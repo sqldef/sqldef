@@ -42,6 +42,24 @@ var tidbTableOptions = []tidbTableOption{
 	{key: "AUTO_ID_CACHE", defaultValue: "0"},
 }
 
+type postgresCheckLocation struct {
+	columnName Ident
+	isColumn   bool
+}
+
+type postgresCheckEntry struct {
+	check    *CheckDefinition
+	location postgresCheckLocation
+}
+
+type postgresCheckMatchPlan struct {
+	current          []postgresCheckEntry
+	desired          []postgresCheckEntry
+	currentToDesired []int
+	desiredToCurrent []int
+	generated        bool
+}
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
@@ -86,6 +104,8 @@ type Generator struct {
 	// Map index names to their owning tables (for comment cleanup after table drops)
 	// Key is "schema.index_name", value is the table's QualifiedName
 	indexToTable map[string]QualifiedName
+
+	postgresCheckPlans map[string]*postgresCheckMatchPlan
 
 	desiredComments []*Comment
 	currentComments []*Comment
@@ -179,6 +199,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		droppedColumns:      make(map[string]bool),
 		droppedIndexes:      make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
+		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -592,24 +613,39 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Check CHECK constraints BEFORE dropping columns.
 		// This is important because CHECK constraints may reference columns that are about to be dropped.
 		// Databases require CHECK constraints to be dropped before the columns they reference.
-		for _, check := range currentTable.checks {
-			// First try to find by name
-			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
-				continue
+		if g.mode == GeneratorModePostgres {
+			plan := g.postgresCheckMatchPlan(currentTable, desiredTable)
+			if !plan.generated {
+				for currentIndex, current := range plan.current {
+					if !g.postgresCheckNeedsDrop(plan, currentIndex) {
+						continue
+					}
+					dropDDL, err := g.generatePostgresCheckDropDDL(currentTable, current.check)
+					if err != nil {
+						return nil, err
+					}
+					appendDDL(dropDDL)
+				}
 			}
+		} else {
+			for _, check := range currentTable.checks {
+				// First try to find by name
+				if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
+					continue
+				}
 
-			// Also check if this constraint matches any CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs (MySQL/MSSQL)
-			// and unnamed CHECK constraints in the desired schema (PostgreSQL)
-			if g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
-				continue
+				// Also check if this constraint matches any CHECK by definition
+				// This handles auto-generated constraint names for column-level CHECKs (MySQL/MSSQL).
+				if g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+					continue
+				}
+
+				// DROP CONSTRAINT is supported across all targets that enforce CHECK:
+				// MySQL 8.0.16+, MariaDB 10.2+, TiDB, PostgreSQL, MSSQL, SQLite. MySQL
+				// 5.7 parses but does not enforce CHECK, so this branch never fires for
+				// it. MariaDB does not accept DROP CHECK <name>, only DROP CONSTRAINT.
+				appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
 			}
-
-			// DROP CONSTRAINT is supported across all targets that enforce CHECK:
-			// MySQL 8.0.16+, MariaDB 10.2+, TiDB, PostgreSQL, MSSQL, SQLite. MySQL
-			// 5.7 parses but does not enforce CHECK, so this branch never fires for
-			// it. MariaDB does not accept DROP CHECK <name>, only DROP CONSTRAINT.
-			appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
 		}
 
 		// Check columns.
@@ -955,6 +991,9 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 // In the caller, `mergeTable` manages `g.currentTables`.
 func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, error) {
 	ddls := []string{}
+	if g.mode == GeneratorModePostgres {
+		g.postgresCheckMatchPlan(&currentTable, &desired.table)
+	}
 	// Track foreign keys that need to be recreated after primary key changes
 	var fkRecreationDDLs []string
 	var desiredColumns = make([]*Column, len(desired.table.columns))
@@ -1127,6 +1166,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 			} else {
 				// Regular column addition (not a rename)
+				if g.mode == GeneratorModePostgres && desiredColumn.check != nil {
+					plan := g.postgresCheckMatchPlan(&currentTable, &desired.table)
+					if !g.postgresColumnCheckCanBeAddedInline(plan, desiredColumn.name) {
+						desiredColumn.check = nil
+					}
+				}
 				definition, err := g.generateColumnDefinition(desiredColumn, true)
 				if err != nil {
 					return ddls, err
@@ -1316,71 +1361,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				tableName := desired.table.name.Name.Name
-				columnName := desiredColumn.name.Name
-				constraintName := buildPostgresConstraintNameIdent(tableName, columnName, "check")
-				if desiredColumn.check != nil && !desiredColumn.check.constraintName.IsEmpty() {
-					constraintName = desiredColumn.check.constraintName
-				}
-
-				// First, check if the current column has a CHECK constraint
-				// If so, use it directly for comparison instead of searching by the desired name
-				var currentCheck *CheckDefinition
-				if currentColumn.check != nil {
-					// Current column has a CHECK - check if its name matches the desired name
-					if g.identsEqual(currentColumn.check.constraintName, constraintName) {
-						// Names match (accounting for quoting), use the current column's check
-						currentCheck = currentColumn.check
-					} else {
-						// Names don't match - this is a rename scenario
-						// The current constraint should be dropped and the new one added
-						currentCheck = nil
-					}
-				} else {
-					// Current column has no CHECK, search in table-level constraints
-					currentCheck = g.findCheckConstraintInTable(&currentTable, constraintName)
-				}
-
-				// Check if current column's CHECK matches a table-level CHECK in desired.
-				// PostgreSQL exports single-column CHECKs as column-level, but user may define them as table-level.
-				skipDropBecauseTableLevel := false
-				if currentColumn.check != nil && desiredColumn.check == nil {
-					if g.findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
-						g.findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
-						skipDropBecauseTableLevel = true
-					}
-				}
-
-				// Determine if we need to drop the current column's constraint
-				// This handles the case where names are different (quoted vs unquoted)
-				// We need to drop if: current has a check AND (definition differs OR constraint names differ)
-				needDropCurrentColumn := currentColumn.check != nil && !skipDropBecauseTableLevel &&
-					(!g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) ||
-						(desiredColumn.check != nil && !g.identsEqual(currentColumn.check.constraintName, constraintName)))
-
-				if (!g.areSameCheckDefinition(currentCheck, desiredColumn.check) || needDropCurrentColumn) && !skipDropBecauseTableLevel {
-					// Drop the current constraint if it exists
-					if currentCheck != nil {
-						dropNameIdent := currentCheck.constraintName
-						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(dropNameIdent))
-						ddls = append(ddls, ddl)
-					} else if needDropCurrentColumn {
-						// Current column has a CHECK with a different name that needs to be dropped
-						dropNameIdent := currentColumn.check.constraintName
-						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(dropNameIdent))
-						ddls = append(ddls, ddl)
-					}
-					if desiredColumn.check != nil {
-						escapedConstraintName := g.escapeSQLIdent(constraintName)
-						checkExpr := g.normalizeCheckExprString(desiredColumn.check.definition)
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), escapedConstraintName, checkExpr)
-						if desiredColumn.check.noInherit {
-							ddl += " NO INHERIT"
-						}
-						ddls = append(ddls, ddl)
-					}
-				}
-
 				// TODO: support adding a column's `references`
 			case GeneratorModeMssql:
 				// Skip if the column is part of the current primary key - the primary key handling logic
@@ -1477,6 +1457,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			default:
 			}
 		}
+	}
+	if g.mode == GeneratorModePostgres {
+		checkDDLs, err := g.generatePostgresCheckDDLs(&currentTable, &desired.table)
+		if err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, checkDDLs...)
 	}
 
 	currentPrimaryKey := currentTable.PrimaryKey()
@@ -1831,43 +1818,43 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	// Examine each check
-	for _, desiredCheck := range desired.table.checks {
-		// First try to find by name
-		currentCheck := g.findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
+	if g.mode != GeneratorModePostgres {
+		for _, desiredCheck := range desired.table.checks {
+			// First try to find by name
+			currentCheck := g.findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
 
-		// Also try to find by definition if not found by name
-		// This handles auto-generated constraint names for MySQL/MSSQL, and
-		// for PostgreSQL when the desired constraint has no explicit name
-		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql ||
-			(g.mode == GeneratorModePostgres && desiredCheck.constraintName.Name == "")) {
-			currentCheck = g.findCheckConstraintByDefinition(&currentTable, &desiredCheck)
-		}
-
-		if currentCheck != nil {
-			if !g.areSameCheckDefinition(currentCheck, &desiredCheck) {
-				// Constraint exists but has different definition, need to replace it
-				currentNameIdent := currentCheck.constraintName
-				desiredNameIdent := desiredCheck.constraintName
-				switch g.mode {
-				case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeMysql:
-					// DROP CONSTRAINT works on MySQL 8.0.16+, MariaDB 10.2+, TiDB,
-					// PostgreSQL, and MSSQL. MariaDB does not accept DROP CHECK.
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentNameIdent)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), g.escapeSQLIdent(desiredNameIdent), g.normalizeCheckExprString(desiredCheck.definition)))
-				case GeneratorModeSQLite3:
-					// SQLite does not support ALTER TABLE for CHECK constraints
-					// Modifying CHECK constraints requires recreating the table, which is not supported
-				}
-			} else if currentCheck.constraintName.Name != desiredCheck.constraintName.Name {
-				// Constraint exists with same definition but different name
-				// Don't generate DDL for renaming - constraint names don't matter if the definition is the same
-				// This handles cases where MSSQL auto-generates names like CK__table__column__hash
-				// and sqldef auto-generates names like table_column_check
+			// Also try to find by definition if not found by name.
+			// This handles auto-generated constraint names for MySQL/MSSQL.
+			if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) {
+				currentCheck = g.findCheckConstraintByDefinition(&currentTable, &desiredCheck)
 			}
-		} else {
-			// Constraint doesn't exist, add it
-			desiredNameIdent := desiredCheck.constraintName
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), g.escapeSQLIdent(desiredNameIdent), g.normalizeCheckExprString(desiredCheck.definition)))
+
+			if currentCheck != nil {
+				if !g.areSameCheckDefinition(currentCheck, &desiredCheck) {
+					// Constraint exists but has different definition, need to replace it
+					currentNameIdent := currentCheck.constraintName
+					desiredNameIdent := desiredCheck.constraintName
+					switch g.mode {
+					case GeneratorModeMssql, GeneratorModeMysql:
+						// DROP CONSTRAINT works on MySQL 8.0.16+, MariaDB 10.2+, TiDB,
+						// and MSSQL. MariaDB does not accept DROP CHECK.
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentNameIdent)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), g.escapeSQLIdent(desiredNameIdent), g.normalizeCheckExprString(desiredCheck.definition)))
+					case GeneratorModeSQLite3:
+						// SQLite does not support ALTER TABLE for CHECK constraints
+						// Modifying CHECK constraints requires recreating the table, which is not supported
+					}
+				} else if currentCheck.constraintName.Name != desiredCheck.constraintName.Name {
+					// Constraint exists with same definition but different name
+					// Don't generate DDL for renaming - constraint names don't matter if the definition is the same
+					// This handles cases where MSSQL auto-generates names like CK__table__column__hash
+					// and sqldef auto-generates names like table_column_check
+				}
+			} else {
+				// Constraint doesn't exist, add it
+				desiredNameIdent := desiredCheck.constraintName
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), g.escapeSQLIdent(desiredNameIdent), g.normalizeCheckExprString(desiredCheck.definition)))
+			}
 		}
 	}
 
@@ -4732,6 +4719,158 @@ func (g *Generator) findCheckConstraintInTable(table *Table, constraintName Iden
 	}
 
 	return nil
+}
+
+func flattenPostgresChecks(table *Table) []postgresCheckEntry {
+	checks := make([]postgresCheckEntry, 0, len(table.columns)+len(table.checks))
+	for _, column := range getSortedColumns(table.columns) {
+		if column.check == nil {
+			continue
+		}
+		checks = append(checks, postgresCheckEntry{
+			check: column.check,
+			location: postgresCheckLocation{
+				columnName: column.name,
+				isColumn:   true,
+			},
+		})
+	}
+	for i := range table.checks {
+		checks = append(checks, postgresCheckEntry{
+			check:    &table.checks[i],
+			location: postgresCheckLocation{},
+		})
+	}
+	return checks
+}
+
+func (g *Generator) buildPostgresCheckMatchPlan(currentTable, desiredTable *Table) *postgresCheckMatchPlan {
+	plan := &postgresCheckMatchPlan{
+		current: flattenPostgresChecks(currentTable),
+		desired: flattenPostgresChecks(desiredTable),
+	}
+	plan.currentToDesired = make([]int, len(plan.current))
+	for i := range plan.currentToDesired {
+		plan.currentToDesired[i] = -1
+	}
+	plan.desiredToCurrent = make([]int, len(plan.desired))
+	for i := range plan.desiredToCurrent {
+		plan.desiredToCurrent[i] = -1
+	}
+
+	match := func(desiredIndex int, same func(*CheckDefinition, *CheckDefinition) bool) {
+		for currentIndex := range plan.current {
+			if plan.currentToDesired[currentIndex] >= 0 {
+				continue
+			}
+			if !same(plan.current[currentIndex].check, plan.desired[desiredIndex].check) {
+				continue
+			}
+			plan.currentToDesired[currentIndex] = desiredIndex
+			plan.desiredToCurrent[desiredIndex] = currentIndex
+			return
+		}
+	}
+
+	// Reserve explicitly named constraints before definition matching so an
+	// unnamed desired CHECK cannot consume a named desired CHECK's identity.
+	for desiredIndex, desired := range plan.desired {
+		if desired.check.constraintName.IsEmpty() {
+			continue
+		}
+		match(desiredIndex, func(current, desired *CheckDefinition) bool {
+			return g.identsEqual(current.constraintName, desired.constraintName)
+		})
+	}
+	for desiredIndex, desired := range plan.desired {
+		if !desired.check.constraintName.IsEmpty() {
+			continue
+		}
+		match(desiredIndex, g.areSameCheckDefinition)
+	}
+
+	return plan
+}
+
+func (g *Generator) postgresCheckMatchPlan(currentTable, desiredTable *Table) *postgresCheckMatchPlan {
+	key := normalizeNameKey(desiredTable.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	if plan := g.postgresCheckPlans[key]; plan != nil {
+		return plan
+	}
+	plan := g.buildPostgresCheckMatchPlan(currentTable, desiredTable)
+	g.postgresCheckPlans[key] = plan
+	return plan
+}
+
+func (g *Generator) postgresCheckNeedsDrop(plan *postgresCheckMatchPlan, currentIndex int) bool {
+	desiredIndex := plan.currentToDesired[currentIndex]
+	return desiredIndex < 0 || !g.areSameCheckDefinition(plan.current[currentIndex].check, plan.desired[desiredIndex].check)
+}
+
+func (g *Generator) postgresCheckNeedsAdd(plan *postgresCheckMatchPlan, desiredIndex int) bool {
+	currentIndex := plan.desiredToCurrent[desiredIndex]
+	return currentIndex < 0 || !g.areSameCheckDefinition(plan.current[currentIndex].check, plan.desired[desiredIndex].check)
+}
+
+func (g *Generator) postgresColumnCheckCanBeAddedInline(plan *postgresCheckMatchPlan, columnName Ident) bool {
+	for desiredIndex, desired := range plan.desired {
+		if desired.location.isColumn && g.identsEqual(desired.location.columnName, columnName) {
+			return plan.desiredToCurrent[desiredIndex] < 0 && desired.check.constraintName.IsEmpty()
+		}
+	}
+	panic("PostgreSQL desired column CHECK constraint not found")
+}
+
+func (g *Generator) generatePostgresCheckAddDDL(table *Table, check *CheckDefinition) string {
+	ddl := fmt.Sprintf("ALTER TABLE %s ADD ", g.escapeTableName(table))
+	if !check.constraintName.IsEmpty() {
+		ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(check.constraintName))
+	}
+	ddl += fmt.Sprintf("CHECK (%s)", g.normalizeCheckExprString(check.definition))
+	if check.noInherit {
+		ddl += " NO INHERIT"
+	}
+	return ddl
+}
+
+func (g *Generator) generatePostgresCheckDropDDL(table *Table, check *CheckDefinition) (string, error) {
+	if check.constraintName.IsEmpty() {
+		return "", fmt.Errorf("cannot drop unnamed PostgreSQL CHECK constraint on table %s: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly", g.escapeTableName(table))
+	}
+	return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(table), g.escapeSQLIdent(check.constraintName)), nil
+}
+
+func (g *Generator) generatePostgresCheckDDLs(currentTable, desiredTable *Table) ([]string, error) {
+	plan := g.postgresCheckMatchPlan(currentTable, desiredTable)
+	ddls := []string{}
+	for currentIndex, current := range plan.current {
+		if !g.postgresCheckNeedsDrop(plan, currentIndex) {
+			continue
+		}
+		dropDDL, err := g.generatePostgresCheckDropDDL(desiredTable, current.check)
+		if err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, dropDDL)
+	}
+	for desiredIndex, desired := range plan.desired {
+		if !g.postgresCheckNeedsAdd(plan, desiredIndex) {
+			continue
+		}
+		if desired.location.isColumn && g.findColumnByName(currentTable.columns, desired.location.columnName) == nil {
+			desiredColumn := g.findColumnByName(desiredTable.columns, desired.location.columnName)
+			if desiredColumn == nil {
+				panic("PostgreSQL desired CHECK constraint column not found")
+			}
+			regularColumnAddition := desiredColumn.renamedFrom.IsEmpty() || g.findColumnByName(currentTable.columns, desiredColumn.renamedFrom) == nil
+			if regularColumnAddition && g.postgresColumnCheckCanBeAddedInline(plan, desired.location.columnName) {
+				continue
+			}
+		}
+		ddls = append(ddls, g.generatePostgresCheckAddDDL(desiredTable, desired.check))
+	}
+	plan.generated = true
+	return ddls, nil
 }
 
 // findCheckConstraintByName finds a CHECK constraint in a list by name

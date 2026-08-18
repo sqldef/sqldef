@@ -8,6 +8,7 @@ import (
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStringConstantSimple(t *testing.T) {
@@ -90,6 +91,275 @@ func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	// Verify no mutation occurred
 	assert.Equal(t, originalBDirection0, indexB.columns[0].direction, "indexB.columns[0].direction should not be mutated")
 	assert.Equal(t, originalBDirection1, indexB.columns[1].direction, "indexB.columns[1].direction should not be mutated")
+}
+
+func TestPostgresCheckConstraintMatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		desired  string
+		expected []string
+	}{
+		{
+			name: "one current check is not reused",
+			current: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CONSTRAINT one_pair_positive CHECK (a > 0 AND b > 0) NO INHERIT
+			);`,
+			desired: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CHECK (a > 0 AND b > 0) NO INHERIT,
+				CHECK (a > 0 AND b > 0) NO INHERIT
+			);`,
+			expected: []string{
+				"ALTER TABLE public.pair_values ADD CHECK (a > 0 AND b > 0) NO INHERIT",
+			},
+		},
+		{
+			name: "one desired check is not reused",
+			current: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CONSTRAINT first_pair_positive CHECK (a > 0 AND b > 0),
+				CONSTRAINT second_pair_positive CHECK (a > 0 AND b > 0)
+			);`,
+			desired: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CHECK (a > 0 AND b > 0)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.pair_values DROP CONSTRAINT second_pair_positive",
+			},
+		},
+		{
+			name: "named checks match before unnamed checks",
+			current: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CONSTRAINT first_pair_positive CHECK (a > 0 AND b > 0),
+				CONSTRAINT second_pair_positive CHECK (a > 0 AND b > 0)
+			);`,
+			desired: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CHECK (a > 0 AND b > 0),
+				CONSTRAINT first_pair_positive CHECK (a > 0 AND b > 0)
+			);`,
+			expected: []string{},
+		},
+		{
+			name: "matched check is not duplicated on a new column",
+			current: `CREATE TABLE moved_check (
+				a integer CONSTRAINT moved_check_a_check CHECK (a > 0)
+			);`,
+			desired: `CREATE TABLE moved_check (
+				a integer,
+				b integer CHECK (a > 0)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.moved_check ADD COLUMN b integer",
+			},
+		},
+		{
+			name:    "named check on a new column keeps its name",
+			current: `CREATE TABLE named_new_column (a integer);`,
+			desired: `CREATE TABLE named_new_column (
+				a integer,
+				b integer CONSTRAINT b_positive CHECK (b > 0)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.named_new_column ADD COLUMN b integer",
+				"ALTER TABLE public.named_new_column ADD CONSTRAINT b_positive CHECK (b > 0)",
+			},
+		},
+		{
+			name: "matching unnamed check does not require a name",
+			current: `CREATE TABLE measurements (
+				amount integer CHECK (amount > 0)
+			);`,
+			desired: `CREATE TABLE measurements (
+				amount integer CHECK (amount > 0)
+			);`,
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
+func TestPostgresUnnamedCurrentCheckDropError(t *testing.T) {
+	const expectedError = "cannot drop unnamed PostgreSQL CHECK constraint on table public.measurements: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly"
+
+	tests := []struct {
+		name    string
+		current string
+		desired string
+	}{
+		{
+			name: "remove column check",
+			current: `CREATE TABLE measurements (
+				amount integer CHECK (amount > 0)
+			);`,
+			desired: `CREATE TABLE measurements (
+				amount integer
+			);`,
+		},
+		{
+			name: "replace table check",
+			current: `CREATE TABLE measurements (
+				amount integer,
+				CHECK (amount > 0)
+			);`,
+			desired: `CREATE TABLE measurements (
+				amount integer,
+				CHECK (amount > 1)
+			);`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+
+			require.EqualError(t, err, expectedError)
+			assert.Nil(t, ddls)
+		})
+	}
+}
+
+func TestPostgresUnnamedCurrentCheckDoesNotBlockTableDrop(t *testing.T) {
+	current := `CREATE TABLE measurements (
+		amount integer CHECK (amount > 0)
+	);`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModePostgres,
+		database.NewParser(parser.ParserModePostgres),
+		"",
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		"public",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"DROP TABLE public.measurements"}, ddls)
+}
+
+func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
+	return &Generator{
+		mode:               GeneratorModePostgres,
+		currentTables:      []*Table{currentTable},
+		desiredTables:      []*Table{desiredTable},
+		defaultSchema:      "public",
+		config:             database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		postgresCheckPlans: make(map[string]*postgresCheckMatchPlan),
+	}
+}
+
+func TestPostgresCheckConstraintCleanup(t *testing.T) {
+	tableName := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "measurements"}}
+
+	t.Run("drop named check", func(t *testing.T) {
+		currentTable := &Table{
+			name:   tableName,
+			checks: []CheckDefinition{{constraintName: Ident{Name: "amount_positive"}}},
+		}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+
+		ddls, err := generator.generateDDLs(nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"ALTER TABLE public.measurements DROP CONSTRAINT amount_positive",
+		}, ddls)
+	})
+
+	t.Run("reject unnamed current check", func(t *testing.T) {
+		currentTable := &Table{name: tableName, checks: []CheckDefinition{{}}}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+
+		ddls, err := generator.generateDDLs(nil)
+
+		require.EqualError(t, err, "cannot drop unnamed PostgreSQL CHECK constraint on table public.measurements: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly")
+		assert.Nil(t, ddls)
+	})
+}
+
+func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
+	t.Run("missing desired check", func(t *testing.T) {
+		generator := &Generator{mode: GeneratorModePostgres}
+		assert.PanicsWithValue(t, "PostgreSQL desired column CHECK constraint not found", func() {
+			generator.postgresColumnCheckCanBeAddedInline(&postgresCheckMatchPlan{}, parser.NewIdent("amount", false))
+		})
+	})
+
+	t.Run("missing desired column", func(t *testing.T) {
+		tableName := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "measurements"}}
+		currentTable := &Table{name: tableName}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+		plan := generator.postgresCheckMatchPlan(currentTable, desiredTable)
+		plan.desired = []postgresCheckEntry{{
+			check: new(CheckDefinition),
+			location: postgresCheckLocation{
+				columnName: Ident{Name: "missing"},
+				isColumn:   true,
+			},
+		}}
+		plan.desiredToCurrent = []int{-1}
+
+		assert.PanicsWithValue(t, "PostgreSQL desired CHECK constraint column not found", func() {
+			_, _ = generator.generatePostgresCheckDDLs(currentTable, desiredTable)
+		})
+	})
+}
+
+func TestSQLiteCheckConstraintModification(t *testing.T) {
+	current := `CREATE TABLE measurements (
+		amount integer,
+		CONSTRAINT amount_positive CHECK (amount > 0)
+	);`
+	desired := `CREATE TABLE measurements (
+		amount integer,
+		CONSTRAINT amount_positive CHECK (amount > 1)
+	);`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeSQLite3,
+		database.NewParser(parser.ParserModeSQLite3),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		"",
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, ddls)
 }
 
 func TestNormalizeViewDefinition(t *testing.T) {

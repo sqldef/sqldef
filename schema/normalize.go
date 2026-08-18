@@ -174,13 +174,13 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 	}
 }
 
-// BuildPostgresConstraintName generates a constraint name following PostgreSQL's naming convention.
-// It automatically truncates names to 63 characters (NAMEDATALEN - 1) using PostgreSQL's algorithm:
-// - If column > 28 chars: reduce column to 28 first, then apply remaining overflow to table
-// - If column == 28 chars and table <= 29 chars: truncate table
-// - If column == 28 chars and table > 29 chars: truncate table
-// - If column < 28 chars: truncate table
-// In summary: when column <= 28, always truncate the table first
+// buildPostgresConstraintName approximates PostgreSQL's base constraint name before
+// the server resolves catalog collisions. It truncates names to 63 bytes using this logic:
+// - If column > 28 bytes: reduce column to 28 first, then apply remaining overflow to table
+// - If column == 28 bytes and table <= 29 bytes: truncate table
+// - If column == 28 bytes and table > 29 bytes: truncate table
+// - If column < 28 bytes: truncate table
+// In summary: when column <= 28 bytes, always truncate the table first
 func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 	fullName := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix)
 	if len(fullName) <= 63 {
@@ -213,8 +213,8 @@ func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 	return fmt.Sprintf("%s_%s_%s", truncatedTable, truncatedColumn, suffix)
 }
 
-// buildPostgresConstraintNameIdent builds a PostgreSQL auto-generated constraint name
-// and returns it as an Ident with quote information inferred from case.
+// buildPostgresConstraintNameIdent builds the base name approximation and returns it
+// as an Ident with quote information inferred from case.
 func buildPostgresConstraintNameIdent(tableName, columnName, suffix string) Ident {
 	name := buildPostgresConstraintName(tableName, columnName, suffix)
 	return NewIdentWithQuoteDetected(name)

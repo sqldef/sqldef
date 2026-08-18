@@ -26,7 +26,7 @@ ParseTextCheckConstraint:
   up: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_col_check";
   down: |
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_col_check" CHECK (col <> '');
+    ALTER TABLE "public"."test" ADD CHECK (col <> '');
 CheckConstraintWithReservedWordColumnName:
   desired: |
     CREATE TABLE test (
@@ -46,9 +46,9 @@ ParseAllAnyCheckConstraint:
       t1 text CHECK (t1 = SOME (ARRAY['x', 'y']))
     );
   up: |
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n1_check" CHECK (n1 = ANY (ARRAY[1, 2, 3]));
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n2_check" CHECK (n2 = ALL (ARRAY[1, 2, 3]));
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t1_check" CHECK (t1 = ANY (ARRAY['x', 'y']));
+    ALTER TABLE "public"."test" ADD CHECK (n1 = ANY (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."test" ADD CHECK (n2 = ALL (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."test" ADD CHECK (t1 = ANY (ARRAY['x', 'y']));
   down: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_n2_check";
@@ -81,10 +81,10 @@ AllAnySomeCheckConstraintsModifyAll:
     );
   up: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
   down: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (all_positive = ALL (ARRAY[1, 2, 3]));
 AllAnySomeCheckConstraintsModifySome:
   current: |
     CREATE TABLE test_all_any (
@@ -104,10 +104,10 @@ AllAnySomeCheckConstraintsModifySome:
     );
   up: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
   down: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
 AllAnySomeCheckConstraintsRemove:
   current: |
     CREATE TABLE test_all_any (
@@ -131,10 +131,10 @@ AllAnySomeCheckConstraintsRemove:
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_score_check";
   down: |
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_state_check" CHECK (state = ANY (ARRAY['active', 'pending']));
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_score_check" CHECK (score > ALL (ARRAY[0, 10, 20]));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (state = ANY (ARRAY['active', 'pending']));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+    ALTER TABLE "public"."test_all_any" ADD CHECK (score > ALL (ARRAY[0, 10, 20]));
 SomeConstraintModificationsCreate:
   desired: |
     CREATE TABLE test_some_modify (
@@ -157,14 +157,14 @@ SomeConstraintModificationsModify:
     );
   up: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
   down: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'pending', 'draft']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['A', 'B', 'C']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (status = ANY (ARRAY['active', 'pending', 'draft']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (category = ANY (ARRAY['A', 'B', 'C']));
 SomeConstraintModificationsSomeToAny:
   current: |
     CREATE TABLE test_some_modify (
@@ -193,14 +193,14 @@ SomeConstraintModificationsSomeToAll:
     );
   up: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
   down: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" ADD CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
 PosixRegexCheckConstraint:
   current: |
     CREATE TABLE test (
@@ -218,22 +218,22 @@ PosixRegexCheckConstraint:
     );
   up: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_ci_check" CHECK (posix_regex_ci ~* '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[a-z]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_regex ~ '[a-z]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_regex_ci ~* '[a-z]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_not_regex !~ '[a-z]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_not_regex_ci !~* '[a-z]');
   down: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[0-9]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_ci_check" CHECK (posix_regex_ci ~* '[0-9]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[0-9]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_regex ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_regex_ci ~* '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_not_regex !~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (posix_not_regex_ci !~* '[0-9]');
 ForeignKeyConstraintsAreEmittedLast:
   current: |
     CREATE TABLE foos ( dummy_column text );
@@ -331,15 +331,15 @@ CheckConstraint:
       d2 date CHECK (d2 >= date '2022-01-01')
     );
   up: |
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n1_check" CHECK (n1 = 0 or not n1 > 10 and n1 is not null);
+    ALTER TABLE "public"."test" ADD CHECK (n1 = 0 or not n1 > 10 and n1 is not null);
     ALTER TABLE "public"."test" ADD CONSTRAINT "chk" CHECK (n2 > 0);
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n3_check" CHECK (n3 > 0) NO INHERIT;
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t1_check" CHECK (t1 ~~ 'x');
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t2_check" CHECK (t2 !~~ 'x');
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t3_check" CHECK (t3 <> '');
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t4_check" CHECK (t4 ~ '[0-9]');
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_d1_check" CHECK (d1 >= '2022-01-01');
-    ALTER TABLE "public"."test" ADD CONSTRAINT "test_d2_check" CHECK (d2 >= '2022-01-01');
+    ALTER TABLE "public"."test" ADD CHECK (n3 > 0) NO INHERIT;
+    ALTER TABLE "public"."test" ADD CHECK (t1 ~~ 'x');
+    ALTER TABLE "public"."test" ADD CHECK (t2 !~~ 'x');
+    ALTER TABLE "public"."test" ADD CHECK (t3 <> '');
+    ALTER TABLE "public"."test" ADD CHECK (t4 ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (d1 >= '2022-01-01');
+    ALTER TABLE "public"."test" ADD CHECK (d2 >= '2022-01-01');
   down: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "chk";
@@ -634,6 +634,124 @@ LongAutoGeneratedCheckConstraint:
       looooooooooooooooooooooooooooooong_column_55_characters INT NOT NULL CHECK (looooooooooooooooooooooooooooooong_column_55_characters > 0)
     );
 
+UnnamedCheckLongNameCollisionInSameTable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE tttttttttttttttttttttttttttttt (
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaa_x integer CHECK (aaaaaaaaaaaaaaaaaaaaaaaaaaaa_x > 0),
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaa_y integer CHECK (aaaaaaaaaaaaaaaaaaaaaaaaaaaa_y > 0)
+    );
+
+UnnamedCheckSchemaWideLongNameCollision:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssx (
+      a integer CHECK (a > 0)
+    );
+    CREATE TABLE ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssy (
+      a integer CHECK (a > 0)
+    );
+
+AddUnnamedCheckWithMultibyteTableName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "表表表表表表表表表表表表表表表表表表表表" (
+      a integer
+    );
+  desired: |
+    CREATE TABLE "表表表表表表表表表表表表表表表表表表表表" (
+      a integer CHECK (a > 0)
+    );
+  up: |
+    ALTER TABLE public."表表表表表表表表表表表表表表表表表表表表" ADD CHECK (a > 0);
+  down: |
+    ALTER TABLE public."表表表表表表表表表表表表表表表表表表表表" DROP CONSTRAINT "表表表表表表表表表表表表表表表表表表_a_check";
+
+DuplicateUnnamedTableCheckOneToOne:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE pair_values (
+      a integer,
+      b integer,
+      CONSTRAINT one_pair_positive CHECK (a > 0 AND b > 0) NO INHERIT
+    );
+  desired: |
+    CREATE TABLE pair_values (
+      a integer,
+      b integer,
+      CHECK (a > 0 AND b > 0) NO INHERIT,
+      CHECK (a > 0 AND b > 0) NO INHERIT
+    );
+  up: |
+    ALTER TABLE public.pair_values ADD CHECK (a > 0 AND b > 0) NO INHERIT;
+  down: |
+    ALTER TABLE public.pair_values DROP CONSTRAINT pair_values_check;
+
+ReplaceUnnamedCheckWithExplicitName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE explicit_check_name (
+      a integer CHECK (a > 0)
+    );
+  desired: |
+    CREATE TABLE explicit_check_name (
+      a integer CONSTRAINT a_positive CHECK (a > 0)
+    );
+  up: |
+    ALTER TABLE public.explicit_check_name DROP CONSTRAINT explicit_check_name_a_check;
+    ALTER TABLE public.explicit_check_name ADD CONSTRAINT a_positive CHECK (a > 0);
+  down: ""
+
+AddUnnamedCheckWithoutColumnReference:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE constant_check (
+      a integer
+    );
+  desired: |
+    CREATE TABLE constant_check (
+      a integer,
+      CHECK (1 > 0)
+    );
+  up: |
+    ALTER TABLE public.constant_check ADD CHECK (1 > 0);
+  down: |
+    ALTER TABLE public.constant_check DROP CONSTRAINT constant_check_check;
+
+MoveUnnamedCheckToNewColumnWithoutDuplication:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE moved_check (
+      a integer CHECK (a > 0)
+    );
+  desired: |
+    CREATE TABLE moved_check (
+      a integer,
+      b integer CHECK (a > 0)
+    );
+  up: |
+    ALTER TABLE public.moved_check ADD COLUMN b integer;
+  down: |
+    ALTER TABLE public.moved_check DROP COLUMN b;
+
+AddNamedCheckWithNewColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE named_new_column (
+      a integer
+    );
+  desired: |
+    CREATE TABLE named_new_column (
+      a integer,
+      b integer CONSTRAINT b_positive CHECK (b > 0)
+    );
+  up: |
+    ALTER TABLE public.named_new_column ADD COLUMN b integer;
+    ALTER TABLE public.named_new_column ADD CONSTRAINT b_positive CHECK (b > 0);
+  down: |
+    ALTER TABLE public.named_new_column DROP CONSTRAINT b_positive;
+    ALTER TABLE public.named_new_column DROP COLUMN b;
+
 # Simple exclusion constraint test first
 ExcludeConstraintWithCreateTableSimple:
   legacy_ignore_quotes: false
@@ -858,7 +976,7 @@ ConstraintCheckInAdd:
       status text CHECK (status IN ('active', 'inactive', 'pending'))
     );
   up: |
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+    ALTER TABLE "public"."products" ADD CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
 ConstraintCheckInUnsorted:
@@ -882,7 +1000,7 @@ ConstraintCheckNotInAdd:
       status text CHECK (status NOT IN ('deleted', 'cancelled'))
     );
   up: |
-    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status <> ALL (ARRAY['deleted', 'cancelled']));
+    ALTER TABLE public.products ADD CHECK (status <> ALL (ARRAY['deleted', 'cancelled']));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
 ConstraintCheckInSingleValue:
@@ -923,10 +1041,10 @@ ConstraintCheckInUnsortedModify:
     );
   up: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
-    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['pending', 'active', 'waiting']));
+    ALTER TABLE public.products ADD CHECK (status = ANY (ARRAY['pending', 'active', 'waiting']));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
-    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['pending', 'active']));
+    ALTER TABLE public.products ADD CHECK (status = ANY (ARRAY['pending', 'active']));
 ConstraintCheckInQuoteAware:
   legacy_ignore_quotes: false
   current: |
@@ -940,7 +1058,7 @@ ConstraintCheckInQuoteAware:
       "Status" text CHECK ("Status" IN ('active', 'inactive', 'pending'))
     );
   up: |
-    ALTER TABLE public.products ADD CONSTRAINT "products_Status_check" CHECK ("Status" = ANY (ARRAY['active', 'inactive', 'pending']));
+    ALTER TABLE public.products ADD CHECK ("Status" = ANY (ARRAY['active', 'inactive', 'pending']));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "products_Status_check";
 ConstraintCheckInRemove:
@@ -957,7 +1075,7 @@ ConstraintCheckInRemove:
   up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
   down: |
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+    ALTER TABLE "public"."products" ADD CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
 ConstraintUniqueAdd:
   current: |
     CREATE TABLE products (
@@ -1003,10 +1121,10 @@ ConstraintCheckInModify:
     );
   up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3, 4, 5]));
+    ALTER TABLE "public"."products" ADD CHECK (priority = ANY (ARRAY[1, 2, 3, 4, 5]));
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."products" ADD CHECK (priority = ANY (ARRAY[1, 2, 3]));
 ConstraintCheckInAndUniqueAdd:
   current: |
     CREATE TABLE products (
@@ -1020,7 +1138,7 @@ ConstraintCheckInAndUniqueAdd:
       UNIQUE (level)
     );
   up: |
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_check" CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
+    ALTER TABLE "public"."products" ADD CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
@@ -1041,7 +1159,7 @@ ConstraintCheckInAndUniqueRemove:
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
   down: |
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_check" CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
+    ALTER TABLE "public"."products" ADD CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
 ConstraintCheckInMultipleColumnsWithUnique:
   current: |
@@ -1058,8 +1176,8 @@ ConstraintCheckInMultipleColumnsWithUnique:
       UNIQUE (priority, category)
     );
   up: |
-    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
-    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_category_check" CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
+    ALTER TABLE "public"."orders" ADD CHECK (priority = ANY (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."orders" ADD CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
     ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_category_key" UNIQUE ("priority", "category");
   down: |
     ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_check";
@@ -1274,10 +1392,10 @@ ModifyColumnCheckConstraint:
     );
   up: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
-    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
+    ALTER TABLE "public"."a" ADD CHECK (a_id > 1);
   down: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
-    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 0);
+    ALTER TABLE "public"."a" ADD CHECK (a_id > 0);
 DropCheckConstraint:
   current: |
     CREATE TABLE a (
@@ -1292,7 +1410,7 @@ DropCheckConstraint:
   up: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
   down: |
-    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
+    ALTER TABLE "public"."a" ADD CHECK (a_id > 1);
 AddCheckConstraintNoInherit:
   current: |
     CREATE TABLE a (
@@ -1305,7 +1423,7 @@ AddCheckConstraintNoInherit:
       my_text TEXT UNIQUE NOT NULL
     );
   up: |
-    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
+    ALTER TABLE "public"."a" ADD CHECK (a_id > 2) NO INHERIT;
   down: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
 ModifyCheckConstraintNoInherit:
@@ -1321,10 +1439,10 @@ ModifyCheckConstraintNoInherit:
     );
   up: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
-    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 3) NO INHERIT;
+    ALTER TABLE "public"."a" ADD CHECK (a_id > 3) NO INHERIT;
   down: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
-    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
+    ALTER TABLE "public"."a" ADD CHECK (a_id > 2) NO INHERIT;
 CreateTableWithoutMultiColumnCheck:
   desired: |
     CREATE TABLE orders (
@@ -1503,7 +1621,7 @@ CheckConstraintInNonPublicSchema:
       CONSTRAINT min_max CHECK (min_value < max_value)
     );
   up: |
-    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
+    ALTER TABLE "test"."dummy" ADD CHECK (max_value > 0);
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
   down: |
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
@@ -1525,7 +1643,7 @@ RemoveCheckConstraintInNonPublicSchema:
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
   down: |
-    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
+    ALTER TABLE "test"."dummy" ADD CHECK (max_value > 0);
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
 AddUniqueConstraintInNonPublicSchema:
   current: |
