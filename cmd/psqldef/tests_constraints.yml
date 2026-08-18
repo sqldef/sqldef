@@ -990,6 +990,24 @@ ConstraintUniqueRemove:
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
   down: |
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
+ConstraintUniqueNullsNotDistinctAdd:
+  legacy_ignore_quotes: false
+  min_version: "15"
+  current: |
+    CREATE TABLE products (
+      a integer,
+      b integer
+    );
+  desired: |
+    CREATE TABLE products (
+      a integer,
+      b integer,
+      CONSTRAINT products_a_b_key UNIQUE NULLS NOT DISTINCT (a, b)
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT products_a_b_key UNIQUE NULLS NOT DISTINCT (a, b);
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_a_b_key;
 ConstraintCheckInModify:
   current: |
     CREATE TABLE products (
