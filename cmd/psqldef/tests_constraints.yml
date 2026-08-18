@@ -2131,3 +2131,23 @@ AtTimeZoneCheckEquivalentToTimezoneFunction:
     );
   up: ""
   down: ""
+
+CheckConstraintComparingParenthesizedComparison:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE assets (
+      id bigint NOT NULL,
+      format text NOT NULL,
+      interval_ms integer
+    );
+  desired: |
+    CREATE TABLE assets (
+      id bigint NOT NULL,
+      format text NOT NULL,
+      interval_ms integer,
+      CONSTRAINT assets_interval_check CHECK ((format = 'animated'::text) = (interval_ms IS NOT NULL))
+    );
+  up: |
+    ALTER TABLE public.assets ADD CONSTRAINT assets_interval_check CHECK ((format = 'animated') = (interval_ms is not null));
+  down: |
+    ALTER TABLE public.assets DROP CONSTRAINT assets_interval_check;
