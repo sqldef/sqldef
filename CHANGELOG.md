@@ -1,3 +1,12 @@
+## [v3.11.20](https://github.com/sqldef/sqldef/compare/v3.11.19...v3.11.20) - 2026-08-19
+
+- psqldef: filter object owners by TargetSchema in export by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1325
+- fix(mysqldef): support CAST(... AS type ARRAY) in multi-valued index parsing  by @masuyu in https://github.com/sqldef/sqldef/pull/1298
+- psqldef: update changed functions with CREATE OR REPLACE instead of DROP + CREATE by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1302
+- psqldef: support @renamed from= on CREATE TYPE for ENUM type renames by @178inaba in https://github.com/sqldef/sqldef/pull/1319
+- psqldef: manage unnamed CHECK constraints by definition instead of predicting server-generated names by @asfrgrtgd in https://github.com/sqldef/sqldef/pull/1324
+- psqldef: support NULLS NOT DISTINCT unique constraints by @chezou in https://github.com/sqldef/sqldef/pull/1332
+
 ## [v3.11.19](https://github.com/sqldef/sqldef/compare/v3.11.18...v3.11.19) - 2026-08-06
 
 - build(deps): bump actions/checkout from 7.0.0 to 7.0.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1318
