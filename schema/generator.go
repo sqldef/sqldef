@@ -3527,6 +3527,9 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	}
 
 	ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
+	if index.nullsNotDistinct {
+		ddl += " NULLS NOT DISTINCT"
+	}
 
 	// Add index options (WITH clause must come before WHERE in PostgreSQL)
 	optionDef := g.generateIndexOptionDefinition(index.options)
@@ -3678,6 +3681,9 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		}
 		if isUniqueConstraint {
 			ddl += " UNIQUE"
+			if index.nullsNotDistinct {
+				ddl += " NULLS NOT DISTINCT"
+			}
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
 		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
@@ -6257,6 +6263,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 	if indexA.vector != indexB.vector {
+		return false
+	}
+	if indexA.nullsNotDistinct != indexB.nullsNotDistinct {
 		return false
 	}
 	if len(indexA.columns) != len(indexB.columns) {

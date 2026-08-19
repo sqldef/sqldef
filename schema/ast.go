@@ -279,6 +279,7 @@ type Index struct {
 	constraint        bool // for Postgres/MSSQL `ADD CONSTRAINT UNIQUE`
 	async             bool // for Aurora DSQL
 	concurrently      bool // for PostgreSQL
+	nullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE indexes and constraints
 	constraintOptions *ConstraintOptions
 	where             parser.Expr    // for Postgres `Partial Indexes`
 	included          []string       // for MSSQL
