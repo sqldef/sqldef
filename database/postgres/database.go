@@ -1911,7 +1911,8 @@ func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (ma
 	JOIN   pg_class cls ON cls.oid = con.conrelid
 	WHERE  con.contype = 'c'
 	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
-	AND    array_length(con.conkey, 1) > 1`
+	AND    coalesce(array_length(con.conkey, 1), 0) <> 1
+	ORDER BY nsp.nspname, cls.relname, con.conname`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {

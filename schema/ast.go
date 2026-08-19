@@ -442,6 +442,7 @@ type Function struct {
 // FunctionArg is the schema-level representation of a function argument.
 // Used by dependency analysis to detect Function -> Type/Domain edges.
 type FunctionArg struct {
+	mode string // "", "IN", "OUT", "INOUT", "VARIADIC" ("" means IN)
 	name Ident
 	typ  string
 }
@@ -526,9 +527,10 @@ type EnumValue struct {
 
 // TODO: include type information
 type Type struct {
-	name       QualifiedName
-	statement  string
-	enumValues []EnumValue
+	name        QualifiedName
+	statement   string
+	enumValues  []EnumValue
+	renamedFrom Ident // Previous type name if renamed via @renamed annotation
 }
 
 type Domain struct {

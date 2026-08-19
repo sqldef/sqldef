@@ -3185,7 +3185,7 @@ or_replace_opt:
   }
 | OR REPLACE
   {
-    $$ = ""
+    $$ = "or replace"
   }
 
 drop_statement:
