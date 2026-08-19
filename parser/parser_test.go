@@ -974,6 +974,21 @@ func TestStringConcatOperator(t *testing.T) {
 			{
 				name: "column-level CHECK with concat and comparison",
 				sql:  "CREATE TABLE t (s text CHECK (s || 'x' <> ''))",
+				// Expected AST: ComparisonExpr{Left: ConcatExpr{s, 'x'}, ...}.
+				// Column-level CHECK stores the expression on ColumnType.Check,
+				// a separate grammar production from table-level TableSpec.Checks.
+				checkShape: func(t *testing.T, stmt Statement) {
+					t.Helper()
+					ddl := stmt.(*DDL)
+					expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+					cmp, ok := expr.(*ComparisonExpr)
+					if !ok {
+						t.Fatalf("expected *ComparisonExpr at top, got %T", expr)
+					}
+					if _, ok := cmp.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected *ConcatExpr on ComparisonExpr.Left, got %T", cmp.Left)
+					}
+				},
 			},
 			{
 				name: "chained concat is left-associative",
@@ -1024,7 +1039,7 @@ func TestStringConcatOperator(t *testing.T) {
 		// Right: IsExpr{s, "is null"}}. The shape assertion locks down both
 		// (a) || binds tighter than comparison, and (b) OR is at the outermost
 		// boolean level — independent of how the emitter formats the text.
-		sql := "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
+		sql := "CREATE TABLE t (s text, CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
 		stmt, err := ParseDDL(sql, ParserModePostgres)
 		if err != nil {
 			t.Fatalf("ParseDDL failed: %v", err)
@@ -1038,7 +1053,7 @@ func TestStringConcatOperator(t *testing.T) {
 		}
 
 		ddl := stmt.(*DDL)
-		expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+		expr := ddl.TableSpec.Checks[0].Where.Expr
 		or, ok := expr.(*OrExpr)
 		if !ok {
 			t.Fatalf("expected *OrExpr at top, got %T", expr)
