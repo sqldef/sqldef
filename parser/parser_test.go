@@ -1720,6 +1720,40 @@ func TestAnyAllOperandParens(t *testing.T) {
 	}
 }
 
+func TestArrayElementColumnReference(t *testing.T) {
+	// PostgreSQL lets ARRAY[...] elements be column references. String() drops the
+	// quoting because Ident.Format ignores Ident.Quoted, so both cases render the
+	// same here; preserving the quotes is the generator's job.
+	testCases := []struct {
+		name     string
+		sql      string
+		expected string
+	}{
+		{
+			name:     "unquoted column reference",
+			sql:      "CREATE TABLE t (status text, fallback text, CHECK (status = ANY (ARRAY[fallback, 'pending'])))",
+			expected: "status = ANY(ARRAY[fallback, 'pending'])",
+		},
+		{
+			name:     "quoted column reference",
+			sql:      `CREATE TABLE t ("Status" text, "Fallback" text, CHECK ("Status" = ANY (ARRAY["Fallback", 'pending'])))`,
+			expected: "Status = ANY(ARRAY[Fallback, 'pending'])",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			if got := String(stmt); !strings.Contains(got, tc.expected) {
+				t.Errorf("String() = %q, want it to contain %q", got, tc.expected)
+			}
+		})
+	}
+}
+
 func TestParenthesizedSetOperationOperands(t *testing.T) {
 	testCases := []struct {
 		name         string
