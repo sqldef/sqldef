@@ -542,3 +542,187 @@ CreateTriggerWithWhenClauseProcedure:
     DROP TRIGGER track_status_change ON public.items;
     DROP TABLE public.items;
     DROP FUNCTION public.track_status;
+
+CreateConstraintTriggerDeferrable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER INSERT ON events
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  up: |
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE CONSTRAINT TRIGGER ensure_processed after insert ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.assert_processed;
+
+CreateConstraintTriggerNotDeferrable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER INSERT ON events
+      NOT DEFERRABLE
+      FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  up: |
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE CONSTRAINT TRIGGER ensure_processed after insert ON public.events NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.assert_processed;
+
+CreateConstraintTriggerDefaultsToNotDeferrable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER INSERT ON events
+      FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  up: |
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE CONSTRAINT TRIGGER ensure_processed after insert ON public.events NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.assert_processed;
+
+ModifyConstraintTriggerDeferrableOption:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER INSERT ON events
+      NOT DEFERRABLE
+      FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER INSERT ON events
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  up: |
+    DROP TRIGGER ensure_processed ON public.events;
+    CREATE CONSTRAINT TRIGGER ensure_processed after insert ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    CREATE CONSTRAINT TRIGGER ensure_processed after insert ON public.events NOT DEFERRABLE FOR EACH ROW EXECUTE FUNCTION assert_processed();
+
+CreateConstraintTriggerExecuteProcedure:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER INSERT ON events
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE PROCEDURE assert_processed();
+  up: |
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE CONSTRAINT TRIGGER ensure_processed after insert ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE PROCEDURE assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.assert_processed;
