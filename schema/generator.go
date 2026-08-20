@@ -2506,7 +2506,22 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		if desiredTrigger.whenCondition != "" {
 			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
 		}
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), whenClause, strings.Join(desiredTrigger.body, "\n"))
+		triggerKeyword := "TRIGGER"
+		deferrableClause := ""
+		if desiredTrigger.constraint {
+			// CONSTRAINT TRIGGER never takes a WHEN clause; whenClause stays empty for it.
+			// Always emit an explicit DEFERRABLE/NOT DEFERRABLE rather than omitting it: an
+			// omitted clause defaults to NOT DEFERRABLE, but being explicit here keeps this
+			// idempotent against a schema.sql that always states it out (e.g. pg_get_triggerdef()'s
+			// own output, which --export produces).
+			triggerKeyword = "CONSTRAINT TRIGGER"
+			if desiredTrigger.constraintOptions != nil && desiredTrigger.constraintOptions.deferrable {
+				deferrableClause = strings.TrimPrefix(g.generateConstraintOptions(desiredTrigger.constraintOptions), " ") + " "
+			} else {
+				deferrableClause = "NOT DEFERRABLE "
+			}
+		}
+		triggerDefinition += fmt.Sprintf("%s %s %s %s ON %s %sFOR EACH ROW %s%s", triggerKeyword, g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), deferrableClause, whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -5983,6 +5998,24 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	// Compare table names using quote-aware comparison
 	if !g.qualifiedNamesEqual(triggerA.tableName, triggerB.tableName) {
 		return false
+	}
+	if triggerA.constraint != triggerB.constraint {
+		return false
+	}
+	if triggerA.constraint {
+		// Treat nil as equivalent to &ConstraintOptions{false, false} (NOT DEFERRABLE),
+		// same convention as areSameForeignKeys for table constraints.
+		da, ia := false, false
+		if triggerA.constraintOptions != nil {
+			da, ia = triggerA.constraintOptions.deferrable, triggerA.constraintOptions.initiallyDeferred
+		}
+		db, ib := false, false
+		if triggerB.constraintOptions != nil {
+			db, ib = triggerB.constraintOptions.deferrable, triggerB.constraintOptions.initiallyDeferred
+		}
+		if da != db || ia != ib {
+			return false
+		}
 	}
 	// Compare WHEN conditions
 	// Normalize: lowercase, remove spaces, strip matching outer parentheses
