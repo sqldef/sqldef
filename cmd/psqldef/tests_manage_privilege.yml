@@ -276,3 +276,101 @@ ManagePrivilegeViewOwner:
   up: |
     ALTER TABLE v_users OWNER TO app_user;
   down: ""
+
+ManagePrivilegeViewGrantIdempotent:
+  # A GRANT on a view must be seen by the export so a declared view grant
+  # converges. Without view privilege export the current schema is not
+  # idempotent (the grant is re-emitted every run).
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE v_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE v_users TO app_user;
+  up: ""
+  down: ""
+
+ManagePrivilegeViewGrantRevoke:
+  # Dropping a declared view grant yields a REVOKE when the rule allows drop.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE v_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+  up: |
+    REVOKE SELECT ON TABLE "public"."v_users" FROM "app_user";
+  down: |
+    GRANT SELECT ON TABLE "public"."v_users" TO "app_user";
+
+ManagePrivilegeViewColumnGrantIdempotent:
+  # Column-level grants on a view (pg_attribute.attacl) must also be exported
+  # so they converge, including WITH GRANT OPTION.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    GRANT SELECT (name) ON TABLE v_users TO app_user WITH GRANT OPTION;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    GRANT SELECT (name) ON TABLE v_users TO app_user WITH GRANT OPTION;
+  up: ""
+  down: ""
+
+ManagePrivilegeMatViewGrantIdempotent:
+  # information_schema.table_privileges does not expose materialized views, so
+  # view privilege export reads relacl directly. This guards that matview
+  # grants converge too.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE mv_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE mv_users TO app_user;
+  up: ""
+  down: ""
