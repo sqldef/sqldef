@@ -231,15 +231,25 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				)
 			}
 
+			var triggerConstraintOptions *ConstraintOptions
+			if stmt.Trigger.ConstraintOptions != nil {
+				triggerConstraintOptions = &ConstraintOptions{
+					deferrable:        stmt.Trigger.ConstraintOptions.Deferrable,
+					initiallyDeferred: stmt.Trigger.ConstraintOptions.InitiallyDeferred,
+				}
+			}
+
 			return &Trigger{
-				statement:     ddl,
-				name:          normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
-				tableName:     normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
-				time:          stmt.Trigger.Time,
-				event:         events,
-				forEach:       stmt.Trigger.ForEach,
-				whenCondition: whenCondition,
-				body:          body,
+				statement:         ddl,
+				name:              normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
+				tableName:         normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
+				time:              stmt.Trigger.Time,
+				event:             events,
+				forEach:           stmt.Trigger.ForEach,
+				whenCondition:     whenCondition,
+				constraint:        stmt.Trigger.Constraint,
+				constraintOptions: triggerConstraintOptions,
+				body:              body,
 			}, nil
 		} else if stmt.Action == parser.CreateEvent {
 			body := util.TransformSlice(stmt.Event.Body, func(s parser.Statement) string {
