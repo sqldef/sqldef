@@ -221,6 +221,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName:     normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:          stmt.Trigger.Time,
 				event:         events,
+				forEach:       stmt.Trigger.ForEach,
 				whenCondition: whenCondition,
 				body:          body,
 			}, nil

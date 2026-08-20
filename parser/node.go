@@ -1471,6 +1471,7 @@ type Trigger struct {
 	TableName TableName
 	Time      string
 	Event     []TriggerEvent
+	ForEach   string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
 	When      Expr
 	Body      []Statement
 }
