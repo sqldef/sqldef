@@ -326,6 +326,30 @@ ManagePrivilegeViewGrantRevoke:
   down: |
     GRANT SELECT ON TABLE "public"."v_users" TO "app_user";
 
+ManagePrivilegeViewColumnGrantIdempotent:
+  # Column-level grants on a view (pg_attribute.attacl) must also be exported
+  # so they converge, including WITH GRANT OPTION.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    GRANT SELECT (name) ON TABLE v_users TO app_user WITH GRANT OPTION;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    GRANT SELECT (name) ON TABLE v_users TO app_user WITH GRANT OPTION;
+  up: ""
+  down: ""
+
 ManagePrivilegeMatViewGrantIdempotent:
   # information_schema.table_privileges does not expose materialized views, so
   # view privilege export reads relacl directly. This guards that matview
