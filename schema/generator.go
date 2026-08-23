@@ -2915,7 +2915,7 @@ func (g *Generator) areSameFunctionSignature(a, b *Function) bool {
 	if strings.EqualFold(a.returnType, "TABLE") || strings.EqualFold(b.returnType, "TABLE") {
 		return false
 	}
-	if normalizePGFunctionType(g.pgFunctionReturnType(a)) != normalizePGFunctionType(g.pgFunctionReturnType(b)) || len(a.args) != len(b.args) {
+	if !g.areSameFunctionReturnType(a, b) || len(a.args) != len(b.args) {
 		return false
 	}
 	for i := range a.args {
@@ -2980,8 +2980,9 @@ func normalizePGFunctionType(typ string) string {
 	t = strings.Join(strings.Fields(t), " ")
 	// SETOF modifies the return type rather than being part of the type name,
 	// so it has to be stripped before the alias lookup.
+	prefix := ""
 	if rest, ok := strings.CutPrefix(t, "setof "); ok {
-		return "setof " + normalizePGFunctionType(rest)
+		prefix, t = "setof ", rest
 	}
 	var suffix strings.Builder
 	for strings.HasSuffix(t, "[]") {
@@ -2991,7 +2992,7 @@ func normalizePGFunctionType(typ string) string {
 	if canonical, ok := pgFunctionTypeAliases[t]; ok {
 		t = canonical
 	}
-	return t + suffix.String()
+	return prefix + t + suffix.String()
 }
 
 // dropFunctionDDL renders DROP FUNCTION for current. In PostgreSQL the
@@ -3039,7 +3040,7 @@ func (g *Generator) areSameFunctionReturnType(a, b *Function) bool {
 	if g.mode != GeneratorModePostgres {
 		return a.returnType == b.returnType
 	}
-	return normalizePGFunctionType(g.pgFunctionReturnType(a)) == normalizePGFunctionType(g.pgFunctionReturnType(b))
+	return normalizePGFunctionType(pgFunctionReturnType(a)) == normalizePGFunctionType(pgFunctionReturnType(b))
 }
 
 // pgFunctionReturnType returns the return type to compare against. PostgreSQL
@@ -3047,22 +3048,23 @@ func (g *Generator) areSameFunctionReturnType(a, b *Function) bool {
 // derives the type from them, while pg_get_functiondef always prints it
 // explicitly, so the derivation has to happen on the desired side. SETOF cannot
 // be written without RETURNS, so it never takes part in the derivation.
-func (g *Generator) pgFunctionReturnType(f *Function) string {
+func pgFunctionReturnType(f *Function) string {
 	if f.returnType != "" {
 		return f.returnType
 	}
-	var outTypes []string
+	outCount, lastOutType := 0, ""
 	for _, arg := range f.args {
 		switch functionArgMode(arg.mode) {
 		case "OUT", "INOUT":
-			outTypes = append(outTypes, arg.typ)
+			outCount++
+			lastOutType = arg.typ
 		}
 	}
-	switch len(outTypes) {
+	switch outCount {
 	case 0:
 		return ""
 	case 1:
-		return outTypes[0]
+		return lastOutType
 	default:
 		return "record"
 	}
