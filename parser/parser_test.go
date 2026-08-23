@@ -1291,6 +1291,79 @@ $$ LANGUAGE plpgsql VOLATILE`,
 	}
 }
 
+func TestCreateFunctionReturnType(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "omitted with a single OUT parameter",
+			sql:  "CREATE FUNCTION f(IN a int, OUT b int) AS $$ BEGIN b := a; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted with multiple OUT parameters",
+			sql:  "CREATE FUNCTION f(OUT b int, OUT c int) AS $$ BEGIN b := 1; c := 2; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted with an INOUT parameter",
+			sql:  "CREATE FUNCTION f(INOUT a int) AS $$ BEGIN a := a + 1; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted in the LANGUAGE-before-AS format",
+			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "omitted in the options-before-AS format",
+			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "SETOF alongside an OUT parameter",
+			sql:  "CREATE FUNCTION f(OUT b int) RETURNS SETOF int AS $$ SELECT 1 $$ LANGUAGE sql",
+			want: "SETOF int",
+		},
+		{
+			name: "present in the AS-before-LANGUAGE format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int AS $$ SELECT a $$ LANGUAGE sql",
+			want: "int",
+		},
+		{
+			name: "present in the LANGUAGE-before-AS format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int LANGUAGE sql AS $$ SELECT a $$",
+			want: "int",
+		},
+		{
+			name: "present in the options-before-AS format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int LANGUAGE sql IMMUTABLE AS $$ SELECT a $$",
+			want: "int",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("ParseDDL failed: %v", err)
+			}
+			ddl, ok := stmt.(*DDL)
+			if !ok {
+				t.Fatalf("expected *DDL, got %T", stmt)
+			}
+			if ddl.Function == nil {
+				t.Fatalf("expected non-nil Function")
+			}
+			if got := ddl.Function.ReturnType; got != tc.want {
+				t.Errorf("ReturnType: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTableSpecRoundTripConstraints(t *testing.T) {
 	cases := []struct {
 		name string
