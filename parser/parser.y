@@ -4490,6 +4490,11 @@ function_arg:
   function_arg_mode_opt sql_id column_type array_opt function_arg_default_opt
   {
     typeStr := $3.Type
+    // The timezone flag is part of the type name, and the return type is
+    // derived from it when RETURNS is omitted, so it must not be dropped.
+    if $3.Timezone {
+      typeStr += " with time zone"
+    }
     if bool($4) {
       typeStr += "[]"
     }
@@ -4503,6 +4508,9 @@ function_arg:
 | function_arg_mode_opt column_type array_opt function_arg_default_opt
   {
     typeStr := $2.Type
+    if $2.Timezone {
+      typeStr += " with time zone"
+    }
     if bool($3) {
       typeStr += "[]"
     }
