@@ -1225,6 +1225,10 @@ func TestAreSameFunctionDefinition(t *testing.T) {
 		fn("record", out("b", "integer"), out("c", "integer")),
 		fn("", out("b", "int"), out("c", "int"))))
 
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("timestamp with time zone", out("b", "timestamp with time zone")),
+		fn("", out("b", "timestamptz"))))
+
 	// VARIADIC and IN are not output parameters, so nothing is derived and the
 	// mismatch against the exported RETURNS stays visible.
 	assert.False(t, g.areSameFunctionDefinition(

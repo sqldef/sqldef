@@ -10888,6 +10888,11 @@ yydefault:
 		yyDollar = yyS[yypt-5 : yypt+1]
 		{
 			typeStr := yyDollar[3].columnType.Type
+			// The timezone flag is part of the type name, and the return type is
+			// derived from it when RETURNS is omitted, so it must not be dropped.
+			if yyDollar[3].columnType.Timezone {
+				typeStr += " with time zone"
+			}
 			if bool(yyDollar[4].boolVal) {
 				typeStr += "[]"
 			}
@@ -10902,6 +10907,9 @@ yydefault:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
 			typeStr := yyDollar[2].columnType.Type
+			if yyDollar[2].columnType.Timezone {
+				typeStr += " with time zone"
+			}
 			if bool(yyDollar[3].boolVal) {
 				typeStr += "[]"
 			}
