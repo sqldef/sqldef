@@ -2786,7 +2786,7 @@ func (g *Generator) areSameFunctionSignature(a, b *Function) bool {
 	if strings.EqualFold(a.returnType, "TABLE") || strings.EqualFold(b.returnType, "TABLE") {
 		return false
 	}
-	if normalizePGFunctionType(a.returnType) != normalizePGFunctionType(b.returnType) || len(a.args) != len(b.args) {
+	if normalizePGFunctionType(g.pgFunctionReturnType(a)) != normalizePGFunctionType(g.pgFunctionReturnType(b)) || len(a.args) != len(b.args) {
 		return false
 	}
 	for i := range a.args {
@@ -2849,6 +2849,11 @@ var pgFunctionTypeAliases = map[string]string{
 func normalizePGFunctionType(typ string) string {
 	t := strings.ToLower(strings.TrimSpace(typ))
 	t = strings.Join(strings.Fields(t), " ")
+	// SETOF modifies the return type rather than being part of the type name,
+	// so it has to be stripped before the alias lookup.
+	if rest, ok := strings.CutPrefix(t, "setof "); ok {
+		return "setof " + normalizePGFunctionType(rest)
+	}
 	var suffix strings.Builder
 	for strings.HasSuffix(t, "[]") {
 		t = strings.TrimSpace(strings.TrimSuffix(t, "[]"))
@@ -2897,9 +2902,46 @@ func insertOrReplaceIntoCreateFunction(stmt string) (string, bool) {
 	return stmt, false
 }
 
+// areSameFunctionReturnType compares two return types the way the target
+// dialect resolves them. Only PostgreSQL gets the alias normalization and the
+// derivation from output parameters; other dialects keep the raw comparison
+// because pgFunctionTypeAliases is not the right canonicalization for them.
+func (g *Generator) areSameFunctionReturnType(a, b *Function) bool {
+	if g.mode != GeneratorModePostgres {
+		return a.returnType == b.returnType
+	}
+	return normalizePGFunctionType(g.pgFunctionReturnType(a)) == normalizePGFunctionType(g.pgFunctionReturnType(b))
+}
+
+// pgFunctionReturnType returns the return type to compare against. PostgreSQL
+// lets CREATE FUNCTION omit RETURNS when the function has output parameters and
+// derives the type from them, while pg_get_functiondef always prints it
+// explicitly, so the derivation has to happen on the desired side. SETOF cannot
+// be written without RETURNS, so it never takes part in the derivation.
+func (g *Generator) pgFunctionReturnType(f *Function) string {
+	if f.returnType != "" {
+		return f.returnType
+	}
+	var outTypes []string
+	for _, arg := range f.args {
+		switch functionArgMode(arg.mode) {
+		case "OUT", "INOUT":
+			outTypes = append(outTypes, arg.typ)
+		}
+	}
+	switch len(outTypes) {
+	case 0:
+		return ""
+	case 1:
+		return outTypes[0]
+	default:
+		return "record"
+	}
+}
+
 func (g *Generator) areSameFunctionDefinition(a, b *Function) bool {
 	// Compare function properties
-	if a.returnType != b.returnType ||
+	if !g.areSameFunctionReturnType(a, b) ||
 		a.body != b.body ||
 		a.language != b.language {
 		return false
