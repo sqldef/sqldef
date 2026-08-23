@@ -1376,6 +1376,14 @@ func TestCreateFunctionArgDefaultsAndModes(t *testing.T) {
 			},
 		},
 		{
+			name: "timezone-qualified argument types",
+			sql:  "CREATE FUNCTION f(IN a timestamp with time zone, OUT b time with time zone) AS $$ BEGIN b := a::time with time zone; END $$ LANGUAGE plpgsql",
+			want: []expectedArg{
+				{Mode: "IN", Name: "a", Type: "timestamp with time zone"},
+				{Mode: "OUT", Name: "b", Type: "time with time zone"},
+			},
+		},
+		{
 			name: "VARIADIC argument mode",
 			sql:  "CREATE FUNCTION f(VARIADIC a int[]) RETURNS int AS $$ SELECT 0 $$ LANGUAGE sql",
 			want: []expectedArg{
@@ -1481,6 +1489,11 @@ func TestCreateFunctionReturnType(t *testing.T) {
 		{
 			name: "omitted in the options-before-AS format",
 			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "omitted with a timezone-qualified OUT parameter",
+			sql:  "CREATE FUNCTION f(OUT b timestamp with time zone) AS $$ BEGIN b := now(); END $$ LANGUAGE plpgsql",
 			want: "",
 		},
 		{

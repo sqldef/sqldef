@@ -595,3 +595,12 @@ FunctionWithOmittedReturnsBodyChangeIsReplacedInPlace:
       b := a;
     END
     $$ LANGUAGE plpgsql;
+
+FunctionWithTimezoneQualifiedOutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_tz(IN a int, OUT b timestamp with time zone) AS $$
+    BEGIN
+      b := now();
+    END
+    $$ LANGUAGE plpgsql;
