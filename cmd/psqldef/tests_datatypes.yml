@@ -45,6 +45,27 @@ CreateTableChangeDefaultBoolean:
     ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT false;
   down: |
     ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT true;
+CreateTableChangeDefaultTimestampWithTimeZoneCast:
+  # Regression: a DEFAULT whose cast carries a time zone modifier must keep it
+  # when SET DEFAULT is regenerated. Dropping "with time zone" stores a
+  # different type (without time zone) while dry-run reports no diff.
+  current: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone NOT NULL DEFAULT (clock_timestamp())::timestamp(0) with time zone
+    );
+  desired: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "a" SET DEFAULT now()::timestamp(0) with time zone;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "a" SET DEFAULT clock_timestamp()::timestamp(0) with time zone;
+CreateTableDefaultTimestampWithTimeZoneCastIdempotent:
+  desired: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
+    );
 NullCast:
   desired: |
     CREATE TABLE public.test (

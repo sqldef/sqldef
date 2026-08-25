@@ -171,6 +171,7 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
+		TimeZone: convertType.TimeZone,
 	}
 }
 
