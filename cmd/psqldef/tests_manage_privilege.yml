@@ -195,6 +195,57 @@ ManagePrivilegeIdempotent:
   up: ""
   down: ""
 
+ManagePrivilegeSplitGrantStatementsRevokeOnce:
+  # Privileges for the same (table, grantee) split across several desired GRANT
+  # statements must be diffed as one unit: the REVOKE is emitted once, not once
+  # per source statement.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "app_user";
+  down: |
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "app_user";
+
+ManagePrivilegeSplitGrantStatementsGrantOnce:
+  # The GRANT side must also be diffed as one unit: a privilege missing from the
+  # current schema is granted once even when the desired GRANTs are split.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+  down: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+
 ManagePrivilegeOwnerConverge:
   # 宣言された owner が current と違えば ALTER OWNER が出る
   manage:
