@@ -839,6 +839,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return &parser.ParenExpr{
 			Expr: normalizedInner,
 		}
+	case *parser.NotExpr:
+		return normalizeNotExpr(normalizeExpr(e.Expr, mode))
 	case *parser.ComparisonExpr:
 		return normalizeComparisonExpr(e, mode, normalizeExpr, true)
 	case *parser.AndExpr:
@@ -1543,6 +1545,14 @@ func normalizeNotExpr(operand parser.Expr) parser.Expr {
 			Left:     comparison.Left,
 			Right:    comparison.Right,
 		}
+	}
+	// AND and OR bind looser than NOT, so they need back the parentheses that
+	// normalizeExpr strips. Without them NOT (a AND b) would print as the very
+	// different NOT a AND b. Operands coming from normalizeCheckExprWith keep
+	// their own ParenExpr, so this only fires for the normalizeExpr side.
+	switch operand.(type) {
+	case *parser.AndExpr, *parser.OrExpr:
+		return &parser.NotExpr{Expr: &parser.ParenExpr{Expr: operand}}
 	}
 	return &parser.NotExpr{Expr: operand}
 }
