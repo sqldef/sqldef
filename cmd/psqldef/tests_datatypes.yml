@@ -66,6 +66,22 @@ CreateTableDefaultTimestampWithTimeZoneCastIdempotent:
     CREATE TABLE test (
       a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
     );
+AddColumnDefaultTimestampWithTimeZoneCast:
+  # ADD COLUMN runs through the same default serialization as SET DEFAULT, so the
+  # timezone modifier must be kept there too.
+  current: |
+    CREATE TABLE test (
+      id integer
+    );
+  desired: |
+    CREATE TABLE test (
+      id integer,
+      a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD COLUMN "a" timestamp(0) WITH TIME ZONE NOT NULL DEFAULT now()::timestamp(0) with time zone;
+  down: |
+    ALTER TABLE "public"."test" DROP COLUMN "a";
 NullCast:
   desired: |
     CREATE TABLE public.test (

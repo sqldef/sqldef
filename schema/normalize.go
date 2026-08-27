@@ -155,6 +155,19 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 	typeStr := convertType.Type
 	isArray := strings.HasSuffix(typeStr, "[]")
 
+	// normalizeTypeName folds timestamptz/timetz (and the spelled-out "with time
+	// zone" forms) down to timestamp/time on the assumption that the timezone
+	// flag lives elsewhere (Column.timezone). ConvertType has no such flag unless
+	// the cast was written out in full and parsed by the generic grammar, so
+	// recover it from the type name here before the alias erases it.
+	timeZone := convertType.TimeZone
+	if timeZone == "" && mode == GeneratorModePostgres {
+		switch strings.ToLower(strings.TrimSuffix(typeStr, "[]")) {
+		case "timestamptz", "timetz", "timestamp with time zone", "time with time zone":
+			timeZone = " with time zone"
+		}
+	}
+
 	// For array types, normalize the base type and then re-append the []
 	if isArray {
 		baseType := strings.TrimSuffix(typeStr, "[]")
@@ -171,7 +184,7 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
-		TimeZone: convertType.TimeZone,
+		TimeZone: timeZone,
 	}
 }
 
