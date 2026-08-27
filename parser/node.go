@@ -2687,6 +2687,10 @@ type ConvertType struct {
 	Operator string
 	Charset  string
 	Array    BoolVal
+	// TimeZone holds the timestamp/time timezone modifier for a cast target
+	// (e.g. " with time zone"), emitted after the length so a cast such as
+	// timestamp(0) with time zone round-trips. Empty for other types.
+	TimeZone string
 }
 
 // this string is "character set" and this comment is required
@@ -2703,6 +2707,9 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 			buf.Printf(", %v", node.Scale)
 		}
 		buf.Printf(")")
+	}
+	if node.TimeZone != "" {
+		buf.Printf("%s", node.TimeZone)
 	}
 	if node.Charset != "" {
 		buf.Printf("%s %s", node.Operator, node.Charset)

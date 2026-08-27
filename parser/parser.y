@@ -4007,7 +4007,7 @@ default_value_expression:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -6773,7 +6773,7 @@ value_expression:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -7342,17 +7342,25 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
-| TIMESTAMP '(' INTEGRAL ')'
+| TIMESTAMP '(' INTEGRAL ')' time_zone_opt
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    ct := &ConvertType{Type: $1, Length: NewIntVal($3)}
+    if bool($5) {
+      ct.TimeZone = " with time zone"
+    }
+    $$ = ct
   }
 | TIMESTAMP %prec LOWER_THAN_WITH
   {
     $$ = &ConvertType{Type: $1}
   }
-| TIME '(' INTEGRAL ')'
+| TIME '(' INTEGRAL ')' time_zone_opt
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    ct := &ConvertType{Type: $1, Length: NewIntVal($3)}
+    if bool($5) {
+      ct.TimeZone = " with time zone"
+    }
+    $$ = ct
   }
 | TIME %prec LOWER_THAN_WITH
   {
@@ -8045,7 +8053,7 @@ array_element:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -8057,7 +8065,7 @@ array_element:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
