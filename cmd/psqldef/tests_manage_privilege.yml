@@ -246,6 +246,33 @@ ManagePrivilegeSplitGrantStatementsGrantOnce:
   down: |
     REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
 
+ManagePrivilegeSplitGrantStatementsReorderedGrantees:
+  # Grantee lists written in a different order (TO a, b vs TO b, a) target the
+  # same grantees and must aggregate together, so the diff is emitted once per
+  # grantee rather than once per source statement.
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+    GRANT INSERT ON TABLE users TO readonly_user, app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "app_user";
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "readonly_user";
+  down: |
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "app_user", "readonly_user";
+
 ManagePrivilegeOwnerConverge:
   # 宣言された owner が current と違えば ALTER OWNER が出る
   manage:

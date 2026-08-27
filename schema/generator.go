@@ -4535,31 +4535,22 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) &&
 					existing.withGrantOption == stmt.withGrantOption &&
 					existing.objectType == stmt.objectType &&
-					len(existing.grantees) == len(stmt.grantees) {
-					allMatch := true
-					for j, grantee := range existing.grantees {
-						if grantee != stmt.grantees[j] {
-							allMatch = false
-							break
-						}
+					sameGranteeSet(existing.grantees, stmt.grantees) {
+					privMap := make(map[string]bool)
+					for _, priv := range existing.privileges {
+						privMap[priv] = true
 					}
-					if allMatch {
-						privMap := make(map[string]bool)
-						for _, priv := range existing.privileges {
-							privMap[priv] = true
-						}
-						for _, priv := range stmt.privileges {
-							privMap[priv] = true
-						}
-						mergedPrivs := []string{}
-						for priv := range privMap {
-							mergedPrivs = append(mergedPrivs, priv)
-						}
-						slices.Sort(mergedPrivs)
-						aggregated.Privileges[i].privileges = mergedPrivs
-						merged = true
-						break
+					for _, priv := range stmt.privileges {
+						privMap[priv] = true
 					}
+					mergedPrivs := []string{}
+					for priv := range privMap {
+						mergedPrivs = append(mergedPrivs, priv)
+					}
+					slices.Sort(mergedPrivs)
+					aggregated.Privileges[i].privileges = mergedPrivs
+					merged = true
+					break
 				}
 			}
 			if !merged {
@@ -4608,6 +4599,20 @@ func formatPrivilegesForGrant(privileges []string) string {
 	return strings.Join(privileges, ", ")
 }
 
+// sameGranteeSet reports whether two grantee lists contain the same grantees
+// regardless of the order they were written in. GRANT ... TO a, b and
+// GRANT ... TO b, a target the same grantees, so they must aggregate together.
+func sameGranteeSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	as := slices.Clone(a)
+	bs := slices.Clone(b)
+	slices.Sort(as)
+	slices.Sort(bs)
+	return slices.Equal(as, bs)
+}
+
 // aggregatedDesiredPrivilege returns the merged desired GrantPrivilege that a
 // raw desired GRANT statement contributes to. Desired GRANTs for the same
 // object, grantees, grant option, and object type are combined into a single
@@ -4618,7 +4623,7 @@ func (g *Generator) aggregatedDesiredPrivilege(raw *GrantPrivilege) *GrantPrivil
 		if g.qualifiedNamesEqual(agg.tableName, raw.tableName) &&
 			agg.withGrantOption == raw.withGrantOption &&
 			agg.objectType == raw.objectType &&
-			slices.Equal(agg.grantees, raw.grantees) {
+			sameGranteeSet(agg.grantees, raw.grantees) {
 			return agg
 		}
 	}
