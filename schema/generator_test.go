@@ -760,6 +760,20 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			postgresExtractDatePartEquivalent: true,
 			expected:                          `select sum(amount) over(partition by extract(month from created_at) order by extract(year from created_at) asc) as running_total, percentile_cont(0.5) within group( order by extract(epoch from created_at) asc) as median from events`,
 		},
+		{
+			name:                              "PostgreSQL before 14: normalize date_part in OR and unary expressions",
+			mode:                              GeneratorModePostgres,
+			input:                             `SELECT -date_part('epoch'::text, created_at) AS negative_epoch FROM events WHERE date_part('year'::text, created_at) = 2026 OR date_part('month'::text, created_at) = 8`,
+			postgresExtractDatePartEquivalent: true,
+			expected:                          `select -extract(epoch from created_at) as negative_epoch from events where extract(year from created_at) = 2026 or extract(month from created_at) = 8`,
+		},
+		{
+			name:                              "PostgreSQL before 14: normalize date_part in JOIN OR expressions",
+			mode:                              GeneratorModePostgres,
+			input:                             `SELECT l.id FROM events l JOIN events r ON date_part('year'::text, CURRENT_TIMESTAMP) = 2026 OR date_part('month'::text, CURRENT_TIMESTAMP) = 8`,
+			postgresExtractDatePartEquivalent: true,
+			expected:                          `select id from events as l join events as r on extract(year from current_timestamp) = 2026 or extract(month from current_timestamp) = 8`,
+		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
 			name:     "MySQL: normalize table qualifiers in SELECT",
@@ -814,6 +828,41 @@ func TestIsPostgresCatalogQualifier(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, isPostgresCatalogQualifier(tt.qualifier))
+		})
+	}
+}
+
+func TestExtractFromDatePartCallRejectsInvalidArguments(t *testing.T) {
+	source := &parser.AliasedExpr{
+		Expr: &parser.ColName{Name: parser.NewIdent("created_at", false)},
+	}
+	tests := []struct {
+		name  string
+		exprs parser.SelectExprs
+	}{
+		{
+			name:  "field is not an aliased expression",
+			exprs: parser.SelectExprs{&parser.StarExpr{}, source},
+		},
+		{
+			name: "field is not a string literal",
+			exprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+				source,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			extract, ok := extractFromDatePartCall(
+				GeneratorModePostgres,
+				parser.Ident{},
+				"date_part",
+				tt.exprs,
+			)
+			assert.False(t, ok)
+			assert.Nil(t, extract)
 		})
 	}
 }
