@@ -549,6 +549,21 @@ func TestNowFunctionInDefaultExpression(t *testing.T) {
 	}
 }
 
+func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
+	sql := "CREATE TABLE test (a integer, b integer, CONSTRAINT x UNIQUE NULLS NOT DISTINCT (a, b))"
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse UNIQUE NULLS NOT DISTINCT constraint: %v", err)
+	}
+
+	got := String(statement)
+	want := "create table test (\n\ta integer,\n\tb integer,\n\tunique x nulls not distinct (a, b)\n)"
+	if got != want {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 // TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
 // can be used as unquoted column names in index definitions
 func TestTypeKeywordsAsIndexColumns(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	pgquery "github.com/pganalyze/pg_query_go/v6"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +63,75 @@ func readTests(file string) (map[string]TestCase, error) {
 	}
 
 	return tests, nil
+}
+
+func TestGenerateUniqueNullsNotDistinctDDLs(t *testing.T) {
+	sqlParser := database.NewParser(parser.ParserModePostgres)
+	current := `CREATE TABLE users (a integer, b integer);`
+	config := database.GeneratorConfig{LegacyIgnoreQuotes: false}
+
+	tests := []struct {
+		name     string
+		current  string
+		desired  string
+		expected []string
+	}{
+		{
+			name: "unique index",
+			desired: current + `
+CREATE UNIQUE INDEX users_a_b_key ON users (a, b) NULLS NOT DISTINCT;`,
+			expected: []string{
+				"CREATE UNIQUE INDEX users_a_b_key ON public.users (a, b) NULLS NOT DISTINCT",
+			},
+		},
+		{
+			name: "unique constraint",
+			desired: `CREATE TABLE users (
+  a integer,
+  b integer,
+  CONSTRAINT users_a_b_key UNIQUE NULLS NOT DISTINCT (a, b)
+);`,
+			expected: []string{
+				"ALTER TABLE public.users ADD CONSTRAINT users_a_b_key UNIQUE NULLS NOT DISTINCT (a, b)",
+			},
+		},
+		{
+			name: "change unique constraint null handling",
+			current: `CREATE TABLE users (
+  a integer,
+  b integer,
+  CONSTRAINT users_a_b_key UNIQUE (a, b)
+);`,
+			desired: `CREATE TABLE users (
+  a integer,
+  b integer,
+  CONSTRAINT users_a_b_key UNIQUE NULLS NOT DISTINCT (a, b)
+);`,
+			expected: []string{
+				"ALTER TABLE public.users DROP CONSTRAINT users_a_b_key",
+				"ALTER TABLE public.users ADD CONSTRAINT users_a_b_key UNIQUE NULLS NOT DISTINCT (a, b)",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			currentSQL := current
+			if test.current != "" {
+				currentSQL = test.current
+			}
+			ddls, err := schema.GenerateIdempotentDDLs(
+				schema.GeneratorModePostgres,
+				sqlParser,
+				test.desired,
+				currentSQL,
+				config,
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, test.expected, ddls)
+		})
+	}
 }
 
 // TestParseIndexAsync tests parsing of CREATE INDEX ASYNC without database execution.

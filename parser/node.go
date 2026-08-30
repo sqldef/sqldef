@@ -1077,6 +1077,7 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 type IndexDefinition struct {
 	Info              *IndexInfo
 	Columns           []IndexColumn
+	NullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE constraints
 	Options           []*IndexOption
 	Partition         *IndexPartition
 	ConstraintOptions *ConstraintOptions
@@ -1084,7 +1085,11 @@ type IndexDefinition struct {
 
 // Format formats the node.
 func (idx *IndexDefinition) Format(buf *nodeBuffer) {
-	buf.Printf("%v (", idx.Info)
+	buf.Printf("%v", idx.Info)
+	if idx.NullsNotDistinct {
+		buf.Printf(" nulls not distinct")
+	}
+	buf.Printf(" (")
 	for i, col := range idx.Columns {
 		if i != 0 {
 			buf.Printf(", %v", col.Column)

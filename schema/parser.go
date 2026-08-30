@@ -641,15 +641,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		index := Index{
-			name:      nameIdent,
-			indexType: indexDef.Info.Type,
-			columns:   indexColumns,
-			primary:   indexDef.Info.Primary,
-			unique:    indexDef.Info.Unique,
-			vector:    indexDef.Info.Vector,
-			clustered: bool(indexDef.Info.Clustered),
-			options:   indexOptions,
-			partition: indexPartition,
+			name:             nameIdent,
+			indexType:        indexDef.Info.Type,
+			columns:          indexColumns,
+			primary:          indexDef.Info.Primary,
+			unique:           indexDef.Info.Unique,
+			vector:           indexDef.Info.Vector,
+			clustered:        bool(indexDef.Info.Clustered),
+			nullsNotDistinct: indexDef.NullsNotDistinct,
+			options:          indexOptions,
+			partition:        indexPartition,
 
 			// Mark as constraint based on database-specific logic
 			constraint:        isConstraint,
@@ -842,6 +843,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		constraint:        stmt.IndexSpec.Constraint,
 		async:             stmt.IndexSpec.Async,
 		concurrently:      stmt.IndexSpec.Concurrently,
+		nullsNotDistinct:  stmt.IndexSpec.NullsNotDistinct,
 		constraintOptions: constraintOptions,
 		clustered:         stmt.IndexSpec.Clustered,
 		where:             where,

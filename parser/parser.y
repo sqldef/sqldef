@@ -2033,7 +2033,7 @@ alter_statement:
       IndexCols: $12,
     }
   }
-| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE nulls_not_distinct_opt '(' index_column_list ')' deferrable_opt initially_deferred_opt
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -2044,12 +2044,13 @@ alter_statement:
         Unique: true,
         Primary: false,
         Constraint: true,
+        NullsNotDistinct: bool($9),
         ConstraintOptions: &ConstraintOptions{
-          Deferrable: $12 != nil && bool(*$12),
-          InitiallyDeferred: $13 != nil && bool(*$13),
+          Deferrable: $13 != nil && bool(*$13),
+          InitiallyDeferred: $14 != nil && bool(*$14),
         },
       },
-      IndexCols: $10,
+      IndexCols: $11,
     }
   }
 /* For SQL Server */
@@ -5481,25 +5482,27 @@ primary_key_definition:
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt nulls_not_distinct_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $3, Name: $2, Primary: false, Unique: true, Clustered: $4},
-      Columns: $6,
-      Options: $8,
-      Partition: $9,
-      ConstraintOptions: &ConstraintOptions{Deferrable: $10 != nil && bool(*$10), InitiallyDeferred: $11 != nil && bool(*$11)},
+      Columns: $7,
+      NullsNotDistinct: bool($5),
+      Options: $9,
+      Partition: $10,
+      ConstraintOptions: &ConstraintOptions{Deferrable: $11 != nil && bool(*$11), InitiallyDeferred: $12 != nil && bool(*$12)},
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
+| UNIQUE clustered_opt nulls_not_distinct_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $1, Primary: false, Unique: true, Clustered: $2},
-      Columns: $4,
-      Options: $6,
-      Partition: $7,
-      ConstraintOptions: &ConstraintOptions{Deferrable: $8 != nil && bool(*$8), InitiallyDeferred: $9 != nil && bool(*$9)},
+      Columns: $5,
+      NullsNotDistinct: bool($3),
+      Options: $7,
+      Partition: $8,
+      ConstraintOptions: &ConstraintOptions{Deferrable: $9 != nil && bool(*$9), InitiallyDeferred: $10 != nil && bool(*$10)},
     }
   }
 
