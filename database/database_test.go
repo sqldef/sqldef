@@ -6,6 +6,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestFormatDDLForOutput(t *testing.T) {
+	tests := []struct {
+		name string
+		ddl  string
+		want string
+	}{
+		{name: "without semicolon", ddl: "CREATE DATABASE mydb", want: "CREATE DATABASE mydb;\n"},
+		{name: "with semicolon", ddl: "CREATE DATABASE mydb;", want: "CREATE DATABASE mydb;\n"},
+		{name: "with duplicate semicolon", ddl: "CREATE DATABASE mydb;;", want: "CREATE DATABASE mydb;\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, formatDDLForOutput(tt.ddl))
+		})
+	}
+}
+
 func TestIsCommentedOut(t *testing.T) {
 	tests := []struct {
 		name     string

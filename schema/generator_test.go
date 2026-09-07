@@ -1037,6 +1037,620 @@ func TestIsDropStatement(t *testing.T) {
 	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
 }
 
+func TestIndexReplacementRespectsEnableDrop(t *testing.T) {
+	current := `CREATE TABLE t (
+  id int NOT NULL,
+  value int,
+  PRIMARY KEY (id),
+  KEY value_idx (value)
+);`
+	desired := `CREATE TABLE t (
+  id int NOT NULL,
+  value int,
+  PRIMARY KEY (id),
+  KEY value_idx (value) GLOBAL
+);`
+
+	withoutDrop, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, strings.Join(withoutDrop, "\n"), "-- Skipped: ALTER TABLE t DROP INDEX value_idx")
+	assert.NotContains(t, strings.Join(withoutDrop, "\n"), "ADD INDEX value_idx")
+
+	withDrop, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	withDropSQL := strings.Join(withDrop, "\n")
+	assert.Contains(t, withDropSQL, "ALTER TABLE t DROP INDEX value_idx")
+	assert.Contains(t, withDropSQL, "ADD INDEX value_idx (value) GLOBAL")
+}
+
+func TestTableHashPartitionColumnChangeGeneratesRepartitionDDL(t *testing.T) {
+	current := `CREATE TABLE hash_sessions (
+  id bigint NOT NULL,
+  user_id bigint NOT NULL,
+  tenant_id bigint NOT NULL,
+  PRIMARY KEY (id, user_id, tenant_id)
+) PARTITION BY HASH (user_id) PARTITIONS 4;`
+	desired := `CREATE TABLE hash_sessions (
+  id bigint NOT NULL,
+  user_id bigint NOT NULL,
+  tenant_id bigint NOT NULL,
+  PRIMARY KEY (id, user_id, tenant_id)
+) PARTITION BY HASH (tenant_id) PARTITIONS 4;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, strings.Join(ddls, "\n"), "ALTER TABLE hash_sessions PARTITION BY HASH (tenant_id) PARTITIONS 4")
+}
+
+func TestRangePartitionInsertionUsesReorganize(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		desired  string
+		expected string
+	}{
+		{
+			name: "ordinary tail",
+			current: `CREATE TABLE a (id int NOT NULL, PRIMARY KEY (id))
+PARTITION BY RANGE (id) (
+  PARTITION p0 VALUES LESS THAN (100),
+  PARTITION p1 VALUES LESS THAN (200)
+);`,
+			desired: `CREATE TABLE a (id int NOT NULL, PRIMARY KEY (id))
+PARTITION BY RANGE (id) (
+  PARTITION p0 VALUES LESS THAN (100),
+  PARTITION p11 VALUES LESS THAN (150),
+  PARTITION p1 VALUES LESS THAN (200)
+);`,
+			expected: "ALTER TABLE a REORGANIZE PARTITION p1 INTO (PARTITION p11 VALUES LESS THAN (150), PARTITION p1 VALUES LESS THAN (200))",
+		},
+		{
+			name: "range columns",
+			current: `CREATE TABLE a (id int NOT NULL, created_at date NOT NULL, PRIMARY KEY (id, created_at))
+PARTITION BY RANGE COLUMNS (created_at) (
+  PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+  PARTITION p2028 VALUES LESS THAN ('2029-01-01')
+);`,
+			desired: `CREATE TABLE a (id int NOT NULL, created_at date NOT NULL, PRIMARY KEY (id, created_at))
+PARTITION BY RANGE COLUMNS (created_at) (
+  PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+  PARTITION p2027 VALUES LESS THAN ('2028-01-01'),
+  PARTITION p2028 VALUES LESS THAN ('2029-01-01')
+);`,
+			expected: "ALTER TABLE a REORGANIZE PARTITION p2028 INTO (PARTITION p2027 VALUES LESS THAN ('2028-01-01'), PARTITION p2028 VALUES LESS THAN ('2029-01-01'))",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModeMysql,
+				database.NewParser(parser.ParserModeMysql),
+				tc.desired,
+				tc.current,
+				database.GeneratorConfig{EnableDrop: true},
+				"",
+			)
+			assert.NoError(t, err)
+			assert.Equal(t, []string{tc.expected}, ddls)
+		})
+	}
+}
+
+func TestTruncatePartitionUpdatesGlobalIndexes(t *testing.T) {
+	base := `CREATE TABLE orders (
+  id int NOT NULL,
+  c1 int NOT NULL,
+  v int,
+  PRIMARY KEY (id, c1),
+  INDEX g_idx (v) GLOBAL
+) PARTITION BY RANGE (c1) (
+  PARTITION p2024 VALUES LESS THAN (2025),
+  PARTITION p2025 VALUES LESS THAN (2026)
+);`
+
+	for _, command := range []string{
+		"ALTER TABLE orders TRUNCATE PARTITION p2025;",
+		"ALTER TABLE orders TRUNCATE PARTITION p2025 UPDATE GLOBAL INDEXES;",
+	} {
+		t.Run(command, func(t *testing.T) {
+			desired := base + "\n" + command
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModeMysql,
+				database.NewParser(parser.ParserModeMysql),
+				desired,
+				base,
+				database.GeneratorConfig{},
+				"",
+			)
+			assert.NoError(t, err)
+			assert.Equal(t, []string{"ALTER TABLE orders TRUNCATE PARTITION p2025 UPDATE GLOBAL INDEXES"}, ddls)
+		})
+	}
+}
+
+func TestRollingWindowPartitionReverseUsesReorganize(t *testing.T) {
+	current := `CREATE TABLE t (
+  id bigint NOT NULL,
+  c1 int NOT NULL,
+  v int,
+  PRIMARY KEY (id, c1),
+  INDEX g_idx (v) GLOBAL
+) PARTITION BY RANGE (c1) (
+  PARTITION p1 VALUES LESS THAN (200),
+  PARTITION p2 VALUES LESS THAN (300)
+);`
+	desired := `CREATE TABLE t (
+  id bigint NOT NULL,
+  c1 int NOT NULL,
+  v int,
+  PRIMARY KEY (id, c1),
+  INDEX g_idx (v)
+) PARTITION BY RANGE (c1) (
+  PARTITION p0 VALUES LESS THAN (100),
+  PARTITION p1 VALUES LESS THAN (200)
+);`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{
+		"ALTER TABLE t DROP INDEX g_idx",
+		"ALTER TABLE t ADD INDEX g_idx (v)",
+		"ALTER TABLE t REORGANIZE PARTITION p1 INTO (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200))",
+		"ALTER TABLE t DROP PARTITION p2 UPDATE GLOBAL INDEXES",
+	}, ddls)
+}
+
+func TestGSIExplicitAlgorithmIsPreservedOnTransition(t *testing.T) {
+	current := `CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k)) PARTITION BY HASH (k) PARTITIONS 4;
+ALTER TABLE t ADD INDEX g_idx (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3, ALGORITHM = COPY;`
+	desired := `CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k)) PARTITION BY HASH (k) PARTITIONS 4;
+ALTER TABLE t ADD INDEX g_idx (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3, ALGORITHM = INPLACE;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{
+		"ALTER TABLE t DROP INDEX g_idx",
+		"ALTER TABLE t ADD INDEX g_idx (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3, ALGORITHM = INPLACE",
+	}, ddls)
+}
+
+func TestGlobalIndexRangePartitionComparisonIsIdempotent(t *testing.T) {
+	current := `CREATE TABLE bbb (
+  id int,
+  testCol int,
+  KEY idx_col (` + "`testCol`" + `)/*B!210604 GLOBAL PARTITION BY RANGE (` + "`testCol`" + `)
+    (PARTITION p1 VALUES LESS THAN (100), PARTITION p2 VALUES LESS THAN (200)) */
+) /*!50100 PARTITION BY HASH (` + "`id`" + `) PARTITIONS 4 */;`
+	desired := `CREATE TABLE bbb (
+  id int,
+  testCol int,
+  KEY idx_col (testCol) GLOBAL PARTITION BY RANGE (testCol)
+    (PARTITION p1 VALUES LESS THAN (100), PARTITION p2 VALUES LESS THAN (200))
+) PARTITION BY HASH (id) PARTITIONS 4;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	assert.NotContains(t, output, "DROP INDEX idx_col")
+	assert.NotContains(t, output, "ADD INDEX idx_col")
+}
+
+func TestGlobalIndexRangePartitionBoundaryChangeRequiresReplacement(t *testing.T) {
+	current := `CREATE TABLE bbb (
+  id int,
+  testCol int,
+  KEY idx_col (testCol) GLOBAL PARTITION BY RANGE (testCol)
+    (PARTITION p1 VALUES LESS THAN (100), PARTITION p2 VALUES LESS THAN (200))
+) PARTITION BY HASH (id) PARTITIONS 4;`
+	desired := `CREATE TABLE bbb (
+  id int,
+  testCol int,
+  KEY idx_col (testCol) GLOBAL PARTITION BY RANGE (testCol)
+    (PARTITION p1 VALUES LESS THAN (100), PARTITION p2 VALUES LESS THAN (300))
+) PARTITION BY HASH (id) PARTITIONS 4;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	assert.Contains(t, output, "DROP INDEX idx_col")
+	assert.Contains(t, output, "ADD INDEX idx_col")
+}
+
+func TestGlobalIndexAlgorithmIsGeneratedOnce(t *testing.T) {
+	desired := `CREATE TABLE t3 (
+  k INT,
+  v INT,
+  KEY g_idx(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 3
+);`
+	current := `CREATE TABLE t3 (k INT, v INT);`
+	for _, algorithm := range []string{"COPY", "INPLACE", "INSTANT", "DEFAULT"} {
+		t.Run(algorithm, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModeMysql,
+				database.NewParser(parser.ParserModeMysql),
+				desired,
+				current,
+				database.GeneratorConfig{Algorithm: algorithm},
+				"",
+			)
+			assert.NoError(t, err)
+			output := strings.Join(ddls, "\n")
+			assert.Equal(t, 1, strings.Count(output, "ALGORITHM = "+algorithm))
+			assert.NotContains(t, output, "ALGORITHM="+algorithm)
+		})
+	}
+}
+
+func TestGlobalIndexAlgorithmDefaultsToTDSQL(t *testing.T) {
+	desired := `CREATE TABLE t3 (
+  k INT,
+  v INT,
+  KEY g_idx(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 3
+);`
+	current := `CREATE TABLE t3 (k INT, v INT);`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{
+		"ALTER TABLE t3 ADD INDEX g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 3",
+	}, ddls)
+}
+
+func TestExplicitGlobalIndexAlgorithmOverridesConfig(t *testing.T) {
+	desired := `CREATE TABLE t3 (
+  k INT,
+  v INT,
+  KEY g_idx(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 3 ALGORITHM = INPLACE
+);`
+	current := `CREATE TABLE t3 (k INT, v INT);`
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{Algorithm: "COPY"},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	assert.Equal(t, 1, strings.Count(output, "ALGORITHM = INPLACE"))
+	assert.NotContains(t, output, "ALGORITHM = COPY")
+}
+
+func TestAlterWithExplicitAlgorithmDoesNotReceiveConfiguredAlgorithm(t *testing.T) {
+	assert.True(t, hasExplicitAlgorithmClause("ALTER TABLE t ADD INDEX i (k) GLOBAL, ALGORITHM=INPLACE"))
+	assert.True(t, hasExplicitAlgorithmClause("ALTER TABLE t ADD INDEX i (k) GLOBAL ALGORITHM DEFAULT"))
+	assert.False(t, hasExplicitAlgorithmClause("ALTER TABLE t ADD COLUMN algorithm INT"))
+	assert.False(t, hasExplicitAlgorithmClause("ALTER TABLE t ADD COLUMN note VARCHAR(32) DEFAULT 'ALGORITHM=COPY'"))
+	assert.False(t, hasExplicitAlgorithmClause("ALTER TABLE t ADD COLUMN note VARCHAR(32) /* ALGORITHM=COPY */"))
+}
+
+func TestPartitionPolicyReplacementRespectsEnableDrop(t *testing.T) {
+	current := `CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 4;`
+	desired := `CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 8;`
+
+	withoutDrop, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	withoutDropSQL := strings.Join(withoutDrop, "\n")
+	assert.Contains(t, withoutDropSQL, "-- Skipped: DROP PARTITION POLICY pp1")
+	assert.NotContains(t, withoutDropSQL, "PARTITIONS 8")
+
+	withDrop, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	withDropSQL := strings.Join(withDrop, "\n")
+	assert.Contains(t, withDropSQL, "DROP PARTITION POLICY pp1")
+	assert.Contains(t, withDropSQL, "PARTITIONS 8")
+}
+
+func TestPartitionPolicyKeyColumnsDiff(t *testing.T) {
+	current := `CREATE PARTITION POLICY pp2 PARTITION BY KEY COLUMNS 1 PARTITIONS 3;`
+	desired := `CREATE PARTITION POLICY pp2 PARTITION BY KEY COLUMNS 2 PARTITIONS 3;`
+
+	withoutDrop, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, strings.Join(withoutDrop, "\n"), "-- Skipped: DROP PARTITION POLICY pp2")
+
+	withDrop, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	withDropSQL := strings.Join(withDrop, "\n")
+	assert.Contains(t, withDropSQL, "DROP PARTITION POLICY pp2")
+	assert.Contains(t, withDropSQL, "KEY COLUMNS 2 PARTITIONS 3")
+}
+
+func TestAlterDatabaseDistributionPolicyIsGenerated(t *testing.T) {
+	desired := `ALTER DATABASE mydb3 USING DISTRIBUTION POLICY dp_supplement;`
+	current := `CREATE DATABASE mydb3;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, strings.Join(ddls, "\n"), "ALTER DATABASE mydb3 USING DISTRIBUTION POLICY dp_supplement;")
+}
+
+func TestExistingDatabasePolicyChangeGeneratesAlter(t *testing.T) {
+	current := `CREATE DATABASE mydb USING DISTRIBUTION POLICY dp1;`
+	desired := `CREATE DATABASE mydb USING DISTRIBUTION POLICY dp2;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, strings.Join(ddls, "\n"), "ALTER DATABASE mydb USING DISTRIBUTION POLICY dp2;")
+}
+
+func TestExistingDatabaseIsNotCreatedAgain(t *testing.T) {
+	current := `CREATE DATABASE ` + "`mydb`" + `;`
+	desired := `CREATE DATABASE mydb USING DISTRIBUTION POLICY dp1;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.NotContains(t, strings.Join(ddls, "\n"), "CREATE DATABASE")
+}
+
+func TestDistributionPolicyPrecedesDatabaseBinding(t *testing.T) {
+	desired := `CREATE DISTRIBUTION POLICY dp1 REGION EXISTS AND REPLICA_COUNT = 3;
+CREATE DATABASE mydb USING DISTRIBUTION POLICY dp1;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		"",
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	policyIndex := strings.Index(output, "CREATE DISTRIBUTION POLICY dp1")
+	databaseIndex := strings.Index(output, "CREATE DATABASE mydb USING DISTRIBUTION POLICY dp1")
+	assert.GreaterOrEqual(t, policyIndex, 0)
+	assert.Greater(t, databaseIndex, policyIndex)
+	assert.NotContains(t, output, ";;")
+}
+
+func TestUsingDistributionPolicyIsIdempotent(t *testing.T) {
+	current := `CREATE TABLE a (id int) USING DISTRIBUTION POLICY "dp1";`
+	desired := `CREATE TABLE a (id int) USING DISTRIBUTION POLICY dp1;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.NotContains(t, strings.Join(ddls, "\n"), "USING DISTRIBUTION POLICY")
+}
+
+func TestUsingPartitionPolicyIsIdempotent(t *testing.T) {
+	current := `CREATE TABLE b (id int, id2 int) PARTITION BY HASH (id2) PARTITIONS 4 USING PARTITION POLICY "pp1";`
+	desired := `CREATE TABLE b (id int, id2 int) PARTITION BY HASH (id2) PARTITIONS 4 USING PARTITION POLICY pp1;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.NotContains(t, strings.Join(ddls, "\n"), "USING PARTITION POLICY")
+}
+
+func TestDistributionPolicyBodyComparisonIgnoresSetPrefix(t *testing.T) {
+	current := `CREATE DISTRIBUTION POLICY "dp1" SET REGION EXISTS AND REPLICA_COUNT = 3;`
+	desired := `CREATE DISTRIBUTION POLICY "dp1" REGION EXISTS AND REPLICA_COUNT = 3;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.NotContains(t, strings.Join(ddls, "\n"), "ALTER DISTRIBUTION POLICY")
+}
+
+func TestDistributionPolicyBodyComparisonIgnoresIdentifierCase(t *testing.T) {
+	current := `CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 1;
+CREATE DISTRIBUTION POLICY "dp2" SET REPLICA_COUNT = 2;`
+	desired := `create distribution policy "dp1" set replica_count = 1;
+create distribution policy "dp2" replica_count = 2;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.NotContains(t, strings.Join(ddls, "\n"), "ALTER DISTRIBUTION POLICY")
+}
+
+func TestDistributionPolicyBodyComparisonPreservesQuotedValueCase(t *testing.T) {
+	current := `CREATE DISTRIBUTION POLICY "dp1" SET REGION = 'Guangzhou';`
+	desired := `CREATE DISTRIBUTION POLICY "dp1" SET REGION = 'Shenzhen';`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, strings.Join(ddls, "\n"), "ALTER DISTRIBUTION POLICY")
+}
+
+func TestDistributionPolicyRenameWithUnquotedAnnotationAndTerminatingSemicolon(t *testing.T) {
+	current := `CREATE DISTRIBUTION POLICY "dp3" SET REPLICA_COUNT = 3;`
+	desired := `CREATE DISTRIBUTION POLICY 'dp3_new' REPLICA_COUNT = 3 --@rename from=dp3;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	assert.Contains(t, output, `RENAME DISTRIBUTION POLICY "dp3" TO "dp3_new"`)
+	assert.NotContains(t, output, "CREATE DISTRIBUTION POLICY")
+	assert.NotContains(t, output, "DROP DISTRIBUTION POLICY")
+}
+
+func TestDistributionPolicyRenameAlsoAltersBody(t *testing.T) {
+	current := `CREATE DISTRIBUTION POLICY "dp3" SET REGION EXISTS AND REPLICA_COUNT = 3;`
+	desired := `CREATE DISTRIBUTION POLICY 'dp3_new' REPLICA_COUNT = 3 --@renamed from=dp3;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	assert.Contains(t, output, `RENAME DISTRIBUTION POLICY "dp3" TO "dp3_new"`)
+	assert.Contains(t, output, `ALTER DISTRIBUTION POLICY "dp3_new" REPLICA_COUNT = 3`)
+	assert.NotContains(t, output, "CREATE DISTRIBUTION POLICY")
+	assert.NotContains(t, output, "DROP DISTRIBUTION POLICY")
+}
+
+func TestObsoletePoliciesAreVisibleWhenDropDisabled(t *testing.T) {
+	current := `CREATE PARTITION POLICY pp_old PARTITION BY HASH(INT) PARTITIONS 2;
+CREATE DISTRIBUTION POLICY "dp_old" SET REPLICA_COUNT = 1;`
+	desired := ``
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeMysql,
+		database.NewParser(parser.ParserModeMysql),
+		desired,
+		current,
+		database.GeneratorConfig{},
+		"",
+	)
+	assert.NoError(t, err)
+	output := strings.Join(ddls, "\n")
+	assert.Contains(t, output, "-- Skipped: DROP PARTITION POLICY pp_old")
+	assert.Contains(t, output, `-- Skipped: DROP DISTRIBUTION POLICY "dp_old"`)
+}
+
 func TestCommentOutDropStatements(t *testing.T) {
 	none := database.GeneratorConfig{}
 	withPrivileges := database.GeneratorConfig{ManagePrivileges: &[]database.ManageObjectRule{}}
@@ -1200,4 +1814,105 @@ func TestDropFunctionDDL(t *testing.T) {
 	// OUT parameters are not part of the identity: keep the bare form.
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
 	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
+}
+
+func TestTDSQLTableOptionAlter(t *testing.T) {
+	cases := []struct {
+		name    string
+		desired string
+		current string
+		warning string
+	}{
+		{
+			name:    "distribution",
+			desired: "CREATE TABLE t (id int) DISTRIBUTION = NODE(ALL);",
+			current: "CREATE TABLE t (id int) DISTRIBUTION = NODE(DEFAULT);",
+			warning: "-- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL)",
+		},
+		{
+			name:    "sync level",
+			desired: "CREATE TABLE t (id int) SYNC_LEVEL = NODE(ALL);",
+			current: "CREATE TABLE t (id int) SYNC_LEVEL = NODE(MAJORITY);",
+			warning: "-- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL)",
+		},
+		{
+			name:    "omitted distribution means default",
+			desired: "CREATE TABLE t (id int);",
+			current: "CREATE TABLE t (id int) DISTRIBUTION = NODE(ALL);",
+			warning: "-- Warning: ALTER TABLE t DISTRIBUTION = NODE(DEFAULT)",
+		},
+		{
+			name:    "explicit distribution default equals omitted",
+			desired: "CREATE TABLE t (id int) DISTRIBUTION = NODE(DEFAULT);",
+			current: "CREATE TABLE t (id int);",
+		},
+		{
+			name:    "explicit sync default equals omitted",
+			desired: "CREATE TABLE t (id int) SYNC_LEVEL = NODE(MAJORITY);",
+			current: "CREATE TABLE t (id int);",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModeMysql,
+				database.NewParser(parser.ParserModeMysql),
+				tc.desired,
+				tc.current,
+				database.GeneratorConfig{},
+				"",
+			)
+			assert.NoError(t, err)
+			got := strings.Join(ddls, "\n")
+			if tc.warning == "" {
+				assert.NotContains(t, got, "ALTER TABLE t DISTRIBUTION")
+				assert.NotContains(t, got, "ALTER TABLE t SYNC_LEVEL")
+				return
+			}
+			assert.Contains(t, got, tc.warning)
+			assert.NotContains(t, got, "\nALTER TABLE t DISTRIBUTION =")
+			assert.NotContains(t, got, "\nALTER TABLE t SYNC_LEVEL =")
+		})
+	}
+}
+
+func TestMySQLToDaysPartitionBoundaryComparison(t *testing.T) {
+	parserImpl := database.NewParser(parser.ParserModeMysql)
+	cases := []struct {
+		name    string
+		desired string
+		current string
+		wantDDL bool
+	}{
+		{
+			name: "literal date equals evaluated boundary",
+			desired: "CREATE TABLE t (id int, created_at date, PRIMARY KEY (id, created_at)) " +
+				"PARTITION BY RANGE (to_days(created_at)) (PARTITION p0 VALUES LESS THAN (TO_DAYS('2024-06-24')));",
+			current: "CREATE TABLE t (id int, created_at date, PRIMARY KEY (id, created_at)) " +
+				"PARTITION BY RANGE (TO_DAYS(created_at)) (PARTITION p0 VALUES LESS THAN (739427));",
+		},
+		{
+			name: "different boundary still differs",
+			desired: "CREATE TABLE t (id int, created_at date, PRIMARY KEY (id, created_at)) " +
+				"PARTITION BY RANGE (TO_DAYS(created_at)) (PARTITION p0 VALUES LESS THAN (TO_DAYS('2024-06-25')));",
+			current: "CREATE TABLE t (id int, created_at date, PRIMARY KEY (id, created_at)) " +
+				"PARTITION BY RANGE (TO_DAYS(created_at)) (PARTITION p0 VALUES LESS THAN (739427));",
+			wantDDL: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModeMysql,
+				parserImpl,
+				tc.desired,
+				tc.current,
+				database.GeneratorConfig{},
+				"",
+			)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.wantDDL, len(ddls) > 0, "generated DDL: %v", ddls)
+		})
+	}
 }

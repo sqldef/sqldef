@@ -33,6 +33,10 @@ func (d *DryRunDatabase) ExportDDLs() (string, error) {
 	return d.wrapped.ExportDDLs()
 }
 
+func (d *DryRunDatabase) ExportDDLsForDiff() (string, error) {
+	return ExportDDLsForDiff(d.wrapped)
+}
+
 func (d *DryRunDatabase) DB() *sql.DB {
 	return d.dryRunDB
 }

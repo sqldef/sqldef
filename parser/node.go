@@ -520,31 +520,34 @@ func (node *Return) Format(buf *nodeBuffer) {
 }
 
 type DDL struct {
-	Action        DDLAction
-	Table         TableName
-	NewName       TableName
-	IfExists      bool
-	IfNotExists   bool
-	TableSpec     *TableSpec
-	PartitionSpec *PartitionSpec
-	PartitionOf   *PartitionOfSpec // PostgreSQL PARTITION OF clause
-	IndexSpec     *IndexSpec
-	IndexCols     []IndexColumn
-	IndexExpr     Expr
-	ForeignKey    *ForeignKeyDefinition
-	Exclusion     *ExclusionDefinition
-	Policy        *Policy
-	View          *View
-	Trigger       *Trigger
-	Event         *Event
-	Function      *Function
-	Type          *Type
-	Domain        *Domain
-	Comment       *Comment
-	Extension     *Extension
-	Schema        *Schema
-	Grant         *Grant
-	OwnerRole     Ident // for SetTableOwner (ALTER TABLE ... OWNER TO)
+	Action                DDLAction
+	Table                 TableName
+	NewName               TableName
+	IfExists              bool
+	IfNotExists           bool
+	TableSpec             *TableSpec
+	PartitionSpec         *PartitionSpec
+	PartitionOf           *PartitionOfSpec // PostgreSQL PARTITION OF clause
+	IndexSpec             *IndexSpec
+	IndexCols             []IndexColumn
+	IndexExpr             Expr
+	ForeignKey            *ForeignKeyDefinition
+	Exclusion             *ExclusionDefinition
+	Policy                *Policy
+	View                  *View
+	Trigger               *Trigger
+	Event                 *Event
+	Function              *Function
+	Type                  *Type
+	Domain                *Domain
+	Comment               *Comment
+	Extension             *Extension
+	Schema                *Schema
+	Grant                 *Grant
+	OwnerRole             Ident                  // for SetTableOwner (ALTER TABLE ... OWNER TO)
+	PartitionPolicy       *PartitionPolicy       // TDSQL CREATE/DROP PARTITION POLICY
+	DistributionPolicyDef *DistributionPolicyDef // TDSQL CREATE/ALTER/DROP DISTRIBUTION POLICY
+	PartitionCommand      *PartitionCommand      // TDSQL DROP/TRUNCATE PARTITION operation
 }
 
 // PartitionOfSpec represents PostgreSQL CREATE TABLE ... PARTITION OF syntax
@@ -583,6 +586,7 @@ const (
 	CreateType
 	CreateView
 	CreateSchema
+	AlterSchema
 	CreateDomain
 	GrantPrivilege
 	RevokePrivilege
@@ -594,7 +598,49 @@ const (
 	ForceRowLevelSecurity
 	NoForceRowLevelSecurity
 	SetTableOwner
+	CreatePartitionPolicy
+	DropPartitionPolicy
+	CreateDistributionPolicy
+	AlterDistributionPolicy
+	DropDistributionPolicy
+	TDSQLPartitionCommand
+	AlterTableOptions
 )
+
+// PartitionCommand represents an operational TDSQL partition command.
+type PartitionCommand struct {
+	Action              string
+	Partitions          []Ident
+	UpdateGlobalIndexes bool
+}
+
+// GSIOption represents TDSQL's GLOBAL/LOCAL secondary index (GSI) attribute,
+// optionally with the GSI's own independent partition definition
+// (`GLOBAL PARTITION BY HASH(...) PARTITIONS n`).
+type GSIOption struct {
+	Global    bool
+	Local     bool
+	Partition *TablePartition
+}
+
+// PartitionPolicy represents TDSQL's `CREATE/DROP PARTITION POLICY` object, a
+// reusable partitioning template that tables can bind to via
+// `... PARTITION BY ... USING PARTITION POLICY<name>`.
+type PartitionPolicy struct {
+	Name        Ident
+	Type        string // HASH or KEY
+	ColumnType  string // placeholder column type for legacy HASH(type)/KEY(type) syntax
+	ColumnCount int    // number of columns for KEY COLUMNS n syntax
+	Partitions  int
+}
+
+// DistributionPolicyDef represents TDSQL's `CREATE/ALTER/DROP DISTRIBUTION POLICY`
+// object. The name is a quoted string literal (stored without quotes), and Body
+// is the raw predicate text (e.g. "REGION EXISTS AND REPLICA_COUNT = 3").
+type DistributionPolicyDef struct {
+	Name string
+	Body string
+}
 
 // View types
 const (
@@ -667,11 +713,12 @@ func (node *PartitionSpec) Format(buf *nodeBuffer) {
 
 // PartitionDefinition describes a partition definition for RANGE or LIST partitions
 type PartitionDefinition struct {
-	Name     Ident
-	Limit    Expr  // For single-value LESS THAN (legacy)
-	LessThan Exprs // For RANGE: VALUES LESS THAN (expr_list)
-	In       Exprs // For LIST: VALUES IN (expr_list)
-	Maxvalue bool  // For LESS THAN MAXVALUE
+	Name        Ident
+	Limit       Expr   // For single-value LESS THAN (legacy)
+	LessThan    Exprs  // For RANGE: VALUES LESS THAN (expr_list)
+	In          Exprs  // For LIST: VALUES IN (expr_list)
+	Maxvalue    bool   // For LESS THAN MAXVALUE
+	StorageTier string // TDSQL partition storage tier
 }
 
 // Format formats the node
@@ -685,6 +732,9 @@ func (node *PartitionDefinition) Format(buf *nodeBuffer) {
 	} else if node.Limit != nil {
 		buf.Printf("partition %v values less than (%v)", node.Name, node.Limit)
 	}
+	if node.StorageTier != "" {
+		buf.Printf(" storage_tier = %s", node.StorageTier)
+	}
 }
 
 // TablePartition represents PARTITION BY clause for MySQL/MariaDB
@@ -693,6 +743,7 @@ type TablePartition struct {
 	Columns     []Ident                // For RANGE COLUMNS, LIST COLUMNS, KEY (column names)
 	Expr        Exprs                  // For RANGE, LIST, HASH (expression list)
 	Partitions  int                    // For PARTITIONS n (0 if not specified)
+	Interval    int                    // TDSQL: RANGE partitioning INTERVAL(n) (0 if not specified)
 	Definitions []*PartitionDefinition // Individual partition definitions
 }
 
@@ -709,6 +760,9 @@ func (p *TablePartition) Format(buf *nodeBuffer) {
 	} else if p.Expr != nil {
 		// RANGE, LIST, HASH
 		buf.Printf(" (%v)", p.Expr)
+	}
+	if p.Interval > 0 {
+		buf.WriteString(fmt.Sprintf(" interval(%d)", p.Interval))
 	}
 	if p.Partitions > 0 {
 		buf.Printf(" partitions %d", p.Partitions)
@@ -1081,6 +1135,10 @@ type IndexDefinition struct {
 	Options           []*IndexOption
 	Partition         *IndexPartition
 	ConstraintOptions *ConstraintOptions
+	Global            bool            // TDSQL: GLOBAL secondary index (GSI)
+	Local             bool            // TDSQL: explicit LOCAL secondary index
+	GSIPartition      *TablePartition // TDSQL: GSI's own partition definition
+	ValueColumns      []Ident         // TDSQL: included/covering columns for ICI (KEY idx(a) VALUE(b))
 }
 
 // Format formats the node.
@@ -1206,6 +1264,10 @@ type IndexSpec struct {
 	Options           []*IndexOption
 	Partition         *IndexPartition // for MSSQL
 	ConstraintOptions *ConstraintOptions
+	Global            bool            // TDSQL: GLOBAL secondary index (GSI)
+	Local             bool            // TDSQL: explicit LOCAL secondary index
+	GSIPartition      *TablePartition // TDSQL: GSI's own partition definition
+	ValueColumns      []Ident         // TDSQL: included/covering columns for ICI
 }
 
 type ConstraintOptions struct {
@@ -1291,7 +1353,8 @@ type Extension struct {
 }
 
 type Schema struct {
-	Name string
+	Name        string
+	UsingPolicy string
 }
 
 type Grant struct {
