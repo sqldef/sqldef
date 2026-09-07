@@ -893,6 +893,34 @@ func TestSQLiteTableOptions(t *testing.T) {
 	}
 }
 
+// TestPragmaAndDeleteStatements covers the non-DDL statements that some schema
+// exports (e.g. Cloudflare D1) interleave with the DDL. They parse instead of
+// erroring; the schema layer drops them.
+func TestPragmaAndDeleteStatements(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{"pragma bare", "PRAGMA foreign_keys", "pragma foreign_keys"},
+		{"pragma assignment", "PRAGMA defer_foreign_keys = TRUE", "pragma defer_foreign_keys"},
+		{"pragma call", "PRAGMA table_info('t')", "pragma table_info"},
+		{"delete from", "DELETE FROM sqlite_sequence", "delete from sqlite_sequence"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeSQLite3)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			if got := String(tree); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCreatePolicyPredicates(t *testing.T) {
 	testCases := []string{
 		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema() = current_database())",
