@@ -19,6 +19,7 @@ package parser
 
 import (
   "fmt"
+  "regexp"
   "strconv"
   "strings"
 )
@@ -33,6 +34,15 @@ func setAllowComments(yylex any, allow bool) {
 
 func setDDL(yylex any, ddl *DDL) {
   yylex.(*Tokenizer).partialDDL = ddl
+}
+
+func normalizeIntervalUnits(s string) string {
+  re := regexp.MustCompile(`(?i)interval\s+\d+\s+\w+`)
+  return re.ReplaceAllStringFunc(s, strings.ToUpper)
+}
+
+func normalizeTTLExpression(s string) string {
+  return strings.ReplaceAll(normalizeIntervalUnits(s), "`", "")
 }
 
 %}
@@ -140,6 +150,10 @@ func setDDL(yylex any, ddl *DDL) {
   triggerEvent             TriggerEvent
   triggerEvents            []TriggerEvent
   distinctClause           *DistinctClause
+  gsiOption                *GSIOption
+  partitionCommand         *PartitionCommand
+  partitionPolicy          *PartitionPolicy
+  intVal                   int
 }
 
 %token LEX_ERROR
@@ -268,7 +282,7 @@ func setDDL(yylex any, ddl *DDL) {
 %right <str> UNIQUE KEY PG_KEY PG_COMMENT
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE ENGINE
 %token <str> MAXVALUE PARTITION PARTITIONS REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION RANGE LIST HASH LINEAR COLUMNS
-%token <str> STATUS VARIABLES
+%token <str> STATUS VARIABLES ALGORITHM INVISIBLE VISIBLE
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <str> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
@@ -283,6 +297,9 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> IMMUTABLE STABLE VOLATILE SETOF
 %token <str> LEAKPROOF CALLED COST ROWS
 %token <str> PARALLEL SAFE UNSAFE RESTRICTED
+
+// TDSQL extension tokens.
+%token <str> DISTRIBUTION SYNC_LEVEL NODE TTL REMOVE LOCAL
 
 // Transaction Tokens
 %token <str> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -466,7 +483,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
-%type <str> table_opt_name table_opt_value sqlite3_table_opt
+%type <str> table_opt_name table_opt_value sqlite3_table_opt node_spec node_arg
+%type <strs> node_arg_list
 %type <tableOptions> table_option_list
 %type <indexInfo> index_info
 %type <indexColumn> index_column
@@ -474,9 +492,16 @@ func setDDL(yylex any, ddl *DDL) {
 %type <indexColumnsOrExpression> index_column_list_or_expression
 %type <indexColumns> index_column_list
 %type <indexPartition> index_partition_opt
-%type <indexOptions> index_option_opt
+%type <indexOptions> index_option_opt index_option_tail_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
+%type <gsiOption> gsi_opt
+%type <columns> ici_opt
+%type <intVal> mysql_partition_interval_opt mysql_partitions_opt
+%type <str> using_policy_opt
+%type <str> distribution_policy_body distribution_policy_predicate distribution_policy_values
+%type <str> policy_column_type
+%type <partitionPolicy> partition_policy_spec
 %type <str> policy_as_opt policy_for_opt
 %type <idents> policy_to_opt
 %type <convertType> character_cast_opt
@@ -532,6 +557,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <tablePartition> table_partition_by_opt
 %type <partDef> mysql_partition_def
 %type <partDefs> mysql_partition_def_list mysql_partition_defs_opt
+%type <empty> partition_engine_opt
+%type <boolVal> update_global_indexes_opt
+%type <str> partition_storage_tier_opt distribution_policy_name
 %type <boolVals> unique_clustered_opt
 %type <byt> concurrently_opt
 %type <empty> nonclustered_columnstore
@@ -898,7 +926,13 @@ comment_statement:
   }
 
 create_statement:
-  create_table_prefix table_spec
+  CREATE DATABASE sql_id using_policy_opt
+  {
+    ddl := &DDL{Action: CreateSchema, Schema: &Schema{Name: $3.Name, UsingPolicy: $4}}
+    setDDL(yylex, ddl)
+    $$ = ddl
+  }
+| create_table_prefix table_spec
   {
     $1.TableSpec = $2
     $$ = $1
@@ -912,25 +946,34 @@ create_statement:
     }
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt gsi_opt ici_opt index_option_tail_opt index_partition_opt
   {
+    spec := &IndexSpec{
+      Name: $5,
+      Type: NewIdent("", false),
+      Unique: bool($2[0]),
+      Clustered: bool($2[1]),
+      Async: $4 == byte(2),
+      Concurrently: $4 == byte(1),
+      NullsNotDistinct: bool($11),
+      Included: $12,
+      Where: NewWhere(WhereStr, $13),
+      Options: append($14, $17...),
+      Partition: $18,
+    }
+    if $15 != nil {
+      spec.Global = $15.Global
+      spec.Local = $15.Local
+      spec.GSIPartition = $15.Partition
+    }
+    if $16 != nil {
+      spec.ValueColumns = $16
+    }
     $$ = &DDL{
       Action: CreateIndex,
       Table: $7,
       NewName: $7,
-      IndexSpec: &IndexSpec{
-        Name: $5,
-        Type: NewIdent("", false),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Async: $4 == byte(2),
-        Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($11),
-        Included: $12,
-        Where: NewWhere(WhereStr, $13),
-        Options: $14,
-        Partition: $15,
-      },
+      IndexSpec: spec,
       IndexCols: $9.IndexCols,
       IndexExpr: $9.IndexExpr,
     }
@@ -1135,6 +1178,47 @@ create_statement:
         Using: NewWhere(WhereStr, $9),
         WithCheck: NewWhere(WhereStr, $10),
       },
+    }
+  }
+/* TDSQL: CREATE PARTITION POLICY policy_name PARTITION BY HASH(INT) PARTITIONS n */
+| CREATE PARTITION POLICY distribution_policy_name
+  {
+    $$ = &DDL{
+      Action: CreatePartitionPolicy,
+      PartitionPolicy: &PartitionPolicy{Name: NewIdent($4, true)},
+    }
+  }
+| CREATE PARTITION POLICY IF NOT EXISTS distribution_policy_name
+  {
+    $$ = &DDL{
+      Action: CreatePartitionPolicy,
+      PartitionPolicy: &PartitionPolicy{Name: NewIdent($7, true)},
+    }
+  }
+| CREATE PARTITION POLICY distribution_policy_name partition_policy_spec
+  {
+    policy := $5
+    policy.Name = NewIdent($4, true)
+    $$ = &DDL{
+      Action: CreatePartitionPolicy,
+      PartitionPolicy: policy,
+    }
+  }
+| CREATE PARTITION POLICY IF NOT EXISTS distribution_policy_name partition_policy_spec
+  {
+    policy := $8
+    policy.Name = NewIdent($7, true)
+    $$ = &DDL{
+      Action: CreatePartitionPolicy,
+      PartitionPolicy: policy,
+    }
+  }
+/* TDSQL: CREATE DISTRIBUTION POLICY 'policy_name' REGION EXISTS AND REPLICA_COUNT = n */
+| CREATE DISTRIBUTION POLICY distribution_policy_name distribution_policy_body
+  {
+    $$ = &DDL{
+      Action: CreateDistributionPolicy,
+      DistributionPolicyDef: &DistributionPolicyDef{Name: $4, Body: $5},
     }
   }
 /* For MySQL */
@@ -2005,7 +2089,47 @@ create_statement:
   }
 
 alter_statement:
-  ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
+  ALTER DATABASE sql_id USING DISTRIBUTION POLICY distribution_policy_name
+  {
+    $$ = &DDL{
+      Action: AlterSchema,
+      Schema: &Schema{Name: $3.Name, UsingPolicy: "DISTRIBUTION POLICY " + $7},
+    }
+  }
+| ALTER ignore_opt TABLE table_name DROP PARTITION sql_id_list update_global_indexes_opt
+  {
+    $$ = &DDL{
+      Action: TDSQLPartitionCommand,
+      Table: $4,
+      PartitionCommand: &PartitionCommand{Action: "DROP", Partitions: $7, UpdateGlobalIndexes: bool($8)},
+    }
+  }
+| ALTER ignore_opt TABLE table_name TRUNCATE PARTITION sql_id_list update_global_indexes_opt
+  {
+    $$ = &DDL{
+      Action: TDSQLPartitionCommand,
+      Table: $4,
+      PartitionCommand: &PartitionCommand{Action: "TRUNCATE", Partitions: $7, UpdateGlobalIndexes: bool($8)},
+    }
+  }
+/* TDSQL: ALTER TABLE table_name DISTRIBUTION/SYNC_LEVEL = NODE(...) */
+| ALTER ignore_opt TABLE table_name DISTRIBUTION '=' node_spec
+  {
+    $$ = &DDL{
+      Action: AlterTableOptions,
+      Table: $4,
+      TableSpec: &TableSpec{Options: map[string]string{"DISTRIBUTION": $7}},
+    }
+  }
+| ALTER ignore_opt TABLE table_name SYNC_LEVEL '=' node_spec
+  {
+    $$ = &DDL{
+      Action: AlterTableOptions,
+      Table: $4,
+      TableSpec: &TableSpec{Options: map[string]string{"SYNC_LEVEL": $7}},
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -2017,6 +2141,53 @@ alter_statement:
         Primary: false,
       },
       IndexCols: $10,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')' gsi_opt ici_opt
+  {
+    spec := &IndexSpec{Name: $8, Unique: bool($6), Primary: false}
+    if $12 != nil {
+      spec.Global = $12.Global
+      spec.Local = $12.Local
+      spec.GSIPartition = $12.Partition
+    }
+    if $13 != nil {
+      spec.ValueColumns = $13
+    }
+    $$ = &DDL{Action: AddIndex, Table: $4, NewName: $4, IndexSpec: spec, IndexCols: $10}
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')' ici_opt gsi_opt
+  {
+    spec := &IndexSpec{Name: $8, Unique: bool($6), Primary: false}
+    if $13 != nil {
+      spec.Global = $13.Global
+      spec.Local = $13.Local
+      spec.GSIPartition = $13.Partition
+    }
+    if $12 != nil {
+      spec.ValueColumns = $12
+    }
+    $$ = &DDL{Action: AddIndex, Table: $4, NewName: $4, IndexSpec: spec, IndexCols: $10}
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')' gsi_opt ici_opt ',' index_option_list
+  {
+    spec := &IndexSpec{Name: $8, Unique: bool($6), Primary: false, Options: $15}
+    if $12 != nil {
+      spec.Global = $12.Global
+      spec.Local = $12.Local
+      spec.GSIPartition = $12.Partition
+    }
+    if $13 != nil {
+      spec.ValueColumns = $13
+    }
+    $$ = &DDL{Action: AddIndex, Table: $4, NewName: $4, IndexSpec: spec, IndexCols: $10}
+  }
+/* TDSQL: ALTER DISTRIBUTION POLICY 'policy_name' REPLICA_COUNT = n */
+| ALTER DISTRIBUTION POLICY distribution_policy_name distribution_policy_body
+  {
+    $$ = &DDL{
+      Action: AlterDistributionPolicy,
+      DistributionPolicyDef: &DistributionPolicyDef{Name: $4, Body: $5},
     }
   }
 | ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY key_kw '(' index_column_list ')'
@@ -3107,6 +3278,161 @@ policy_to_opt:
     $$ = $2
   }
 
+// TDSQL partition policy syntax. Keep the legacy HASH(type)/KEY(type)
+// form for compatibility and also support KEY COLUMNS n, where n is the
+// number of columns covered by the policy.
+partition_policy_spec:
+  PARTITION BY HASH '(' policy_column_type ')' PARTITIONS INTEGRAL
+  {
+    n, _ := strconv.Atoi($8)
+    $$ = &PartitionPolicy{Type: "HASH", ColumnType: $5, Partitions: n}
+  }
+| PARTITION BY KEY '(' policy_column_type ')' PARTITIONS INTEGRAL
+  {
+    n, _ := strconv.Atoi($8)
+    $$ = &PartitionPolicy{Type: "KEY", ColumnType: $5, Partitions: n}
+  }
+| PARTITION BY KEY COLUMNS INTEGRAL PARTITIONS INTEGRAL
+  {
+    columnCount, _ := strconv.Atoi($5)
+    partitions, _ := strconv.Atoi($7)
+    $$ = &PartitionPolicy{Type: "KEY", ColumnCount: columnCount, Partitions: partitions}
+  }
+
+policy_column_type:
+  INT
+  {
+    $$ = strings.ToUpper($1)
+  }
+| INTEGER
+  {
+    $$ = strings.ToUpper($1)
+  }
+| BIGINT
+  {
+    $$ = strings.ToUpper($1)
+  }
+| SMALLINT
+  {
+    $$ = strings.ToUpper($1)
+  }
+| TINYINT
+  {
+    $$ = strings.ToUpper($1)
+  }
+| MEDIUMINT
+  {
+    $$ = strings.ToUpper($1)
+  }
+
+// TDSQL: CREATE/ALTER DISTRIBUTION POLICY predicate body, e.g.
+// `REGION EXISTS AND REPLICA_COUNT = 3`. This is captured as raw text
+// (not fully parsed into a structured predicate tree) since it is an
+// opaque, TDSQL-internal policy DSL.
+distribution_policy_name:
+  sql_id
+  {
+    $$ = $1.Name
+  }
+| STRING
+  {
+    $$ = $1
+  }
+
+distribution_policy_body:
+  distribution_policy_predicate
+  {
+    $$ = $1
+  }
+| distribution_policy_body AND distribution_policy_predicate
+  {
+    $$ = $1 + " AND " + $3
+  }
+
+distribution_policy_predicate:
+  SET NODE IN '(' distribution_policy_values ')'
+  {
+    $$ = "SET NODE IN (" + $5 + ")"
+  }
+| SET NODE NOT IN '(' distribution_policy_values ')'
+  {
+    $$ = "SET NODE NOT IN (" + $6 + ")"
+  }
+| SET sql_id IN '(' distribution_policy_values ')'
+  {
+    $$ = "SET " + $2.Name + " IN (" + $5 + ")"
+  }
+| SET sql_id NOT IN '(' distribution_policy_values ')'
+  {
+    $$ = "SET " + $2.Name + " NOT IN (" + $6 + ")"
+  }
+| sql_id IN '(' distribution_policy_values ')'
+  {
+    $$ = $1.Name + " IN (" + $4 + ")"
+  }
+| sql_id NOT IN '(' distribution_policy_values ')'
+  {
+    $$ = $1.Name + " NOT IN (" + $5 + ")"
+  }
+| SET sql_id '=' INTEGRAL
+  {
+    $$ = "SET " + $2.Name + " = " + $4
+  }
+| SET sql_id '=' STRING
+  {
+    $$ = "SET " + $2.Name + " = '" + $4 + "'"
+  }
+| SET sql_id EXISTS
+  {
+    $$ = "SET " + $2.Name + " EXISTS"
+  }
+| SET sql_id NOT EXISTS
+  {
+    $$ = "SET " + $2.Name + " NOT EXISTS"
+  }
+| sql_id EXISTS
+  {
+    $$ = $1.Name + " EXISTS"
+  }
+| sql_id NOT EXISTS
+  {
+    $$ = $1.Name + " NOT EXISTS"
+  }
+| sql_id '=' INTEGRAL
+  {
+    $$ = $1.Name + " = " + $3
+  }
+| sql_id '=' STRING
+  {
+    $$ = $1.Name + " = '" + $3 + "'"
+  }
+
+distribution_policy_values:
+  STRING
+  {
+    $$ = "\"" + $1 + "\""
+  }
+| INTEGRAL
+  {
+    $$ = $1
+  }
+| sql_id
+  {
+    $$ = "\"" + $1.Name + "\""
+  }
+| distribution_policy_values ',' STRING
+  {
+    $$ = $1 + ", \"" + $3 + "\""
+  }
+| distribution_policy_values ',' INTEGRAL
+  {
+    $$ = $1 + ", " + $3
+  }
+| distribution_policy_values ',' sql_id
+  {
+    $$ = $1 + ", \"" + $3.Name + "\""
+  }
+
 policy_as_opt:
   {
     $$ = ""
@@ -3199,6 +3525,22 @@ drop_statement:
       },
     }
   }
+/* TDSQL: DROP PARTITION POLICY policy_name */
+| DROP PARTITION POLICY sql_id
+  {
+    $$ = &DDL{
+      Action: DropPartitionPolicy,
+      PartitionPolicy: &PartitionPolicy{Name: $4},
+    }
+  }
+/* TDSQL: DROP DISTRIBUTION POLICY 'policy_name' */
+| DROP DISTRIBUTION POLICY distribution_policy_name
+  {
+    $$ = &DDL{
+      Action: DropDistributionPolicy,
+      DistributionPolicyDef: &DistributionPolicyDef{Name: $4},
+    }
+  }
 | DROP INDEX IF EXISTS sql_id
   {
     $$ = &DDL{
@@ -3271,20 +3613,39 @@ create_table_prefix:
     $$ = &DDL{Action: CreateTable, NewName: $4}
     setDDL(yylex, $$)
   }
+| CREATE TABLE if_not_exists_opt TTL
+  {
+    $$ = &DDL{Action: CreateTable, NewName: TableName{Name: NewIdent($4, false)}}
+    setDDL(yylex, $$)
+  }
 
 table_spec:
-  '(' table_column_list ')' table_option_list table_partition_by_opt
+  '(' table_column_list ')' table_option_list table_partition_by_opt using_policy_opt
   {
     $$ = $2
     $$.Options = $4
     $$.Partition = $5
+    if $6 != "" { $$.Options["USING_POLICY"] = $6 }
   }
-| '(' table_column_list ',' error ')' table_option_list table_partition_by_opt
+| '(' table_column_list ',' error ')' table_option_list table_partition_by_opt using_policy_opt
   {
     yylex.Error("trailing comma is not allowed in column definitions")
     $$ = $2
     $$.Options = $6
     $$.Partition = $7
+  }
+
+using_policy_opt:
+  {
+    $$ = ""
+  }
+| USING PARTITION POLICY distribution_policy_name
+  {
+    $$ = "PARTITION POLICY " + $4
+  }
+| USING DISTRIBUTION POLICY distribution_policy_name
+  {
+    $$ = "DISTRIBUTION POLICY " + $4
   }
 
 // PostgreSQL PARTITION BY clause for partitioned tables
@@ -3294,14 +3655,14 @@ table_partition_by_opt:
     $$ = nil
   }
 /* RANGE partitioning - PostgreSQL and MySQL */
-| PARTITION BY RANGE '(' expression_list ')' mysql_partition_defs_opt
+| PARTITION BY RANGE '(' expression_list ')' mysql_partition_interval_opt mysql_partition_defs_opt
   {
-    $$ = &TablePartition{Type: "RANGE", Expr: $5, Definitions: $7}
+    $$ = &TablePartition{Type: "RANGE", Expr: $5, Interval: $7, Definitions: $8}
   }
 /* RANGE COLUMNS partitioning - MySQL only */
-| PARTITION BY RANGE COLUMNS '(' column_list ')' mysql_partition_defs_opt
+| PARTITION BY RANGE COLUMNS '(' column_list ')' mysql_partition_interval_opt mysql_partition_defs_opt
   {
-    $$ = &TablePartition{Type: "RANGE COLUMNS", Columns: $6, Definitions: $8}
+    $$ = &TablePartition{Type: "RANGE COLUMNS", Columns: $6, Interval: $8, Definitions: $9}
   }
 /* LIST partitioning - PostgreSQL and MySQL */
 | PARTITION BY LIST '(' expression_list ')' mysql_partition_defs_opt
@@ -3314,42 +3675,52 @@ table_partition_by_opt:
     $$ = &TablePartition{Type: "LIST COLUMNS", Columns: $6, Definitions: $8}
   }
 /* HASH partitioning - PostgreSQL and MySQL */
-| PARTITION BY HASH '(' expression_list ')' mysql_partitions_opt
+| PARTITION BY HASH '(' expression_list ')' mysql_partition_interval_opt mysql_partitions_opt
   {
-    $$ = &TablePartition{Type: "HASH", Expr: $5}
+    $$ = &TablePartition{Type: "HASH", Expr: $5, Interval: $7, Partitions: $8}
   }
 /* KEY partitioning - MySQL only */
-| PARTITION BY KEY '(' column_list ')' mysql_partitions_opt
+| PARTITION BY KEY '(' column_list ')' mysql_partition_interval_opt mysql_partitions_opt
   {
-    $$ = &TablePartition{Type: "KEY", Columns: $5}
+    $$ = &TablePartition{Type: "KEY", Columns: $5, Interval: $7, Partitions: $8}
   }
 | PARTITION BY KEY '(' ')' mysql_partitions_opt
   {
-    $$ = &TablePartition{Type: "KEY", Columns: nil}
+    $$ = &TablePartition{Type: "KEY", Columns: nil, Partitions: $6}
   }
 /* LINEAR HASH partitioning - MySQL only */
 | PARTITION BY LINEAR HASH '(' expression_list ')' mysql_partitions_opt
   {
-    $$ = &TablePartition{Type: "LINEAR HASH", Expr: $6}
+    $$ = &TablePartition{Type: "LINEAR HASH", Expr: $6, Partitions: $8}
   }
 /* LINEAR KEY partitioning - MySQL only */
 | PARTITION BY LINEAR KEY '(' column_list ')' mysql_partitions_opt
   {
-    $$ = &TablePartition{Type: "LINEAR KEY", Columns: $6}
+    $$ = &TablePartition{Type: "LINEAR KEY", Columns: $6, Partitions: $8}
   }
 | PARTITION BY LINEAR KEY '(' ')' mysql_partitions_opt
   {
-    $$ = &TablePartition{Type: "LINEAR KEY", Columns: nil}
+    $$ = &TablePartition{Type: "LINEAR KEY", Columns: nil, Partitions: $7}
   }
 
 // MySQL PARTITIONS n clause (optional, for HASH/KEY partitioning)
 mysql_partitions_opt:
   {
-    // empty - number of partitions not specified
+    $$ = 0
   }
 | PARTITIONS INTEGRAL
   {
-    // PARTITIONS n - not stored as we don't need it for ADD/DROP PARTITION
+    $$, _ = strconv.Atoi($2)
+  }
+
+// TDSQL: RANGE partitioning INTERVAL(n) clause for auto partition extension
+mysql_partition_interval_opt:
+  {
+    $$ = 0
+  }
+| INTERVAL '(' INTEGRAL ')'
+  {
+    $$, _ = strconv.Atoi($3)
   }
 
 // MySQL partition definitions (optional, for RANGE/LIST partitioning)
@@ -3373,24 +3744,36 @@ mysql_partition_def_list:
   }
 
 mysql_partition_def:
-  PARTITION sql_id VALUES LESS THAN '(' expression_list ')' partition_engine_opt
+  PARTITION sql_id VALUES LESS THAN '(' expression_list ')' partition_engine_opt partition_storage_tier_opt
   {
-    $$ = &PartitionDefinition{Name: $2, LessThan: $7}
+    $$ = &PartitionDefinition{Name: $2, LessThan: $7, StorageTier: $10}
   }
-| PARTITION sql_id VALUES LESS THAN '(' MAXVALUE ')' partition_engine_opt
+| PARTITION sql_id VALUES LESS THAN '(' MAXVALUE ')' partition_engine_opt partition_storage_tier_opt
   {
-    $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
+    $$ = &PartitionDefinition{Name: $2, Maxvalue: true, StorageTier: $10}
   }
-| PARTITION sql_id VALUES LESS THAN MAXVALUE partition_engine_opt
+| PARTITION sql_id VALUES LESS THAN MAXVALUE partition_engine_opt partition_storage_tier_opt
   {
-    $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
+    $$ = &PartitionDefinition{Name: $2, Maxvalue: true, StorageTier: $8}
   }
-| PARTITION sql_id VALUES IN '(' expression_list ')' partition_engine_opt
+| PARTITION sql_id VALUES IN '(' expression_list ')' partition_engine_opt partition_storage_tier_opt
   {
-    $$ = &PartitionDefinition{Name: $2, In: $6}
+    $$ = &PartitionDefinition{Name: $2, In: $6, StorageTier: $9}
   }
 
 // Optional ENGINE clause for partition definitions (MariaDB exports this)
+update_global_indexes_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| UPDATE GLOBAL sql_id
+  {
+    if !strings.EqualFold($3.Name, "INDEXES") {
+      yylex.Error("expected INDEXES after UPDATE GLOBAL")
+    }
+    $$ = BoolVal(true)
+  }
+
 partition_engine_opt:
   {
     // empty
@@ -3398,6 +3781,19 @@ partition_engine_opt:
 | ENGINE '=' reserved_sql_id
   {
     // ENGINE = InnoDB - parsed but discarded
+  }
+
+partition_storage_tier_opt:
+  {
+    $$ = ""
+  }
+| sql_id '=' reserved_sql_id
+  {
+    $$ = strings.ToUpper($3.Name)
+  }
+| sql_id '=' STRING
+  {
+    $$ = strings.ToUpper($3)
   }
 
 // PostgreSQL partition bound specification for child partitions
@@ -3557,6 +3953,38 @@ column_definition:
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
 | PG_COMMENT column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| NODE column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| LOCAL column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| REMOVE column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| TTL column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| SYNC_LEVEL column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| DISTRIBUTION column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| GLOBAL column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| VALUE column_definition_type
   {
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
@@ -3998,6 +4426,10 @@ default_value_expression:
 | INTERVAL STRING interval_unit
   {
     $$ = &IntervalExpr{Expr: NewStrVal($2), Unit: $3}
+  }
+| INTERVAL INTEGRAL interval_unit
+  {
+    $$ = &IntervalExpr{Expr: NewIntVal($2), Unit: $3}
   }
 | variadic_opt array_constructor
   {
@@ -4987,9 +5419,156 @@ collate_opt:
   }
 
 index_definition:
-  index_info '(' index_column_list ')' index_option_opt index_partition_opt
+  index_info '(' index_column_list ')' index_option_opt gsi_opt ici_opt index_partition_opt
   {
-    $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $5, Partition: $6}
+    def := &IndexDefinition{Info: $1, Columns: $3, Options: $5, Partition: $8}
+    if $6 != nil {
+      def.Global = $6.Global
+      def.Local = $6.Local
+      def.GSIPartition = $6.Partition
+    }
+    if $7 != nil {
+      def.ValueColumns = $7
+    }
+    $$ = def
+  }
+| index_info '(' index_column_list ')' index_option_opt gsi_opt ici_opt index_option_list index_partition_opt
+  {
+    def := &IndexDefinition{Info: $1, Columns: $3, Options: append($5, $8...), Partition: $9}
+    if $6 != nil {
+      def.Global = $6.Global
+      def.Local = $6.Local
+      def.GSIPartition = $6.Partition
+    }
+    if $7 != nil {
+      def.ValueColumns = $7
+    }
+    $$ = def
+  }
+| index_info '(' index_column_list ')' index_option_opt ici_opt gsi_opt index_partition_opt
+  {
+    def := &IndexDefinition{Info: $1, Columns: $3, Options: $5, Partition: $8}
+    if $7 != nil {
+      def.Global = $7.Global
+      def.Local = $7.Local
+      def.GSIPartition = $7.Partition
+    }
+    if $6 != nil {
+      def.ValueColumns = $6
+    }
+    $$ = def
+  }
+
+// gsi_opt captures TDSQL's GLOBAL/LOCAL secondary index attribute, optionally
+// with the GSI's own independent partition definition (GLOBAL PARTITION BY ...).
+gsi_opt:
+  {
+    $$ = nil
+  }
+| GLOBAL
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| GLOBAL INVISIBLE
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| GLOBAL VISIBLE
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| INVISIBLE GLOBAL
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| VISIBLE GLOBAL
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| INVISIBLE
+  {
+    $$ = &GSIOption{}
+  }
+| VISIBLE
+  {
+    $$ = &GSIOption{}
+  }
+| GLOBAL COMMENT_KEYWORD STRING
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| GLOBAL COMMENT_KEYWORD STRING INVISIBLE
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| GLOBAL COMMENT_KEYWORD STRING VISIBLE
+  {
+    $$ = &GSIOption{Global: true}
+  }
+| LOCAL
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| LOCAL INVISIBLE
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| LOCAL VISIBLE
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| INVISIBLE LOCAL
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| VISIBLE LOCAL
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| LOCAL COMMENT_KEYWORD STRING
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| LOCAL COMMENT_KEYWORD STRING INVISIBLE
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| LOCAL COMMENT_KEYWORD STRING VISIBLE
+  {
+    $$ = &GSIOption{Local: true}
+  }
+| GLOBAL PARTITION BY HASH '(' expression_list ')' PARTITIONS INTEGRAL
+  {
+    partitions, _ := strconv.Atoi($9)
+    $$ = &GSIOption{Global: true, Partition: &TablePartition{Type: "HASH", Expr: $6, Partitions: partitions}}
+  }
+| GLOBAL PARTITION BY KEY '(' column_list ')' PARTITIONS INTEGRAL
+  {
+    partitions, _ := strconv.Atoi($9)
+    $$ = &GSIOption{Global: true, Partition: &TablePartition{Type: "KEY", Columns: $6, Partitions: partitions}}
+  }
+| GLOBAL PARTITION BY RANGE '(' expression_list ')' mysql_partition_defs_opt
+  {
+    $$ = &GSIOption{Global: true, Partition: &TablePartition{Type: "RANGE", Expr: $6, Definitions: $8}}
+  }
+| GLOBAL PARTITION BY RANGE COLUMNS '(' column_list ')' mysql_partition_defs_opt
+  {
+    $$ = &GSIOption{Global: true, Partition: &TablePartition{Type: "RANGE COLUMNS", Columns: $7, Definitions: $9}}
+  }
+
+// ici_opt captures TDSQL's included column index (ICI) clause, e.g.
+// `KEY idx_b(b) VALUE(c)` where `c` is a covering/included column.
+ici_opt:
+  {
+    $$ = nil
+  }
+| VALUE '(' column_list ')'
+  {
+    $$ = $3
+  }
+| VALUE '(' column_list ')' COMMENT_KEYWORD STRING
+  {
+    $$ = $3
   }
 
 index_option_opt:
@@ -5003,6 +5582,15 @@ index_option_opt:
 | WITH '(' mssql_index_option_list ')'
   {
     $$ = $3
+  }
+
+index_option_tail_opt:
+  {
+    $$ = []*IndexOption{}
+  }
+| index_option_list
+  {
+    $$ = $1
   }
 
 index_option_list:
@@ -5046,6 +5634,18 @@ index_option:
 | COMMENT_KEYWORD STRING
   {
     $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
+  }
+| sql_id '=' sql_id
+  {
+    $$ = &IndexOption{Name: $1.Name, Value: NewStrVal($3.Name)}
+  }
+| ALGORITHM equal_opt sql_id
+  {
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($3.Name)}
+  }
+| ALGORITHM equal_opt DEFAULT
+  {
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
   }
 | WITH PARSER sql_id
   {
@@ -5200,6 +5800,18 @@ index_info:
 | index_or_key ID clustered_opt
   {
     $$ = &IndexInfo{Type: $1, Name: $2, Unique: false, Clustered: $3}
+  }
+| index_or_key NODE clustered_opt
+  {
+    $$ = &IndexInfo{Type: $1, Name: NewIdent($2, false), Unique: false, Clustered: $3}
+  }
+| index_or_key LOCAL clustered_opt
+  {
+    $$ = &IndexInfo{Type: $1, Name: NewIdent($2, false), Unique: false, Clustered: $3}
+  }
+| index_or_key TTL clustered_opt
+  {
+    $$ = &IndexInfo{Type: $1, Name: NewIdent($2, false), Unique: false, Clustered: $3}
   }
 | index_or_key ID UNIQUE clustered_opt
   {
@@ -5760,6 +6372,34 @@ table_option_list:
     $$ = $1
     $$[$2] = $4
   }
+/* TDSQL: DISTRIBUTION = NODE(ALL|DEFAULT|MAJORITY|n[,n...]) */
+| table_option_list DISTRIBUTION '=' node_spec
+  {
+    $$ = $1
+    $$["DISTRIBUTION"] = $4
+  }
+/* TDSQL: SYNC_LEVEL = NODE(ALL|MAJORITY) */
+| table_option_list SYNC_LEVEL '=' node_spec
+  {
+    $$ = $1
+    $$["SYNC_LEVEL"] = $4
+  }
+| table_option_list USING PARTITION POLICY distribution_policy_name
+  {
+    $$ = $1
+    $$["USING_POLICY"] = "PARTITION POLICY " + $5
+  }
+| table_option_list USING DISTRIBUTION POLICY distribution_policy_name
+  {
+    $$ = $1
+    $$["USING_POLICY"] = "DISTRIBUTION POLICY " + $5
+  }
+/* TDSQL: TTL = col + INTERVAL n unit */
+| table_option_list TTL '=' expression
+  {
+    $$ = $1
+    $$["TTL"] = normalizeTTLExpression(String($4))
+  }
 /* For SQLite3 // SQLite Syntax: table-options https://www.sqlite.org/syntax/table-options.html */
 | sqlite3_table_opt
   {
@@ -5769,6 +6409,63 @@ table_option_list:
   {
     $$ = $1
     $$[$3] = ""
+  }
+
+// node_spec captures TDSQL's `NODE(...)` expression used as the value of
+// DISTRIBUTION/SYNC_LEVEL table options, e.g. NODE(ALL), NODE(DEFAULT),
+// NODE(MAJORITY), NODE(1, 2, 3).
+node_spec:
+  NODE '(' node_arg_list ')'
+  {
+    $$ = "NODE(" + strings.ToUpper(strings.Join($3, ", ")) + ")"
+  }
+| STRING
+  {
+    $$ = strings.ToUpper($1)
+  }
+
+node_arg_list:
+  node_arg
+  {
+    $$ = []string{$1}
+  }
+| node_arg_list ',' node_arg
+  {
+    $$ = append($1, $3)
+  }
+
+node_arg:
+  ALL
+  {
+    $$ = strings.ToUpper($1)
+  }
+| DEFAULT
+  {
+    $$ = strings.ToUpper($1)
+  }
+| LOCAL
+  {
+    $$ = strings.ToUpper($1)
+  }
+| REMOVE
+  {
+    $$ = strings.ToUpper($1)
+  }
+| SYNC_LEVEL
+  {
+    $$ = strings.ToUpper($1)
+  }
+| TTL
+  {
+    $$ = strings.ToUpper($1)
+  }
+| INTEGRAL
+  {
+    $$ = $1
+  }
+| sql_id
+  {
+    $$ = $1.Name
   }
 
 sqlite3_table_opt:
@@ -6748,6 +7445,14 @@ value_expression:
 | '!' value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BangStr, Expr: $2}
+  }
+| INTERVAL INTEGRAL interval_unit
+  {
+    $$ = &IntervalExpr{Expr: NewIntVal($2), Unit: $3}
+  }
+| INTERVAL value_expression interval_unit
+  {
+    $$ = &IntervalExpr{Expr: $2, Unit: $3}
   }
 | INTERVAL value_expression
   {
@@ -8340,6 +9045,12 @@ col_name_keyword:
 | TIME
 | TIMESTAMP
 | VALUE
+| NODE
+| LOCAL
+| REMOVE
+| TTL
+| SYNC_LEVEL
+| DISTRIBUTION
 
 // type_func_name_keyword: keywords that are type or function names.
 // These can be used as identifiers in contexts like CREATE EXTENSION.

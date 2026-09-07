@@ -1,0 +1,5283 @@
+# TDSQL-specific mysqldef test fixtures.
+# Consolidated from test/tests_tdsql_1_1.yml .. 1_8.yml and
+# test/tests_tdsql_partition_diff_regressions.yml (2026-09-07).
+# Loaded automatically by TestApply via the "tests*.yml" glob in
+# mysqldef_test.go, same as every other cmd/mysqldef/tests_*.yml file.
+# All cases are offline (parser/diff/idempotency only); none require a
+# live TDSQL instance to run.
+# 1.1 分布式表定义
+CreateTableWithDistributionDefault:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(DEFAULT);
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(DEFAULT);
+  down: |
+    DROP TABLE t;
+
+CreateTableWithSyncLevelMajority:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(MAJORITY);
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(MAJORITY);
+  down: |
+    DROP TABLE t;
+CreateTableBroadcastSyncTable:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE dim_city (
+      id int NOT NULL,
+      name varchar(50),
+      PRIMARY KEY (id)
+    ) SYNC_LEVEL = NODE(ALL) DISTRIBUTION = NODE(ALL);
+
+  current: ""
+  up: |
+    CREATE TABLE dim_city (
+      id int NOT NULL,
+      name varchar(50),
+      PRIMARY KEY (id)
+    ) SYNC_LEVEL = NODE(ALL) DISTRIBUTION = NODE(ALL);
+  down: |
+    DROP TABLE dim_city;
+CreateTableDistributionQuotedValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = 'NODE(ALL)';
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL);
+  up: ""
+  down: ""
+CreateTableDistributionCaseInsensitive:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) distribution = node(all) sync_level = node(all);
+  up: ""
+  down: ""
+
+AddDistributionAndSyncLevel: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL);
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+RemoveDistributionAndSyncLevel:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+AddColumnKeepsDistribution:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int,
+      b varchar(20)
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL);
+  up: |
+    ALTER TABLE t ADD COLUMN b varchar(20) AFTER a;
+  down: |
+    ALTER TABLE `t` DROP COLUMN b;
+CreateTableDistributionWithOtherTableOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int,
+      b varchar(20)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='dim table' DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL);
+
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int,
+      b varchar(20)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='dim table' DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL);
+  down: |
+    DROP TABLE t;
+CreateNewTableWithTdsqlOptionsNoAlter:
+  legacy_ignore_quotes: false
+  offline: true
+  current: ""
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL) STORAGE_TIER = LOCAL_STORAGE
+    TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h';
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL) STORAGE_TIER = LOCAL_STORAGE
+    TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h';
+  down: |
+    DROP TABLE t;
+DropTableWithTdsqlOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: ""
+  up: |
+    DROP TABLE `t`;
+  down: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+RegressionPlainTableOptionsUnchanged:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='c1';
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='c2';
+  up: |
+    ALTER TABLE t COMMENT = 'c2';
+  down: |
+    ALTER TABLE `t` COMMENT = 'c1';
+
+CreateTableDistributionDefaultOnly:
+  legacy_ignore_quotes: false
+  offline: true
+  current: ""
+  desired: |
+    CREATE TABLE t (id int NOT NULL, PRIMARY KEY(id)) DISTRIBUTION = NODE(DEFAULT);
+  up: |
+    CREATE TABLE t (id int NOT NULL, PRIMARY KEY(id)) DISTRIBUTION = NODE(DEFAULT);
+  down: |
+    DROP TABLE t;
+CreateTableSyncLevelMajorityOnly:
+  legacy_ignore_quotes: false
+  offline: true
+  current: ""
+  desired: |
+    CREATE TABLE t (id int NOT NULL, PRIMARY KEY(id)) SYNC_LEVEL = NODE(MAJORITY);
+  up: |
+    CREATE TABLE t (id int NOT NULL, PRIMARY KEY(id)) SYNC_LEVEL = NODE(MAJORITY);
+  down: |
+    DROP TABLE t;
+# 1.2 存储分层（Tiered Storage）
+
+RemoveMultipleTdsqlOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) STORAGE_TIER = LOCAL_STORAGE DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    );
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+    ALTER TABLE t STORAGE_TIER = AUTO_STORAGE;
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+    ALTER TABLE `t` STORAGE_TIER = LOCAL_STORAGE;
+AddStorageTierLocal:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (a int) STORAGE_TIER = LOCAL_STORAGE;
+  up: |
+    ALTER TABLE t STORAGE_TIER = LOCAL_STORAGE;
+  down: |
+    ALTER TABLE `t` STORAGE_TIER = AUTO_STORAGE;
+CreateTableWithStorageTierLocal:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = LOCAL_STORAGE;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = LOCAL_STORAGE;
+  down: |
+    DROP TABLE t;
+CreateTableWithStorageTierObject:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = OBJECT_STORAGE;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = OBJECT_STORAGE;
+  down: |
+    DROP TABLE t;
+CreateTableWithStorageTierAuto:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = AUTO_STORAGE;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = AUTO_STORAGE;
+  down: |
+    DROP TABLE t;
+CreateTableStorageTierCaseInsensitive:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) STORAGE_TIER = LOCAL_STORAGE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) storage_tier = local_storage;
+  up: ""
+  down: ""
+AddStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = LOCAL_STORAGE;
+  up: |
+    ALTER TABLE t STORAGE_TIER = LOCAL_STORAGE;
+  down: |
+    ALTER TABLE `t` STORAGE_TIER = AUTO_STORAGE;
+ChangeStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) STORAGE_TIER = LOCAL_STORAGE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = OBJECT_STORAGE;
+  up: |
+    ALTER TABLE t STORAGE_TIER = OBJECT_STORAGE;
+  down: |
+    ALTER TABLE `t` STORAGE_TIER = LOCAL_STORAGE;
+RemoveStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    ) STORAGE_TIER = OBJECT_STORAGE;
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: |
+    ALTER TABLE t STORAGE_TIER = AUTO_STORAGE;
+  down: |
+    ALTER TABLE t STORAGE_TIER = OBJECT_STORAGE;
+StorageTierAutoIsNoop:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: ""
+  down: ""
+CreateTableWithPartitionStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = LOCAL_STORAGE,
+     PARTITION p2 VALUES LESS THAN MAXVALUE);
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = LOCAL_STORAGE,
+     PARTITION p2 VALUES LESS THAN MAXVALUE);
+  down: |
+    DROP TABLE t;
+CreateTableStorageTierTableAndPartitionLevel:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200));
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200));
+  down: |
+    DROP TABLE t;
+ModifyPartitionStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `c1` int DEFAULT NULL,
+      `c2` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t MODIFY PARTITION (p0) STORAGE_TIER = OBJECT_STORAGE;
+  down: |
+    ALTER TABLE `t` MODIFY PARTITION (p0) STORAGE_TIER = AUTO_STORAGE;
+ChangePartitionStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `c1` int DEFAULT NULL,
+      `c2` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100)  STORAGE_TIER = LOCAL_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t MODIFY PARTITION (p0) STORAGE_TIER = OBJECT_STORAGE;
+  down: |
+    ALTER TABLE `t` MODIFY PARTITION (p0) STORAGE_TIER = LOCAL_STORAGE;
+ModifyMultiplePartitionsStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `c1` int DEFAULT NULL,
+      `c2` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200),
+     PARTITION p2 VALUES LESS THAN (300)) */;
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = LOCAL_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = LOCAL_STORAGE,
+     PARTITION p2 VALUES LESS THAN (300));
+  up: |
+    ALTER TABLE t MODIFY PARTITION (p0, p1) STORAGE_TIER = LOCAL_STORAGE;
+  down: |
+    ALTER TABLE `t` MODIFY PARTITION (p0, p1) STORAGE_TIER = AUTO_STORAGE;
+ModifyPartitionsDifferentStorageTiers:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `c1` int DEFAULT NULL,
+      `c2` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = LOCAL_STORAGE);
+  up: |
+    ALTER TABLE t MODIFY PARTITION (p0) STORAGE_TIER = OBJECT_STORAGE;
+    ALTER TABLE t MODIFY PARTITION (p1) STORAGE_TIER = LOCAL_STORAGE;
+  down: |
+    ALTER TABLE `t` MODIFY PARTITION (p0) STORAGE_TIER = AUTO_STORAGE;
+    ALTER TABLE `t` MODIFY PARTITION (p1) STORAGE_TIER = AUTO_STORAGE;
+ChangeTableAndPartitionStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `c1` int DEFAULT NULL,
+      `c2` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t STORAGE_TIER = LOCAL_STORAGE;
+    ALTER TABLE t MODIFY PARTITION (p0) STORAGE_TIER = OBJECT_STORAGE;
+  down: |
+    ALTER TABLE `t` STORAGE_TIER = AUTO_STORAGE;
+    ALTER TABLE `t` MODIFY PARTITION (p0) STORAGE_TIER = AUTO_STORAGE;
+AddPartitionWithStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `c1` int NOT NULL,
+      `c2` int DEFAULT NULL,
+      PRIMARY KEY (`c1`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      c1 int NOT NULL,
+      c2 int,
+      PRIMARY KEY (c1)
+    )
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = OBJECT_STORAGE);
+  up: |
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = OBJECT_STORAGE);
+  down: |
+    ALTER TABLE `t` DROP PARTITION p1;
+PartitionStorageTierIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = LOCAL_STORAGE);
+  desired: |
+    CREATE TABLE t (
+      c1 int,
+      c2 int
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = OBJECT_STORAGE,
+     PARTITION p1 VALUES LESS THAN (200) STORAGE_TIER = LOCAL_STORAGE);
+  up: ""
+  down: ""
+ChangeObjectStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) STORAGE_TIER = LOCAL_STORAGE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) STORAGE_TIER = OBJECT_STORAGE;
+  up: |
+    ALTER TABLE t STORAGE_TIER = OBJECT_STORAGE;
+  down: |
+    ALTER TABLE `t` STORAGE_TIER = LOCAL_STORAGE;
+AddStorageTierAndTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) STORAGE_TIER = LOCAL_STORAGE TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'ON';
+  up: |
+    ALTER TABLE t STORAGE_TIER = LOCAL_STORAGE;
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` STORAGE_TIER = AUTO_STORAGE;
+    ALTER TABLE `t` REMOVE TTL;
+CreateTableStorageTierAutoIsNoop:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (a int) STORAGE_TIER = AUTO_STORAGE;
+
+  up: ""
+  down: ""
+# 1.3 TTL 行级自动过期
+
+CreateTableWithTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      data varchar(255),
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h';
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      data varchar(255),
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h';
+  down: |
+    DROP TABLE t;
+CreateTableWithTtlOnly:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 30 DAY;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 30 DAY;
+  down: |
+    DROP TABLE t;
+CreateTableWithTtlArchiveTable:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h'
+    TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h'
+    TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  down: |
+    DROP TABLE t;
+CreateTableTtlIntervalSecond:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 30 SECOND;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 30 SECOND;
+  down: |
+    DROP TABLE t;
+CreateTableTtlIntervalMinute:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 15 MINUTE;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 15 MINUTE;
+  down: |
+    DROP TABLE t;
+CreateTableTtlIntervalHour:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 12 HOUR;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 12 HOUR;
+  down: |
+    DROP TABLE t;
+CreateTableTtlIntervalMonth:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 6 MONTH;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 6 MONTH;
+  down: |
+    DROP TABLE t;
+CreateTableTtlIntervalYear:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 1 YEAR;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 1 YEAR;
+  down: |
+    DROP TABLE t;
+CreateTableTtlQuotedColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      `created at` datetime(6) NOT NULL
+    ) TTL = `created at` + INTERVAL 90 DAY;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      `created at` datetime(6) NOT NULL
+    ) TTL = `created at` + INTERVAL 90 DAY;
+  down: |
+    DROP TABLE t;
+CreateTableTtlOnTimestampColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) TTL = created_at + INTERVAL 7 DAY;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) TTL = created_at + INTERVAL 7 DAY;
+  down: |
+    DROP TABLE t;
+CreateTableTtlDisabled:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'OFF';
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'OFF';
+  down: |
+    DROP TABLE t;
+AddTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY;
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+AddTtlWithEnableAndJobInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+ChangeTtlInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 30 DAY;
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 30 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+ChangeTtlIntervalUnit:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 1 DAY;
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 1 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+ChangeTtlColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      `updated_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL,
+      updated_at datetime(6) NOT NULL
+    ) TTL = updated_at + INTERVAL 90 DAY;
+  up: |
+    ALTER TABLE t TTL = updated_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+DisableTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'OFF';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_ENABLE = 'OFF';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+EnableTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+ChangeTtlJobInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_JOB_INTERVAL = '30m';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_JOB_INTERVAL = '30m';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+AddTtlJobIntervalToExistingTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_JOB_INTERVAL = '2h';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_JOB_INTERVAL = '2h';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+AddTtlArchiveTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+ChangeTtlArchiveTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' TTL_ARCHIVE_TABLE='archive_db.archive_t' TTL_ARCHIVE_ON_CONFLICT='STOP' */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ARCHIVE_TABLE = 'archive_db.archive_t2';
+  up: |
+    ALTER TABLE t TTL_ARCHIVE_TABLE = 'archive_db.archive_t2';
+  down: |
+    ALTER TABLE `t` TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+RemoveTtlArchiveTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' TTL_ARCHIVE_TABLE='archive_db.archive_t' TTL_ARCHIVE_ON_CONFLICT='STOP' */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY;
+  up: |
+    ALTER TABLE t TTL_ARCHIVE_TABLE = '';
+  down: |
+    ALTER TABLE `t` TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+RemoveTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    );
+  up: ""
+  down: ""
+RemoveTtlWithArchiveTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' TTL_ARCHIVE_TABLE='archive_db.archive_t' TTL_ARCHIVE_ON_CONFLICT='STOP' */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    );
+  up: |
+    ALTER TABLE t REMOVE TTL;
+  down: |
+    ALTER TABLE `t` TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE `t` TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+DropTtlColumnRemovesTtlFirst:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    );
+  up: |
+    ALTER TABLE t DROP COLUMN `created_at`;
+  down: |
+    ALTER TABLE `t` ADD COLUMN `created_at` datetime(6) NOT NULL AFTER `id`;
+TtlIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `data` varchar(255) DEFAULT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' TTL_ARCHIVE_TABLE='archive_db.archive_t' TTL_ARCHIVE_ON_CONFLICT='STOP' */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      data varchar(255),
+      created_at datetime(6) NOT NULL
+    ) TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON'
+    TTL_JOB_INTERVAL = '1h'
+    TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  up: ""
+  down: ""
+TtlCaseInsensitive:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) ttl = created_at + interval 90 day
+    ttl_enable = 'on';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+CreateTtlWithArchiveTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY, created_at datetime(6) NOT NULL) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h' TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+ChangeTtlArchiveTableSupplement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' TTL_ARCHIVE_TABLE='archive_db.archive_old' TTL_ARCHIVE_ON_CONFLICT='STOP' */;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY, created_at datetime(6) NOT NULL) TTL = created_at + INTERVAL 90 DAY TTL_ARCHIVE_TABLE = 'archive_db.archive_new';
+  up: |
+    ALTER TABLE t TTL_ARCHIVE_TABLE = 'archive_db.archive_new';
+  down: |
+    ALTER TABLE `t` TTL_ARCHIVE_TABLE = 'archive_db.archive_old';
+ParseTdsqlTtlShowCreateComment:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY, created_at datetime(6) NOT NULL) TTL = created_at + INTERVAL 30 HOUR TTL_ENABLE = 'OFF' TTL_JOB_INTERVAL = '4h' TTL_ARCHIVE_TABLE = 'archive_db.archive_new';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 30 HOUR;
+    ALTER TABLE t TTL_ENABLE = 'OFF';
+    ALTER TABLE t TTL_JOB_INTERVAL = '4h';
+    ALTER TABLE t TTL_ARCHIVE_TABLE = 'archive_db.archive_new';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+DropTtlBeforeArchiveColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' TTL_ARCHIVE_TABLE='archive_db.archive_t' TTL_ARCHIVE_ON_CONFLICT='STOP' */;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY);
+  up: |
+    ALTER TABLE t REMOVE TTL;
+    ALTER TABLE t DROP COLUMN `created_at`;
+  down: |
+    ALTER TABLE `t` ADD COLUMN `created_at` datetime(6) NOT NULL AFTER `id`;
+    ALTER TABLE `t` TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE `t` TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+CreateTableBroadcastWithTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE dim_cache (
+      id int NOT NULL PRIMARY KEY,
+      name varchar(50),
+      created_at datetime(6) NOT NULL
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL)
+    TTL = created_at + INTERVAL 7 DAY
+    TTL_ENABLE = 'ON';
+
+  current: ""
+  up: |
+    CREATE TABLE dim_cache (
+      id int NOT NULL PRIMARY KEY,
+      name varchar(50),
+      created_at datetime(6) NOT NULL
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL)
+    TTL = created_at + INTERVAL 7 DAY
+    TTL_ENABLE = 'ON';
+  down: |
+    DROP TABLE dim_cache;
+CreateTableTtlWithStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) STORAGE_TIER = OBJECT_STORAGE
+    TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON';
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) STORAGE_TIER = OBJECT_STORAGE
+    TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON';
+  down: |
+    DROP TABLE t;
+RegressionTtlAsIndexName:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      INDEX ttl (b)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      INDEX ttl (b)
+    );
+  down: |
+    DROP TABLE t;
+AddTtlDisabled:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'OFF';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_ENABLE = 'OFF';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+AddTtlWithNonDefaultJobInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_JOB_INTERVAL = '30m';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_JOB_INTERVAL = '30m';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+RemoveTtlWithNonDefaultOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id));
+  up: ""
+  down: ""
+TtlShowCreateChangeInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 30 DAY;
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 30 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+TtlShowCreateDisableTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'OFF';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_ENABLE = 'OFF';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+TtlShowCreateChangeJobInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_JOB_INTERVAL = '30m';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_JOB_INTERVAL = '30m';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+CreateTableTtlIntervalDay:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY;
+
+  current: ""
+  up: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    DROP TABLE t;
+TtlShowCreateAddTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY;
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+TtlShowCreateIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h';
+
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+TtlShowCreateRemoveTtl:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id));
+  up: ""
+  down: ""
+AddTtlArchiveTableQualified:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+    ALTER TABLE t TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+RemoveTtlJobIntervalOnly:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY;
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+TtlShowCreateIdempotentDefaultsSuppressed:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY;
+
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+AddTtlWithDefaultOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h';
+  up: |
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    ALTER TABLE `t` REMOVE TTL;
+CreateTableTtlFullOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, data varchar(255), created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h' TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+
+  current: ""
+  up: |
+    CREATE TABLE t (id bigint NOT NULL, data varchar(255), created_at datetime(6) NOT NULL, PRIMARY KEY(id)) TTL = created_at + INTERVAL 90 DAY TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h' TTL_ARCHIVE_TABLE = 'archive_db.archive_t';
+  down: |
+    DROP TABLE t;
+AddMultipleTdsqlOptions:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `created_at` datetime(6) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      created_at datetime(6) NOT NULL
+    ) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL) STORAGE_TIER = LOCAL_STORAGE
+    TTL = created_at + INTERVAL 90 DAY
+    TTL_ENABLE = 'ON';
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+    ALTER TABLE t STORAGE_TIER = LOCAL_STORAGE;
+    ALTER TABLE t TTL = created_at + INTERVAL 90 DAY;
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+    ALTER TABLE `t` STORAGE_TIER = AUTO_STORAGE;
+    ALTER TABLE `t` REMOVE TTL;
+# 1.4 全局二级索引（GSI）
+# 1.4.1 GSI 独立分区
+# 1.4.2 DROP/TRUNCATE PARTITION 时同步更新 GSI
+
+CreateTableAllTdsqlFeatures:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE orders (
+      order_date date NOT NULL,
+      order_no varchar(32) NOT NULL,
+      user_id bigint NOT NULL,
+      amount decimal(10,2),
+      PRIMARY KEY (order_date, order_no),
+      UNIQUE INDEX g_uk_no (order_no) GLOBAL,
+      INDEX idx_user (user_id) VALUE(amount)
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (TO_DAYS(order_date)) INTERVAL(30)
+    (PARTITION p0 VALUES LESS THAN (TO_DAYS('2026-01-01')) STORAGE_TIER = OBJECT_STORAGE);
+
+  current: ""
+  up: |
+    CREATE TABLE orders (
+      order_date date NOT NULL,
+      order_no varchar(32) NOT NULL,
+      user_id bigint NOT NULL,
+      amount decimal(10,2),
+      PRIMARY KEY (order_date, order_no),
+      UNIQUE INDEX g_uk_no (order_no) GLOBAL,
+      INDEX idx_user (user_id) VALUE(amount)
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (TO_DAYS(order_date)) INTERVAL(30)
+    (PARTITION p0 VALUES LESS THAN (TO_DAYS('2026-01-01')) STORAGE_TIER = OBJECT_STORAGE);
+  down: |
+    DROP TABLE orders;
+CreateTableWithGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE orders (
+      user_id bigint NOT NULL,
+      order_no varchar(32) NOT NULL,
+      amount decimal(10,2),
+      PRIMARY KEY (user_id, order_no),
+      INDEX g_idx_order_no (order_no) GLOBAL
+    ) PARTITION BY HASH (user_id) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE orders (
+      user_id bigint NOT NULL,
+      order_no varchar(32) NOT NULL,
+      amount decimal(10,2),
+      PRIMARY KEY (user_id, order_no),
+      INDEX g_idx_order_no (order_no) GLOBAL
+    ) PARTITION BY HASH (user_id) PARTITIONS 4;
+  down: |
+    DROP TABLE orders;
+CreateTableWithGlobalUniqueIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE users (
+      user_id bigint NOT NULL,
+      email varchar(128) NOT NULL,
+      phone varchar(20) NOT NULL,
+      PRIMARY KEY (user_id),
+      UNIQUE INDEX g_uk_email (email) GLOBAL,
+      UNIQUE INDEX g_uk_phone (phone) GLOBAL
+    ) PARTITION BY HASH (user_id) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE users (
+      user_id bigint NOT NULL,
+      email varchar(128) NOT NULL,
+      phone varchar(20) NOT NULL,
+      PRIMARY KEY (user_id),
+      UNIQUE INDEX g_uk_email (email) GLOBAL,
+      UNIQUE INDEX g_uk_phone (phone) GLOBAL
+    ) PARTITION BY HASH (user_id) PARTITIONS 4;
+  down: |
+    DROP TABLE users;
+CreateTableWithGlobalKey:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableWithGlobalUniqueKey:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      UNIQUE KEY g_uk (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      UNIQUE KEY g_uk (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableWithMultiColumnGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      a int,
+      b int,
+      PRIMARY KEY (k),
+      INDEX g_idx (a, b) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      a int,
+      b int,
+      PRIMARY KEY (k),
+      INDEX g_idx (a, b) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIndexWithComment:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL COMMENT 'global index'
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL COMMENT 'global index'
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableWithGlobalAndLocalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      a int,
+      b int,
+      PRIMARY KEY (k),
+      INDEX l_idx (a),
+      INDEX g_idx (b) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      a int,
+      b int,
+      PRIMARY KEY (k),
+      INDEX l_idx (a),
+      INDEX g_idx (b) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateGlobalIndexStatement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k)
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+    CREATE INDEX g_idx ON t (v) GLOBAL;
+  up: |
+    CREATE INDEX g_idx ON t (v) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+CreateGlobalUniqueIndexStatement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k)
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+    CREATE UNIQUE INDEX g_uk ON t (v) GLOBAL;
+  up: |
+    CREATE UNIQUE INDEX g_uk ON t (v) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_uk;
+AddGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+AddGlobalUniqueIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      UNIQUE INDEX g_uk (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t ADD UNIQUE INDEX g_uk (v) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_uk;
+DropGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k)
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+  down: |
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+ChangeIndexLocalToGlobal:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      INDEX idx (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX idx;
+    ALTER TABLE t ADD INDEX idx (v) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `idx`;
+    ALTER TABLE `t` ADD KEY `idx` (`v`);
+ChangeIndexGlobalToLocal:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      INDEX idx (v)
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: ""
+  down: ""
+ChangeGlobalIndexColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `a` int DEFAULT NULL,
+      `b` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `g_idx` (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      a int,
+      b int,
+      PRIMARY KEY (k),
+      INDEX g_idx (a, b) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (a, b) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`a`);
+GlobalIndexIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+GlobalKeywordCaseInsensitive:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      INDEX g_idx (v) global
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+GlobalUsableAsColumnName:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      global int,
+      a int
+    );
+
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      global int,
+      a int
+    );
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIndexPartitionByHash:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIndexPartitionByKey:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL PARTITION BY KEY (v) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL PARTITION BY KEY (v) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIndexPartitionByRange:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL PARTITION BY RANGE (v)
+        (PARTITION gp0 VALUES LESS THAN (100),
+         PARTITION gp1 VALUES LESS THAN (200))
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL PARTITION BY RANGE (v)
+        (PARTITION gp0 VALUES LESS THAN (100),
+         PARTITION gp1 VALUES LESS THAN (200))
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIndexPartitionByRangeColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      d date,
+      PRIMARY KEY (k),
+      KEY g_idx (d) GLOBAL PARTITION BY RANGE COLUMNS (d)
+        (PARTITION gp0 VALUES LESS THAN ('2026-01-01'),
+         PARTITION gp1 VALUES LESS THAN ('2027-01-01'))
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      d date,
+      PRIMARY KEY (k),
+      KEY g_idx (d) GLOBAL PARTITION BY RANGE COLUMNS (d)
+        (PARTITION gp0 VALUES LESS THAN ('2026-01-01'),
+         PARTITION gp1 VALUES LESS THAN ('2027-01-01'))
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIndexDifferentPartitionKey:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE orders (
+      user_id bigint NOT NULL,
+      order_no varchar(32) NOT NULL,
+      PRIMARY KEY (user_id, order_no),
+      KEY g_idx (order_no) GLOBAL PARTITION BY KEY (order_no) PARTITIONS 8
+    ) PARTITION BY HASH (user_id) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE orders (
+      user_id bigint NOT NULL,
+      order_no varchar(32) NOT NULL,
+      PRIMARY KEY (user_id, order_no),
+      KEY g_idx (order_no) GLOBAL PARTITION BY KEY (order_no) PARTITIONS 8
+    ) PARTITION BY HASH (user_id) PARTITIONS 4;
+  down: |
+    DROP TABLE orders;
+CreateTableGlobalUniqueIndexPartitioned:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      UNIQUE KEY g_uk (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 3
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      UNIQUE KEY g_uk (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 3
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+AddGlobalIndexPartitionedWithAlgorithm:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx2 (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 3
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t ADD INDEX g_idx2 (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 3;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx2;
+AddGlobalIndexPartitionedByRange:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL PARTITION BY RANGE (v)
+        (PARTITION gp0 VALUES LESS THAN (100),
+         PARTITION gp1 VALUES LESS THAN (200))
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL PARTITION BY RANGE (v) (PARTITION gp0 VALUES LESS THAN (100), PARTITION gp1 VALUES LESS THAN (200));
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+ChangeGlobalIndexPartitionCount:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 8
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 8;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 4;
+AddPartitioningToGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 4;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+GlobalIndexPartitionedIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  desired: |
+    CREATE TABLE t (
+      k int NOT NULL,
+      v int,
+      PRIMARY KEY (k),
+      KEY g_idx (k) GLOBAL PARTITION BY HASH (k) PARTITIONS 4
+    ) PARTITION BY HASH (k) PARTITIONS 4;
+  up: ""
+  down: ""
+DropPartitionWithGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `orders` (
+      `id` int NOT NULL,
+      `user_id` int NOT NULL,
+      `created_date` date NOT NULL,
+      PRIMARY KEY (`id`,`created_date`),
+      KEY `gsi_user` (`user_id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (to_days(`created_date`))
+    (PARTITION p202401 VALUES LESS THAN (739282),
+     PARTITION p202402 VALUES LESS THAN (739311),
+     PARTITION p202403 VALUES LESS THAN (739342)) */;
+  desired: |
+    CREATE TABLE orders (
+      id int NOT NULL,
+      user_id int NOT NULL,
+      created_date date NOT NULL,
+      PRIMARY KEY (id, created_date),
+      INDEX gsi_user (user_id) GLOBAL
+    ) PARTITION BY RANGE (TO_DAYS(created_date))
+    (PARTITION p202402 VALUES LESS THAN (TO_DAYS('2024-03-01')),
+     PARTITION p202403 VALUES LESS THAN (TO_DAYS('2024-04-01')));
+  up: |
+    ALTER TABLE orders DROP INDEX gsi_user;
+    ALTER TABLE orders ADD INDEX gsi_user (user_id) GLOBAL;
+    ALTER TABLE orders DROP PARTITION p202401;
+  down: |
+    ALTER TABLE `orders` DROP INDEX `gsi_user`;
+    ALTER TABLE `orders` ADD KEY `gsi_user` (`user_id`);
+    ALTER TABLE `orders` PARTITION BY RANGE (to_days(created_date)) (PARTITION p202401 VALUES LESS THAN (739282), PARTITION p202402 VALUES LESS THAN (739311), PARTITION p202403 VALUES LESS THAN (739342));
+DropPartitionWithoutGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      PRIMARY KEY (`id`,`c1`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      PRIMARY KEY (id, c1)
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t DROP PARTITION p1;
+  down: |
+    ALTER TABLE `t` ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+DropPartitionWithLocalIndexOnly:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `l_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX l_idx (v)
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t DROP PARTITION p1;
+  down: |
+    ALTER TABLE `t` ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+DropMultiplePartitionsWithGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200),
+     PARTITION p2 VALUES LESS THAN (300)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+    ALTER TABLE t DROP PARTITION p1, p2;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+    ALTER TABLE `t` ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+    ALTER TABLE `t` ADD PARTITION (PARTITION p2 VALUES LESS THAN (300));
+DropPartitionWithGlobalUniqueIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      UNIQUE KEY `g_uk` (`v`)/*B!210603 GLOBAL */
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      UNIQUE INDEX g_uk (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t DROP PARTITION p1 UPDATE GLOBAL INDEXES;
+  down: |
+    ALTER TABLE `t` ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+TruncatePartitionUpdateGlobalIndexesParse:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `#trun-231e_10d758_6a7dc6f700036a_45bd` (`v`) /*!80000 INVISIBLE */,
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+DropPartitionUpdateGlobalIndexesParse:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+DropPartitionWithGlobalIndexBlockedWhenDisabled:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: false
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    -- Skipped: ALTER TABLE t DROP INDEX g_idx;
+    -- Skipped: ALTER TABLE t DROP PARTITION p1;
+  down: |
+    -- Skipped: ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+RollingWindowPartitionWithGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p1 VALUES LESS THAN (200),
+     PARTITION p2 VALUES LESS THAN (300));
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+    ALTER TABLE t ADD PARTITION (PARTITION p2 VALUES LESS THAN (300));
+    ALTER TABLE t DROP PARTITION p0;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+    ALTER TABLE `t` REORGANIZE PARTITION p1 INTO (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200));
+    ALTER TABLE `t` DROP PARTITION p2 UPDATE GLOBAL INDEXES;
+AddGlobalIndexToIntervalPartitionedTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`)
+    ) STORAGE_TIER = LOCAL_STORAGE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      v int,
+      PRIMARY KEY (id),
+      INDEX g_idx (v) GLOBAL
+    ) STORAGE_TIER = LOCAL_STORAGE
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+    ALTER TABLE t SET INTERVAL(100);
+  down: |
+    ALTER TABLE `t` SET INTERVAL();
+    ALTER TABLE t DROP INDEX g_idx;
+RegressionPlainIndexUnchanged:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      INDEX idx_b (b)
+    );
+  up: |
+    ALTER TABLE t ADD INDEX idx_b (b);
+  down: |
+    ALTER TABLE t DROP INDEX idx_b;
+RegressionAddPartitionHasNoUpdateGlobalIndexes:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      c1 int NOT NULL,
+      v int,
+      PRIMARY KEY (id, c1),
+      INDEX g_idx (v) GLOBAL
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+    ALTER TABLE `t` DROP PARTITION p1 UPDATE GLOBAL INDEXES;
+CreateGlobalIndexInvisible:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx (v) GLOBAL INVISIBLE) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx (v) GLOBAL INVISIBLE) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateGlobalIndexVisibleWithComment:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx (v) GLOBAL COMMENT 'gsi' VISIBLE) PARTITION BY HASH (k) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx (v) GLOBAL COMMENT 'gsi' VISIBLE) PARTITION BY HASH (k) PARTITIONS 4;
+  down: |
+    DROP TABLE t;
+CreateGlobalIndexWithAlgorithmInplace:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k)) PARTITION BY HASH (k) PARTITIONS 4; CREATE INDEX g_idx ON t (v) GLOBAL ALGORITHM = INPLACE;
+  up: |
+    CREATE INDEX g_idx ON t (v) GLOBAL ALGORITHM = INPLACE;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+AddGlobalIndexWithAlgorithmComma:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`k`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), INDEX g_idx (v) GLOBAL) PARTITION BY HASH (k) PARTITIONS 4;
+
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+AddGlobalIndexPartitionedWithAlgorithmCopy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k)) PARTITION BY HASH (k) PARTITIONS 4;
+    ALTER TABLE t ADD INDEX g_idx2 (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3, ALGORITHM = COPY;
+  desired: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx2 (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 3) PARTITION BY HASH (k) PARTITIONS 4;
+
+  up: |
+    ALTER TABLE t DROP INDEX g_idx2;
+    ALTER TABLE t ADD KEY g_idx2 (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx2;
+    ALTER TABLE t ADD INDEX g_idx2 (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3, ALGORITHM = COPY;
+RemovePartitioningFromGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx (v) GLOBAL PARTITION BY HASH (v) PARTITIONS 4) PARTITION BY HASH (k) PARTITIONS 4
+  desired: |
+    CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), INDEX g_idx (v) GLOBAL) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD KEY g_idx (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 4;
+GsiShowCreateIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `val` varchar(20) DEFAULT NULL,
+      PRIMARY KEY (`id`),
+      KEY `g_idx` (`val`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL, val varchar(20), PRIMARY KEY(id), INDEX g_idx (val) GLOBAL) PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200));
+
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (val) GLOBAL;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`val`);
+TruncatePartitionWithoutClauseParse:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      PRIMARY KEY (`id`,`c1`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (id int NOT NULL, c1 int NOT NULL, PRIMARY KEY (id, c1)) PARTITION BY RANGE (c1) (PARTITION p0 VALUES LESS THAN (100));
+
+  up: ""
+  down: ""
+GsiShowCreateDropPartition:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `val` varchar(20) DEFAULT NULL,
+      PRIMARY KEY (`id`),
+      KEY `g_idx` (`val`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200),
+     PARTITION p2 VALUES LESS THAN (300)) */;
+  desired: |
+    CREATE TABLE `t` (`id` bigint NOT NULL, `val` varchar(20) DEFAULT NULL, PRIMARY KEY (`id`), KEY `g_idx` (`val`) GLOBAL) ENGINE=ROCKSDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100) ENGINE = ROCKSDB,
+     PARTITION p1 VALUES LESS THAN (200) ENGINE = ROCKSDB) */
+  up: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD INDEX `g_idx` (`val`) GLOBAL;
+    ALTER TABLE `t` DROP PARTITION p2;
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`val`);
+    ALTER TABLE `t` ADD PARTITION (PARTITION p2 VALUES LESS THAN (300));
+AddPartitionHasNoUpdateGlobalIndexes:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      `v` int DEFAULT NULL,
+      PRIMARY KEY (`id`,`c1`),
+      KEY `g_idx` (`v`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (id int NOT NULL, c1 int NOT NULL, v int, PRIMARY KEY (id, c1), INDEX g_idx (v) GLOBAL) PARTITION BY RANGE (c1) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t ADD INDEX g_idx (v) GLOBAL;
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+  down: |
+    ALTER TABLE `t` DROP INDEX `g_idx`;
+    ALTER TABLE `t` ADD KEY `g_idx` (`v`);
+    ALTER TABLE `t` DROP PARTITION p1 UPDATE GLOBAL INDEXES;
+AddMultiColumnGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `a` int DEFAULT NULL,
+      `b` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (k int NOT NULL, a int, b int, PRIMARY KEY (k), INDEX g_idx (a, b) GLOBAL) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t ADD INDEX g_idx (a, b) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+AddGlobalAndLocalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `k` int NOT NULL,
+      `a` int DEFAULT NULL,
+      `b` int DEFAULT NULL,
+      PRIMARY KEY (`k`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`k`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (k int NOT NULL, a int, b int, PRIMARY KEY (k), INDEX l_idx (a), INDEX g_idx (b) GLOBAL) PARTITION BY HASH (k) PARTITIONS 4;
+  up: |
+    ALTER TABLE t ADD INDEX l_idx (a);
+    ALTER TABLE t ADD INDEX g_idx (b) GLOBAL;
+  down: |
+    ALTER TABLE t DROP INDEX g_idx;
+    ALTER TABLE t DROP INDEX l_idx;
+CreateTableGlobalUniqueConstraints:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE users (user_id bigint NOT NULL, email varchar(128) NOT NULL, phone varchar(20) NOT NULL, PRIMARY KEY (user_id), UNIQUE INDEX g_uk_email (email) GLOBAL, UNIQUE INDEX g_uk_phone (phone) GLOBAL) PARTITION BY HASH (user_id) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE users (user_id bigint NOT NULL, email varchar(128) NOT NULL, phone varchar(20) NOT NULL, PRIMARY KEY (user_id), UNIQUE INDEX g_uk_email (email) GLOBAL, UNIQUE INDEX g_uk_phone (phone) GLOBAL) PARTITION BY HASH (user_id) PARTITIONS 4;
+  down: |
+    DROP TABLE users;
+GSIIndependentHashPartition:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders_gsi_hash (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id)
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE orders_gsi_hash (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_user_hash (user_id)
+        GLOBAL PARTITION BY HASH (user_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE orders_gsi_hash ADD INDEX g_idx_user_hash (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 4;
+  down: |
+    ALTER TABLE orders_gsi_hash DROP INDEX g_idx_user_hash;
+GSIIndependentKeyPartition:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders_gsi_key (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id)
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE orders_gsi_key (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_user_key (user_id)
+        GLOBAL PARTITION BY KEY (user_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE orders_gsi_key ADD INDEX g_idx_user_key (user_id) GLOBAL PARTITION BY KEY (user_id) PARTITIONS 4;
+  down: |
+    ALTER TABLE orders_gsi_key DROP INDEX g_idx_user_key;
+GSIIndependentRangePartition:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders_gsi_range (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id)
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE orders_gsi_range (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_user_range (user_id)
+        GLOBAL PARTITION BY RANGE (user_id) (
+          PARTITION gp0 VALUES LESS THAN (1000),
+          PARTITION gp1 VALUES LESS THAN (2000),
+          PARTITION gpmax VALUES LESS THAN MAXVALUE
+        )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE orders_gsi_range ADD INDEX g_idx_user_range (user_id) GLOBAL PARTITION BY RANGE (user_id) (PARTITION gp0 VALUES LESS THAN (1000), PARTITION gp1 VALUES LESS THAN (2000), PARTITION gpmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE orders_gsi_range DROP INDEX g_idx_user_range;
+GSIIndependentRangeColumnsPartition:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders_gsi_range_columns (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id)
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE orders_gsi_range_columns (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_created_range_columns (created_at)
+        GLOBAL PARTITION BY RANGE COLUMNS (created_at) (
+          PARTITION gp2026 VALUES LESS THAN ('2027-01-01'),
+          PARTITION gp2027 VALUES LESS THAN ('2028-01-01'),
+          PARTITION gpmax VALUES LESS THAN (MAXVALUE)
+        )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE orders_gsi_range_columns ADD INDEX g_idx_created_range_columns (created_at) GLOBAL PARTITION BY RANGE COLUMNS (created_at) (PARTITION gp2026 VALUES LESS THAN ('2027-01-01'), PARTITION gp2027 VALUES LESS THAN ('2028-01-01'), PARTITION gpmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE orders_gsi_range_columns DROP INDEX g_idx_created_range_columns;
+TruncatePartitionWithGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      value int DEFAULT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_value (value) GLOBAL
+    ) PARTITION BY RANGE (tenant_id) (
+      PARTITION p2024 VALUES LESS THAN (2025),
+      PARTITION p2025 VALUES LESS THAN (2026)
+    );
+  desired: |
+    CREATE TABLE orders (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      value int DEFAULT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_value (value) GLOBAL
+    ) PARTITION BY RANGE (tenant_id) (
+      PARTITION p2024 VALUES LESS THAN (2025),
+      PARTITION p2025 VALUES LESS THAN (2026)
+    );
+    ALTER TABLE orders TRUNCATE PARTITION p2025;
+  up: |
+    ALTER TABLE orders TRUNCATE PARTITION p2025 UPDATE GLOBAL INDEXES;
+  down: ""
+TruncateMultiplePartitionsWithGlobalIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders_multi (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      value int DEFAULT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_value (value) GLOBAL
+    ) PARTITION BY RANGE (tenant_id) (
+      PARTITION p2024 VALUES LESS THAN (2025),
+      PARTITION p2025 VALUES LESS THAN (2026),
+      PARTITION p2026 VALUES LESS THAN (2027)
+    );
+  desired: |
+    CREATE TABLE orders_multi (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      value int DEFAULT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_value (value) GLOBAL
+    ) PARTITION BY RANGE (tenant_id) (
+      PARTITION p2024 VALUES LESS THAN (2025),
+      PARTITION p2025 VALUES LESS THAN (2026),
+      PARTITION p2026 VALUES LESS THAN (2027)
+    );
+    ALTER TABLE orders_multi TRUNCATE PARTITION p2025, p2026;
+  up: |
+    ALTER TABLE orders_multi TRUNCATE PARTITION p2025, p2026 UPDATE GLOBAL INDEXES;
+  down: ""
+TruncatePartitionWithExistingClause:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE orders_explicit (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      value int DEFAULT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_value (value) GLOBAL
+    ) PARTITION BY RANGE (tenant_id) (
+      PARTITION p2025 VALUES LESS THAN (2026)
+    );
+  desired: |
+    CREATE TABLE orders_explicit (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      value int DEFAULT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx_value (value) GLOBAL
+    ) PARTITION BY RANGE (tenant_id) (
+      PARTITION p2025 VALUES LESS THAN (2026)
+    );
+    ALTER TABLE orders_explicit TRUNCATE PARTITION p2025 UPDATE GLOBAL INDEXES;
+  up: |
+    ALTER TABLE orders_explicit TRUNCATE PARTITION p2025 UPDATE GLOBAL INDEXES;
+  down: ""
+# 1.5 分布策略
+
+CreateTableUsingPartitionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp2;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp2;
+  down: |
+    DROP TABLE t;
+CreateTableUsingDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) USING DISTRIBUTION POLICY dp1;
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id int
+    ) USING DISTRIBUTION POLICY dp1;
+  down: |
+    DROP TABLE t;
+AddUsingPartitionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp1;
+  up: |
+    ALTER TABLE t USING PARTITION POLICY pp1;
+  down: |
+    ALTER TABLE `t` DROP PARTITION POLICY FORCE;
+ChangeUsingPartitionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+    
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */ USING PARTITION POLICY "pp1";
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp2;
+  up: |
+    ALTER TABLE t USING PARTITION POLICY pp2;
+    DROP PARTITION POLICY pp1;
+  down: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+    ALTER TABLE `t` USING PARTITION POLICY pp1;
+RemoveUsingPartitionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+    
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */ USING PARTITION POLICY "pp1";
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4;
+  up: |
+    ALTER TABLE t DROP PARTITION POLICY FORCE;
+    DROP PARTITION POLICY pp1;
+  down: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+    ALTER TABLE `t` USING PARTITION POLICY pp1;
+AddUsingDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) USING DISTRIBUTION POLICY dp1;
+  up: |
+    ALTER TABLE t USING DISTRIBUTION POLICY dp1;
+  down: |
+    ALTER TABLE `t` DROP DISTRIBUTION POLICY FORCE;
+ChangeUsingDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+    
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci USING DISTRIBUTION POLICY "dp1";
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) USING DISTRIBUTION POLICY dp2;
+  up: |
+    ALTER TABLE t USING DISTRIBUTION POLICY dp2;
+    DROP DISTRIBUTION POLICY "dp1";
+  down: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+    ALTER TABLE `t` USING DISTRIBUTION POLICY dp1;
+RemoveUsingDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+    
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci USING DISTRIBUTION POLICY "dp1";
+  desired: |
+    CREATE TABLE t (
+      id int
+    );
+  up: |
+    ALTER TABLE t DROP DISTRIBUTION POLICY FORCE;
+    DROP DISTRIBUTION POLICY "dp1";
+  down: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+    ALTER TABLE `t` USING DISTRIBUTION POLICY dp1;
+UsingPartitionPolicyIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+    
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */ USING PARTITION POLICY "pp1";
+  desired: |
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp1;
+  up: |
+    DROP PARTITION POLICY pp1;
+  down: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+CreateDatabaseUsingDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE DATABASE mydb USING DISTRIBUTION POLICY dp1;
+
+  current: ""
+  up: |
+    CREATE DATABASE mydb USING DISTRIBUTION POLICY dp1;
+  down: ""
+CreateTableUsingPartitionPolicyDiff:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (id int) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp1;
+  up: |
+    ALTER TABLE t USING PARTITION POLICY pp1;
+  down: |
+    ALTER TABLE `t` DROP PARTITION POLICY FORCE;
+CreateTableUsingDistributionPolicyDiff:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id int) USING DISTRIBUTION POLICY dp1;
+  up: |
+    ALTER TABLE t USING DISTRIBUTION POLICY dp1;
+  down: |
+    ALTER TABLE `t` DROP DISTRIBUTION POLICY FORCE;
+CreateDatabaseUsingDistributionPolicySupplement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DATABASE `mydb`;
+    
+    CREATE DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 3;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 3;
+    CREATE DATABASE mydb USING DISTRIBUTION POLICY "dp_supplement";
+
+  up: |
+    ALTER DATABASE mydb USING DISTRIBUTION POLICY dp_supplement;
+  down: ""
+CreateDatabaseUsingPartitionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DATABASE `mydb`;
+    
+    CREATE PARTITION POLICY `pp_supplement` PARTITION BY HASH(INT) PARTITIONS 4;
+  desired: |
+    CREATE PARTITION POLICY `pp_supplement` PARTITION BY HASH(INT) PARTITIONS 4;
+    CREATE DATABASE mydb USING PARTITION POLICY `pp_supplement`;
+
+  up: |
+    ALTER DATABASE mydb USING PARTITION POLICY pp_supplement;
+  down: ""
+CreateTableUsingDistributionPolicySupplement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) USING DISTRIBUTION POLICY "dp_supplement";
+  up: |
+    ALTER TABLE t USING DISTRIBUTION POLICY dp_supplement;
+  down: |
+    ALTER TABLE `t` DROP DISTRIBUTION POLICY FORCE;
+CreateTableUsingPartitionPolicySupplement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) PARTITION BY HASH(id) PARTITIONS 4 USING PARTITION POLICY "pp_supplement";
+  up: |
+    ALTER TABLE t USING PARTITION POLICY pp_supplement;
+  down: |
+    ALTER TABLE `t` DROP PARTITION POLICY FORCE;
+BindPolicyFromExplicitCurrent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) USING DISTRIBUTION POLICY "dp_supplement"
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) USING DISTRIBUTION POLICY "dp_supplement";
+
+
+  up: ""
+  down: ""
+CreateTableWithIntervalPartition:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+  down: |
+    DROP TABLE t;
+CreateTableIntervalPartitionMultiPartitions:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200),
+     PARTITION p2 VALUES LESS THAN (300));
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200),
+     PARTITION p2 VALUES LESS THAN (300));
+  down: |
+    DROP TABLE t;
+CreateTableIntervalPartitionWithExpression:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      created_date date NOT NULL,
+      PRIMARY KEY (id, created_date)
+    )
+    PARTITION BY RANGE (TO_DAYS(created_date)) INTERVAL(30)
+    (PARTITION p0 VALUES LESS THAN (TO_DAYS('2026-01-01')));
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      created_date date NOT NULL,
+      PRIMARY KEY (id, created_date)
+    )
+    PARTITION BY RANGE (TO_DAYS(created_date)) INTERVAL(30)
+    (PARTITION p0 VALUES LESS THAN (TO_DAYS('2026-01-01')));
+  down: |
+    DROP TABLE t;
+CreateTableIntervalPartitionRangeColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      c1 int NOT NULL,
+      PRIMARY KEY (id, c1)
+    )
+    PARTITION BY RANGE COLUMNS (c1) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      c1 int NOT NULL,
+      PRIMARY KEY (id, c1)
+    )
+    PARTITION BY RANGE COLUMNS (c1) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+  down: |
+    DROP TABLE t;
+AddIntervalToRangePartition:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t SET INTERVAL(100);
+  down: |
+    ALTER TABLE `t` SET INTERVAL();
+ChangeIntervalStep:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(500)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t SET INTERVAL(500);
+  down: |
+    ALTER TABLE `t` SET INTERVAL();
+RemoveInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: ""
+  down: ""
+IntervalPartitionIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t SET INTERVAL(100);
+  down: |
+    ALTER TABLE `t` SET INTERVAL();
+AddPartitionKeepsInterval:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+    ALTER TABLE t SET INTERVAL(100);
+  down: |
+    ALTER TABLE `t` DROP PARTITION p1;
+    ALTER TABLE `t` SET INTERVAL();
+IntervalCaseInsensitive:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    partition by range (id) interval(100)
+    (partition p0 values less than (100));
+  up: |
+    ALTER TABLE t SET INTERVAL(100);
+  down: |
+    ALTER TABLE `t` SET INTERVAL();
+CreateTableWithIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      KEY idx_b (b) VALUE(c)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      KEY idx_b (b) VALUE(c)
+    );
+  down: |
+    DROP TABLE t1;
+RegressionIntervalExpressionStillWorks:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      expire_at datetime DEFAULT (CURRENT_TIMESTAMP + INTERVAL 7 DAY)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY,
+      expire_at datetime DEFAULT (CURRENT_TIMESTAMP + INTERVAL 7 DAY)
+    );
+  down: |
+    DROP TABLE t;
+RegressionPlainRangePartitionUnchanged:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      `c1` int NOT NULL,
+      PRIMARY KEY (`id`,`c1`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      c1 int NOT NULL,
+      PRIMARY KEY (id, c1)
+    ) PARTITION BY RANGE (c1)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200));
+  up: ""
+  down: ""
+ErrorIntervalWithMaxValuePartition:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    )
+    PARTITION BY RANGE (id) INTERVAL(100)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION pmax VALUES LESS THAN MAXVALUE);
+  error: "INTERVAL partitioning cannot be used with a MAXVALUE partition"
+
+  current: ""
+  up: ""
+  down: ""
+ErrorIntervalOnHashPartition:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL PRIMARY KEY
+    ) PARTITION BY HASH (id) INTERVAL(100) PARTITIONS 4;
+  error: "INTERVAL is only supported with RANGE partitioning"
+  current: ""
+  up: ""
+  down: ""
+CreateIntervalPartitionBasic:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) PARTITION BY RANGE (id) INTERVAL(100) (PARTITION p0 VALUES LESS THAN (100));
+
+  current: ""
+  up: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) PARTITION BY RANGE (id) INTERVAL(100) (PARTITION p0 VALUES LESS THAN (100));
+  down: |
+    DROP TABLE t;
+AddIntervalPartitionBasic:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) PARTITION BY RANGE (id) INTERVAL(100) (PARTITION p0 VALUES LESS THAN (100));
+  up: |
+    ALTER TABLE t SET INTERVAL(100);
+  down: |
+    ALTER TABLE `t` SET INTERVAL();
+RemoveIntervalPartitionBasic:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100));
+  up: ""
+  down: ""
+RegressionPlainRangePartitionAddDropUnchanged:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      `c1` int NOT NULL,
+      PRIMARY KEY (`id`,`c1`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`c1`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE t (id int NOT NULL, c1 int NOT NULL, PRIMARY KEY (id, c1)) PARTITION BY RANGE (c1) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200));
+  up: |
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+  down: |
+    ALTER TABLE `t` DROP PARTITION p1;
+# 1.7 包含列索引（ICI，Included Column Index）
+
+CreateTableWithIncludedColumnIndexMultiple:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      d int,
+      KEY idx_b (b) VALUE(c, d)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      d int,
+      KEY idx_b (b) VALUE(c, d)
+    );
+  down: |
+    DROP TABLE t1;
+CreateTableWithUniqueIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      UNIQUE KEY idx_b (b) VALUE(c)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      UNIQUE KEY idx_b (b) VALUE(c)
+    );
+  down: |
+    DROP TABLE t1;
+CreateTableIncludedColumnIndexMultiKeyColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      d int,
+      KEY idx_bc (b, c) VALUE(d)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      d int,
+      KEY idx_bc (b, c) VALUE(d)
+    );
+  down: |
+    DROP TABLE t1;
+CreateTableIncludedColumnIndexWithIndexKeyword:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      INDEX idx_b (b) VALUE(c)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      INDEX idx_b (b) VALUE(c)
+    );
+  down: |
+    DROP TABLE t1;
+CreateTableIncludedColumnIndexWithComment:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      KEY idx_b (b) VALUE(c) COMMENT 'covering index'
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      KEY idx_b (b) VALUE(c) COMMENT 'covering index'
+    );
+  down: |
+    DROP TABLE t1;
+CreateTableIncludedColumnIndexQuotedColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      `c d` int,
+      KEY idx_b (b) VALUE(`c d`)
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      `c d` int,
+      KEY idx_b (b) VALUE(`c d`)
+    );
+  down: |
+    DROP TABLE t1;
+CreateIncludedColumnIndexStatement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int
+    );
+    CREATE INDEX idx_b ON t1 (b) VALUE(c);
+  up: |
+    CREATE INDEX idx_b ON t1 (b) VALUE(c);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+CreateUniqueIncludedColumnIndexStatement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int
+    );
+    CREATE UNIQUE INDEX idx_b ON t1 (b) VALUE(c);
+  up: |
+    CREATE UNIQUE INDEX idx_b ON t1 (b) VALUE(c);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+AddIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      INDEX idx_b (b) VALUE(c)
+    );
+  up: |
+    ALTER TABLE t1 ADD INDEX idx_b (b) VALUE(c);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+AddUniqueIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      UNIQUE INDEX idx_b (b) VALUE(c)
+    );
+  up: |
+    ALTER TABLE t1 ADD UNIQUE INDEX idx_b (b) VALUE(c);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+DropIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int
+    );
+  up: |
+    ALTER TABLE `t1` DROP INDEX `idx_b`;
+  down: |
+    ALTER TABLE `t1` ADD KEY `idx_b` (`b`) VALUE(`c`);
+AddIncludedColumnToExistingIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int
+    );
+    ALTER TABLE t1 ADD INDEX idx_b (b) VALUE(c);
+  up: |
+    ALTER TABLE `t1` DROP INDEX `idx_b`;
+    ALTER TABLE t1 ADD INDEX idx_b (b) VALUE(c);
+  down: |
+    ALTER TABLE `t1` DROP INDEX `idx_b`;
+    ALTER TABLE `t1` ADD KEY `idx_b` (`b`);
+ChangeIncludedColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      `d` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      d int,
+      INDEX idx_b (b) VALUE(c, d)
+    );
+  up: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+    ALTER TABLE t1 ADD INDEX idx_b (b) VALUE(c, d);
+  down: |
+    ALTER TABLE `t1` DROP INDEX `idx_b`;
+    ALTER TABLE `t1` ADD KEY `idx_b` (`b`) VALUE(`c`);
+RemoveIncludedColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      INDEX idx_b (b)
+    );
+  up: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+    ALTER TABLE t1 ADD INDEX idx_b (b);
+  down: |
+    ALTER TABLE `t1` DROP INDEX `idx_b`;
+    ALTER TABLE `t1` ADD KEY `idx_b` (`b`) VALUE(`c`);
+ChangeIncludedColumnOrder:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      `d` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`,`d`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      d int,
+      INDEX idx_b (b) VALUE(d, c)
+    );
+  up: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+    ALTER TABLE t1 ADD INDEX idx_b (b) VALUE(d, c);
+  down: |
+    ALTER TABLE `t1` DROP INDEX `idx_b`;
+    ALTER TABLE `t1` ADD KEY `idx_b` (`b`) VALUE(`c`, `d`);
+IncludedColumnIndexIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      INDEX idx_b (b) VALUE(c)
+    );
+  up: ""
+  down: ""
+IncludedColumnIndexCaseInsensitive:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL PRIMARY KEY,
+      b int,
+      c int,
+      INDEX idx_b (b) value(c)
+    );
+  up: ""
+  down: ""
+ValueUsableAsColumnName:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      value int,
+      a int
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      value int,
+      a int
+    );
+  down: |
+    DROP TABLE t;
+CreateTableGlobalIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL,
+      b int,
+      c int,
+      PRIMARY KEY (a),
+      INDEX g_idx (b) VALUE(c) GLOBAL
+    ) PARTITION BY HASH (a) PARTITIONS 4;
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL,
+      b int,
+      c int,
+      PRIMARY KEY (a),
+      INDEX g_idx (b) VALUE(c) GLOBAL
+    ) PARTITION BY HASH (a) PARTITIONS 4;
+  down: |
+    DROP TABLE t1;
+AddGlobalIncludedColumnIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`a`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL,
+      b int,
+      c int,
+      PRIMARY KEY (a),
+      INDEX g_idx (b) VALUE(c) GLOBAL
+    ) PARTITION BY HASH (a) PARTITIONS 4;
+  up: |
+    ALTER TABLE t1 ADD INDEX g_idx (b) VALUE(c) GLOBAL;
+  down: |
+    ALTER TABLE t1 DROP INDEX g_idx;
+CreateTableGlobalIncludedColumnIndexPartitioned:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t1 (
+      a int NOT NULL,
+      b int,
+      c int,
+      PRIMARY KEY (a),
+      INDEX g_idx (b) VALUE(c) GLOBAL PARTITION BY HASH (b) PARTITIONS 4
+    ) PARTITION BY HASH (a) PARTITIONS 4;
+
+
+  current: ""
+  up: |
+    CREATE TABLE t1 (
+      a int NOT NULL,
+      b int,
+      c int,
+      PRIMARY KEY (a),
+      INDEX g_idx (b) VALUE(c) GLOBAL PARTITION BY HASH (b) PARTITIONS 4
+    ) PARTITION BY HASH (a) PARTITIONS 4;
+  down: |
+    DROP TABLE t1;
+AddIncludedColumnIndexMultiple:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      `d` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (a int NOT NULL, b int, c int, d int, PRIMARY KEY(a), KEY idx_b (b) VALUE(c, d));
+  up: |
+    ALTER TABLE t1 ADD KEY idx_b (b) VALUE(`c`, `d`);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+AddUniqueIncludedColumnIndexKey:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (a int NOT NULL, b int, c int, PRIMARY KEY(a), UNIQUE KEY idx_b (b) VALUE(c));
+  up: |
+    ALTER TABLE t1 ADD UNIQUE KEY idx_b (b) VALUE(`c`);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_b;
+AddIncludedColumnIndexMultiKeyColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      `d` int DEFAULT NULL,
+      PRIMARY KEY (`a`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (a int NOT NULL, b int, c int, d int, PRIMARY KEY(a), KEY idx_bc (b, c) VALUE(d));
+  up: |
+    ALTER TABLE t1 ADD KEY idx_bc (b, c) VALUE(`d`);
+  down: |
+    ALTER TABLE t1 DROP INDEX idx_bc;
+RegressionValueAndGlobalAsColumnNames:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (`value` int, `global` int, a int);
+
+  current: ""
+  up: |
+    CREATE TABLE t (`value` int, `global` int, a int);
+  down: |
+    DROP TABLE t;
+IciShowCreateIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t1` (
+      `a` int NOT NULL,
+      `b` int DEFAULT NULL,
+      `c` int DEFAULT NULL,
+      PRIMARY KEY (`a`),
+      KEY `idx_b` (`b`) VALUE(`c`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t1 (a int NOT NULL, b int, c int, PRIMARY KEY(a), KEY idx_b (b) VALUE(c));
+
+
+  up: ""
+  down: ""
+# 1.8 策略对象管理
+
+ReplaceDistributionPolicyWithoutAnnotation:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp2" SET REPLICA_COUNT = 3;
+  up: |
+    CREATE DISTRIBUTION POLICY "dp2" SET REPLICA_COUNT = 3;
+    DROP DISTRIBUTION POLICY "dp1";
+  down: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+    DROP DISTRIBUTION POLICY "dp2";
+CreatePartitionPolicyHash:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 4;
+  up: |
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 4;
+  down: |
+    DROP PARTITION POLICY pp1;
+  current: ""
+CreatePartitionPolicyIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+  desired: |
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 4;
+  up: ""
+  down: ""
+DropPartitionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+  desired: ""
+  up: |
+    DROP PARTITION POLICY pp1;
+  down: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+ChangePartitionPolicyPartitionCount:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+  desired: |
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 8;
+  up: |
+    DROP PARTITION POLICY pp1;
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 8;
+  down: |
+    DROP PARTITION POLICY pp1;
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+CreatePartitionPolicyThenTable:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 4;
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp1;
+  up: |
+    CREATE PARTITION POLICY pp1 PARTITION BY HASH(INT) PARTITIONS 4;
+    CREATE TABLE t (
+      id int
+    ) PARTITION BY HASH (id) PARTITIONS 4 USING PARTITION POLICY pp1;
+  down: |
+    DROP TABLE t;
+    DROP PARTITION POLICY pp1;
+  current: ""
+CreateDistributionPolicyBasicAlter:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 5;
+  up: |
+    ALTER DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 5;
+  down: |
+    ALTER DISTRIBUTION POLICY "dp1" SET REPLICA_COUNT = 3;
+CreateDistributionPolicyBasicCreateDropRename:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "old_dp" SET REPLICA_COUNT = 3;
+  desired: |
+    CREATE DISTRIBUTION POLICY "new_dp" SET REPLICA_COUNT = 3; -- @renamed from="old_dp"
+  up: |
+    RENAME DISTRIBUTION POLICY "old_dp" TO "new_dp";
+  down: |
+    RENAME DISTRIBUTION POLICY "new_dp" TO "old_dp";
+CreatePartitionPolicyNoClause:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: ""
+  desired: |
+    CREATE PARTITION POLICY pp1;
+  up: |
+    CREATE PARTITION POLICY pp1;
+  down: |
+    DROP PARTITION POLICY pp1;
+CreateDistributionPolicyReplicaCount:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: ""
+  desired: |
+    CREATE DISTRIBUTION POLICY "policy_1" SET REPLICA_COUNT = 5;
+  up: |
+    CREATE DISTRIBUTION POLICY "policy_1" SET REPLICA_COUNT = 5;
+  down: |
+    DROP DISTRIBUTION POLICY "policy_1";
+RenameDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "old_dp_name" SET REPLICA_COUNT = 3;
+  desired: |
+    CREATE DISTRIBUTION POLICY "new_dp_name" SET REPLICA_COUNT = 3; -- @renamed from="old_dp_name"
+  up: |
+    RENAME DISTRIBUTION POLICY "old_dp_name" TO "new_dp_name";
+  down: |
+    RENAME DISTRIBUTION POLICY "new_dp_name" TO "old_dp_name";
+DistributionShowCreateIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DISTRIBUTION=NODE(ALL) SYNC_LEVEL=NODE(ALL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id int NOT NULL, PRIMARY KEY(id)) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL);
+
+
+  up: ""
+  down: ""
+DropDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE DISTRIBUTION POLICY "policy_1" SET REPLICA_COUNT = 3;
+  desired: |
+  up: |
+    DROP DISTRIBUTION POLICY "policy_1";
+  down: |
+    CREATE DISTRIBUTION POLICY "policy_1" SET REPLICA_COUNT = 3;
+DropPartitionPolicyObject:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+  desired: |
+  up: |
+    DROP PARTITION POLICY pp1;
+  down: |
+    CREATE PARTITION POLICY `pp1` PARTITION BY HASH(INT) PARTITIONS 4;
+CreateDistributionPolicyIdempotent:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "policy_1" SET REPLICA_COUNT = 5
+  desired: |
+    CREATE DISTRIBUTION POLICY "policy_1" SET REPLICA_COUNT = 5;
+
+  up: ""
+  down: ""
+CreateAdvancedDistributionPolicy:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 3 AND REGION EXISTS;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 3 AND REGION EXISTS;
+
+  up: ""
+  down: ""
+AlterDistributionPolicyWithMultipleRules:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 3 AND REGION EXISTS;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 5 AND REGION EXISTS;
+  up: |
+    ALTER DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 5 AND REGION EXISTS;
+  down: |
+    ALTER DISTRIBUTION POLICY "dp_supplement" SET REPLICA_COUNT = 3 AND REGION EXISTS;
+CreateDistributionPolicyNodeInSupplement:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp_node_supplement" SET NODE IN ("node-001", "node-002") AND REPLICA_COUNT = 2;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp_node_supplement" SET NODE IN ("node-001", "node-002") AND REPLICA_COUNT = 2;
+
+  up: ""
+  down: ""
+RenameDistributionPolicySafely:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE DISTRIBUTION POLICY "dp_old_supplement" SET REPLICA_COUNT = 3;
+  desired: |
+    CREATE DISTRIBUTION POLICY "dp_new_supplement" SET REPLICA_COUNT = 3; -- @renamed from="dp_old_supplement"
+  up: |
+    RENAME DISTRIBUTION POLICY "dp_old_supplement" TO "dp_new_supplement";
+  down: |
+    RENAME DISTRIBUTION POLICY "dp_new_supplement" TO "dp_old_supplement";
+CreatePartitionPolicyKey:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE PARTITION POLICY `pp_supplement` PARTITION BY KEY(INT) PARTITIONS 4;
+  desired: |
+    CREATE PARTITION POLICY `pp_supplement` PARTITION BY KEY(INT) PARTITIONS 4;
+
+  up: ""
+  down: ""
+
+ChangeTableHashPartitionColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `tdsql_hash_partition_repro` (
+      `id` bigint NOT NULL,
+      `user_id` bigint NOT NULL,
+      `tenant_id` bigint NOT NULL,
+      `payload` varchar(255) DEFAULT NULL,
+      PRIMARY KEY (`id`,`user_id`,`tenant_id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`user_id`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE tdsql_hash_partition_repro (
+      id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      tenant_id BIGINT NOT NULL,
+      payload VARCHAR(255) DEFAULT NULL,
+      PRIMARY KEY (id, user_id, tenant_id)
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE tdsql_hash_partition_repro PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  down: |
+    ALTER TABLE `tdsql_hash_partition_repro` PARTITION BY HASH (user_id) PARTITIONS 4;
+
+
+ChangeRangePartitionBoundary:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_boundary_diff` (
+      `id` int NOT NULL,
+      `payload` varchar(100) DEFAULT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION p1 VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE range_boundary_diff (
+      id int NOT NULL,
+      payload varchar(100),
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p1 VALUES LESS THAN (300)
+    );
+  up: |
+    ALTER TABLE range_boundary_diff PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (300));
+  down: |
+    ALTER TABLE `range_boundary_diff` PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200));
+ChangeRangePartitionToMaxValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_maxvalue_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION pmax VALUES LESS THAN (200)) */;
+  desired: |
+    CREATE TABLE range_maxvalue_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  up: |
+    ALTER TABLE range_maxvalue_diff PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE `range_maxvalue_diff` PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100), PARTITION pmax VALUES LESS THAN (200));
+ChangeListPartitionValues:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `list_values_diff` (
+      `id` int NOT NULL,
+      `region_id` int NOT NULL,
+      PRIMARY KEY (`id`,`region_id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY LIST (`region_id`)
+    (PARTITION p_cn VALUES IN (1,2),
+     PARTITION p_us VALUES IN (3,4)) */;
+  desired: |
+    CREATE TABLE list_values_diff (
+      id int NOT NULL,
+      region_id int NOT NULL,
+      PRIMARY KEY (id, region_id)
+    ) PARTITION BY LIST (region_id) (
+      PARTITION p_cn VALUES IN (1, 2, 5),
+      PARTITION p_us VALUES IN (3, 4)
+    );
+  up: |
+    ALTER TABLE list_values_diff PARTITION BY LIST (region_id) (PARTITION p_cn VALUES IN (1, 2, 5), PARTITION p_us VALUES IN (3, 4));
+  down: |
+    ALTER TABLE `list_values_diff` PARTITION BY LIST (region_id) (PARTITION p_cn VALUES IN (1, 2), PARTITION p_us VALUES IN (3, 4));
+# ReorderRangePartitionDefinitions 暂不支持，待 TDSQL 合法分区重排语义确认后恢复。
+AddPartitioningToExistingTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `add_partitioning_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE add_partitioning_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY HASH (id) PARTITIONS 4;
+  up: |
+    ALTER TABLE add_partitioning_diff PARTITION BY HASH (id) PARTITIONS 4;
+  down: |
+    ALTER TABLE `add_partitioning_diff` REMOVE PARTITIONING;
+RemovePartitioningFromExistingTable:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `remove_partitioning_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE remove_partitioning_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE remove_partitioning_diff REMOVE PARTITIONING;
+  down: |
+    ALTER TABLE `remove_partitioning_diff` PARTITION BY HASH (id) PARTITIONS 4;
+ChangeHashPartitionCount:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `hash_count_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY HASH (`id`)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE hash_count_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY HASH (id) PARTITIONS 8;
+  up: |
+    ALTER TABLE hash_count_diff PARTITION BY HASH (id) PARTITIONS 8;
+  down: |
+    ALTER TABLE `hash_count_diff` PARTITION BY HASH (id) PARTITIONS 4;
+ChangeKeyPartitionColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `key_columns_diff` (
+      `id` int NOT NULL,
+      `tenant_id` int NOT NULL,
+      PRIMARY KEY (`id`,`tenant_id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY KEY (id)
+    PARTITIONS 4 */;
+  desired: |
+    CREATE TABLE key_columns_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id)
+    ) PARTITION BY KEY (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE key_columns_diff PARTITION BY KEY (tenant_id) PARTITIONS 4;
+  down: |
+    ALTER TABLE `key_columns_diff` PARTITION BY KEY (id) PARTITIONS 4;
+ChangeRangeColumnsBoundary:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_columns_boundary_diff` (
+      `id` int NOT NULL,
+      `created_at` date NOT NULL,
+      PRIMARY KEY (`id`,`created_at`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50500 PARTITION BY RANGE  COLUMNS(created_at)
+    (PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+     PARTITION pmax VALUES LESS THAN (MAXVALUE)) */;
+  desired: |
+    CREATE TABLE range_columns_boundary_diff (
+      id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, created_at)
+    ) PARTITION BY RANGE COLUMNS (created_at) (
+      PARTITION p2026 VALUES LESS THAN ('2027-07-01'),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  up: |
+    ALTER TABLE range_columns_boundary_diff PARTITION BY RANGE COLUMNS (created_at) (PARTITION p2026 VALUES LESS THAN ('2027-07-01'), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE `range_columns_boundary_diff` PARTITION BY RANGE COLUMNS (created_at) (PARTITION p2026 VALUES LESS THAN ('2027-01-01'), PARTITION pmax VALUES LESS THAN MAXVALUE);
+ChangeListColumnsValues:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `list_columns_values_diff` (
+      `id` int NOT NULL,
+      `country` char(2) NOT NULL,
+      PRIMARY KEY (`id`,`country`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50500 PARTITION BY LIST  COLUMNS(country)
+    (PARTITION p_asia VALUES IN ('CN','JP'),
+     PARTITION p_other VALUES IN ('US','GB')) */;
+  desired: |
+    CREATE TABLE list_columns_values_diff (
+      id int NOT NULL,
+      country char(2) NOT NULL,
+      PRIMARY KEY (id, country)
+    ) PARTITION BY LIST COLUMNS (country) (
+      PARTITION p_asia VALUES IN ('CN', 'JP', 'KR'),
+      PARTITION p_other VALUES IN ('US', 'GB')
+    );
+  up: |
+    ALTER TABLE list_columns_values_diff PARTITION BY LIST COLUMNS (country) (PARTITION p_asia VALUES IN ('CN', 'JP', 'KR'), PARTITION p_other VALUES IN ('US', 'GB'));
+  down: |
+    ALTER TABLE `list_columns_values_diff` PARTITION BY LIST COLUMNS (country) (PARTITION p_asia VALUES IN ('CN', 'JP'), PARTITION p_other VALUES IN ('US', 'GB'));
+ChangePartitionStorageTierWithBoundaryChange:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `partition_tier_boundary_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)  STORAGE_TIER = LOCAL_STORAGE,
+     PARTITION pmax VALUES LESS THAN MAXVALUE  STORAGE_TIER = LOCAL_STORAGE) */;
+  desired: |
+    CREATE TABLE partition_tier_boundary_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (200) STORAGE_TIER = OBJECT_STORAGE,
+      PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = OBJECT_STORAGE
+    );
+  up: |
+    ALTER TABLE partition_tier_boundary_diff PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (200) STORAGE_TIER = OBJECT_STORAGE, PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = OBJECT_STORAGE);
+  down: |
+    ALTER TABLE `partition_tier_boundary_diff` PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100) STORAGE_TIER = LOCAL_STORAGE, PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = LOCAL_STORAGE);
+ChangeIntervalValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `interval_value_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE interval_value_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) INTERVAL(500) (
+      PARTITION p0 VALUES LESS THAN (100)
+    );
+  up: |
+    ALTER TABLE interval_value_diff SET INTERVAL(500);
+  down: |
+    ALTER TABLE `interval_value_diff` SET INTERVAL();
+RemoveIntervalRegression:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `remove_interval_diff` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100)) */;
+  desired: |
+    CREATE TABLE remove_interval_diff (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100)
+    );
+  up: ""
+  down: ""
+ChangeGSIHashPartitionColumn:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE gsi_hash_column_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY HASH (tenant_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE gsi_hash_column_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE gsi_hash_column_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_hash_column_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 4;
+  down: |
+    ALTER TABLE gsi_hash_column_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_hash_column_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY HASH (tenant_id) PARTITIONS 4;
+ChangeGSIHashPartitionCount:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE gsi_hash_count_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE gsi_hash_count_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 8
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE gsi_hash_count_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_hash_count_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 8;
+  down: |
+    ALTER TABLE gsi_hash_count_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_hash_count_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY HASH (user_id) PARTITIONS 4;
+ChangeGSIKeyPartitionColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE gsi_key_columns_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY KEY (tenant_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE gsi_key_columns_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY KEY (user_id) PARTITIONS 4
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE gsi_key_columns_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_key_columns_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY KEY (user_id) PARTITIONS 4;
+  down: |
+    ALTER TABLE gsi_key_columns_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_key_columns_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY KEY (tenant_id) PARTITIONS 4;
+ChangeGSIRangeBoundary:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE gsi_range_boundary_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (
+        PARTITION p0 VALUES LESS THAN (100),
+        PARTITION p1 VALUES LESS THAN (200),
+        PARTITION pmax VALUES LESS THAN MAXVALUE
+      )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE gsi_range_boundary_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (
+        PARTITION p0 VALUES LESS THAN (100),
+        PARTITION p1 VALUES LESS THAN (300),
+        PARTITION pmax VALUES LESS THAN MAXVALUE
+      )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE gsi_range_boundary_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_range_boundary_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (300), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE gsi_range_boundary_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_range_boundary_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200), PARTITION pmax VALUES LESS THAN MAXVALUE);
+ChangeGSIRangeColumnsBoundary:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE gsi_range_columns_boundary_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (created_at) GLOBAL PARTITION BY RANGE COLUMNS (created_at) (
+        PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+        PARTITION pmax VALUES LESS THAN MAXVALUE
+      )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE gsi_range_columns_boundary_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (created_at) GLOBAL PARTITION BY RANGE COLUMNS (created_at) (
+        PARTITION p2026 VALUES LESS THAN ('2027-07-01'),
+        PARTITION pmax VALUES LESS THAN MAXVALUE
+      )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE gsi_range_columns_boundary_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_range_columns_boundary_diff ADD INDEX g_idx (created_at) GLOBAL PARTITION BY RANGE COLUMNS (created_at) (PARTITION p2026 VALUES LESS THAN ('2027-07-01'), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE gsi_range_columns_boundary_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_range_columns_boundary_diff ADD INDEX g_idx (created_at) GLOBAL PARTITION BY RANGE COLUMNS (created_at) (PARTITION p2026 VALUES LESS THAN ('2027-01-01'), PARTITION pmax VALUES LESS THAN MAXVALUE);
+ChangeGSIStorageTier:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE gsi_storage_tier_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (
+        PARTITION p0 VALUES LESS THAN (1000) STORAGE_TIER = LOCAL_STORAGE,
+        PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = LOCAL_STORAGE
+      )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  desired: |
+    CREATE TABLE gsi_storage_tier_diff (
+      id int NOT NULL,
+      tenant_id int NOT NULL,
+      user_id int NOT NULL,
+      PRIMARY KEY (id, tenant_id),
+      KEY g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (
+        PARTITION p0 VALUES LESS THAN (1000) STORAGE_TIER = OBJECT_STORAGE,
+        PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = OBJECT_STORAGE
+      )
+    ) PARTITION BY HASH (tenant_id) PARTITIONS 4;
+  up: |
+    ALTER TABLE gsi_storage_tier_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_storage_tier_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (PARTITION p0 VALUES LESS THAN (1000) STORAGE_TIER = OBJECT_STORAGE, PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = OBJECT_STORAGE);
+  down: |
+    ALTER TABLE gsi_storage_tier_diff DROP INDEX g_idx;
+    ALTER TABLE gsi_storage_tier_diff ADD INDEX g_idx (user_id) GLOBAL PARTITION BY RANGE (user_id) (PARTITION p0 VALUES LESS THAN (1000) STORAGE_TIER = LOCAL_STORAGE, PARTITION pmax VALUES LESS THAN MAXVALUE STORAGE_TIER = LOCAL_STORAGE);
+
+AddRangePartitionBeforeMaxValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_reorganize_maxvalue` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    /*!50100 PARTITION BY RANGE (`id`)
+    (PARTITION p0 VALUES LESS THAN (100),
+     PARTITION pmax VALUES LESS THAN MAXVALUE) */;
+  desired: |
+    CREATE TABLE range_reorganize_maxvalue (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p1 VALUES LESS THAN (200),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  up: |
+    ALTER TABLE range_reorganize_maxvalue REORGANIZE PARTITION pmax INTO (PARTITION p1 VALUES LESS THAN (200), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE `range_reorganize_maxvalue` DROP PARTITION p1;
+
+AddMultipleRangePartitionsBeforeMaxValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_reorganize_multiple` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) PARTITION BY RANGE (`id`) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  desired: |
+    CREATE TABLE range_reorganize_multiple (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p1 VALUES LESS THAN (200),
+      PARTITION p2 VALUES LESS THAN (300),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  up: |
+    ALTER TABLE range_reorganize_multiple REORGANIZE PARTITION pmax INTO (PARTITION p1 VALUES LESS THAN (200), PARTITION p2 VALUES LESS THAN (300), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE `range_reorganize_multiple` DROP PARTITION p1, p2;
+
+AddRangeColumnsPartitionBeforeMaxValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_columns_reorganize_maxvalue` (
+      `id` int NOT NULL,
+      `created_at` date NOT NULL,
+      PRIMARY KEY (`id`, `created_at`)
+    ) PARTITION BY RANGE COLUMNS (`created_at`) (
+      PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  desired: |
+    CREATE TABLE range_columns_reorganize_maxvalue (
+      id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, created_at)
+    ) PARTITION BY RANGE COLUMNS (created_at) (
+      PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+      PARTITION p2027 VALUES LESS THAN ('2028-01-01'),
+      PARTITION pmax VALUES LESS THAN MAXVALUE
+    );
+  up: |
+    ALTER TABLE range_columns_reorganize_maxvalue REORGANIZE PARTITION pmax INTO (PARTITION p2027 VALUES LESS THAN ('2028-01-01'), PARTITION pmax VALUES LESS THAN MAXVALUE);
+  down: |
+    ALTER TABLE `range_columns_reorganize_maxvalue` DROP PARTITION p2027;
+
+AddRangePartitionWithoutMaxValueUsesAdd:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_add_without_maxvalue` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) PARTITION BY RANGE (`id`) (
+      PARTITION p0 VALUES LESS THAN (100)
+    );
+  desired: |
+    CREATE TABLE range_add_without_maxvalue (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p1 VALUES LESS THAN (200)
+    );
+  up: |
+    ALTER TABLE range_add_without_maxvalue ADD PARTITION (PARTITION p1 VALUES LESS THAN (200));
+  down: |
+    ALTER TABLE `range_add_without_maxvalue` DROP PARTITION p1;
+
+AddRangePartitionBeforeOrdinaryTail:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_reorganize_ordinary_tail` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) PARTITION BY RANGE (`id`) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p1 VALUES LESS THAN (200)
+    );
+  desired: |
+    CREATE TABLE range_reorganize_ordinary_tail (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p11 VALUES LESS THAN (150),
+      PARTITION p1 VALUES LESS THAN (200)
+    );
+  up: |
+    ALTER TABLE range_reorganize_ordinary_tail REORGANIZE PARTITION p1 INTO (PARTITION p11 VALUES LESS THAN (150), PARTITION p1 VALUES LESS THAN (200));
+  down: |
+    ALTER TABLE `range_reorganize_ordinary_tail` DROP PARTITION p11;
+
+AddMultipleRangePartitionsBeforeOrdinaryTail:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_reorganize_multiple_ordinary` (
+      `id` int NOT NULL,
+      PRIMARY KEY (`id`)
+    ) PARTITION BY RANGE (`id`) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p1 VALUES LESS THAN (300)
+    );
+  desired: |
+    CREATE TABLE range_reorganize_multiple_ordinary (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    ) PARTITION BY RANGE (id) (
+      PARTITION p0 VALUES LESS THAN (100),
+      PARTITION p11 VALUES LESS THAN (150),
+      PARTITION p12 VALUES LESS THAN (250),
+      PARTITION p1 VALUES LESS THAN (300)
+    );
+  up: |
+    ALTER TABLE range_reorganize_multiple_ordinary REORGANIZE PARTITION p1 INTO (PARTITION p11 VALUES LESS THAN (150), PARTITION p12 VALUES LESS THAN (250), PARTITION p1 VALUES LESS THAN (300));
+  down: |
+    ALTER TABLE `range_reorganize_multiple_ordinary` DROP PARTITION p11, p12;
+
+AddRangeColumnsPartitionBeforeOrdinaryTail:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `range_columns_reorganize_ordinary` (
+      `id` int NOT NULL,
+      `created_at` date NOT NULL,
+      PRIMARY KEY (`id`, `created_at`)
+    ) PARTITION BY RANGE COLUMNS (`created_at`) (
+      PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+      PARTITION p2028 VALUES LESS THAN ('2029-01-01')
+    );
+  desired: |
+    CREATE TABLE range_columns_reorganize_ordinary (
+      id int NOT NULL,
+      created_at date NOT NULL,
+      PRIMARY KEY (id, created_at)
+    ) PARTITION BY RANGE COLUMNS (created_at) (
+      PARTITION p2026 VALUES LESS THAN ('2027-01-01'),
+      PARTITION p2027 VALUES LESS THAN ('2028-01-01'),
+      PARTITION p2028 VALUES LESS THAN ('2029-01-01')
+    );
+  up: |
+    ALTER TABLE range_columns_reorganize_ordinary REORGANIZE PARTITION p2028 INTO (PARTITION p2027 VALUES LESS THAN ('2028-01-01'), PARTITION p2028 VALUES LESS THAN ('2029-01-01'));
+  down: |
+    ALTER TABLE `range_columns_reorganize_ordinary` DROP PARTITION p2027;
+
+# The following cases were carried over from the legacy tests_tdsql.yml /
+# tests_tdsql_2.yml (now removed) because they are not covered by the
+# sections above: reserved-keyword-as-identifier regression coverage, and
+# isolated (single-attribute) DISTRIBUTION / SYNC_LEVEL add/change/remove/
+# no-op cases (the sections above only test them as a pair).
+RegressionTdsqlKeywordsAsColumnNames:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      node int,
+      ttl int,
+      distribution int,
+      sync_level int,
+      storage_tier int,
+      interval_col int,
+      policy int,
+      region int,
+      replica_count int
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      node int,
+      ttl int,
+      distribution int,
+      sync_level int,
+      storage_tier int,
+      interval_col int,
+      policy int,
+      region int,
+      replica_count int
+    );
+  down: |
+    DROP TABLE t;
+RegressionTdsqlKeywordsAsTableName:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE ttl (
+      a int
+    );
+    CREATE TABLE policy (
+      a int
+    );
+
+  current: ""
+  up: |
+    CREATE TABLE ttl (
+      a int
+    );
+    CREATE TABLE policy (
+      a int
+    );
+  down: |
+    DROP TABLE ttl;
+    DROP TABLE policy;
+CreateTableWithDistribution:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL);
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL);
+  down: |
+    DROP TABLE t;
+CreateTableWithSyncLevel:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(ALL);
+
+  current: ""
+  up: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(ALL);
+  down: |
+    DROP TABLE t;
+AddDistribution:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL);
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+AddSyncLevel: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(ALL);
+  up: |
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+  down: |
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+ChangeDistribution: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL);
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+ChangeSyncLevel: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(ALL);
+  up: |
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+  down: |
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+CreateDistributionAndSyncLevelPair:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `id` bigint NOT NULL,
+      PRIMARY KEY (`id`)
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (id bigint NOT NULL PRIMARY KEY) DISTRIBUTION = NODE(ALL) SYNC_LEVEL = NODE(ALL);
+
+
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));
+  down: |
+    -- Warning: ALTER TABLE `t` DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+    -- Warning: ALTER TABLE `t` SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+CreateTableSyncLevelQuotedValue:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = 'NODE(MAJORITY)';
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(MAJORITY);
+  up: ""
+  down: ""
+DistributionDefaultIsNoop: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: ""
+  down: ""
+SyncLevelMajorityIsNoop: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE `t` (
+      `a` int DEFAULT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: ""
+  down: ""
+RemoveDistribution: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    ) DISTRIBUTION = NODE(ALL);
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(DEFAULT) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(ALL), desired: NODE(DEFAULT));
+  down: |
+    -- Warning: ALTER TABLE t DISTRIBUTION = NODE(ALL) is not applied because TDSQL silently ignores changes to DISTRIBUTION (current: NODE(DEFAULT), desired: NODE(ALL));
+RemoveSyncLevel: 
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    ) SYNC_LEVEL = NODE(ALL);
+  desired: |
+    CREATE TABLE t (
+      a int
+    );
+  up: |
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(MAJORITY) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(ALL), desired: NODE(MAJORITY));
+  down: |
+    -- Warning: ALTER TABLE t SYNC_LEVEL = NODE(ALL) is not applied because TDSQL silently ignores changes to SYNC_LEVEL (current: NODE(MAJORITY), desired: NODE(ALL));

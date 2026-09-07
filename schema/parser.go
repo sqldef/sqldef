@@ -17,6 +17,12 @@ import (
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
 func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaultSchema string) ([]DDL, error) {
+	renameFrom := extractRenameFrom(sql)
+	// Keep inline annotations attached to columns/indexes/tables, but remove
+	// standalone annotation lines that the SQL parser would otherwise treat as
+	// comment-only statements (notably distribution-policy renames).
+	sql = regexp.MustCompile(`(?m)^\s*--\s*@renamed[^\n]*\n`).ReplaceAllString(sql, "")
+	sql = regexp.MustCompile(`(?m);[ \t]*--\s*@renamed[^\n]*`).ReplaceAllString(sql, ";")
 	ddls, err := sqlParser.Parse(sql)
 	if err != nil {
 		return nil, err
@@ -42,6 +48,9 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaul
 				return result, err
 			}
 			if parsed != nil {
+				if policy, ok := parsed.(*DistributionPolicy); ok && renameFrom.Name != "" {
+					policy.renamedFrom = renameFrom.Name
+				}
 				result = append(result, parsed)
 			}
 		}
@@ -52,6 +61,9 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaul
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
 func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSchema string) (DDL, error) {
+	if strings.HasPrefix(strings.TrimSpace(ddl), "-- @renamed") {
+		return nil, nil
+	}
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
 		if stmt.Action == parser.CreateTable {
@@ -289,15 +301,37 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				comment:   *stmt.Comment,
 			}, nil
+		} else if stmt.Action == parser.TDSQLPartitionCommand {
+			if stmt.PartitionCommand == nil || stmt.PartitionCommand.Action != "TRUNCATE" {
+				return &NoopDDL{statement: ddl}, nil
+			}
+			return &PartitionCommandDDL{
+				statement: ddl,
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
+				action:    stmt.PartitionCommand.Action,
+				partitions: util.TransformSlice(stmt.PartitionCommand.Partitions, func(partition parser.Ident) Ident {
+					return Ident{Name: partition.Name, Quoted: partition.Quoted}
+				}),
+				updateGlobalIndexes: stmt.PartitionCommand.UpdateGlobalIndexes,
+			}, nil
+		} else if stmt.Action == parser.AlterTableOptions {
+			// TDSQL table-option ALTER statements are already operational DDLs;
+			// schema diff generation emits them from CREATE TABLE options.
+			return &NoopDDL{statement: ddl}, nil
+		} else if stmt.Action == parser.CreatePartitionPolicy {
+			return &PartitionPolicy{statement: ddl, name: stmt.PartitionPolicy.Name, typ: stmt.PartitionPolicy.Type, columnType: stmt.PartitionPolicy.ColumnType, columnCount: stmt.PartitionPolicy.ColumnCount, partitions: stmt.PartitionPolicy.Partitions}, nil
+		} else if stmt.Action == parser.CreateDistributionPolicy {
+			return &DistributionPolicy{statement: ddl, name: stmt.DistributionPolicyDef.Name, body: stmt.DistributionPolicyDef.Body, renamedFrom: extractRenameFrom(ddl).Name}, nil
 		} else if stmt.Action == parser.CreateExtension {
 			return &Extension{
 				statement: ddl,
 				extension: *stmt.Extension,
 			}, nil
-		} else if stmt.Action == parser.CreateSchema {
+		} else if stmt.Action == parser.CreateSchema || stmt.Action == parser.AlterSchema {
 			return &Schema{
 				statement: ddl,
 				schema:    *stmt.Schema,
+				alter:     stmt.Action == parser.AlterSchema,
 			}, nil
 		} else if stmt.Action == parser.GrantPrivilege {
 			grantees := stmt.Grant.Grantees
@@ -652,9 +686,24 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			options:          indexOptions,
 			partition:        indexPartition,
 
+			global:       indexDef.Global,
+			local:        indexDef.Local,
+			gsiPartition: indexDef.GSIPartition,
+			valueColumns: util.TransformSlice(indexDef.ValueColumns, func(col parser.Ident) string {
+				return col.Name
+			}),
+
 			// Mark as constraint based on database-specific logic
 			constraint:        isConstraint,
 			constraintOptions: constraintOptions,
+		}
+
+		// TDSQL creates transient invisible indexes named #trun-* while
+		// maintaining a GSI during TRUNCATE PARTITION ... UPDATE GLOBAL INDEXES.
+		// They are implementation details, not user schema, so never include
+		// them in the exported schema model.
+		if mode == GeneratorModeMysql && strings.HasPrefix(strings.ToLower(nameIdent.Name), "#trun-") {
+			continue
 		}
 
 		// Parse @renamed annotation for this index
@@ -719,14 +768,29 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	// Parse partition information
 	var partition *TablePartition
 	if stmt.TableSpec.Partition != nil {
+		if stmt.TableSpec.Partition.Interval != 0 && !strings.EqualFold(stmt.TableSpec.Partition.Type, "RANGE") && !strings.EqualFold(stmt.TableSpec.Partition.Type, "RANGE COLUMNS") {
+			return Table{}, fmt.Errorf("INTERVAL is only supported with RANGE partitioning")
+		}
+		if stmt.TableSpec.Partition.Interval != 0 {
+			for _, def := range stmt.TableSpec.Partition.Definitions {
+				if def.Maxvalue {
+					return Table{}, fmt.Errorf("INTERVAL partitioning cannot be used with a MAXVALUE partition")
+				}
+			}
+		}
 		partition = &TablePartition{
-			Type: stmt.TableSpec.Partition.Type,
+			Type:       stmt.TableSpec.Partition.Type,
+			Expr:       stmt.TableSpec.Partition.Expr,
+			Columns:    stmt.TableSpec.Partition.Columns,
+			Partitions: stmt.TableSpec.Partition.Partitions,
+			Interval:   stmt.TableSpec.Partition.Interval,
 			Definitions: util.TransformSlice(stmt.TableSpec.Partition.Definitions, func(def *parser.PartitionDefinition) PartitionDefinition {
 				return PartitionDefinition{
-					Name:     def.Name,
-					LessThan: def.LessThan,
-					In:       def.In,
-					Maxvalue: def.Maxvalue,
+					Name:        def.Name,
+					LessThan:    def.LessThan,
+					In:          def.In,
+					Maxvalue:    def.Maxvalue,
+					StorageTier: def.StorageTier,
 				}
 			}),
 		}
@@ -851,6 +915,12 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		options:           indexOptions,
 		partition:         indexPartition,
 		renamedFrom:       renameFrom,
+		global:            stmt.IndexSpec.Global,
+		local:             stmt.IndexSpec.Local,
+		gsiPartition:      stmt.IndexSpec.GSIPartition,
+		valueColumns: util.TransformSlice(stmt.IndexSpec.ValueColumns, func(col parser.Ident) string {
+			return col.Name
+		}),
 	}, nil
 }
 
@@ -1140,18 +1210,31 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 	return &ret
 }
 
+func hasTDSQLExtension(ddl string) bool {
+	upper := strings.ToUpper(ddl)
+	for _, marker := range []string{
+		"TTL", "STORAGE_TIER", "DISTRIBUTION", "SYNC_LEVEL", "BROADCAST",
+		" GLOBAL", " LOCAL", " VALUE(", "PARTITION POLICY", "INTERVAL(",
+	} {
+		if strings.Contains(upper, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // extractRenameFrom extracts the old name from a @renamed annotation.
 // Returns an Ident with both the name and whether it was quoted.
 // e.g., `@renamed from="OldName"` -> Ident{Name: "OldName", Quoted: true}
 // e.g., `@renamed from=oldname` -> Ident{Name: "oldname", Quoted: false}
 func extractRenameFrom(comment string) Ident {
 	// First try to match @renamed (preferred)
-	reRenamed := regexp.MustCompile(`@renamed\s+from=(?:"([^"]+)"|(\S+))`)
+	reRenamed := regexp.MustCompile(`@renamed\s+from=(?:"([^"]+)"|([^\s;]+))`)
 	matches := reRenamed.FindStringSubmatch(comment)
 
 	// If @renamed not found, try @rename (deprecated) for backward compatibility
 	if len(matches) == 0 {
-		reRename := regexp.MustCompile(`@rename\s+from=(?:"([^"]+)"|(\S+))`)
+		reRename := regexp.MustCompile(`@rename\s+from=(?:"([^"]+)"|([^\s;]+))`)
 		matches = reRename.FindStringSubmatch(comment)
 
 		// If @rename is found, issue a deprecation warning

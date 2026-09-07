@@ -96,6 +96,7 @@ var keywords = map[string]int{
 	"after":                  AFTER,
 	"against":                AGAINST,
 	"all":                    ALL,
+	"algorithm":              ALGORITHM,
 	"alter":                  ALTER,
 	"always":                 ALWAYS,
 	"analyze":                ANALYZE,
@@ -193,6 +194,12 @@ var keywords = map[string]int{
 	"do":                     DO,
 	"domain":                 DOMAIN,
 	"distinct":               DISTINCT,
+	"distribution":           DISTRIBUTION,
+	"sync_level":             SYNC_LEVEL,
+	"node":                   NODE,
+	"ttl":                    TTL,
+	"remove":                 REMOVE,
+	"local":                  LOCAL,
 	"distinctrow":            UNUSED,
 	"div":                    DIV,
 	"double":                 DOUBLE,
@@ -515,6 +522,8 @@ var keywords = map[string]int{
 	"utc_timestamp":          UTC_TIMESTAMP,
 	"uniqueidentifier":       UNIQUEIDENTIFIER,
 	"uuid":                   UUID,
+	"visible":                VISIBLE,
+	"invisible":              INVISIBLE,
 	"value":                  VALUE,
 	"values":                 VALUES,
 	"variables":              VARIABLES,
@@ -1375,6 +1384,25 @@ func (tkn *Tokenizer) scanCommentType2OrTiDBComment() (int, string) {
 		tkn.consumeNext(&buffer)
 	}
 	comment := buffer.String()
+	if strings.HasPrefix(comment, "/*B![") {
+		// TDSQL SHOW CREATE uses /*B![ttl] ... */ for TTL metadata.
+		// The feature marker is not SQL and must be removed before parsing
+		// the executable table option contained in the comment.
+		closeBracket := strings.Index(comment, "]")
+		if closeBracket >= 0 {
+			innerSQL := strings.TrimSpace(comment[closeBracket+1 : len(comment)-2])
+			tkn.specialComment = NewTokenizer(innerSQL, tkn.mode)
+			return tkn.Scan()
+		}
+	}
+	if strings.HasPrefix(comment, "/*B!") {
+		// TDSQL SHOW CREATE uses /*B!<version> ... */ for executable
+		// comments, alongside MySQL's /*!<version> ... */ form.
+		// Normalize it before reusing the MySQL version-comment parser.
+		_, innerSQL := extractMysqlComment("/*!B" + comment[4:])
+		tkn.specialComment = NewTokenizer(innerSQL, tkn.mode)
+		return tkn.Scan()
+	}
 	if innerSQL, ok := extractTiDBComment(comment); ok {
 		tkn.specialComment = NewTokenizer(innerSQL, tkn.mode)
 		return tkn.Scan()
@@ -1409,7 +1437,7 @@ func extractTiDBComment(comment string) (string, bool) {
 	}
 	feature := inner[3:closeBracket]
 	switch feature {
-	case "auto_rand", "auto_id_cache":
+	case "auto_rand", "auto_id_cache", "ttl":
 		// Supported features: expand the inner SQL into the token stream
 	default:
 		// Unsupported features (e.g. clustered_index): ignore
@@ -1500,13 +1528,25 @@ func (tkn *Tokenizer) peekTwoTokens() (int, int) {
 func extractMysqlComment(sql string) (version string, innerSQL string) {
 	sql = sql[3 : len(sql)-2]
 
-	digitCount := 0
-	endOfVersionIndex := strings.IndexFunc(sql, func(c rune) bool {
-		digitCount++
-		return !isAsciiDigit(c) || digitCount == 6
-	})
-	version = sql[0:endOfVersionIndex]
-	innerSQL = strings.TrimFunc(sql[endOfVersionIndex:], unicode.IsSpace)
+	// TDSQL uses version tags with a single leading letter, e.g. "B210604"
+	// (used for e.g. `/*!B210604 INTERVAL(100) */`), in addition to MySQL's
+	// plain numeric versions (e.g. "50100").
+	prefixLen := 0
+	if len(sql) > 0 && sql[0] != ' ' && !isAsciiDigit(rune(sql[0])) {
+		if len(sql) > 1 && isAsciiDigit(rune(sql[1])) {
+			prefixLen = 1
+		}
+	}
+
+	end := prefixLen
+	for end < len(sql) && isAsciiDigit(rune(sql[end])) {
+		end++
+		if end-prefixLen == 6 {
+			break
+		}
+	}
+	version = sql[:end]
+	innerSQL = strings.TrimFunc(sql[end:], unicode.IsSpace)
 
 	return version, innerSQL
 }
