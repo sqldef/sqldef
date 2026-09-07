@@ -146,7 +146,7 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> UNION INTERSECT EXCEPT
 %token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
-%token <str> ROWID STRICT
+%token <str> ROWID STRICT PRAGMA
 %token <str> VALUES LAST_INSERT_ID
 %token <str> NEXT VALUE SHARE MODE
 %token <str> SQL_NO_CACHE SQL_CACHE
@@ -366,7 +366,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <withClause> with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement pragma_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement drop_statement comment_statement
@@ -561,6 +561,7 @@ statement:
 | set_statement
 | use_statement
 | delete_statement
+| pragma_statement
 
 use_statement:
   USE sql_id
@@ -2469,6 +2470,33 @@ delete_statement:
   {
     $$ = &Delete{Comments: Comments($2), Targets: $3, TableExprs: $5, Where: NewWhere(WhereStr, $6)}
   }
+
+// sqldef does not manage pragmas. This rule exists only so that schema exports
+// which emit PRAGMA lines (Cloudflare D1, for one) parse instead of erroring;
+// the statement is dropped by the caller.
+pragma_statement:
+  PRAGMA sql_id
+  {
+    $$ = &Pragma{Name: $2}
+  }
+| PRAGMA sql_id '=' pragma_value
+  {
+    $$ = &Pragma{Name: $2}
+  }
+| PRAGMA sql_id '(' pragma_value ')'
+  {
+    $$ = &Pragma{Name: $2}
+  }
+
+pragma_value:
+  sql_id
+| STRING
+| INTEGRAL
+| FLOAT
+| ON
+| OFF
+| TRUE
+| FALSE
 
 from_or_using:
   FROM {}

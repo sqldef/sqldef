@@ -387,6 +387,7 @@ var keywords = map[string]int{
 	"point":                  POINT,
 	"policy":                 POLICY,
 	"polygon":                POLYGON,
+	"pragma":                 PRAGMA,
 	"precision":              PRECISION,
 	"preserve":               PRESERVE,
 	"primary":                PRIMARY,
