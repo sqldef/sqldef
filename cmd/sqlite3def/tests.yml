@@ -511,3 +511,7 @@ GeneratedColumnNoKeywordEquivalentToVirtual:
     );
   up: ""
   down: ""
+
+SimpleDeleteFrom:
+  current: |
+    DELETE FROM sqlite_sequence;

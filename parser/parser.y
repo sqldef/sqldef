@@ -560,6 +560,7 @@ statement:
 | comment_statement
 | set_statement
 | use_statement
+| delete_statement
 
 use_statement:
   USE sql_id

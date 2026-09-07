@@ -41,6 +41,12 @@ func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 		if err != nil {
 			return result, err
 		}
+		// Some schema exports interleave DML with the DDL: Cloudflare D1, for
+		// instance, emits `DELETE FROM sqlite_sequence;` when exporting a schema.
+		// Such statements carry no schema meaning, so accept them and drop them here.
+		if _, ok := stmt.(*parser.Delete); ok {
+			continue
+		}
 		result = append(result, DDLStatement{DDL: ddl, Statement: stmt})
 	}
 	return result, nil
