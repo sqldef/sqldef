@@ -666,6 +666,15 @@ func TestTypeKeywordsAsIndexColumns(t *testing.T) {
 	}
 }
 
+// TestLanguageAsUnquotedIdentifier tests that LANGUAGE can be used as an unquoted index column.
+// PostgreSQL classifies it as non-reserved, so the generic parser must accept that form.
+func TestLanguageAsUnquotedIdentifier(t *testing.T) {
+	sql := `CREATE UNIQUE INDEX index_translations_on_tenant_id_and_language ON translations USING btree (tenant_id, language)`
+	if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+		t.Fatalf("unquoted language in index column list should parse: %v", err)
+	}
+}
+
 func TestAutoRandom(t *testing.T) {
 	testCases := []struct {
 		name      string
