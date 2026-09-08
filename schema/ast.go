@@ -106,6 +106,20 @@ type DDL interface {
 	Statement() string
 }
 
+type NoopDDL struct{ statement string }
+
+func (n *NoopDDL) Statement() string { return n.statement }
+
+type PartitionCommandDDL struct {
+	statement           string
+	tableName           QualifiedName
+	action              string
+	partitions          []Ident
+	updateGlobalIndexes bool
+}
+
+func (p *PartitionCommandDDL) Statement() string { return p.statement }
+
 type CreateTable struct {
 	statement string
 	table     Table
@@ -165,6 +179,25 @@ type SetTableOwner struct {
 	owner     string
 }
 
+type PartitionPolicy struct {
+	statement   string
+	name        Ident
+	typ         string
+	columnType  string
+	columnCount int
+	partitions  int
+}
+
+type DistributionPolicy struct {
+	statement   string
+	name        string
+	body        string
+	renamedFrom string
+}
+
+func (p *PartitionPolicy) Statement() string    { return p.statement }
+func (p *DistributionPolicy) Statement() string { return p.statement }
+
 type GrantPrivilege struct {
 	statement       string
 	tableName       QualifiedName
@@ -221,16 +254,21 @@ type Table struct {
 
 // TablePartition represents partition information for a table
 type TablePartition struct {
-	Type        string                // RANGE, RANGE COLUMNS, LIST, LIST COLUMNS, HASH, LINEAR HASH, KEY, LINEAR KEY
+	Type        string // RANGE, RANGE COLUMNS, LIST, LIST COLUMNS, HASH, LINEAR HASH, KEY, LINEAR KEY
+	Expr        parser.Exprs
+	Columns     []parser.Ident
+	Partitions  int                   // MySQL: HASH/KEY partition count (0 = not specified)
+	Interval    int                   // TDSQL: RANGE partitioning INTERVAL(n) (0 = not set)
 	Definitions []PartitionDefinition // Individual partition definitions
 }
 
 // PartitionDefinition represents a single partition
 type PartitionDefinition struct {
-	Name     Ident
-	LessThan parser.Exprs // For RANGE: VALUES LESS THAN
-	In       parser.Exprs // For LIST: VALUES IN
-	Maxvalue bool         // For VALUES LESS THAN MAXVALUE
+	Name        Ident
+	LessThan    parser.Exprs // For RANGE: VALUES LESS THAN
+	In          parser.Exprs // For LIST: VALUES IN
+	Maxvalue    bool         // For VALUES LESS THAN MAXVALUE
+	StorageTier string       // TDSQL partition storage tier
 }
 
 type Column struct {
@@ -286,7 +324,11 @@ type Index struct {
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption
-	renamedFrom       Ident // Previous index name if renamed via @renamed annotation
+	renamedFrom       Ident                  // Previous index name if renamed via @renamed annotation
+	global            bool                   // TDSQL: GLOBAL secondary index (GSI)
+	local             bool                   // TDSQL: explicit LOCAL secondary index
+	gsiPartition      *parser.TablePartition // TDSQL: GSI's own partition definition
+	valueColumns      []string               // TDSQL: included/covering columns for ICI (KEY idx(a) VALUE(b))
 }
 
 // AccessMethod returns the index access method, e.g. "btree" or "gin". A DDL without a USING
@@ -575,6 +617,7 @@ type Extension struct {
 type Schema struct {
 	statement string
 	schema    parser.Schema
+	alter     bool
 }
 
 func (c *CreateTable) Statement() string {

@@ -469,3 +469,35 @@ Without this setting, CHECK constraints in your schema will be silently ignored 
 mysqldef automatically parses TiDB-specific comment formats (`/*T![feature] ... */` and `/*T! ... */`) from `SHOW CREATE TABLE` output, so schema management works seamlessly with existing TiDB tables.
 
 For `SHARD_ROW_ID_BITS`, `PRE_SPLIT_REGIONS`, and `AUTO_ID_CACHE`, mysqldef detects changes and generates `ALTER TABLE` statements accordingly.
+
+## TDSQL Compatibility
+
+mysqldef is compatible with [TDSQL](https://cloud.tencent.com/product/dcdb), Tencent's MySQL-compatible distributed database, including the following TDSQL-specific extensions.
+
+### Supported TDSQL Features
+
+| Feature | Description | Example |
+|---------|-------------|---------|
+| `DISTRIBUTION` | Controls which nodes a table's data is written to. | `CREATE TABLE t (...) DISTRIBUTION = NODE(ALL)` |
+| `SYNC_LEVEL` | Controls the synchronous replication level. | `CREATE TABLE t (...) SYNC_LEVEL = NODE(MAJORITY)` |
+| `STORAGE_TIER` | Controls the storage tier (`AUTO_STORAGE`, `LOCAL_STORAGE`, `OBJECT_STORAGE`). | `CREATE TABLE t (...) STORAGE_TIER = OBJECT_STORAGE` |
+| `TTL` | Automatically deletes rows older than a computed expiration time. | `CREATE TABLE t (...) TTL = created_at + INTERVAL 90 DAY` |
+| `TTL_ENABLE`, `TTL_JOB_INTERVAL`, `TTL_ARCHIVE_TABLE` | Control the TTL background job and archiving behavior. | `TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h'` |
+| Global Secondary Index (GSI) | Adds a `GLOBAL` secondary index, optionally with its own `HASH`/`KEY`/`RANGE` partitioning. TDSQL requires the base table to be partitioned. | `KEY g_idx (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 4` |
+| Included Column Index (ICI) | Adds covering columns to a secondary index via `VALUE(...)`. | `KEY idx_b (b) VALUE(c)` |
+| Interval partitioning | Automatically adds new `RANGE` partitions as data grows. | `PARTITION BY RANGE(id) INTERVAL(100) (...)` |
+| `PARTITION POLICY` / `DISTRIBUTION POLICY` | Reusable partitioning/distribution templates, managed as independent objects. | `CREATE PARTITION POLICY p1 PARTITION BY HASH(INT) PARTITIONS 4;` / `CREATE DISTRIBUTION POLICY 'dp1' REGION EXISTS AND REPLICA_COUNT = 3;` |
+
+When a partition is dropped from a table that owns a GSI, mysqldef appends `UPDATE GLOBAL INDEXES` so the global index stays consistent (`ALTER TABLE t DROP PARTITION p1 UPDATE GLOBAL INDEXES`).
+
+Because none of the words TDSQL uses for these extensions (`DISTRIBUTION`, `SYNC_LEVEL`, `NODE`, `TTL`, `REMOVE`, `LOCAL`, ...) are reserved in MySQL, they remain usable as ordinary table, column, and index names.
+
+mysqldef automatically parses TDSQL's `/*T![ttl] ... */` comment format (reusing the TiDB comment convention TDSQL adopts for TTL) and its versioned `/*!Bxxxxxx ... */` comment format (used for `INTERVAL(n)`) from `SHOW CREATE TABLE` output.
+
+### Known Limitations
+
+- `USING PARTITION POLICY <name>` / `USING DISTRIBUTION POLICY <name>` (binding a table to a policy at creation time) is only parsed when it directly follows a `PARTITION BY HASH(...) PARTITIONS n` clause, matching how TDSQL emits it in practice. This binding is not exposed via `SHOW CREATE TABLE`, so mysqldef cannot detect an existing table's current binding; the clause is therefore accepted at table-creation time but never diffed on subsequent runs (similar to how the `ENGINE` clause on individual partitions is parsed but not diffed).
+- `PARTITION POLICY` / `DISTRIBUTION POLICY` objects are diffed only against another schema definition (e.g. `--dry-run`/`--export` output previously captured, or a `current` schema file); mysqldef has no way to query TDSQL's internal policy catalog directly, so `--export` will not discover existing policies from a live database. A change to a distribution policy's body is applied via the native `ALTER DISTRIBUTION POLICY 'name' <body>` statement; a change to a partition policy's body is applied as `DROP` + `CREATE` (TDSQL has no `ALTER PARTITION POLICY`). Renaming a policy in the desired schema is not detected as a rename (mysqldef has no annotation for it, unlike table renames which support `/* @renamed from="..." */`); it is treated as dropping the old name and creating the new one, so mysqldef never generates TDSQL's native `RENAME DISTRIBUTION POLICY ... TO ...`.
+- `TRUNCATE PARTITION ... UPDATE GLOBAL INDEXES` is not supported. Unlike `DROP PARTITION`, truncating a partition only clears its rows and does not change the table's structure (partition boundaries/count stay the same), so there is no schema-state difference that would ever cause mysqldef's diff engine to emit it; this is intentionally out of scope, the same way mysqldef never emits `TRUNCATE TABLE` or `DELETE`.
+- Recycle-bin/flashback features (`SET GLOBAL tdsql_recycle_bin_enabled`, `FLASHBACK TABLE ... TO BEFORE DROP`, `DROP TABLE ... PURGE`) are operational commands, not schema state, and are intentionally out of scope for mysqldef's declarative schema management.
+- The TDSQL `ALTER TABLE` statements mysqldef generates (e.g. `SET INTERVAL(...)`, `REMOVE TTL`, `TTL = ...`, `DISTRIBUTION = NODE(...)`, `DROP PARTITION ... UPDATE GLOBAL INDEXES`) are migration output only. As with the standard `ALTER TABLE ADD COLUMN` output, they are not meant to be fed back as a desired schema; the desired schema is always expressed as `CREATE TABLE`.

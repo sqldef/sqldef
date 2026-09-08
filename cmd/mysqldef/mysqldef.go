@@ -82,16 +82,6 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		os.Exit(0)
 	}
 
-	desiredFiles := sqldef.ParseFiles(opts.File)
-
-	var desiredDDLs string
-	if !opts.Export {
-		desiredDDLs, err = sqldef.ReadFiles(desiredFiles)
-		if err != nil {
-			log.Fatalf("Failed to read '%v': %s", desiredFiles, err)
-		}
-	}
-
 	// merge --config and --config-inline in order
 	config := database.MergeGeneratorConfigs(configs)
 
@@ -100,15 +90,6 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 	if opts.BulkAlter {
 		config.BulkAlter = true
-	}
-
-	options := sqldef.Options{
-		DesiredDDLs: desiredDDLs,
-		DryRun:      opts.DryRun,
-		Check:       opts.Check,
-		Export:      opts.Export,
-		BeforeApply: opts.BeforeApply,
-		Config:      config,
 	}
 
 	if len(args) == 0 {
@@ -120,6 +101,25 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		parser.WriteHelp(os.Stdout)
 		os.Exit(1)
 	}
+
+	desiredFiles := sqldef.ParseFiles(opts.File)
+	var desiredDDLs string
+	if !opts.Export {
+		desiredDDLs, err = sqldef.ReadFiles(desiredFiles)
+		if err != nil {
+			log.Fatalf("Failed to read '%v': %s", desiredFiles, err)
+		}
+	}
+
+	options := sqldef.Options{
+		DesiredDDLs: desiredDDLs,
+		DryRun:      opts.DryRun,
+		Check:       opts.Check,
+		Export:      opts.Export,
+		BeforeApply: opts.BeforeApply,
+		Config:      config,
+	}
+
 	var databaseName string
 	if strings.HasSuffix(args[0], ".sql") {
 		options.CurrentFile = args[0]

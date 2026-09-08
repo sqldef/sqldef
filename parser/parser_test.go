@@ -756,6 +756,307 @@ func TestTiDBComments(t *testing.T) {
 	}
 }
 
+// TestTDSQLExtensions covers parsing of TDSQL-specific syntax into the AST.
+//
+// It intentionally asserts on parsed AST fields rather than doing a
+// parse -> String -> parse round-trip: the generic *.Format path (used by
+// parser.String) is not on sqldef's TDSQL code path (CREATE TABLE is preserved
+// as the raw statement and the generator builds ALTER clauses directly), and
+// TablePartition.Format uses an unsupported "%d" verb that predates this work.
+func TestTDSQLExtensions(t *testing.T) {
+	t.Run("table options", func(t *testing.T) {
+		cases := []struct {
+			name string
+			sql  string
+			key  string
+			want string
+		}{
+			{"distribution all", "CREATE TABLE t (a int) DISTRIBUTION = NODE(ALL)", "DISTRIBUTION", "NODE(ALL)"},
+			{"distribution default", "CREATE TABLE t (a int) DISTRIBUTION = NODE(DEFAULT)", "DISTRIBUTION", "NODE(DEFAULT)"},
+			{"distribution nodes", "CREATE TABLE t (a int) DISTRIBUTION = NODE(1, 2, 3)", "DISTRIBUTION", "NODE(1, 2, 3)"},
+			{"sync_level", "CREATE TABLE t (a int) SYNC_LEVEL = NODE(MAJORITY)", "SYNC_LEVEL", "NODE(MAJORITY)"},
+			// Function-shaped values are upper-cased so comparison is case-insensitive.
+			{"node case", "CREATE TABLE t (a int) SYNC_LEVEL = node(majority)", "SYNC_LEVEL", "NODE(MAJORITY)"},
+			{"storage_tier", "CREATE TABLE t (a int) STORAGE_TIER = LOCAL_STORAGE", "STORAGE_TIER", "LOCAL_STORAGE"},
+			{"ttl", "CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY (id)) TTL = created_at + INTERVAL 90 DAY", "TTL", "created_at + INTERVAL 90 DAY"},
+			{"tdsql show create ttl comment", "CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY (id)) /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' */", "TTL", "created_at + INTERVAL 90 DAY"},
+			{"tdsql show create ttl with engine", "CREATE TABLE t (id bigint NOT NULL, created_at datetime(6) NOT NULL, PRIMARY KEY (id)) ENGINE=ROCKSDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*B![ttl] TTL=`created_at` + INTERVAL 90 DAY TTL_ENABLE='ON' TTL_JOB_INTERVAL='1h' */", "TTL", "created_at + INTERVAL 90 DAY"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				tree, err := ParseDDL(tc.sql, ParserModeMysql)
+				if err != nil {
+					t.Fatalf("parse error: %v", err)
+				}
+				opts := tree.(*DDL).TableSpec.Options
+				got, ok := opts[tc.key]
+				if !ok {
+					// Keyword-derived option names are lower-cased by the tokenizer.
+					got = opts[strings.ToLower(tc.key)]
+				}
+				if got != tc.want {
+					t.Errorf("option %q: expected %q, got %q (all=%v)", tc.key, tc.want, got, opts)
+				}
+			})
+		}
+	})
+
+	t.Run("global secondary index", func(t *testing.T) {
+		tree, err := ParseDDL("CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g (v) GLOBAL PARTITION BY HASH(v) PARTITIONS 3) PARTITION BY HASH(k) PARTITIONS 4", ParserModeMysql)
+		if err != nil {
+			t.Fatalf("parse error: %v", err)
+		}
+		idx := findIndexByName(tree.(*DDL), "g")
+		if idx == nil {
+			t.Fatal("index g not found")
+		}
+		if !idx.Global {
+			t.Error("expected Global=true")
+		}
+		if idx.GSIPartition == nil || idx.GSIPartition.Type != "HASH" || idx.GSIPartition.Partitions != 3 {
+			t.Errorf("expected HASH GSI partition with 3 partitions, got %+v", idx.GSIPartition)
+		}
+	})
+
+	t.Run("range partitioned gsi", func(t *testing.T) {
+		tree, err := ParseDDL("CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g (v) GLOBAL PARTITION BY RANGE(v) (PARTITION q0 VALUES LESS THAN (10))) PARTITION BY HASH(k) PARTITIONS 4", ParserModeMysql)
+		if err != nil {
+			t.Fatalf("parse error: %v", err)
+		}
+		idx := findIndexByName(tree.(*DDL), "g")
+		if idx == nil {
+			t.Fatal("index g not found")
+		}
+		if idx.GSIPartition == nil || idx.GSIPartition.Type != "RANGE" || len(idx.GSIPartition.Definitions) != 1 {
+			t.Errorf("expected RANGE GSI partition with 1 definition, got %+v", idx.GSIPartition)
+		}
+	})
+
+	t.Run("included column index", func(t *testing.T) {
+		tree, err := ParseDDL("CREATE TABLE t (a int NOT NULL, b int, c int, PRIMARY KEY (a), KEY idx_b (b) VALUE(c))", ParserModeMysql)
+		if err != nil {
+			t.Fatalf("parse error: %v", err)
+		}
+		idx := findIndexByName(tree.(*DDL), "idx_b")
+		if idx == nil {
+			t.Fatal("index idx_b not found")
+		}
+		if len(idx.ValueColumns) != 1 || idx.ValueColumns[0].Name != "c" {
+			t.Errorf("expected VALUE(c), got %v", idx.ValueColumns)
+		}
+	})
+
+	t.Run("TDSQL SHOW CREATE GSI visibility comments", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			suffix string
+			global bool
+			local  bool
+		}{
+			{"invisible then global", "/*!80000 INVISIBLE *//*B!210603 GLOBAL */", true, false},
+			{"global then invisible", "/*B!210603 GLOBAL *//*!80000 INVISIBLE */", true, false},
+			{"invisible only", "/*!80000 INVISIBLE */", false, false},
+			{"visible then local", "/*!80000 VISIBLE *//*B!210603 LOCAL */", false, true},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				sql := "CREATE TABLE t (k int NOT NULL, v int, PRIMARY KEY (k), KEY g_idx (v) " + tc.suffix + ")"
+				tree, err := ParseDDL(sql, ParserModeMysql)
+				if err != nil {
+					t.Fatalf("parse error: %v", err)
+				}
+				idx := findIndexByName(tree.(*DDL), "g_idx")
+				if idx == nil {
+					t.Fatal("index g_idx not found")
+				}
+				if idx.Global != tc.global || idx.Local != tc.local {
+					t.Errorf("expected global=%v local=%v, got global=%v local=%v", tc.global, tc.local, idx.Global, idx.Local)
+				}
+			})
+		}
+	})
+
+	t.Run("interval partition", func(t *testing.T) {
+		cases := []struct {
+			name string
+			sql  string
+		}{
+			{
+				name: "plain syntax",
+				sql:  "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) PARTITION BY RANGE(id) INTERVAL(100) (PARTITION p0 VALUES LESS THAN (100))",
+			},
+			{
+				name: "MySQL executable comment",
+				sql:  "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) /*!50100 PARTITION BY RANGE (`id`) */ /*!B210604 INTERVAL(100) */ /*!50100 (PARTITION p0 VALUES LESS THAN (100)) */",
+			},
+			{
+				name: "TDSQL executable comment",
+				sql:  "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) /*B!50100 PARTITION BY RANGE (`id`) */ /*B!210604 INTERVAL(100) */ /*B!50100 (PARTITION p0 VALUES LESS THAN (100)) */",
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				tree, err := ParseDDL(tc.sql, ParserModeMysql)
+				if err != nil {
+					t.Fatalf("parse error: %v", err)
+				}
+				partition := tree.(*DDL).TableSpec.Partition
+				if partition == nil {
+					t.Fatal("expected table partition")
+				}
+				if got := partition.Interval; got != 100 {
+					t.Errorf("expected Interval=100, got %d", got)
+				}
+				if got := String(partition); !strings.Contains(got, "interval(100)") {
+					t.Errorf("formatted partition lost interval: %s", got)
+				}
+			})
+		}
+	})
+
+	// TDSQL words that are not MySQL keywords must remain usable as identifiers.
+	t.Run("keywords usable as identifiers", func(t *testing.T) {
+		for _, sql := range []string{
+			"CREATE TABLE t (node int, ttl int, sync_level int, remove int, local int)",
+			"CREATE TABLE t (v int, KEY node (v))",
+			"CREATE TABLE t (v int, KEY local (v))",
+		} {
+			if _, err := ParseDDL(sql, ParserModeMysql); err != nil {
+				t.Errorf("expected %q to parse, got: %v", sql, err)
+			}
+		}
+	})
+
+	t.Run("table option ALTER", func(t *testing.T) {
+		cases := []struct {
+			sql  string
+			key  string
+			want string
+		}{
+			{"ALTER TABLE t DISTRIBUTION = NODE(ALL)", "DISTRIBUTION", "NODE(ALL)"},
+			{"ALTER TABLE t SYNC_LEVEL = 'NODE(MAJORITY)'", "SYNC_LEVEL", "NODE(MAJORITY)"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.key, func(t *testing.T) {
+				tree, err := ParseDDL(tc.sql, ParserModeMysql)
+				if err != nil {
+					t.Fatalf("parse error: %v", err)
+				}
+				ddl := tree.(*DDL)
+				if ddl.Action != AlterTableOptions {
+					t.Fatalf("expected AlterTableOptions, got %v", ddl.Action)
+				}
+				if ddl.TableSpec == nil || ddl.TableSpec.Options[tc.key] != tc.want {
+					t.Fatalf("expected %s=%q, got %+v", tc.key, tc.want, ddl.TableSpec)
+				}
+			})
+		}
+	})
+}
+
+// findIndexByName returns the CREATE TABLE index definition with the given name.
+func findIndexByName(ddl *DDL, name string) *IndexDefinition {
+	for _, idx := range ddl.TableSpec.Indexes {
+		if idx.Info.Name.Name == name {
+			return idx
+		}
+	}
+	return nil
+}
+
+// TestVersionlessMysqlComment guards extractMysqlComment against consuming the
+// first letter of a version-less /*! ... */ comment (regression: a single
+// leading letter was always stripped).
+func TestVersionlessMysqlComment(t *testing.T) {
+	// TDSQL's versioned tag keeps its digits; a version-less tag keeps its body.
+	if _, inner := extractMysqlComment("/*!B210604 INTERVAL(100) */"); inner != "INTERVAL(100)" {
+		t.Errorf("versioned TDSQL comment: expected inner %q, got %q", "INTERVAL(100)", inner)
+	}
+	if _, inner := extractMysqlComment("/*!50100 SELECT 1 */"); inner != "SELECT 1" {
+		t.Errorf("numeric version comment: expected inner %q, got %q", "SELECT 1", inner)
+	}
+	if _, inner := extractMysqlComment("/*!STRAIGHT_JOIN */"); inner != "STRAIGHT_JOIN" {
+		t.Errorf("version-less comment: expected inner %q, got %q", "STRAIGHT_JOIN", inner)
+	}
+}
+
+func TestAlterDatabaseUsingDistributionPolicy(t *testing.T) {
+	tree, err := ParseDDL("ALTER DATABASE mydb3 USING DISTRIBUTION POLICY dp_supplement", ParserModeMysql)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	ddl := tree.(*DDL)
+	if ddl.Action != AlterSchema {
+		t.Fatalf("expected AlterSchema, got %v", ddl.Action)
+	}
+	if ddl.Schema == nil || ddl.Schema.Name != "mydb3" || ddl.Schema.UsingPolicy != "DISTRIBUTION POLICY dp_supplement" {
+		t.Fatalf("unexpected ALTER DATABASE AST: %+v", ddl.Schema)
+	}
+}
+
+func TestPartitionPolicyIfNotExists(t *testing.T) {
+	for _, sql := range []string{
+		"CREATE PARTITION POLICY IF NOT EXISTS pp2;",
+		"CREATE PARTITION POLICY IF NOT EXISTS pp2 PARTITION BY HASH(INT) PARTITIONS 2;",
+	} {
+		if _, err := ParseDDL(sql, ParserModeMysql); err != nil {
+			t.Fatalf("parse error for %q: %v", sql, err)
+		}
+	}
+}
+
+func TestPartitionPolicyKeyColumns(t *testing.T) {
+	tree, err := ParseDDL("CREATE PARTITION POLICY pp2 PARTITION BY KEY COLUMNS 1 PARTITIONS 3", ParserModeMysql)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	ddl := tree.(*DDL)
+	if ddl.Action != CreatePartitionPolicy {
+		t.Fatalf("expected CreatePartitionPolicy, got %v", ddl.Action)
+	}
+	policy := ddl.PartitionPolicy
+	if policy == nil {
+		t.Fatal("expected partition policy")
+	}
+	if policy.Type != "KEY" || policy.ColumnCount != 1 || policy.ColumnType != "" || policy.Partitions != 3 {
+		t.Fatalf("unexpected policy: %+v", policy)
+	}
+}
+
+func TestDistributionPolicySetExistsRoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "set exists first", body: "SET REGION EXISTS AND REPLICA_COUNT = 3"},
+		{name: "set not exists first", body: "SET REGION NOT EXISTS AND REPLICA_COUNT = 3"},
+		{name: "not exists without set", body: "REGION NOT EXISTS AND SET REPLICA_COUNT = 3"},
+		{name: "region in list", body: "REGION IN ('guangzhou') AND REPLICA_COUNT = 3", want: `REGION IN ("guangzhou") AND REPLICA_COUNT = 3`},
+		{name: "region not in list", body: "REGION NOT IN ('guangzhou', 'shanghai') AND REPLICA_COUNT = 3", want: `REGION NOT IN ("guangzhou", "shanghai") AND REPLICA_COUNT = 3`},
+		{name: "exists without set", body: "REGION EXISTS AND REPLICA_COUNT = 3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL("CREATE DISTRIBUTION POLICY \"dp1\" "+tc.body, ParserModeMysql)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			ddl := tree.(*DDL)
+			if ddl.Action != CreateDistributionPolicy {
+				t.Fatalf("expected CreateDistributionPolicy, got %v", ddl.Action)
+			}
+			want := tc.want
+			if want == "" {
+				want = tc.body
+			}
+			if ddl.DistributionPolicyDef == nil || ddl.DistributionPolicyDef.Body != want {
+				t.Fatalf("expected body %q, got %+v", want, ddl.DistributionPolicyDef)
+			}
+		})
+	}
+}
+
 // TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
 func TestInvalidCustomOperators(t *testing.T) {
 	testCases := []struct {

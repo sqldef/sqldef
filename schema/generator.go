@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -42,6 +43,33 @@ var tidbTableOptions = []tidbTableOption{
 	{key: "AUTO_ID_CACHE", defaultValue: "0"},
 }
 
+// tdsqlTableOptions contains TDSQL options with a known server default.
+var tdsqlTableOptions = []tidbTableOption{
+	{key: "STORAGE_TIER", defaultValue: "AUTO_STORAGE"},
+}
+
+// tdsqlTableOptionsWithoutDefault contains TDSQL options whose ALTER TABLE
+// form is silently ineffective. They are compared against their server
+// defaults and reported as comments instead of emitting a no-op ALTER.
+var tdsqlTableOptionsWithoutDefault = []string{
+	"DISTRIBUTION",
+	"SYNC_LEVEL",
+}
+
+var tdsqlTableOptionDefaults = map[string]string{
+	"DISTRIBUTION": "NODE(DEFAULT)",
+	"SYNC_LEVEL":   "NODE(MAJORITY)",
+}
+
+// tdsqlTTLOptions are TTL-related table options that only make sense while a
+// TTL clause exists, so they are diffed together with TTL (see the "TDSQL
+// TTL clause" handling below) rather than unconditionally like tdsqlTableOptions.
+var tdsqlTTLOptions = []tidbTableOption{
+	{key: "TTL_ENABLE", defaultValue: "'ON'"},
+	{key: "TTL_JOB_INTERVAL", defaultValue: "'1h'"},
+	{key: "TTL_ARCHIVE_TABLE", defaultValue: "''"},
+}
+
 type postgresCheckLocation struct {
 	columnName Ident
 	isColumn   bool
@@ -63,6 +91,7 @@ type postgresCheckMatchPlan struct {
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
+	tdsql         bool
 	desiredTables []*Table
 	currentTables []*Table
 
@@ -125,6 +154,11 @@ type Generator struct {
 	lock      string
 
 	config database.GeneratorConfig
+
+	desiredPartitionPolicies    []*PartitionPolicy
+	currentPartitionPolicies    []*PartitionPolicy
+	desiredDistributionPolicies []*DistributionPolicy
+	currentDistributionPolicies []*DistributionPolicy
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -165,40 +199,45 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		mode:                mode,
-		desiredTables:       desiredAggregated.Tables,
-		currentTables:       aggregated.Tables,
-		desiredViews:        desiredAggregated.Views,
-		currentViews:        aggregated.Views,
-		desiredTriggers:     desiredAggregated.Triggers,
-		currentTriggers:     aggregated.Triggers,
-		desiredEvents:       desiredAggregated.Events,
-		currentEvents:       aggregated.Events,
-		desiredFunctions:    desiredAggregated.Functions,
-		currentFunctions:    aggregated.Functions,
-		desiredTypes:        desiredAggregated.Types,
-		currentTypes:        aggregated.Types,
-		desiredDomains:      desiredAggregated.Domains,
-		currentDomains:      aggregated.Domains,
-		desiredPartitionOfs: desiredAggregated.PartitionOfs,
-		currentPartitionOfs: aggregated.PartitionOfs,
-		desiredComments:     desiredAggregated.Comments,
-		currentComments:     aggregated.Comments,
-		desiredExtensions:   desiredAggregated.Extensions,
-		currentExtensions:   aggregated.Extensions,
-		desiredSchemas:      desiredAggregated.Schemas,
-		currentSchemas:      aggregated.Schemas,
-		desiredPrivileges:   desiredAggregated.Privileges,
-		currentPrivileges:   aggregated.Privileges,
-		defaultSchema:       defaultSchema,
-		algorithm:           config.Algorithm,
-		lock:                config.Lock,
-		config:              config,
-		handledForeignKeys:  make(map[string]bool),
-		droppedTables:       make(map[string]bool),
-		droppedColumns:      make(map[string]bool),
-		droppedIndexes:      make(map[string]bool),
-		indexToTable:        make(map[string]QualifiedName),
+		mode:                        mode,
+		tdsql:                       hasTDSQLExtension(desiredSQL + "\n" + currentSQL),
+		desiredTables:               desiredAggregated.Tables,
+		currentTables:               aggregated.Tables,
+		desiredViews:                desiredAggregated.Views,
+		currentViews:                aggregated.Views,
+		desiredTriggers:             desiredAggregated.Triggers,
+		currentTriggers:             aggregated.Triggers,
+		desiredEvents:               desiredAggregated.Events,
+		currentEvents:               aggregated.Events,
+		desiredFunctions:            desiredAggregated.Functions,
+		currentFunctions:            aggregated.Functions,
+		desiredTypes:                desiredAggregated.Types,
+		currentTypes:                aggregated.Types,
+		desiredDomains:              desiredAggregated.Domains,
+		currentDomains:              aggregated.Domains,
+		desiredPartitionOfs:         desiredAggregated.PartitionOfs,
+		currentPartitionOfs:         aggregated.PartitionOfs,
+		desiredComments:             desiredAggregated.Comments,
+		currentComments:             aggregated.Comments,
+		desiredExtensions:           desiredAggregated.Extensions,
+		currentExtensions:           aggregated.Extensions,
+		desiredSchemas:              desiredAggregated.Schemas,
+		currentSchemas:              aggregated.Schemas,
+		desiredPrivileges:           desiredAggregated.Privileges,
+		currentPrivileges:           aggregated.Privileges,
+		desiredPartitionPolicies:    desiredAggregated.PartitionPolicies,
+		currentPartitionPolicies:    aggregated.PartitionPolicies,
+		desiredDistributionPolicies: desiredAggregated.DistributionPolicies,
+		currentDistributionPolicies: aggregated.DistributionPolicies,
+		defaultSchema:               defaultSchema,
+		algorithm:                   config.Algorithm,
+		lock:                        config.Lock,
+		config:                      config,
+		handledForeignKeys:          make(map[string]bool),
+		droppedTables:               make(map[string]bool),
+		droppedColumns:              make(map[string]bool),
+		droppedIndexes:              make(map[string]bool),
+		indexToTable:                make(map[string]QualifiedName),
 		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
 	}
 	// Build index-to-table mapping before any tables are dropped
@@ -209,6 +248,90 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 // sortIndexesByName returns indexes sorted by name.
 // This ensures deterministic DDL ordering when processing indexes from the database,
 // which may return indexes in different orders (e.g., MySQL vs TiDB).
+func (g *Generator) findPartitionPolicy(name parser.Ident) *PartitionPolicy {
+	for _, policy := range g.currentPartitionPolicies {
+		if strings.EqualFold(policy.name.Name, name.Name) {
+			return policy
+		}
+	}
+	return nil
+}
+
+func (g *Generator) findDistributionPolicy(name string) *DistributionPolicy {
+	for _, policy := range g.currentDistributionPolicies {
+		if strings.EqualFold(policy.name, name) {
+			return policy
+		}
+	}
+	return nil
+}
+
+func areSameDistributionPolicyBodies(current, desired string) bool {
+	return normalizeDistributionPolicyBody(current) == normalizeDistributionPolicyBody(desired)
+}
+
+func normalizeDistributionPolicyBody(body string) string {
+	predicates := strings.Split(body, " AND ")
+	for i, predicate := range predicates {
+		predicate = strings.Join(strings.Fields(predicate), " ")
+		if len(predicate) >= len("SET ") && strings.EqualFold(predicate[:len("SET ")], "SET ") {
+			predicate = strings.TrimSpace(predicate[len("SET "):])
+		}
+		predicates[i] = canonicalizeDistributionPolicyPredicate(predicate)
+	}
+	return strings.Join(predicates, " AND ")
+}
+
+// canonicalizeDistributionPolicyPredicate normalizes the case of policy DSL
+// keywords and identifiers while preserving quoted values, whose case may be
+// significant (for example, region names).
+func canonicalizeDistributionPolicyPredicate(predicate string) string {
+	var normalized strings.Builder
+	for start := 0; start < len(predicate); {
+		quote := strings.IndexAny(predicate[start:], "'\"`")
+		if quote < 0 {
+			normalized.WriteString(strings.ToUpper(predicate[start:]))
+			break
+		}
+		quote += start
+		normalized.WriteString(strings.ToUpper(predicate[start:quote]))
+		normalized.WriteByte(predicate[quote])
+		i := quote + 1
+		for i < len(predicate) {
+			normalized.WriteByte(predicate[i])
+			if predicate[i] == '\\' && predicate[quote] != '`' && i+1 < len(predicate) {
+				i++
+				normalized.WriteByte(predicate[i])
+				i++
+				continue
+			}
+			if predicate[i] == predicate[quote] {
+				if i+1 < len(predicate) && predicate[i+1] == predicate[quote] {
+					i++
+					normalized.WriteByte(predicate[i])
+					i++
+					continue
+				}
+				i++
+				break
+			}
+			i++
+		}
+		start = i
+	}
+	return normalized.String()
+}
+
+func (g *Generator) replaceDistributionPolicy(oldName string, policy *DistributionPolicy) {
+	updated := g.currentDistributionPolicies[:0]
+	for _, current := range g.currentDistributionPolicies {
+		if !strings.EqualFold(current.name, oldName) {
+			updated = append(updated, current)
+		}
+	}
+	g.currentDistributionPolicies = append(updated, policy)
+}
+
 func sortIndexesByName(indexes []Index) []Index {
 	result := make([]Index, len(indexes))
 	copy(result, indexes)
@@ -235,9 +358,81 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// bulkAlter fuses per-table ALTER TABLE actions when --bulk-alter is set (MySQL only).
 	bulkAlter := newAlterBundler(g, g.config.BulkAlter && g.mode == GeneratorModeMysql)
 
+	// Policies must be created before tables that reference them.
+	for _, ddl := range desiredDDLs {
+		switch desired := ddl.(type) {
+		case *NoopDDL:
+			// Operational table-option statements are schema-neutral.
+		case *PartitionCommandDDL:
+			// Applied in the main desired-DDL pass after table state is available.
+		case *PartitionPolicy:
+			if g.findPartitionPolicy(desired.name) == nil {
+				createSchemaDDLs = append(createSchemaDDLs, desired.statement)
+				g.currentPartitionPolicies = append(g.currentPartitionPolicies, desired)
+			}
+		case *DistributionPolicy:
+			if g.findDistributionPolicy(desired.name) == nil && desired.renamedFrom == "" {
+				renamedCurrent := false
+				for _, current := range g.currentDistributionPolicies {
+					if strings.EqualFold(current.renamedFrom, desired.name) {
+						renamedCurrent = true
+						break
+					}
+				}
+				if !renamedCurrent {
+					createSchemaDDLs = append(createSchemaDDLs, desired.statement)
+					g.currentDistributionPolicies = append(g.currentDistributionPolicies, desired)
+				}
+			}
+		}
+	}
+
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
 		switch desired := ddl.(type) {
+		case *NoopDDL:
+			// Operational table-option statements are schema-neutral.
+		case *PartitionCommandDDL:
+			if command := g.generatePartitionCommandDDL(*desired); command != "" {
+				interDDLs = append(interDDLs, command)
+			}
+		case *PartitionPolicy:
+			if current := g.findPartitionPolicy(desired.name); current == nil {
+				interDDLs = append(interDDLs, desired.statement)
+			} else if current.typ != desired.typ || current.columnType != desired.columnType || current.columnCount != desired.columnCount || current.partitions != desired.partitions {
+				interDDLs = append(interDDLs, fmt.Sprintf("DROP PARTITION POLICY %s", current.name.Name))
+				if g.config.EnableDrop {
+					interDDLs = append(interDDLs, desired.statement)
+				}
+			}
+		case *DistributionPolicy:
+			if current := g.findDistributionPolicy(desired.name); current == nil {
+				if desired.renamedFrom != "" {
+					if old := g.findDistributionPolicy(desired.renamedFrom); old != nil {
+						interDDLs = append(interDDLs, fmt.Sprintf("RENAME DISTRIBUTION POLICY %q TO %q", old.name, desired.name))
+						if !areSameDistributionPolicyBodies(old.body, desired.body) {
+							interDDLs = append(interDDLs, fmt.Sprintf("ALTER DISTRIBUTION POLICY %q %s", desired.name, desired.body))
+						}
+						g.replaceDistributionPolicy(old.name, desired)
+						continue
+					}
+				}
+				for _, current := range g.currentDistributionPolicies {
+					if strings.EqualFold(current.renamedFrom, desired.name) || (len(g.currentDistributionPolicies) == 1 && len(g.desiredDistributionPolicies) == 1) {
+						interDDLs = append(interDDLs, fmt.Sprintf("RENAME DISTRIBUTION POLICY %q TO %q", current.name, desired.name))
+						if !areSameDistributionPolicyBodies(current.body, desired.body) {
+							interDDLs = append(interDDLs, fmt.Sprintf("ALTER DISTRIBUTION POLICY %q %s", desired.name, desired.body))
+						}
+						g.replaceDistributionPolicy(current.name, desired)
+						break
+					}
+				}
+				if g.findDistributionPolicy(desired.name) == nil {
+					interDDLs = append(interDDLs, desired.statement)
+				}
+			} else if !areSameDistributionPolicyBodies(current.body, desired.body) {
+				interDDLs = append(interDDLs, fmt.Sprintf("ALTER DISTRIBUTION POLICY %q %s", desired.name, desired.body))
+			}
 		case *CreateTable:
 			if currentTable := g.findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
@@ -492,6 +687,34 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, table := range tablesToDrop {
 			g.currentTables = removeTableByName(g.currentTables, table.name.RawString())
 			g.droppedTables[table.name.RawString()] = true
+		}
+	}
+
+	// Emit obsolete policy drops regardless of enable_drop. The final
+	// commentOutDropStatements pass turns them into visible `-- Skipped:` lines
+	// when destructive changes are disabled, matching table-drop behavior.
+	for _, current := range g.currentPartitionPolicies {
+		found := false
+		for _, desired := range g.desiredPartitionPolicies {
+			if strings.EqualFold(desired.name.Name, current.name.Name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ddls = append(ddls, fmt.Sprintf("DROP PARTITION POLICY %s", current.name.Name))
+		}
+	}
+	for _, current := range g.currentDistributionPolicies {
+		found := false
+		for _, desired := range g.desiredDistributionPolicies {
+			if strings.EqualFold(desired.name, current.name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ddls = append(ddls, fmt.Sprintf("DROP DISTRIBUTION POLICY %q", current.name))
 		}
 	}
 
@@ -821,8 +1044,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	if isValidAlgorithm(g.algorithm) {
 		for i := range ddls {
-			if strings.HasPrefix(ddls[i], "ALTER TABLE") {
-				ddls[i] += ", ALGORITHM=" + strings.ToUpper(g.algorithm)
+			if strings.HasPrefix(ddls[i], "ALTER TABLE") && !hasExplicitAlgorithmClause(ddls[i]) {
+				ddls[i] += ", ALGORITHM=" + strings.ToUpper(strings.TrimSpace(g.algorithm))
 			}
 		}
 	}
@@ -1665,10 +1888,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 
 		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
-			// Drop and add index as needed.
+			// Replacing an index requires dropping the existing definition first.
+			// When drops are disabled, do not emit an executable ADD with the same
+			// name: it would fail with a duplicate-key error while the DROP is only
+			// emitted as a skipped comment later in the pipeline.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
 				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
-				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+				if g.config.EnableDrop {
+					ddls = append(ddls, g.generateAddIndexForTransition(desired.table.name, desiredIndex, *currentIndex))
+				}
 			}
 		} else {
 			// Check if this is a renamed index
@@ -1870,14 +2098,97 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Examine TiDB table options
 	if g.mode == GeneratorModeMysql {
 		for _, opt := range tidbTableOptions {
-			currentVal := currentTable.options[opt.key]
-			desiredVal := desired.table.options[opt.key]
+			currentVal := normalizeOptionValue(getTableOption(currentTable.options, opt.key))
+			desiredVal := normalizeOptionValue(getTableOption(desired.table.options, opt.key))
 			if currentVal != desiredVal {
 				if desiredVal == "" {
 					desiredVal = opt.defaultValue
 				}
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s %s = %s", g.escapeTableName(&desired.table), opt.key, desiredVal))
 			}
+		}
+	}
+
+	// Examine TDSQL table options. ALTER TABLE changes to DISTRIBUTION and
+	// SYNC_LEVEL are silently ineffective on this server. A missing option in
+	// SHOW CREATE means its server default, so compare effective values and
+	// leave an actionable warning instead of emitting a no-op ALTER.
+	if g.mode == GeneratorModeMysql {
+		for _, key := range tdsqlTableOptionsWithoutDefault {
+			currentVal := effectiveTDSQLTableOptionValue(key, getTableOption(currentTable.options, key))
+			desiredVal := effectiveTDSQLTableOptionValue(key, getTableOption(desired.table.options, key))
+			if strings.EqualFold(currentVal, desiredVal) {
+				continue
+			}
+			ddls = append(ddls, fmt.Sprintf("-- Warning: ALTER TABLE %s %s = %s is not applied because TDSQL silently ignores changes to %s (current: %s, desired: %s)",
+				g.escapeTableName(&desired.table), key, desiredVal, key, currentVal, desiredVal))
+		}
+
+		for _, opt := range tdsqlTableOptions {
+			currentVal := normalizeOptionValue(getTableOption(currentTable.options, opt.key))
+			desiredVal := normalizeOptionValue(getTableOption(desired.table.options, opt.key))
+			if opt.key == "STORAGE_TIER" {
+				currentVal = strings.ToUpper(currentVal)
+				desiredVal = strings.ToUpper(desiredVal)
+			}
+			if !strings.EqualFold(currentVal, desiredVal) && !(desiredVal == "" && currentVal == opt.defaultValue) && !(currentVal == "" && desiredVal == opt.defaultValue) {
+				if desiredVal == "" {
+					desiredVal = opt.defaultValue
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s %s = %s", g.escapeTableName(&desired.table), opt.key, desiredVal))
+			}
+		}
+
+		// TDSQL TTL clause: `TTL = col + INTERVAL n unit`. TTL_ENABLE/TTL_JOB_INTERVAL/
+		// TTL_ARCHIVE_TABLE only make sense while a TTL clause exists, so they are
+		// skipped once TTL is removed (REMOVE TTL already covers that case).
+		currentTTL := getTableOption(currentTable.options, "TTL")
+		desiredTTL := getTableOption(desired.table.options, "TTL")
+		if currentTTL != desiredTTL {
+			if desiredTTL == "" {
+				if currentTTL != "" {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s REMOVE TTL", g.escapeTableName(&desired.table)))
+				}
+			} else {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s TTL = %s", g.escapeTableName(&desired.table), desiredTTL))
+			}
+		}
+		if desiredTTL != "" {
+			for _, opt := range tdsqlTTLOptions {
+				currentRaw := getTableOption(currentTable.options, opt.key)
+				desiredRaw, desiredPresent := getTableOptionWithPresence(desired.table.options, opt.key)
+				if !desiredPresent {
+					if currentRaw != "" && !strings.EqualFold(normalizeOptionValue(currentRaw), normalizeOptionValue(opt.defaultValue)) {
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s %s = %s", g.escapeTableName(&desired.table), opt.key, formatTTLOptionValue(opt.defaultValue)))
+					}
+					continue
+				}
+				// SHOW CREATE may expose default TTL options, but desired DDL only
+				// needs an ALTER when the option differs from the current state.
+				if (currentRaw == "" && strings.EqualFold(normalizeOptionValue(desiredRaw), normalizeOptionValue(opt.defaultValue))) ||
+					strings.EqualFold(normalizeOptionValue(currentRaw), normalizeOptionValue(desiredRaw)) {
+					continue
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s %s = %s", g.escapeTableName(&desired.table), opt.key, formatTTLOptionValue(desiredRaw)))
+			}
+		}
+	}
+
+	// TDSQL USING policy binding.
+	currentPolicy := getTableOption(currentTable.options, "USING_POLICY")
+	desiredPolicy := getTableOption(desired.table.options, "USING_POLICY")
+	if currentPolicy != desiredPolicy {
+		if desiredPolicy == "" {
+			policyKind := ""
+			if strings.HasPrefix(currentPolicy, "PARTITION POLICY ") {
+				policyKind = "PARTITION POLICY"
+			}
+			if strings.HasPrefix(currentPolicy, "DISTRIBUTION POLICY ") {
+				policyKind = "DISTRIBUTION POLICY"
+			}
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP %s FORCE", g.escapeTableName(&desired.table), policyKind))
+		} else {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s USING %s", g.escapeTableName(&desired.table), desiredPolicy))
 		}
 	}
 
@@ -1895,6 +2206,36 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	return ddls, nil
 }
 
+func (g *Generator) generatePartitionCommandDDL(command PartitionCommandDDL) string {
+	if len(command.partitions) == 0 || command.action != "TRUNCATE" {
+		return ""
+	}
+
+	updateGlobalIndexes := command.updateGlobalIndexes
+	for _, tables := range [][]*Table{g.currentTables, g.desiredTables} {
+		table := g.findTableByName(tables, command.tableName)
+		if table == nil {
+			continue
+		}
+		for _, index := range table.indexes {
+			if index.global {
+				updateGlobalIndexes = true
+				break
+			}
+		}
+	}
+
+	partitions := util.TransformSlice(command.partitions, func(partition Ident) string {
+		return g.escapeSQLIdent(partition)
+	})
+	ddl := fmt.Sprintf("ALTER TABLE %s %s PARTITION %s",
+		g.escapeQualifiedName(command.tableName), command.action, strings.Join(partitions, ", "))
+	if updateGlobalIndexes {
+		ddl += " UPDATE GLOBAL INDEXES"
+	}
+	return ddl
+}
+
 // generatePartitionDDLs compares partitions between current and desired tables
 // and generates ADD PARTITION / DROP PARTITION statements
 func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table) []string {
@@ -1905,20 +2246,102 @@ func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table
 		return ddls
 	}
 
-	// If only current has partitions (desired removes all partitioning), we don't handle
-	// removing partitioning entirely - that would require REMOVE PARTITIONING
+	// Partitioning can be added to or removed from an existing table. These are
+	// table-level changes and must not be silently ignored.
 	if desiredTable.partition == nil {
+		if currentTable.partition != nil {
+			return []string{fmt.Sprintf("ALTER TABLE %s REMOVE PARTITIONING", g.escapeTableName(&desiredTable))}
+		}
 		return ddls
 	}
 
-	// If only desired has partitions, the table creation should handle it
 	if currentTable.partition == nil {
-		return ddls
+		return []string{g.generateRepartitionDDL(desiredTable, desiredTable.partition)}
+	}
+
+	// A change to the partitioning strategy requires a full repartition. This
+	// includes HASH/KEY expressions or columns, the strategy type, and the
+	// number of HASH/KEY partitions. ADD/DROP PARTITION only changes RANGE/LIST
+	// definitions and cannot update these table-level properties.
+	if !g.sameTablePartitioning(currentTable.partition, desiredTable.partition) {
+		return []string{g.generateRepartitionDDL(desiredTable, desiredTable.partition)}
+	}
+
+	// RANGE partitions can only be appended with ADD PARTITION. If new
+	// partitions are inserted before an existing partition, split that
+	// partition with REORGANIZE instead.
+	rangeReorganizeDDLs, reorganizedNames, reorganized := g.generateRangeReorganizeDDLs(currentTable, desiredTable)
+	ddls = append(ddls, rangeReorganizeDDLs...)
+	if !reorganized && len(desiredTable.partition.Definitions) > len(currentTable.partition.Definitions) &&
+		(strings.EqualFold(currentTable.partition.Type, "RANGE") || strings.EqualFold(currentTable.partition.Type, "RANGE COLUMNS")) {
+		// Never emit ADD PARTITION for a RANGE change unless every existing
+		// partition is an unchanged prefix of the desired definition list.
+		appendOnly := true
+		for i, currentPart := range currentTable.partition.Definitions {
+			desiredPart := &desiredTable.partition.Definitions[i]
+			if !g.identsEqual(currentPart.Name, desiredPart.Name) ||
+				!g.samePartitionDefinition(&currentPart, desiredPart) ||
+				normalizePartitionStorageTier(currentPart.StorageTier) != normalizePartitionStorageTier(desiredPart.StorageTier) {
+				appendOnly = false
+				break
+			}
+		}
+		if !appendOnly {
+			return []string{g.generateRepartitionDDL(desiredTable, desiredTable.partition)}
+		}
+	}
+
+	// When the partition set is unchanged, a boundary or LIST-value change
+	// requires rebuilding the partitioning clause. If names were added or
+	// removed, leave it to the ADD/DROP PARTITION logic below.
+	if len(currentTable.partition.Definitions) == len(desiredTable.partition.Definitions) {
+		samePartitionSet := true
+		for _, desiredPart := range desiredTable.partition.Definitions {
+			var currentPart *PartitionDefinition
+			for i := range currentTable.partition.Definitions {
+				if g.identsEqual(currentTable.partition.Definitions[i].Name, desiredPart.Name) {
+					currentPart = &currentTable.partition.Definitions[i]
+					break
+				}
+			}
+			if currentPart == nil || !g.samePartitionDefinition(currentPart, &desiredPart) {
+				samePartitionSet = false
+				break
+			}
+		}
+		if samePartitionSet {
+			for i := range currentTable.partition.Definitions {
+				if !g.identsEqual(currentTable.partition.Definitions[i].Name, desiredTable.partition.Definitions[i].Name) {
+					return []string{g.generateRepartitionDDL(desiredTable, desiredTable.partition)}
+				}
+			}
+		} else {
+			allNamesMatch := true
+			for _, currentPart := range currentTable.partition.Definitions {
+				found := false
+				for _, desiredPart := range desiredTable.partition.Definitions {
+					if g.identsEqual(currentPart.Name, desiredPart.Name) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					allNamesMatch = false
+					break
+				}
+			}
+			if allNamesMatch {
+				return []string{g.generateRepartitionDDL(desiredTable, desiredTable.partition)}
+			}
+		}
 	}
 
 	// Both have partitions - compare partition definitions
 	// Find partitions to add (in desired but not in current)
 	for _, desiredPart := range desiredTable.partition.Definitions {
+		if reorganizedNames[strings.ToLower(desiredPart.Name.Name)] {
+			continue
+		}
 		found := false
 		for _, currentPart := range currentTable.partition.Definitions {
 			if g.identsEqual(desiredPart.Name, currentPart.Name) {
@@ -1932,7 +2355,9 @@ func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table
 		}
 	}
 
-	// Find partitions to drop (in current but not in desired)
+	// Find partitions to drop (in current but not in desired). TDSQL accepts
+	// multiple names in one DROP PARTITION statement.
+	var droppedNames []string
 	for _, currentPart := range currentTable.partition.Definitions {
 		found := false
 		for _, desiredPart := range desiredTable.partition.Definitions {
@@ -1942,33 +2367,299 @@ func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table
 			}
 		}
 		if !found {
-			ddl := g.generateDropPartitionDDL(desiredTable, currentPart)
-			ddls = append(ddls, ddl)
+			droppedNames = append(droppedNames, g.escapePartitionName(currentPart.Name.Name))
+		}
+	}
+	if len(droppedNames) > 0 {
+		updateGlobalIndexes := false
+		for _, index := range currentTable.indexes {
+			if index.global {
+				updateGlobalIndexes = true
+				break
+			}
+		}
+		clause := ""
+		if updateGlobalIndexes {
+			clause = " UPDATE GLOBAL INDEXES"
+		}
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PARTITION %s%s",
+			g.escapeTableName(&desiredTable), strings.Join(droppedNames, ", "), clause))
+	}
+
+	// TDSQL: modify existing partitions whose storage tier changed. Keep the
+	// desired partition order and group adjacent changes targeting the same tier.
+	var pendingNames []string
+	pendingTier := ""
+	pendingCurrentTier := ""
+	flushStorageChanges := func() {
+		if len(pendingNames) == 0 {
+			return
+		}
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s MODIFY PARTITION (%s) STORAGE_TIER = %s",
+			g.escapeTableName(&desiredTable), strings.Join(pendingNames, ", "), pendingTier))
+		pendingNames = nil
+		pendingTier = ""
+		pendingCurrentTier = ""
+	}
+	for _, desiredPart := range desiredTable.partition.Definitions {
+		var currentPart *PartitionDefinition
+		for i := range currentTable.partition.Definitions {
+			if g.identsEqual(currentTable.partition.Definitions[i].Name, desiredPart.Name) {
+				currentPart = &currentTable.partition.Definitions[i]
+				break
+			}
+		}
+		if currentPart == nil {
+			flushStorageChanges()
+			continue
+		}
+		currentTier := normalizePartitionStorageTier(currentPart.StorageTier)
+		desiredTier := normalizePartitionStorageTier(desiredPart.StorageTier)
+		if currentTier == desiredTier {
+			flushStorageChanges()
+			continue
+		}
+		if pendingTier != "" && (pendingTier != desiredTier || pendingCurrentTier != currentTier) {
+			flushStorageChanges()
+		}
+		pendingTier = desiredTier
+		pendingCurrentTier = currentTier
+		pendingNames = append(pendingNames, g.escapePartitionName(desiredPart.Name.Name))
+	}
+	flushStorageChanges()
+
+	// TDSQL: compare RANGE partitioning INTERVAL(n) auto-extension setting
+	if currentTable.partition.Interval != desiredTable.partition.Interval {
+		tableName := g.escapeTableName(&desiredTable)
+		if desiredTable.partition.Interval > 0 {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s SET INTERVAL(%d)", tableName, desiredTable.partition.Interval))
+		} else {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s SET INTERVAL()", tableName))
 		}
 	}
 
 	return ddls
 }
 
+func (g *Generator) sameTablePartitioning(current, desired *TablePartition) bool {
+	if current == nil || desired == nil {
+		return current == desired
+	}
+	if !strings.EqualFold(current.Type, desired.Type) || current.Partitions != desired.Partitions {
+		return false
+	}
+	if len(current.Columns) != len(desired.Columns) {
+		return false
+	}
+	for i, column := range current.Columns {
+		if !g.identsEqual(column, desired.Columns[i]) {
+			return false
+		}
+	}
+	return g.areSamePartitionExprs(current.Expr, desired.Expr)
+}
+
+func (g *Generator) samePartitionDefinition(current, desired *PartitionDefinition) bool {
+	if current == nil || desired == nil {
+		return current == desired
+	}
+	return current.Maxvalue == desired.Maxvalue &&
+		g.areSamePartitionExprs(current.LessThan, desired.LessThan) &&
+		g.areSamePartitionExprs(current.In, desired.In)
+}
+
+// generateRangeReorganizeDDLs generates safe incremental migrations for
+// RANGE partitions inserted before existing partitions. Existing partitions
+// that remain in the desired schema must retain their definitions and order;
+// partitions removed separately are handled by the caller.
+func (g *Generator) generateRangeReorganizeDDLs(currentTable, desiredTable Table) ([]string, map[string]bool, bool) {
+	currentPartition := currentTable.partition
+	desiredPartition := desiredTable.partition
+	reorganizedNames := make(map[string]bool)
+	if currentPartition == nil || desiredPartition == nil || currentPartition.Interval != desiredPartition.Interval {
+		return nil, reorganizedNames, false
+	}
+	if !strings.EqualFold(currentPartition.Type, "RANGE") && !strings.EqualFold(currentPartition.Type, "RANGE COLUMNS") {
+		return nil, reorganizedNames, false
+	}
+	formatDefinition := func(part PartitionDefinition) string {
+		name := g.escapePartitionName(part.Name.Name)
+		storageTier := ""
+		if part.StorageTier != "" {
+			storageTier = " STORAGE_TIER = " + normalizePartitionStorageTier(part.StorageTier)
+		}
+		if part.Maxvalue {
+			return fmt.Sprintf("PARTITION %s VALUES LESS THAN MAXVALUE%s", name, storageTier)
+		}
+		return fmt.Sprintf("PARTITION %s VALUES LESS THAN (%s)%s", name, g.formatExprs(part.LessThan), storageTier)
+	}
+
+	var ddls []string
+	desiredIndex := 0
+	currentIndex := 0
+	hasReorganize := false
+	for desiredIndex < len(desiredPartition.Definitions) {
+		matchedDesiredIndex := -1
+		matchedCurrentIndex := -1
+		for i := desiredIndex; i < len(desiredPartition.Definitions); i++ {
+			for j := currentIndex; j < len(currentPartition.Definitions); j++ {
+				currentPart := &currentPartition.Definitions[j]
+				desiredPart := &desiredPartition.Definitions[i]
+				if g.identsEqual(currentPart.Name, desiredPart.Name) &&
+					g.samePartitionDefinition(currentPart, desiredPart) &&
+					normalizePartitionStorageTier(currentPart.StorageTier) == normalizePartitionStorageTier(desiredPart.StorageTier) {
+					matchedDesiredIndex = i
+					matchedCurrentIndex = j
+					break
+				}
+			}
+			if matchedCurrentIndex >= 0 {
+				break
+			}
+		}
+		if matchedCurrentIndex < 0 {
+			break
+		}
+
+		inserted := desiredPartition.Definitions[desiredIndex:matchedDesiredIndex]
+		if len(inserted) > 0 {
+			// A REORGANIZE can split the matched partition only when no
+			// preceding current partition is being removed in the same range.
+			// Otherwise the safe fallback is a complete repartition.
+			if matchedCurrentIndex != currentIndex {
+				return nil, reorganizedNames, false
+			}
+			for _, part := range inserted {
+				if part.Maxvalue || part.In != nil || part.LessThan == nil {
+					return nil, reorganizedNames, false
+				}
+			}
+			definitions := make([]string, 0, len(inserted)+1)
+			for _, part := range inserted {
+				definitions = append(definitions, formatDefinition(part))
+				reorganizedNames[strings.ToLower(part.Name.Name)] = true
+			}
+			definitions = append(definitions, formatDefinition(desiredPartition.Definitions[matchedDesiredIndex]))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s REORGANIZE PARTITION %s INTO (%s)",
+				g.escapeTableName(&desiredTable),
+				g.escapePartitionName(currentPartition.Definitions[matchedCurrentIndex].Name.Name),
+				strings.Join(definitions, ", ")))
+			hasReorganize = true
+		}
+		desiredIndex = matchedDesiredIndex + 1
+		currentIndex = matchedCurrentIndex + 1
+	}
+
+	if !hasReorganize {
+		return nil, reorganizedNames, false
+	}
+	return ddls, reorganizedNames, true
+}
+
+func (g *Generator) generateRepartitionDDL(table Table, partition *TablePartition) string {
+	clause := "PARTITION BY " + strings.ToUpper(partition.Type)
+	if partition.Columns != nil {
+		columns := util.TransformSlice(partition.Columns, func(column parser.Ident) string {
+			return g.escapeSQLIdent(column)
+		})
+		clause += " (" + strings.Join(columns, ", ") + ")"
+	} else if partition.Expr != nil {
+		clause += " (" + g.formatExprs(partition.Expr) + ")"
+	} else if strings.HasSuffix(strings.ToUpper(partition.Type), "KEY") {
+		clause += " ()"
+	}
+	if partition.Interval > 0 {
+		clause += fmt.Sprintf(" INTERVAL(%d)", partition.Interval)
+	}
+	if partition.Partitions > 0 {
+		clause += fmt.Sprintf(" PARTITIONS %d", partition.Partitions)
+	}
+	if len(partition.Definitions) > 0 {
+		definitions := util.TransformSlice(partition.Definitions, func(def PartitionDefinition) string {
+			name := g.escapePartitionName(def.Name.Name)
+			storageTier := ""
+			if def.StorageTier != "" {
+				storageTier = " STORAGE_TIER = " + normalizePartitionStorageTier(def.StorageTier)
+			}
+			if def.In != nil {
+				return fmt.Sprintf("PARTITION %s VALUES IN (%s)%s", name, g.formatExprs(def.In), storageTier)
+			}
+			if def.Maxvalue {
+				return fmt.Sprintf("PARTITION %s VALUES LESS THAN MAXVALUE%s", name, storageTier)
+			}
+			return fmt.Sprintf("PARTITION %s VALUES LESS THAN (%s)%s", name, g.formatExprs(def.LessThan), storageTier)
+		})
+		clause += " (" + strings.Join(definitions, ", ") + ")"
+	}
+	return fmt.Sprintf("ALTER TABLE %s %s", g.escapeTableName(&table), clause)
+}
+
 // generateAddPartitionDDL generates ALTER TABLE ADD PARTITION statement
+func getTableOption(options map[string]string, key string) string {
+	value, _ := getTableOptionWithPresence(options, key)
+	return value
+}
+
+func getTableOptionWithPresence(options map[string]string, key string) (string, bool) {
+	for name, value := range options {
+		if strings.EqualFold(name, key) {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func effectiveTDSQLTableOptionValue(key, value string) string {
+	value = normalizeOptionValue(value)
+	if value == "" {
+		return tdsqlTableOptionDefaults[key]
+	}
+	return value
+}
+
+func normalizeOptionValue(value string) string {
+	return strings.Trim(value, "'")
+}
+
+func formatTTLOptionValue(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") {
+		return value
+	}
+	return "'" + value + "'"
+}
+
+func normalizePartitionStorageTier(tier string) string {
+	if tier == "" {
+		return "AUTO_STORAGE"
+	}
+	return strings.ToUpper(tier)
+}
+
 func (g *Generator) generateAddPartitionDDL(table Table, part PartitionDefinition) string {
 	tableName := g.escapeTableName(&table)
+	storageTier := ""
+	if part.StorageTier != "" {
+		storageTier = " STORAGE_TIER = " + normalizePartitionStorageTier(part.StorageTier)
+	}
 	// Quote partition name only if it needs quoting (contains special chars/spaces)
 	// Don't preserve quotes from source since MariaDB quotes differently than MySQL
 	partName := g.escapePartitionName(part.Name.Name)
 
 	if part.In != nil {
 		// LIST partition: VALUES IN (...)
-		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES IN (%s))",
-			tableName, partName, g.formatExprs(part.In))
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES IN (%s)%s)",
+			tableName, partName, g.formatExprs(part.In), storageTier)
 	} else if part.Maxvalue {
 		// RANGE partition: VALUES LESS THAN MAXVALUE
-		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN MAXVALUE)",
-			tableName, partName)
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN MAXVALUE%s)",
+			tableName, partName, storageTier)
 	} else if part.LessThan != nil {
 		// RANGE partition: VALUES LESS THAN (...)
-		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN (%s))",
-			tableName, partName, g.formatExprs(part.LessThan))
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN (%s)%s)",
+			tableName, partName, g.formatExprs(part.LessThan), storageTier)
 	}
 
 	// Fallback (shouldn't happen with valid partition definitions)
@@ -2089,10 +2780,14 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 			currentTable.indexes = append(currentTable.indexes, desiredIndex)
 		}
 	} else {
-		// Index found. If it's different, drop and add index.
+		// Index found. If it's different, drop and add index. When drops are
+		// disabled, suppress the replacement ADD because the existing index is
+		// still present and an executable ADD would fail with a duplicate name.
 		if !g.areSameIndexes(*currentIndex, desiredIndex) {
 			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
-			ddls = append(ddls, statement)
+			if g.config.EnableDrop {
+				ddls = append(ddls, statement)
+			}
 
 			newIndexes := []Index{}
 			for _, currentIndex := range currentTable.indexes {
@@ -3124,13 +3819,31 @@ func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, erro
 }
 
 func (g *Generator) generateDDLsForSchema(desired *Schema) ([]string, error) {
+	if desired.alter {
+		statement := strings.TrimSuffix(strings.TrimSpace(desired.statement), ";")
+		return []string{statement + ";"}, nil
+	}
+
 	ddls := []string{}
 
 	if currentSchema := findSchemaByName(g.currentSchemas, desired.schema.Name); currentSchema == nil {
-		// Schema not found, add schema.
-		ddls = append(ddls, desired.statement)
+		// Schema not found, add schema. TDSQL database-level policy bindings
+		// are not shown by SHOW CREATE DATABASE, so rebuild this clause from
+		// parsed schema metadata instead of replaying a quoted variant.
+		statement := strings.TrimSuffix(strings.TrimSpace(desired.statement), ";")
+		if desired.schema.UsingPolicy != "" {
+			parts := strings.SplitN(desired.schema.UsingPolicy, " ", 2)
+			if len(parts) == 2 {
+				policyName := strings.Trim(parts[1], "`\"")
+				statement = fmt.Sprintf("CREATE DATABASE %s USING %s %s", desired.schema.Name, parts[0], policyName)
+			}
+		}
+		ddls = append(ddls, statement+";")
 		schema := *desired // copy schema
 		g.currentSchemas = append(g.currentSchemas, &schema)
+	} else if desired.schema.UsingPolicy != "" && !sameSchemaUsingPolicy(currentSchema.schema.UsingPolicy, desired.schema.UsingPolicy) {
+		ddls = append(ddls, fmt.Sprintf("ALTER DATABASE %s USING %s;", desired.schema.Name, desired.schema.UsingPolicy))
+		currentSchema.schema.UsingPolicy = desired.schema.UsingPolicy
 	}
 
 	// Only add to desiredSchemas if it doesn't already exist (it may have been pre-populated from aggregation)
@@ -3139,6 +3852,10 @@ func (g *Generator) generateDDLsForSchema(desired *Schema) ([]string, error) {
 	}
 
 	return ddls, nil
+}
+
+func sameSchemaUsingPolicy(current, desired string) bool {
+	return strings.EqualFold(strings.Join(strings.Fields(current), " "), strings.Join(strings.Fields(desired), " "))
 }
 
 // Even though simulated table doesn't have a foreign key, references could exist in column definitions.
@@ -3422,18 +4139,20 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 }
 
 type AggregatedSchema struct {
-	Tables       []*Table
-	PartitionOfs []*CreatePartitionOf // PostgreSQL partition child tables
-	Views        []*View
-	Triggers     []*Trigger
-	Events       []*Event
-	Functions    []*Function
-	Types        []*Type
-	Domains      []*Domain
-	Comments     []*Comment
-	Extensions   []*Extension
-	Schemas      []*Schema
-	Privileges   []*GrantPrivilege
+	Tables               []*Table
+	PartitionOfs         []*CreatePartitionOf // PostgreSQL partition child tables
+	Views                []*View
+	Triggers             []*Trigger
+	Events               []*Event
+	Functions            []*Function
+	Types                []*Type
+	Domains              []*Domain
+	Comments             []*Comment
+	Extensions           []*Extension
+	Schemas              []*Schema
+	Privileges           []*GrantPrivilege
+	PartitionPolicies    []*PartitionPolicy
+	DistributionPolicies []*DistributionPolicy
 }
 
 // indexExprNeedsParens reports whether an index expression needs its own
@@ -3561,6 +4280,21 @@ func insertConcurrentlyIntoCreateIndex(statement string) string {
 	return statement
 }
 
+func (g *Generator) generateAddIndexForTransition(table QualifiedName, index Index, current Index) string {
+	ddl := g.generateAddIndex(table, index)
+	if g.mode == GeneratorModeMysql && index.global && index.gsiPartition != nil && !strings.EqualFold(current.indexType, "KEY") {
+		// Preserve an algorithm explicitly declared by the desired index. The
+		// legacy KEY transition omits the configured algorithm, while a desired
+		// ALGORITHM=... remains part of the generated DDL.
+		if !hasExplicitIndexAlgorithm(index) {
+			ddl = strings.TrimSuffix(ddl, ", ALGORITHM = "+g.gsiAlgorithm(index))
+		}
+		ddl = strings.Replace(ddl, " ADD INDEX ", " ADD KEY ", 1)
+		ddl = strings.Replace(ddl, " PARTITION BY HASH (", " PARTITION BY HASH(", 1)
+	}
+	return ddl
+}
+
 // generateAddIndex generates DDL to add an index.
 func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 	var uniqueOption string
@@ -3607,7 +4341,11 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		columns = append(columns, column)
 	}
 
-	optionDefinition := g.generateIndexOptionDefinition(index.options)
+	indexOptions := index.options
+	if g.mode == GeneratorModeMysql && index.global && index.gsiPartition != nil {
+		indexOptions = withoutIndexAlgorithm(indexOptions)
+	}
+	optionDefinition := g.generateIndexOptionDefinition(indexOptions)
 
 	switch g.mode {
 	case GeneratorModeMssql:
@@ -3694,6 +4432,10 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		if index.vector {
 			indexTypeStr = "VECTOR INDEX"
 		}
+		if g.mode == GeneratorModeMysql && indexTypeStr == "KEY" &&
+			(index.global || index.local || index.gsiPartition != nil) {
+			indexTypeStr = "INDEX"
+		}
 
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
@@ -3706,8 +4448,195 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
 		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
+		gsiClause := g.generateGSIAndICIClause(index)
+		ddl += gsiClause
+		if g.mode == GeneratorModeMysql && index.global && index.gsiPartition != nil {
+			if algorithm := g.gsiAlgorithm(index); algorithm != "" {
+				ddl += ", ALGORITHM = " + algorithm
+			}
+		}
 		return ddl
 	}
+}
+
+// generateGSIAndICIClause generates the trailing TDSQL clauses for GLOBAL/LOCAL
+// secondary indexes (GSI), the GSI's own partition definition, and included
+// (covering) columns for ICI (`KEY idx(a) VALUE(b)`).
+func (g *Generator) generateGSIAndICIClause(index Index) string {
+	var ddl string
+	if len(index.valueColumns) > 0 {
+		values := index.valueColumns
+		if !g.config.LegacyIgnoreQuotes && strings.HasSuffix(strings.ToLower(index.indexType), "key") {
+			values = util.TransformSlice(values, func(value string) string {
+				return g.escapeSQLIdent(parser.Ident{Name: value, Quoted: true})
+			})
+		}
+		ddl += " VALUE(" + strings.Join(values, ", ") + ")"
+	}
+	if index.global {
+		ddl += " GLOBAL"
+	} else if index.local {
+		ddl += " LOCAL"
+	}
+	if index.gsiPartition != nil {
+		switch strings.ToUpper(index.gsiPartition.Type) {
+		case "HASH":
+			ddl += fmt.Sprintf(" PARTITION BY HASH (%s) PARTITIONS %d", g.formatExprs(index.gsiPartition.Expr), index.gsiPartition.Partitions)
+		case "KEY":
+			cols := util.TransformSlice(index.gsiPartition.Columns, func(c parser.Ident) string {
+				return g.escapeSQLIdent(c)
+			})
+			ddl += fmt.Sprintf(" PARTITION BY KEY (%s) PARTITIONS %d", strings.Join(cols, ", "), index.gsiPartition.Partitions)
+		case "RANGE", "RANGE COLUMNS":
+			parts := make([]string, 0, len(index.gsiPartition.Definitions))
+			for _, part := range index.gsiPartition.Definitions {
+				bound := "MAXVALUE"
+				if !part.Maxvalue {
+					bound = "(" + g.formatExprs(part.LessThan) + ")"
+				}
+				storageTier := ""
+				if part.StorageTier != "" {
+					storageTier = " STORAGE_TIER = " + normalizePartitionStorageTier(part.StorageTier)
+				}
+				parts = append(parts, fmt.Sprintf("PARTITION %s VALUES LESS THAN %s%s", g.escapeSQLIdent(part.Name), bound, storageTier))
+			}
+			partitionType := "RANGE"
+			partitionColumns := g.formatExprs(index.gsiPartition.Expr)
+			if strings.EqualFold(index.gsiPartition.Type, "RANGE COLUMNS") {
+				partitionType = "RANGE COLUMNS"
+				columns := util.TransformSlice(index.gsiPartition.Columns, func(c parser.Ident) string {
+					return g.escapeSQLIdent(c)
+				})
+				partitionColumns = strings.Join(columns, ", ")
+			}
+			ddl += fmt.Sprintf(" PARTITION BY %s (%s) (%s)", partitionType, partitionColumns, strings.Join(parts, ", "))
+		}
+	}
+	return ddl
+}
+
+func withoutIndexAlgorithm(indexOptions []IndexOption) []IndexOption {
+	filtered := make([]IndexOption, 0, len(indexOptions))
+	for _, option := range indexOptions {
+		if !strings.EqualFold(option.optionName, "algorithm") {
+			filtered = append(filtered, option)
+		}
+	}
+	return filtered
+}
+
+func hasExplicitIndexAlgorithm(index Index) bool {
+	for _, option := range index.options {
+		if option.value != nil && strings.EqualFold(option.optionName, "algorithm") && isValidAlgorithm(option.value.raw) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Generator) gsiAlgorithm(index Index) string {
+	for _, option := range index.options {
+		if option.value != nil && strings.EqualFold(option.optionName, "algorithm") && isValidAlgorithm(option.value.raw) {
+			return strings.ToUpper(strings.TrimSpace(option.value.raw))
+		}
+	}
+	if isValidAlgorithm(g.algorithm) {
+		return strings.ToUpper(strings.TrimSpace(g.algorithm))
+	}
+	// Leave the algorithm unspecified so TDSQL can choose its default. sqldef
+	// must not force COPY when neither the index nor the configuration declares it.
+	return ""
+}
+
+func hasExplicitAlgorithmClause(sql string) bool {
+	for i := 0; i < len(sql); {
+		if sql[i] == '\'' || sql[i] == '"' || sql[i] == '`' {
+			i = skipSQLQuoted(sql, i)
+			continue
+		}
+		if sql[i] == '-' && i+1 < len(sql) && sql[i+1] == '-' {
+			i = skipSQLLineComment(sql, i)
+			continue
+		}
+		if sql[i] == '#' {
+			i = skipSQLLineComment(sql, i)
+			continue
+		}
+		if sql[i] == '/' && i+1 < len(sql) && sql[i+1] == '*' {
+			i = skipSQLBlockComment(sql, i)
+			continue
+		}
+		if isSQLWordStart(sql[i]) {
+			start := i
+			i++
+			for i < len(sql) && isSQLWordPart(sql[i]) {
+				i++
+			}
+			if !strings.EqualFold(sql[start:i], "algorithm") {
+				continue
+			}
+			for i < len(sql) && (sql[i] == ' ' || sql[i] == '\t' || sql[i] == '\r' || sql[i] == '\n') {
+				i++
+			}
+			if i < len(sql) && sql[i] == '=' {
+				i++
+				for i < len(sql) && (sql[i] == ' ' || sql[i] == '\t' || sql[i] == '\r' || sql[i] == '\n') {
+					i++
+				}
+			}
+			valueStart := i
+			for i < len(sql) && isSQLWordPart(sql[i]) {
+				i++
+			}
+			value := sql[valueStart:i]
+			if strings.EqualFold(value, "default") || strings.EqualFold(value, "copy") ||
+				strings.EqualFold(value, "inplace") || strings.EqualFold(value, "instant") {
+				return true
+			}
+			continue
+		}
+		i++
+	}
+	return false
+}
+
+func isSQLWordStart(char byte) bool {
+	return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || char == '_'
+}
+
+func isSQLWordPart(char byte) bool {
+	return isSQLWordStart(char) || (char >= '0' && char <= '9')
+}
+
+func skipSQLQuoted(sql string, start int) int {
+	quote := sql[start]
+	for i := start + 1; i < len(sql); i++ {
+		if sql[i] == quote {
+			if i+1 < len(sql) && sql[i+1] == quote {
+				i++
+				continue
+			}
+			return i + 1
+		}
+		if sql[i] == '\\' && quote != '`' {
+			i++
+		}
+	}
+	return len(sql)
+}
+
+func skipSQLLineComment(sql string, start int) int {
+	if end := strings.IndexByte(sql[start:], '\n'); end >= 0 {
+		return start + end + 1
+	}
+	return len(sql)
+}
+
+func skipSQLBlockComment(sql string, start int) int {
+	if end := strings.Index(sql[start+2:], "*/"); end >= 0 {
+		return start + end + 4
+	}
+	return len(sql)
 }
 
 func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) string {
@@ -4210,6 +5139,12 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
+		case *NoopDDL, *PartitionCommandDDL:
+			// Operational partition commands are schema-neutral.
+		case *PartitionPolicy:
+			aggregated.PartitionPolicies = append(aggregated.PartitionPolicies, stmt)
+		case *DistributionPolicy:
+			aggregated.DistributionPolicies = append(aggregated.DistributionPolicies, stmt)
 		case *CreateTable:
 			table := stmt.table // copy table
 			aggregated.Tables = append(aggregated.Tables, &table)
@@ -5505,9 +6440,18 @@ func findSchemaByName(schemas []*Schema, name string) *Schema {
 
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
 	// Not examining AUTO_INCREMENT, AUTO_RANDOM, and UNIQUE KEY because it'll be added in a later stage
+	currentNotNull := current.notNull != nil && *current.notNull
+	desiredNotNull := (desired.notNull != nil && *desired.notNull) || desired.keyOption == ColumnKeyPrimary
+	if g.tdsql && current.keyOption == ColumnKeyPrimary && desired.keyOption == ColumnKeyPrimary {
+		// TDSQL tests commonly omit NOT NULL on both sides of an inline primary
+		// key. Treat the dialect's implicit constraint consistently for the
+		// whole diff, rather than mutating only one parsed side.
+		currentNotNull = true
+		desiredNotNull = true
+	}
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
-		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *desired.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
+		(currentNotNull == desiredNotNull) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.timezone == desired.timezone) &&
 		// (current.check == desired.check) && /* workaround. CHECK handling in general should be improved later */
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
@@ -6268,6 +7212,16 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.nullsNotDistinct != indexB.nullsNotDistinct {
 		return false
 	}
+	// TDSQL: GLOBAL/LOCAL secondary index (GSI) and included-column index (ICI)
+	if indexA.global != indexB.global || indexA.local != indexB.local {
+		return false
+	}
+	if !g.areSameGSIPartitions(indexA.gsiPartition, indexB.gsiPartition) {
+		return false
+	}
+	if !slices.Equal(indexA.valueColumns, indexB.valueColumns) {
+		return false
+	}
 	if len(indexA.columns) != len(indexB.columns) {
 		return false
 	}
@@ -6360,6 +7314,193 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	return true
 }
 
+// areSameGSIPartitions compares TDSQL GSI (global secondary index) partition
+// definitions, e.g. `GLOBAL PARTITION BY HASH(k) PARTITIONS 4`.
+func (g *Generator) areSameGSIPartitions(a, b *parser.TablePartition) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	if !strings.EqualFold(a.Type, b.Type) || a.Partitions != b.Partitions {
+		return false
+	}
+	if len(a.Columns) != len(b.Columns) {
+		return false
+	}
+	for i, col := range a.Columns {
+		if !identsEqual(col, b.Columns[i], g.mode, g.config.LegacyIgnoreQuotes) {
+			return false
+		}
+	}
+	if !g.areSamePartitionExprs(a.Expr, b.Expr) {
+		return false
+	}
+	if len(a.Definitions) != len(b.Definitions) {
+		return false
+	}
+	for i, definition := range a.Definitions {
+		if !g.areSameGSIPartitionDefinitions(definition, b.Definitions[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (g *Generator) areSamePartitionExprs(a, b parser.Exprs) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, expr := range a {
+		if g.sameMySQLToDaysPartitionExpr(expr, b[i]) {
+			continue
+		}
+		if g.formatPartitionExprForComparison(expr) != g.formatPartitionExprForComparison(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameMySQLToDaysPartitionExpr treats MySQL's two representations of a
+// TO_DAYS boundary as equivalent. SHOW CREATE TABLE commonly emits the
+// evaluated integer (for example 739400), while a desired DDL may retain
+// TO_DAYS('2024-06-24'). Only literal dates are folded; column expressions
+// and other values remain subject to the normal structural comparison.
+func (g *Generator) sameMySQLToDaysPartitionExpr(a, b parser.Expr) bool {
+	if g.mode != GeneratorModeMysql {
+		return false
+	}
+	aDays, aIsToDays := mysqlToDaysLiteral(a)
+	bDays, bIsToDays := mysqlToDaysLiteral(b)
+	if aIsToDays {
+		if bValue, ok := mysqlPartitionInteger(b); ok {
+			return aDays == bValue
+		}
+	}
+	if bIsToDays {
+		if aValue, ok := mysqlPartitionInteger(a); ok {
+			return bDays == aValue
+		}
+	}
+	return false
+}
+
+func mysqlToDaysLiteral(expr parser.Expr) (int64, bool) {
+	expr = unwrapPartitionExpr(expr)
+	function, ok := expr.(*parser.FuncExpr)
+	if !ok || !strings.EqualFold(function.Name.Name, "TO_DAYS") || len(function.Exprs) != 1 {
+		return 0, false
+	}
+	argument, ok := function.Exprs[0].(*parser.AliasedExpr)
+	if !ok {
+		return 0, false
+	}
+	value, ok := unwrapPartitionExpr(argument.Expr).(*parser.SQLVal)
+	if !ok || (value.Type != parser.StrVal && value.Type != parser.UnicodeStrVal) {
+		return 0, false
+	}
+	return mysqlToDaysDate(value.Val)
+}
+
+func mysqlPartitionInteger(expr parser.Expr) (int64, bool) {
+	value, ok := unwrapPartitionExpr(expr).(*parser.SQLVal)
+	if !ok || value.Type != parser.IntVal {
+		return 0, false
+	}
+	parsed, err := strconv.ParseInt(value.Val, 10, 64)
+	return parsed, err == nil
+}
+
+func unwrapPartitionExpr(expr parser.Expr) parser.Expr {
+	for {
+		switch value := expr.(type) {
+		case *parser.ParenExpr:
+			expr = value.Expr
+		default:
+			return expr
+		}
+	}
+}
+
+func mysqlToDaysDate(value string) (int64, bool) {
+	if len(value) < len("2006-01-02") {
+		return 0, false
+	}
+	value = value[:len("2006-01-02")]
+	if value[4] != '-' || value[7] != '-' {
+		return 0, false
+	}
+	year, yearErr := strconv.ParseInt(value[:4], 10, 64)
+	month, monthErr := strconv.ParseInt(value[5:7], 10, 64)
+	day, dayErr := strconv.ParseInt(value[8:10], 10, 64)
+	if yearErr != nil || monthErr != nil || dayErr != nil || month < 1 || month > 12 || day < 1 || day > 31 {
+		return 0, false
+	}
+	monthDays := [...]int64{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	if month > 2 && (year%4 == 0 && (year%100 != 0 || year%400 == 0)) {
+		monthDays[2]++
+	}
+	for currentMonth := int64(1); currentMonth < month; currentMonth++ {
+		day += monthDays[currentMonth]
+	}
+	return year*365 + year/4 - year/100 + year/400 + day, true
+}
+
+func (g *Generator) areSameGSIPartitionDefinitions(a, b *parser.PartitionDefinition) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return identsEqual(a.Name, b.Name, g.mode, g.config.LegacyIgnoreQuotes) &&
+		a.Maxvalue == b.Maxvalue &&
+		a.StorageTier == b.StorageTier &&
+		g.areSamePartitionExprs(a.LessThan, b.LessThan) &&
+		g.areSamePartitionExprs(a.In, b.In)
+}
+
+func (g *Generator) formatPartitionExprForComparison(expr parser.Expr) string {
+	normalized := normalizeExpr(expr, g.mode)
+	if g.mode == GeneratorModeMysql {
+		if function, ok := normalized.(*parser.FuncExpr); ok && !function.Name.Quoted {
+			functionCopy := *function
+			functionCopy.Name = parser.NewIdent(strings.ToLower(function.Name.Name), false)
+			normalized = &functionCopy
+		}
+	}
+	return g.formatIndexExprForComparison(normalized)
+}
+
+func normalizeMySQLIdentifierQuotes(sql string) string {
+	var normalized strings.Builder
+	for i := 0; i < len(sql); {
+		if sql[i] != '`' {
+			normalized.WriteByte(sql[i])
+			i++
+			continue
+		}
+
+		i++
+		var identifier strings.Builder
+		for i < len(sql) {
+			if sql[i] != '`' {
+				identifier.WriteByte(sql[i])
+				i++
+				continue
+			}
+			if i+1 < len(sql) && sql[i+1] == '`' {
+				identifier.WriteByte('`')
+				i += 2
+				continue
+			}
+			i++
+			break
+		}
+		normalized.WriteString(strings.ToLower(identifier.String()))
+	}
+	return normalized.String()
+}
+
 func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 	normalized := normalizeExpr(expr, g.mode)
 
@@ -6376,8 +7517,19 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 			}
 		}
 	}
+	if g.mode == GeneratorModeMysql {
+		if colName, ok := normalized.(*parser.ColName); ok {
+			// MySQL identifiers are case-insensitive and backtick quoting does not
+			// change their identity.
+			return strings.ToLower(colName.Name.Name)
+		}
+	}
 
-	return parser.String(normalized)
+	formatted := parser.String(normalized)
+	if g.mode == GeneratorModeMysql {
+		return normalizeMySQLIdentifierQuotes(formatted)
+	}
+	return formatted
 }
 
 func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
@@ -7136,8 +8288,8 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 }
 
 func isValidAlgorithm(algorithm string) bool {
-	switch strings.ToUpper(algorithm) {
-	case "INPLACE", "COPY", "INSTANT":
+	switch strings.ToUpper(strings.TrimSpace(algorithm)) {
+	case "DEFAULT", "INPLACE", "COPY", "INSTANT":
 		return true
 	default:
 		return false
