@@ -652,8 +652,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Use sorted columns to ensure deterministic DDL ordering
 		// Drop columns in reverse order (last column first) to be more intuitive
 		sortedColumns := getSortedColumns(currentTable.columns)
-		for i := len(sortedColumns) - 1; i >= 0; i-- {
-			column := sortedColumns[i]
+		for _, column := range slices.Backward(sortedColumns) {
+
 			if g.findColumnByName(desiredTable.columns, column.name) != nil {
 				continue // Column is expected to exist.
 			}
@@ -2361,8 +2361,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 					// Find all views that depend on this view
 					dependentViews := g.findDependentViews(desiredView.name)
 					// Drop them first (in reverse dependency order)
-					for i := len(dependentViews) - 1; i >= 0; i-- {
-						depView := dependentViews[i]
+					for _, depView := range slices.Backward(dependentViews) {
+
 						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
 					}
 					// Store DDLs to recreate dependent views after the base view
@@ -2471,6 +2471,19 @@ func (g *Generator) createTableLookup() TableLookupFunc {
 	}
 }
 
+// normalizeTriggerForEach resolves an omitted FOR EACH clause to the database's default,
+// so that "CREATE TRIGGER ... EXECUTE FUNCTION ..." compares equal to the definition
+// reported by the database (pg_get_triggerdef() always prints "FOR EACH STATEMENT").
+func (g *Generator) normalizeTriggerForEach(forEach string) string {
+	if forEach != "" {
+		return forEach
+	}
+	if g.mode == GeneratorModePostgres {
+		return "STATEMENT"
+	}
+	return "ROW"
+}
+
 func (g *Generator) formatTriggerEvent(event TriggerEvent) string {
 	if len(event.columns) == 0 {
 		return event.eventType
@@ -2506,7 +2519,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		if desiredTrigger.whenCondition != "" {
 			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
 		}
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), whenClause, strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH %s %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), g.normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -2714,15 +2727,15 @@ var pgFunctionTypeAliases = map[string]string{
 func normalizePGFunctionType(typ string) string {
 	t := strings.ToLower(strings.TrimSpace(typ))
 	t = strings.Join(strings.Fields(t), " ")
-	suffix := ""
+	var suffix strings.Builder
 	for strings.HasSuffix(t, "[]") {
 		t = strings.TrimSpace(strings.TrimSuffix(t, "[]"))
-		suffix += "[]"
+		suffix.WriteString("[]")
 	}
 	if canonical, ok := pgFunctionTypeAliases[t]; ok {
 		t = canonical
 	}
-	return t + suffix
+	return t + suffix.String()
 }
 
 // dropFunctionDDL renders DROP FUNCTION for current. In PostgreSQL the
@@ -5975,6 +5988,9 @@ func areSameEvents(eventsA, eventsB []TriggerEvent) bool {
 
 func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if triggerA.time != triggerB.time {
+		return false
+	}
+	if g.normalizeTriggerForEach(triggerA.forEach) != g.normalizeTriggerForEach(triggerB.forEach) {
 		return false
 	}
 	if !areSameEvents(triggerA.event, triggerB.event) {

@@ -218,7 +218,7 @@ func isCommentedOut(s string) bool {
 	if !strings.HasPrefix(s, "-- ") {
 		return false
 	}
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" && !strings.HasPrefix(trimmed, "--") {
 			return false

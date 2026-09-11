@@ -205,7 +205,7 @@ CreateTriggerWithThreeEvents:
     DROP TRIGGER audit_all ON public.audit_log;
     DROP TABLE public.audit_log;
     DROP FUNCTION public.log_all_changes;
-CreateTriggerWithoutForEachRow:
+CreateTriggerWithoutForEachDefaultsToStatement:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
@@ -234,11 +234,105 @@ CreateTriggerWithoutForEachRow:
       id serial PRIMARY KEY,
       name text
     );
-    CREATE TRIGGER notify_change after insert ON public.users FOR EACH ROW EXECUTE FUNCTION notify_func();
+    CREATE TRIGGER notify_change after insert ON public.users FOR EACH STATEMENT EXECUTE FUNCTION notify_func();
   down: |
     DROP TRIGGER notify_change ON public.users;
     DROP TABLE public.users;
     DROP FUNCTION public.notify_func;
+CreateTriggerForEachStatement:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER notify_change
+      AFTER INSERT ON users
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION notify_func();
+  up: |
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER notify_change after insert ON public.users FOR EACH STATEMENT EXECUTE FUNCTION notify_func();
+  down: |
+    DROP TRIGGER notify_change ON public.users;
+    DROP TABLE public.users;
+    DROP FUNCTION public.notify_func;
+ChangeTriggerForEachRowToStatement:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER notify_change
+      AFTER INSERT ON users
+      FOR EACH ROW
+      EXECUTE FUNCTION notify_func();
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER notify_change
+      AFTER INSERT ON users
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION notify_func();
+  up: |
+    DROP TRIGGER notify_change ON public.users;
+    CREATE TRIGGER notify_change after insert ON public.users FOR EACH STATEMENT EXECUTE FUNCTION notify_func();
+  down: |
+    DROP TRIGGER notify_change ON public.users;
+    CREATE TRIGGER notify_change after insert ON public.users FOR EACH ROW EXECUTE FUNCTION notify_func();
+CreateTriggerForEachStatementWithWhenAndProcedure:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER notify_change
+      AFTER INSERT ON users
+      FOR EACH STATEMENT
+      WHEN (pg_trigger_depth() < 1)
+      EXECUTE PROCEDURE notify_func();
 CreateTriggerWithFunctionArgs:
   legacy_ignore_quotes: false
   desired: |
