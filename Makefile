@@ -78,7 +78,7 @@ package-tar.gz: build
 .PHONY: package-tar.gz
 
 parser:
-	go run golang.org/x/tools/cmd/goyacc@$(GOYACC_VERSION) -o parser/parser.go parser/parser.y
+	go run golang.org/x/tools/cmd/goyacc@$(GOYACC_VERSION) -l -o parser/parser.go parser/parser.y
 	gofmt -w ./parser/parser.go
 .PHONY: parser
 
