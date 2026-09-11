@@ -2471,17 +2471,19 @@ func (g *Generator) createTableLookup() TableLookupFunc {
 	}
 }
 
-// normalizeTriggerForEach resolves an omitted FOR EACH clause to the database's default,
-// so that "CREATE TRIGGER ... EXECUTE FUNCTION ..." compares equal to the definition
-// reported by the database (pg_get_triggerdef() always prints "FOR EACH STATEMENT").
-func (g *Generator) normalizeTriggerForEach(forEach string) string {
-	if forEach != "" {
-		return forEach
+// normalizeTriggerForEach resolves an omitted FOR EACH clause to ROW.
+//
+// PostgreSQL itself defaults an omitted FOR EACH clause to STATEMENT, but sqldef has
+// always created such triggers as row-level ones. Following PostgreSQL here would
+// silently drop and recreate every existing row-level trigger as a statement-level one,
+// so the v3 behavior is kept and v4 requires the clause to be written explicitly
+// (see v4-migration.md). Definitions read back from the database are unaffected:
+// pg_get_triggerdef() always prints the FOR EACH clause explicitly.
+func normalizeTriggerForEach(forEach string) string {
+	if forEach == "" {
+		return "ROW"
 	}
-	if g.mode == GeneratorModePostgres {
-		return "STATEMENT"
-	}
-	return "ROW"
+	return forEach
 }
 
 func (g *Generator) formatTriggerEvent(event TriggerEvent) string {
@@ -2519,7 +2521,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		if desiredTrigger.whenCondition != "" {
 			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
 		}
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH %s %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), g.normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH %s %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -5990,7 +5992,7 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if triggerA.time != triggerB.time {
 		return false
 	}
-	if g.normalizeTriggerForEach(triggerA.forEach) != g.normalizeTriggerForEach(triggerB.forEach) {
+	if normalizeTriggerForEach(triggerA.forEach) != normalizeTriggerForEach(triggerB.forEach) {
 		return false
 	}
 	if !areSameEvents(triggerA.event, triggerB.event) {

@@ -4,6 +4,7 @@ package schema
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strconv"
@@ -213,6 +214,19 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			var whenCondition string
 			if stmt.Trigger.When != nil {
 				whenCondition = parser.String(stmt.Trigger.When)
+			}
+
+			// PostgreSQL defaults an omitted FOR EACH clause to STATEMENT while sqldef creates
+			// a row-level trigger. v4 rejects the omission instead of picking either default
+			// (see v4-migration.md).
+			if mode == GeneratorModePostgres && stmt.Trigger.ForEach == "" {
+				slog.Warn(
+					"CREATE TRIGGER without a FOR EACH clause is created as FOR EACH ROW, "+
+						"but PostgreSQL defaults it to FOR EACH STATEMENT. "+
+						"sqldef v4 will reject the omission. "+
+						"Write FOR EACH ROW explicitly to keep the current behavior.",
+					"trigger", parser.String(stmt.Trigger.Name),
+				)
 			}
 
 			return &Trigger{
