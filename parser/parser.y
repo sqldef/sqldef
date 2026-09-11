@@ -8303,7 +8303,6 @@ reserved_keyword:
 | SEPARATOR
 | SET
 | SHOW
-| STATEMENT
 | STRAIGHT_JOIN
 | TABLE
 | TABLES
@@ -8367,6 +8366,7 @@ non_reserved_keyword:
 | SAFE
 | SQL
 | TYPE
+| STATEMENT
 | STATUS
 | UNSAFE
 | VARIABLES
