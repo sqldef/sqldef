@@ -653,7 +653,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Drop columns in reverse order (last column first) to be more intuitive
 		sortedColumns := getSortedColumns(currentTable.columns)
 		for _, column := range slices.Backward(sortedColumns) {
-
 			if g.findColumnByName(desiredTable.columns, column.name) != nil {
 				continue // Column is expected to exist.
 			}
@@ -2362,7 +2361,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 					dependentViews := g.findDependentViews(desiredView.name)
 					// Drop them first (in reverse dependency order)
 					for _, depView := range slices.Backward(dependentViews) {
-
 						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
 					}
 					// Store DDLs to recreate dependent views after the base view
