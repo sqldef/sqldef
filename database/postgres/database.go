@@ -216,6 +216,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, matViewDDLs...)
 
+	viewPrivilegeDDLs, err := d.viewPrivileges()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewPrivilegeDDLs...)
+
 	seqPrivilegeDDLs, err := d.sequencePrivileges()
 	if err != nil {
 		return "", err
@@ -367,6 +373,147 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 	}
 
 	return ddls, rows.Err()
+}
+
+// viewPrivileges exports GRANT ... ON TABLE statements for views and
+// materialized views. Table/column privileges for ordinary tables are attached
+// to the table DDL via getPrivilegeDefsForTables (keyed off tableNames(), which
+// is relkind in ('r','p')), but views and matviews are dumped through a
+// separate path (views()/materializedViews()) that carries no privileges. As a
+// result view/matview grants were never exported, so a declared view GRANT was
+// re-emitted on every run and never converged. Like sequencePrivileges and
+// objectOwners, this emits standalone GRANTs and only runs when privilege
+// management is configured. Extension-owned objects are excluded.
+func (d *PostgresDatabase) viewPrivileges() ([]string, error) {
+	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+		return nil, nil
+	}
+
+	var ddls []string
+
+	// Table-level privileges on views/matviews (pg_class.relacl). information_schema
+	// .table_privileges (used for ordinary tables) does not expose materialized
+	// views, so read relacl directly to cover both 'v' and 'm' uniformly.
+	const tableLevelQuery = `
+		SELECT
+			n.nspname AS schema_name,
+			n.nspname || '.' || c.relname AS obj_name,
+			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+			acl.is_grantable,
+			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+		WHERE c.relkind IN ('v', 'm')
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		AND acl.grantee <> c.relowner
+		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
+		AND NOT EXISTS (
+			SELECT 1 FROM pg_depend dep
+			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		)
+		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
+		ORDER BY obj_name, grantee, acl.is_grantable
+	`
+
+	rows, err := d.db.Query(tableLevelQuery, d.managedGranteeArgs())
+	if err != nil {
+		return nil, fmt.Errorf("failed to query view privileges: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var schemaName, objName, grantee, privileges string
+		var isGrantable bool
+		if err := rows.Scan(&schemaName, &objName, &grantee, &isGrantable, &privileges); err != nil {
+			return nil, fmt.Errorf("failed to scan view privilege row: %w", err)
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schemaName) {
+			continue
+		}
+		if !d.isExportedGrantee(grantee) {
+			continue
+		}
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
+		}
+
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, objName, escapedGrantee)
+		if isGrantable {
+			grant += " WITH GRANT OPTION"
+		}
+		ddls = append(ddls, grant+";")
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Column-level privileges on views/matviews (pg_attribute.attacl).
+	const columnLevelQuery = `
+		SELECT
+			n.nspname AS schema_name,
+			n.nspname || '.' || c.relname AS obj_name,
+			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+			acl.is_grantable,
+			acl.privilege_type,
+			string_agg(at.attname, ', ' ORDER BY at.attname) AS columns
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
+		LATERAL aclexplode(at.attacl) AS acl
+		WHERE c.relkind IN ('v', 'm')
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		AND acl.grantee <> c.relowner
+		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
+		AND NOT EXISTS (
+			SELECT 1 FROM pg_depend dep
+			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		)
+		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
+		ORDER BY obj_name, grantee, acl.privilege_type, acl.is_grantable
+	`
+
+	colRows, err := d.db.Query(columnLevelQuery, d.managedGranteeArgs())
+	if err != nil {
+		return nil, fmt.Errorf("failed to query view column privileges: %w", err)
+	}
+	defer colRows.Close()
+
+	for colRows.Next() {
+		var schemaName, objName, grantee, privilegeType, columns string
+		var isGrantable bool
+		if err := colRows.Scan(&schemaName, &objName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
+			return nil, fmt.Errorf("failed to scan view column privilege row: %w", err)
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schemaName) {
+			continue
+		}
+		if !d.isExportedGrantee(grantee) {
+			continue
+		}
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
+		}
+
+		colNames := strings.Split(columns, ", ")
+		escapedCols := make([]string, len(colNames))
+		for i, col := range colNames {
+			escapedCols[i] = d.quoteIdentifierIfNeeded(col)
+		}
+
+		grant := fmt.Sprintf("GRANT %s (%s) ON TABLE %s TO %s",
+			privilegeType, strings.Join(escapedCols, ", "), objName, escapedGrantee)
+		if isGrantable {
+			grant += " WITH GRANT OPTION"
+		}
+		ddls = append(ddls, grant+";")
+	}
+
+	return ddls, colRows.Err()
 }
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {
