@@ -8151,6 +8151,10 @@ array_element:
   {
     $$ = $2
   }
+| column_name
+  {
+    $$ = $1
+  }
 
 bool_option_name_list:
   bool_option_name
