@@ -8402,6 +8402,7 @@ non_reserved_keyword:
 | ENDS
 | TRIGGER
 | INDEX
+| LANGUAGE
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
 // like PRIMARY KEY / FOREIGN KEY / VECTOR KEY work in both dialects while
