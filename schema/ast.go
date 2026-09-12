@@ -410,6 +410,7 @@ type Trigger struct {
 	tableName     QualifiedName
 	time          string
 	event         []TriggerEvent
+	forEach       string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
 	whenCondition string
 	body          []string
 }

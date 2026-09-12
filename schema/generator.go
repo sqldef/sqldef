@@ -93,6 +93,12 @@ type Generator struct {
 	// Track tables that have been dropped to skip COMMENT cleanup for them
 	droppedTables map[string]bool
 
+	// Qualified names of the tables dropped and renamed away in this run.
+	// Privilege cleanup compares them through the default-schema normalization,
+	// which a droppedTables key lookup does not apply.
+	droppedTableNames []QualifiedName
+	renamedTableNames []QualifiedName
+
 	// Track columns that have been dropped to skip COMMENT cleanup for them
 	// Key is "schema.table.column"
 	droppedColumns map[string]bool
@@ -264,6 +270,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, renameDDL)
 						// PostgreSQL automatically transfers comments when renaming tables
 						g.droppedTables[oldTableName.RawString()] = true
+						g.renamedTableNames = append(g.renamedTableNames, oldTableName)
 
 						// Update the old table's name to the new name
 						oldTable.name = desired.table.name
@@ -492,6 +499,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, table := range tablesToDrop {
 			g.currentTables = removeTableByName(g.currentTables, table.name.RawString())
 			g.droppedTables[table.name.RawString()] = true
+			g.droppedTableNames = append(g.droppedTableNames, table.name)
 		}
 	}
 
@@ -652,8 +660,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Use sorted columns to ensure deterministic DDL ordering
 		// Drop columns in reverse order (last column first) to be more intuitive
 		sortedColumns := getSortedColumns(currentTable.columns)
-		for i := len(sortedColumns) - 1; i >= 0; i-- {
-			column := sortedColumns[i]
+		for _, column := range slices.Backward(sortedColumns) {
 			if g.findColumnByName(desiredTable.columns, column.name) != nil {
 				continue // Column is expected to exist.
 			}
@@ -782,6 +789,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	if g.mode == GeneratorModePostgres {
 		for _, currentPriv := range g.currentPrivileges {
+			if g.isPrivilegeOnRemovedTable(currentPriv) {
+				continue
+			}
 			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
 				// Skip grantees whose privileges are not managed (manage.privilege
@@ -2361,8 +2371,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 					// Find all views that depend on this view
 					dependentViews := g.findDependentViews(desiredView.name)
 					// Drop them first (in reverse dependency order)
-					for i := len(dependentViews) - 1; i >= 0; i-- {
-						depView := dependentViews[i]
+					for _, depView := range slices.Backward(dependentViews) {
 						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
 					}
 					// Store DDLs to recreate dependent views after the base view
@@ -2471,6 +2480,21 @@ func (g *Generator) createTableLookup() TableLookupFunc {
 	}
 }
 
+// normalizeTriggerForEach resolves an omitted FOR EACH clause to ROW.
+//
+// PostgreSQL itself defaults an omitted FOR EACH clause to STATEMENT, but sqldef has
+// always created such triggers as row-level ones. Following PostgreSQL here would
+// silently drop and recreate every existing row-level trigger as a statement-level one,
+// so the v3 behavior is kept and v4 requires the clause to be written explicitly
+// (see v4-migration.md). Definitions read back from the database are unaffected:
+// pg_get_triggerdef() always prints the FOR EACH clause explicitly.
+func normalizeTriggerForEach(forEach string) string {
+	if forEach == "" {
+		return "ROW"
+	}
+	return forEach
+}
+
 func (g *Generator) formatTriggerEvent(event TriggerEvent) string {
 	if len(event.columns) == 0 {
 		return event.eventType
@@ -2506,7 +2530,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		if desiredTrigger.whenCondition != "" {
 			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
 		}
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), whenClause, strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH %s %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -2714,15 +2738,15 @@ var pgFunctionTypeAliases = map[string]string{
 func normalizePGFunctionType(typ string) string {
 	t := strings.ToLower(strings.TrimSpace(typ))
 	t = strings.Join(strings.Fields(t), " ")
-	suffix := ""
+	var suffix strings.Builder
 	for strings.HasSuffix(t, "[]") {
 		t = strings.TrimSpace(strings.TrimSuffix(t, "[]"))
-		suffix += "[]"
+		suffix.WriteString("[]")
 	}
 	if canonical, ok := pgFunctionTypeAliases[t]; ok {
 		t = canonical
 	}
-	return t + suffix
+	return t + suffix.String()
 }
 
 // dropFunctionDDL renders DROP FUNCTION for current. In PostgreSQL the
@@ -5270,6 +5294,27 @@ func (g *Generator) findCommentByObject(comments []*Comment, targetComment *pars
 	return nil
 }
 
+// isPrivilegeOnRemovedTable checks if a privilege belongs to a table that this run
+// drops or renames away. PostgreSQL removes privileges together with the table and
+// carries them over on a rename, so no REVOKE is needed for either.
+func (g *Generator) isPrivilegeOnRemovedTable(priv *GrantPrivilege) bool {
+	for _, renamed := range g.renamedTableNames {
+		if g.qualifiedNamesEqual(priv.tableName, renamed) {
+			return true
+		}
+	}
+	// Without enable_drop the DROP TABLE is only commented out and the table stays.
+	if !g.config.EnableDrop {
+		return false
+	}
+	for _, dropped := range g.droppedTableNames {
+		if g.qualifiedNamesEqual(priv.tableName, dropped) {
+			return true
+		}
+	}
+	return false
+}
+
 // isCommentOnDroppedTable checks if a comment belongs to a table that has been dropped.
 // This is used to skip generating COMMENT ... IS NULL for dropped tables,
 // since PostgreSQL automatically removes comments when a table is dropped.
@@ -5975,6 +6020,9 @@ func areSameEvents(eventsA, eventsB []TriggerEvent) bool {
 
 func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if triggerA.time != triggerB.time {
+		return false
+	}
+	if normalizeTriggerForEach(triggerA.forEach) != normalizeTriggerForEach(triggerB.forEach) {
 		return false
 	}
 	if !areSameEvents(triggerA.event, triggerB.event) {
