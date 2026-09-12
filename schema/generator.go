@@ -93,6 +93,12 @@ type Generator struct {
 	// Track tables that have been dropped to skip COMMENT cleanup for them
 	droppedTables map[string]bool
 
+	// Qualified names of the tables dropped and renamed away in this run.
+	// Privilege cleanup compares them through the default-schema normalization,
+	// which a droppedTables key lookup does not apply.
+	droppedTableNames []QualifiedName
+	renamedTableNames []QualifiedName
+
 	// Track columns that have been dropped to skip COMMENT cleanup for them
 	// Key is "schema.table.column"
 	droppedColumns map[string]bool
@@ -264,6 +270,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, renameDDL)
 						// PostgreSQL automatically transfers comments when renaming tables
 						g.droppedTables[oldTableName.RawString()] = true
+						g.renamedTableNames = append(g.renamedTableNames, oldTableName)
 
 						// Update the old table's name to the new name
 						oldTable.name = desired.table.name
@@ -492,6 +499,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, table := range tablesToDrop {
 			g.currentTables = removeTableByName(g.currentTables, table.name.RawString())
 			g.droppedTables[table.name.RawString()] = true
+			g.droppedTableNames = append(g.droppedTableNames, table.name)
 		}
 	}
 
@@ -781,6 +789,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	if g.mode == GeneratorModePostgres {
 		for _, currentPriv := range g.currentPrivileges {
+			if g.isPrivilegeOnRemovedTable(currentPriv) {
+				continue
+			}
 			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
 				// Skip grantees whose privileges are not managed (manage.privilege
@@ -5281,6 +5292,27 @@ func (g *Generator) findCommentByObject(comments []*Comment, targetComment *pars
 		}
 	}
 	return nil
+}
+
+// isPrivilegeOnRemovedTable checks if a privilege belongs to a table that this run
+// drops or renames away. PostgreSQL removes privileges together with the table and
+// carries them over on a rename, so no REVOKE is needed for either.
+func (g *Generator) isPrivilegeOnRemovedTable(priv *GrantPrivilege) bool {
+	for _, renamed := range g.renamedTableNames {
+		if g.qualifiedNamesEqual(priv.tableName, renamed) {
+			return true
+		}
+	}
+	// Without enable_drop the DROP TABLE is only commented out and the table stays.
+	if !g.config.EnableDrop {
+		return false
+	}
+	for _, dropped := range g.droppedTableNames {
+		if g.qualifiedNamesEqual(priv.tableName, dropped) {
+			return true
+		}
+	}
+	return false
 }
 
 // isCommentOnDroppedTable checks if a comment belongs to a table that has been dropped.

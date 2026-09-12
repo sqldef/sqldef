@@ -276,3 +276,23 @@ ManagePrivilegeViewOwner:
   up: |
     ALTER TABLE v_users OWNER TO app_user;
   down: ""
+
+ManagePrivilegeDropTableWithoutEnableDrop:
+  # enable_drop: false only comments the DROP out, so the table survives and its
+  # privileges stay revocable.
+  enable_drop: false
+  manage:
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE audit_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE audit_logs TO readonly_user;
+  desired: ""
+  up: |
+    -- Skipped: DROP TABLE "public"."audit_logs";
+    REVOKE SELECT ON TABLE "public"."audit_logs" FROM "readonly_user";
+  down: |
+    GRANT SELECT ON TABLE "public"."audit_logs" TO "readonly_user";
