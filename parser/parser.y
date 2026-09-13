@@ -6954,10 +6954,6 @@ function_call_generic:
   {
     $$ = &FuncExpr{Name: $1}
   }
-| sql_id '(' select_expression_list ')'
-  {
-    $$ = &FuncExpr{Name: $1, Exprs: $3}
-  }
 | sql_id '(' DISTINCT select_expression_list ')'
   {
     $$ = &FuncExpr{Name: $1, Distinct: true, Exprs: $4}
