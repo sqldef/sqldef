@@ -1892,16 +1892,16 @@ func TestFunctionCallForms(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{name: "no arguments", expr: "f()", expected: "f() from t"},
-		{name: "arguments", expr: "f(x)", expected: "f(x) from t"},
+		{name: "no arguments", expr: "f()", expected: "f()"},
+		{name: "arguments", expr: "f(x)", expected: "f(x)"},
 		{name: "distinct arguments", expr: "f(DISTINCT x)", expected: "f(distinct x)"},
 		{name: "no arguments with over", expr: "f() OVER ()", expected: "f() over()"},
 		{name: "arguments with over", expr: "f(x) OVER ()", expected: "f(x) over()"},
 		{name: "arguments with partition by", expr: "f(x) OVER (PARTITION BY y)", expected: "f(x) over(partition by y)"},
 		{name: "within group", expr: "f(x) WITHIN GROUP (ORDER BY y)", expected: "f(x) within group( order by y asc)"},
-		{name: "lag without over", expr: "LAG(x)", expected: "lag(x) from t"},
+		{name: "lag without over", expr: "LAG(x)", expected: "lag(x)"},
 		{name: "lag with over", expr: "LAG(x) OVER (ORDER BY y)", expected: "lag(x) over( order by y asc)"},
-		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x) from t"},
+		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x)"},
 	}
 
 	for _, tc := range testCases {
@@ -1910,8 +1910,9 @@ func TestFunctionCallForms(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse failed: %v", err)
 			}
-			if got := String(stmt); !strings.Contains(got, tc.expected) {
-				t.Errorf("String() = %q, want it to contain %q", got, tc.expected)
+			want := "select " + tc.expected + " from t"
+			if got := String(stmt); !strings.Contains(got, want) {
+				t.Errorf("String() = %q, want it to contain %q", got, want)
 			}
 		})
 	}
