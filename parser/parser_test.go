@@ -1902,6 +1902,7 @@ func TestFunctionCallForms(t *testing.T) {
 		{name: "lag without over", expr: "LAG(x)", expected: "lag(x)"},
 		{name: "lag with over", expr: "LAG(x) OVER (ORDER BY y)", expected: "lag(x) over( order by y asc)"},
 		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x)"},
+		{name: "schema-qualified", expr: "s.f(x)", expected: "s.f(x)"},
 	}
 
 	for _, tc := range testCases {
