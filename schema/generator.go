@@ -2675,7 +2675,7 @@ func (g *Generator) areSameFunctionSignature(a, b *Function) bool {
 	if strings.EqualFold(a.returnType, "TABLE") || strings.EqualFold(b.returnType, "TABLE") {
 		return false
 	}
-	if normalizePGFunctionType(a.returnType) != normalizePGFunctionType(b.returnType) || len(a.args) != len(b.args) {
+	if !g.areSameFunctionReturnType(a, b) || len(a.args) != len(b.args) {
 		return false
 	}
 	for i := range a.args {
@@ -2738,6 +2738,12 @@ var pgFunctionTypeAliases = map[string]string{
 func normalizePGFunctionType(typ string) string {
 	t := strings.ToLower(strings.TrimSpace(typ))
 	t = strings.Join(strings.Fields(t), " ")
+	// SETOF modifies the return type rather than being part of the type name,
+	// so it has to be stripped before the alias lookup.
+	prefix := ""
+	if rest, ok := strings.CutPrefix(t, "setof "); ok {
+		prefix, t = "setof ", rest
+	}
 	var suffix strings.Builder
 	for strings.HasSuffix(t, "[]") {
 		t = strings.TrimSpace(strings.TrimSuffix(t, "[]"))
@@ -2746,7 +2752,7 @@ func normalizePGFunctionType(typ string) string {
 	if canonical, ok := pgFunctionTypeAliases[t]; ok {
 		t = canonical
 	}
-	return t + suffix.String()
+	return prefix + t + suffix.String()
 }
 
 // dropFunctionDDL renders DROP FUNCTION for current. In PostgreSQL the
@@ -2786,9 +2792,47 @@ func insertOrReplaceIntoCreateFunction(stmt string) (string, bool) {
 	return stmt, false
 }
 
+// areSameFunctionReturnType compares two return types the way the target
+// dialect resolves them. Only PostgreSQL gets the alias normalization and the
+// derivation from output parameters; other dialects keep the raw comparison
+// because pgFunctionTypeAliases is not the right canonicalization for them.
+func (g *Generator) areSameFunctionReturnType(a, b *Function) bool {
+	if g.mode != GeneratorModePostgres {
+		return a.returnType == b.returnType
+	}
+	return normalizePGFunctionType(pgFunctionReturnType(a)) == normalizePGFunctionType(pgFunctionReturnType(b))
+}
+
+// pgFunctionReturnType returns the return type to compare against. PostgreSQL
+// lets CREATE FUNCTION omit RETURNS when the function has output parameters and
+// derives the type from them, while pg_get_functiondef always prints it
+// explicitly, so the derivation has to happen on the desired side. SETOF cannot
+// be written without RETURNS, so it never takes part in the derivation.
+func pgFunctionReturnType(f *Function) string {
+	if f.returnType != "" {
+		return f.returnType
+	}
+	outCount, lastOutType := 0, ""
+	for _, arg := range f.args {
+		switch functionArgMode(arg.mode) {
+		case "OUT", "INOUT":
+			outCount++
+			lastOutType = arg.typ
+		}
+	}
+	switch outCount {
+	case 0:
+		return ""
+	case 1:
+		return lastOutType
+	default:
+		return "record"
+	}
+}
+
 func (g *Generator) areSameFunctionDefinition(a, b *Function) bool {
 	// Compare function properties
-	if a.returnType != b.returnType ||
+	if !g.areSameFunctionReturnType(a, b) ||
 		a.body != b.body ||
 		a.language != b.language {
 		return false

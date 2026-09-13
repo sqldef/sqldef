@@ -518,7 +518,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <functionArg> function_arg
 %type <str> function_arg_mode_opt
 %type <expr> function_arg_default_opt
-%type <str> function_return_type function_option set_value_list set_value
+%type <str> function_return_type returns_opt function_option set_value_list set_value
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
@@ -1524,51 +1524,51 @@ create_statement:
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
-/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 1: RETURNS type AS body LANGUAGE lang */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type AS STRING LANGUAGE reserved_sql_id function_options_opt
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 1: [RETURNS type] AS body LANGUAGE lang */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' returns_opt AS STRING LANGUAGE reserved_sql_id function_options_opt
   {
     $$ = &DDL{
       Action: CreateFunction,
       Function: &Function{
         Name: $4,
         Args: $6,
-        ReturnType: $9,
-        Body: $11,
-        Language: $13.Name,
+        ReturnType: $8,
+        Body: $10,
+        Language: $12.Name,
         OrReplace: $2 != "",
-        Options: $14,
+        Options: $13,
       },
     }
   }
-/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 2: RETURNS type LANGUAGE lang AS body (pg_get_functiondef format) */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE reserved_sql_id AS STRING function_options_opt
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 2: [RETURNS type] LANGUAGE lang AS body (pg_get_functiondef format) */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' returns_opt LANGUAGE reserved_sql_id AS STRING function_options_opt
   {
     $$ = &DDL{
       Action: CreateFunction,
       Function: &Function{
         Name: $4,
         Args: $6,
-        ReturnType: $9,
+        ReturnType: $8,
+        Body: $12,
+        Language: $10.Name,
+        OrReplace: $2 != "",
+        Options: $13,
+      },
+    }
+  }
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 3: [RETURNS type] LANGUAGE lang options AS body (pg_get_functiondef format with options before AS) */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' returns_opt LANGUAGE reserved_sql_id function_options AS STRING
+  {
+    $$ = &DDL{
+      Action: CreateFunction,
+      Function: &Function{
+        Name: $4,
+        Args: $6,
+        ReturnType: $8,
         Body: $13,
-        Language: $11.Name,
+        Language: $10.Name,
         OrReplace: $2 != "",
-        Options: $14,
-      },
-    }
-  }
-/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 3: RETURNS type LANGUAGE lang options AS body (pg_get_functiondef format with options before AS) */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE reserved_sql_id function_options AS STRING
-  {
-    $$ = &DDL{
-      Action: CreateFunction,
-      Function: &Function{
-        Name: $4,
-        Args: $6,
-        ReturnType: $9,
-        Body: $14,
-        Language: $11.Name,
-        OrReplace: $2 != "",
-        Options: $12,
+        Options: $11,
       },
     }
   }
@@ -4362,6 +4362,11 @@ function_arg:
   function_arg_mode_opt sql_id column_type array_opt function_arg_default_opt
   {
     typeStr := $3.Type
+    // The timezone flag is part of the type name, and the return type is
+    // derived from it when RETURNS is omitted, so it must not be dropped.
+    if $3.Timezone {
+      typeStr += " with time zone"
+    }
     if bool($4) {
       typeStr += "[]"
     }
@@ -4375,6 +4380,9 @@ function_arg:
 | function_arg_mode_opt column_type array_opt function_arg_default_opt
   {
     typeStr := $2.Type
+    if $2.Timezone {
+      typeStr += " with time zone"
+    }
     if bool($3) {
       typeStr += "[]"
     }
@@ -4415,6 +4423,17 @@ function_arg_default_opt:
     $$ = $2
   }
 | '=' expression
+  {
+    $$ = $2
+  }
+
+/* PostgreSQL derives the return type from the OUT/INOUT parameters when RETURNS
+   is omitted, so the clause is optional. */
+returns_opt:
+  {
+    $$ = ""
+  }
+| RETURNS function_return_type
   {
     $$ = $2
   }
