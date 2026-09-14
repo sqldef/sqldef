@@ -695,6 +695,15 @@ func TestTypeKeywordsAsIndexColumns(t *testing.T) {
 	}
 }
 
+// TestLanguageAsUnquotedIdentifier tests that LANGUAGE can be used as an unquoted index column.
+// PostgreSQL classifies it as non-reserved, so the generic parser must accept that form.
+func TestLanguageAsUnquotedIdentifier(t *testing.T) {
+	sql := `CREATE UNIQUE INDEX index_translations_on_tenant_id_and_language ON translations USING btree (tenant_id, language)`
+	if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+		t.Fatalf("unquoted language in index column list should parse: %v", err)
+	}
+}
+
 func TestAutoRandom(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -850,6 +859,16 @@ func TestDefaultFunctionExpressions(t *testing.T) {
 			sql:  "CREATE TABLE t (created_at timestamp DEFAULT now())",
 			mode: ParserModePostgres,
 		},
+		{
+			name: "SQL Server NEWID default",
+			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWID())",
+			mode: ParserModeMssql,
+		},
+		{
+			name: "SQL Server NEWSEQUENTIALID default",
+			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWSEQUENTIALID())",
+			mode: ParserModeMssql,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -898,6 +917,34 @@ func TestSQLiteTableOptions(t *testing.T) {
 			got := String(tree)
 			if got != tc.want {
 				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPragmaAndDeleteStatements covers the non-DDL statements that some schema
+// exports (e.g. Cloudflare D1) interleave with the DDL. They parse instead of
+// erroring; the schema layer drops them.
+func TestPragmaAndDeleteStatements(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{"pragma bare", "PRAGMA foreign_keys", "pragma foreign_keys"},
+		{"pragma assignment", "PRAGMA defer_foreign_keys = TRUE", "pragma defer_foreign_keys"},
+		{"pragma call", "PRAGMA table_info('t')", "pragma table_info"},
+		{"delete from", "DELETE FROM sqlite_sequence", "delete from sqlite_sequence"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeSQLite3)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			if got := String(tree); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -1749,6 +1796,40 @@ func TestAnyAllOperandParens(t *testing.T) {
 	}
 }
 
+func TestArrayElementColumnReference(t *testing.T) {
+	// PostgreSQL lets ARRAY[...] elements be column references. String() drops the
+	// quoting because Ident.Format ignores Ident.Quoted, so both cases render the
+	// same here; preserving the quotes is the generator's job.
+	testCases := []struct {
+		name     string
+		sql      string
+		expected string
+	}{
+		{
+			name:     "unquoted column reference",
+			sql:      "CREATE TABLE t (status text, fallback text, CHECK (status = ANY (ARRAY[fallback, 'pending'])))",
+			expected: "status = ANY(ARRAY[fallback, 'pending'])",
+		},
+		{
+			name:     "quoted column reference",
+			sql:      `CREATE TABLE t ("Status" text, "Fallback" text, CHECK ("Status" = ANY (ARRAY["Fallback", 'pending'])))`,
+			expected: "Status = ANY(ARRAY[Fallback, 'pending'])",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			if got := String(stmt); !strings.Contains(got, tc.expected) {
+				t.Errorf("String() = %q, want it to contain %q", got, tc.expected)
+			}
+		})
+	}
+}
+
 func TestParenthesizedSetOperationOperands(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -1904,4 +1985,51 @@ SELECT id FROM items`, ParserModePostgres)
 	if inner.Limit == nil {
 		t.Error("inner.Limit is nil")
 	}
+}
+
+func TestParenthesizedComparisonAsComparisonOperand(t *testing.T) {
+	// PostgreSQL renders an "if and only if" invariant between two columns in
+	// this shape, and pg_get_constraintdef() returns it verbatim, so it comes
+	// back through --export.
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "both operands parenthesized",
+			sql:  "CREATE TABLE t (a text, b int, CONSTRAINT c CHECK ((a = 'x'::text) = (b IS NOT NULL)))",
+		},
+		{
+			name: "left operand parenthesized",
+			sql:  "CREATE TABLE t (a text, flag bool, CONSTRAINT c CHECK ((a = 'x'::text) = flag))",
+		},
+		{
+			name: "right operand parenthesized",
+			sql:  "CREATE TABLE t (a text, flag bool, CONSTRAINT c CHECK (flag = (a = 'x'::text)))",
+		},
+		{
+			name: "both operands parenthesized inequalities",
+			sql:  "CREATE TABLE t (b int, CONSTRAINT c CHECK ((b > 1) = (b < 5)))",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseDDL(tc.sql, ParserModePostgres); err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+		})
+	}
+
+	t.Run("a parenthesized condition is still a ParenExpr", func(t *testing.T) {
+		sql := "CREATE TABLE t (a text, CONSTRAINT c CHECK ((a = 'x'::text)))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		check := stmt.(*DDL).TableSpec.Checks[0]
+		if _, ok := check.Where.Expr.(*ParenExpr); !ok {
+			t.Errorf("expected *ParenExpr, got %T", check.Where.Expr)
+		}
+	})
 }

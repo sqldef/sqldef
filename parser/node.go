@@ -102,6 +102,7 @@ func (*If) iStatement()              {}
 func (*DDL) iStatement()             {}
 func (*Show) iStatement()            {}
 func (*Use) iStatement()             {}
+func (*Pragma) iStatement()          {}
 func (*Begin) iStatement()           {}
 func (*Commit) iStatement()          {}
 func (*Rollback) iStatement()        {}
@@ -1380,6 +1381,17 @@ func (node *Use) Format(buf *nodeBuffer) {
 	}
 }
 
+// Pragma represents a PRAGMA statement. sqldef does not manage pragmas; the node
+// exists so PRAGMA lines in a schema export can be parsed and then ignored.
+type Pragma struct {
+	Name Ident
+}
+
+// Format formats the node.
+func (node *Pragma) Format(buf *nodeBuffer) {
+	buf.Printf("pragma %v", node.Name)
+}
+
 // Begin represents a Begin statement.
 type Begin struct{}
 
@@ -1471,6 +1483,7 @@ type Trigger struct {
 	TableName TableName
 	Time      string
 	Event     []TriggerEvent
+	ForEach   string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
 	When      Expr
 	Body      []Statement
 }

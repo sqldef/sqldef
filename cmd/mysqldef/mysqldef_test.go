@@ -330,6 +330,24 @@ func TestMysqldefConfigInlineEnableDrop(t *testing.T) {
 	assert.Equal(t, expectedOutput, outConfigInline)
 }
 
+func TestMysqldefDisableDdlTransactionFlag(t *testing.T) {
+	resetTestDatabase()
+	ddl := "CREATE TABLE users (\n  name varchar(40)\n);\n"
+	tu.WriteFile("schema.sql", ddl)
+
+	out := mustExecuteMySQLDef(t, "mysqldef_test", "--disable-ddl-transaction", "--file", "schema.sql")
+	assert.Equal(t, applyPrefix+ddl, out)
+}
+
+func TestMysqldefConfigInlineDisableDdlTransaction(t *testing.T) {
+	resetTestDatabase()
+	ddl := "CREATE TABLE users (\n  name varchar(40)\n);\n"
+	tu.WriteFile("schema.sql", ddl)
+
+	out := mustExecuteMySQLDef(t, "mysqldef_test", "--config-inline", "disable_ddl_transaction: true", "--file", "schema.sql")
+	assert.Equal(t, applyPrefix+ddl, out)
+}
+
 func TestMysqldefSkipView(t *testing.T) {
 	resetTestDatabase()
 
@@ -522,6 +540,20 @@ func TestMysqldefHelp(t *testing.T) {
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
+}
+
+func TestParseOptionsDisableDdlTransactionFlag(t *testing.T) {
+	dbConfig, options := parseOptions([]string{"testdb", "--export", "--disable-ddl-transaction"})
+
+	assert.True(t, dbConfig.DisableDdlTransaction)
+	assert.True(t, options.Config.DisableDdlTransaction)
+}
+
+func TestParseOptionsDisableDdlTransactionFlagOverridesConfig(t *testing.T) {
+	dbConfig, options := parseOptions([]string{"testdb", "--export", "--config-inline", "disable_ddl_transaction: false", "--disable-ddl-transaction"})
+
+	assert.True(t, dbConfig.DisableDdlTransaction)
+	assert.True(t, options.Config.DisableDdlTransaction)
 }
 
 // waitForMySQL waits for MySQL to be ready for connections with retry logic.

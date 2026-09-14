@@ -293,7 +293,7 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 // In legacy managed_roles mode it returns the role list (SQL-side filtering);
 // with manage.privilege it returns NULL so every grantee is fetched and
 // filtered in Go via the regexp rules (isExportedGrantee).
-func (d *PostgresDatabase) managedGranteeArgs() interface{} {
+func (d *PostgresDatabase) managedGranteeArgs() any {
 	if d.generatorConfig.ManagePrivileges != nil {
 		return pq.Array([]string(nil))
 	}

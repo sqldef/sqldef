@@ -831,3 +831,23 @@ CreateIndexOnColumnNamedIndex:
     CREATE INDEX idx_ai_statements_user_reply_index ON public.ai_statements (user_id, reply_id, index);
   down: |
     DROP INDEX public.idx_ai_statements_user_reply_index;
+
+CreateIndexOnColumnNamedLanguage:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE translations (
+      id bigint NOT NULL,
+      tenant_id bigint NOT NULL,
+      language character varying NOT NULL
+    );
+  desired: |
+    CREATE TABLE translations (
+      id bigint NOT NULL,
+      tenant_id bigint NOT NULL,
+      language character varying NOT NULL
+    );
+    CREATE UNIQUE INDEX index_translations_on_tenant_id_and_language ON translations USING btree (tenant_id, language);
+  up: |
+    CREATE UNIQUE INDEX index_translations_on_tenant_id_and_language ON public.translations USING btree (tenant_id, language);
+  down: |
+    DROP INDEX public.index_translations_on_tenant_id_and_language;

@@ -108,6 +108,32 @@ CREATE TABLE Users (Id int);  -- refers to lowercase "users"
 PSQLDEF_PARSER=generic psqldef mydb --dry-run < schema.sql
 ```
 
+### 4. Explicit `FOR EACH` clause required for `CREATE TRIGGER` (psqldef)
+
+**Change**: `CREATE TRIGGER` without a `FOR EACH` clause is now rejected. Write `FOR EACH ROW` or `FOR EACH STATEMENT` explicitly.
+
+**Why this matters**: An omitted clause means different things to PostgreSQL and to v3. PostgreSQL defaults it to `FOR EACH STATEMENT`, while v3 created a row-level trigger:
+
+```sql
+-- Your schema file
+CREATE TRIGGER notify_change AFTER INSERT ON users EXECUTE FUNCTION notify_func();
+
+-- v3 output (does not match PostgreSQL's own default)
+CREATE TRIGGER notify_change AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION notify_func();
+```
+
+Adopting PostgreSQL's default in v4 would silently drop and recreate every such trigger as a statement-level one. A statement-level trigger fires once per statement and its function cannot reference `NEW` or `OLD`, so a function written for a row-level trigger would start failing at runtime. v4 rejects the ambiguous form instead of picking either meaning:
+
+```
+error: CREATE TRIGGER requires a FOR EACH clause: notify_change
+```
+
+**Migration**: Add the clause to every `CREATE TRIGGER` in your schema file. v3 warns for each trigger that omits it, and `--export` always writes the clause, so exported schemas need no change. To keep the v3 behavior, write `FOR EACH ROW`:
+
+```sql
+CREATE TRIGGER notify_change AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION notify_func();
+```
+
 ## Migration Checklist
 
 Before upgrading to v4:
@@ -115,4 +141,5 @@ Before upgrading to v4:
 - [ ] Add `--apply` flag to all scripts and CI/CD pipelines
 - [ ] Test with `--config-inline 'legacy_ignore_quotes: false'` to preview the new quoting behavior
 - [ ] Test with `PSQLDEF_PARSER=generic` (for psqldef users)
+- [ ] Add an explicit `FOR EACH ROW` / `FOR EACH STATEMENT` clause to every `CREATE TRIGGER` in your schema file (for psqldef users)
 - [ ] If you have existing tables with mixed-case names created by v3, update your schema file to use quoted identifiers

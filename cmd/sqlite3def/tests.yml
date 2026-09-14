@@ -511,3 +511,11 @@ GeneratedColumnNoKeywordEquivalentToVirtual:
     );
   up: ""
   down: ""
+
+SimpleDeleteFrom:
+  current: |
+    DELETE FROM sqlite_sequence;
+
+PragmaStatement:
+  current: |
+    PRAGMA defer_foreign_keys=TRUE;

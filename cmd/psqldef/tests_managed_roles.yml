@@ -616,3 +616,45 @@ ManagedRolesSequenceOrphanRevoke:
     REVOKE USAGE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
   down: |
     GRANT USAGE ON SEQUENCE "public"."counters_n_seq" TO "app_user";
+
+ManagedRolesDropTable:
+  # A dropped table takes its privileges with it, so no REVOKE is emitted.
+  current: |
+    CREATE TABLE audit_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE audit_logs TO app_user;
+  desired: ""
+  managed_roles:
+    - app_user
+  up: |
+    DROP TABLE "public"."audit_logs";
+  down: |
+    CREATE TABLE audit_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE "public"."audit_logs" TO "app_user";
+
+ManagedRolesRenameTable:
+  # A rename carries the privileges over, so the old name is not revoked.
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE old_logs TO app_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE new_logs TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE "public"."old_logs" RENAME TO "new_logs";
+    GRANT SELECT ON TABLE "public"."new_logs" TO "app_user";
+  down: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE "public"."old_logs" TO "app_user";
+    DROP TABLE "public"."new_logs";

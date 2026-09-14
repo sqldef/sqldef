@@ -146,7 +146,7 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> UNION INTERSECT EXCEPT
 %token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
-%token <str> ROWID STRICT
+%token <str> ROWID STRICT PRAGMA
 %token <str> VALUES LAST_INSERT_ID
 %token <str> NEXT VALUE SHARE MODE
 %token <str> SQL_NO_CACHE SQL_CACHE
@@ -240,7 +240,7 @@ func setDDL(yylex any, ddl *DDL) {
  * shifting ')' over reducing productions marked with %prec LOWER_THAN_RPAREN.
  * This resolves conflicts in:
  * - value: INTEGRAL (vs length_opt: '(' INTEGRAL ')')
- * - expression: condition (vs condition: '(' condition ')')
+ * - expression: condition (vs row_tuple: '(' expression_list ')')
  * - select_expression_list reduction (vs function call completion)            */
 %nonassoc LOWER_THAN_RPAREN
 %left ')'
@@ -272,7 +272,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <str> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
-%token <str> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT INPUT
+%token <str> BEFORE AFTER EACH ROW STATEMENT SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT INPUT
 %token <str> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <str> PERIOD
@@ -366,7 +366,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <withClause> with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement pragma_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement drop_statement comment_statement
@@ -561,6 +561,8 @@ statement:
 | comment_statement
 | set_statement
 | use_statement
+| delete_statement
+| pragma_statement
 
 use_statement:
   USE sql_id
@@ -1265,7 +1267,7 @@ create_statement:
       },
     }
   }
-/* For PostgreSQL: CREATE TRIGGER ... FOR EACH ROW EXECUTE FUNCTION/PROCEDURE */
+/* For PostgreSQL: CREATE TRIGGER ... FOR EACH { ROW | STATEMENT } EXECUTE FUNCTION/PROCEDURE */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
   {
     $$ = &DDL{
@@ -1275,6 +1277,27 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
+        ForEach: "ROW",
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH STATEMENT EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        ForEach: "STATEMENT",
         Body: []Statement{
           &TriggerFuncExec{
             Keyword: "FUNCTION",
@@ -1294,6 +1317,7 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
+        ForEach: "ROW",
         Body: []Statement{
           &TriggerFuncExec{
             Keyword: "PROCEDURE",
@@ -1304,7 +1328,27 @@ create_statement:
       },
     }
   }
-/* For PostgreSQL: CREATE TRIGGER ... FOR EACH ROW WHEN (...) EXECUTE FUNCTION/PROCEDURE */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH STATEMENT EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        ForEach: "STATEMENT",
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
+          },
+        },
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... FOR EACH { ROW | STATEMENT } WHEN (...) EXECUTE FUNCTION/PROCEDURE */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW WHEN '(' expression ')' EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
   {
     $$ = &DDL{
@@ -1314,6 +1358,28 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
+        ForEach: "ROW",
+        When: &ParenExpr{Expr: $13},
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $17,
+            Args: SelectExprsToExprs($19),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH STATEMENT WHEN '(' expression ')' EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        ForEach: "STATEMENT",
         When: &ParenExpr{Expr: $13},
         Body: []Statement{
           &TriggerFuncExec{
@@ -1334,6 +1400,28 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
+        ForEach: "ROW",
+        When: &ParenExpr{Expr: $13},
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $17,
+            Args: SelectExprsToExprs($19),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH STATEMENT WHEN '(' expression ')' EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        ForEach: "STATEMENT",
         When: &ParenExpr{Expr: $13},
         Body: []Statement{
           &TriggerFuncExec{
@@ -2383,6 +2471,33 @@ delete_statement:
   {
     $$ = &Delete{Comments: Comments($2), Targets: $3, TableExprs: $5, Where: NewWhere(WhereStr, $6)}
   }
+
+// sqldef does not manage pragmas. This rule exists only so that schema exports
+// which emit PRAGMA lines (Cloudflare D1, for one) parse instead of erroring;
+// the statement is dropped by the caller.
+pragma_statement:
+  PRAGMA sql_id
+  {
+    $$ = &Pragma{Name: $2}
+  }
+| PRAGMA sql_id '=' pragma_value
+  {
+    $$ = &Pragma{Name: $2}
+  }
+| PRAGMA sql_id '(' pragma_value ')'
+  {
+    $$ = &Pragma{Name: $2}
+  }
+
+pragma_value:
+  sql_id
+| STRING
+| INTEGRAL
+| FLOAT
+| ON
+| OFF
+| TRUE
+| FALSE
 
 from_or_using:
   FROM {}
@@ -3979,14 +4094,6 @@ default_value_expression:
 | function_call_conflict
   {
     $$ = $1
-  }
-| NEWID '(' ')'
-  {
-    $$ = &FuncExpr{Name: NewIdent($1, false)}
-  }
-| NEWSEQUENTIALID '(' ')'
-  {
-    $$ = &FuncExpr{Name: NewIdent($1, false)}
   }
 | typed_literal
   {
@@ -6485,10 +6592,6 @@ condition:
   {
     $$ = &UpdateFuncExpr{Name: nil}
   }
-| '(' condition ')'
-  {
-    $$ = &ParenExpr{Expr: $2}
-  }
 
 is_suffix:
   NULL
@@ -8087,6 +8190,10 @@ array_element:
   {
     $$ = $2
   }
+| column_name
+  {
+    $$ = $1
+  }
 
 bool_option_name_list:
   bool_option_name
@@ -8302,6 +8409,7 @@ non_reserved_keyword:
 | SAFE
 | SQL
 | TYPE
+| STATEMENT
 | STATUS
 | UNSAFE
 | VARIABLES
@@ -8337,6 +8445,7 @@ non_reserved_keyword:
 | ENDS
 | TRIGGER
 | INDEX
+| LANGUAGE
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
 // like PRIMARY KEY / FOREIGN KEY / VECTOR KEY work in both dialects while
