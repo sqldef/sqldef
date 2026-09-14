@@ -312,7 +312,7 @@ func normalizeTrimFunction(e *parser.FuncExpr, exprs parser.SelectExprs) (parser
 	case 1:
 		return &parser.TrimExpr{Direction: direction, String: args[0]}, true
 	case 2:
-		return &parser.TrimExpr{Direction: direction, TrimChar: args[0], String: args[1]}, true
+		return &parser.TrimExpr{Direction: direction, TrimChar: args[1], String: args[0]}, true
 	default:
 		return nil, false
 	}

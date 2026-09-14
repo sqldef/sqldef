@@ -2589,8 +2589,8 @@ func (node *SubstrExpr) Format(buf *nodeBuffer) {
 // TrimExpr represents a TRIM expression.
 type TrimExpr struct {
 	Direction string
-	TrimChar Expr
-	String   Expr
+	TrimChar  Expr
+	String    Expr
 }
 
 // Format formats the node.

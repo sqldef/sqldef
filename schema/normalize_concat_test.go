@@ -151,9 +151,27 @@ func TestNormalizeTrimFunction(t *testing.T) {
 			name: "btrim with trim character",
 			function: &parser.FuncExpr{
 				Name:  parser.NewIdent("btrim", false),
-				Exprs: parser.SelectExprs{column("chars"), column("value")},
+				Exprs: parser.SelectExprs{column("value"), column("chars")},
 			},
 			want:      "trim(chars from value)",
+			wantMatch: true,
+		},
+		{
+			name: "ltrim with trim character",
+			function: &parser.FuncExpr{
+				Name:  parser.NewIdent("ltrim", false),
+				Exprs: parser.SelectExprs{column("value"), column("chars")},
+			},
+			want:      "trim(leading chars from value)",
+			wantMatch: true,
+		},
+		{
+			name: "rtrim with trim character",
+			function: &parser.FuncExpr{
+				Name:  parser.NewIdent("rtrim", false),
+				Exprs: parser.SelectExprs{column("value"), column("chars")},
+			},
+			want:      "trim(trailing chars from value)",
 			wantMatch: true,
 		},
 		{
