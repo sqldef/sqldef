@@ -1012,6 +1012,14 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			}
 		}
 
+		// UNUSED words are MySQL keywords that PostgreSQL does not reserve (e.g. year_month),
+		// so lex them as plain identifiers there. BOTH, LEADING and TRAILING are the exceptions.
+		if keywordID == UNUSED && tkn.mode == ParserModePostgres &&
+			loweredStr != "both" && loweredStr != "leading" && loweredStr != "trailing" {
+			tkn.lastIdentifierQuoted = false
+			return ID, loweredStr
+		}
+
 		// keyword is case-insensitive
 		return keywordID, loweredStr
 	}
