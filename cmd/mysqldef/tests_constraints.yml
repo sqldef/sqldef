@@ -11,7 +11,7 @@ ConstraintCheck:
       CONSTRAINT `books_type_chk` CHECK (`type` IN ('manga', 'novel'))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
-TrimFunctionCheckConstraintsKeepArgumentOrder:
+TrimFunctionCheckConstraints:
   current: |
     CREATE TABLE `test` (
       `t1` varchar(255) NOT NULL,

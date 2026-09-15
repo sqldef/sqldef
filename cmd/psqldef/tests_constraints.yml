@@ -350,7 +350,7 @@ CheckConstraint:
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_t4_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_d1_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_d2_check";
-TrimFunctionCheckConstraintsKeepArgumentOrder:
+TrimFunctionCheckConstraints:
   current: |
     CREATE TABLE test (
       t1 varchar(255) NOT NULL,

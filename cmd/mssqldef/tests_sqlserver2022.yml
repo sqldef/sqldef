@@ -209,7 +209,7 @@ SqlServerForXmlValueAndReservedIdentifiers:
     WHERE OperationInput.IsDeleted = 0;
   legacy_ignore_quotes: false
 
-TrimFunctionCheckConstraintsKeepArgumentOrder:
+TrimFunctionCheckConstraints:
   current: |
     CREATE TABLE test (
       t1 varchar(255) NOT NULL,
