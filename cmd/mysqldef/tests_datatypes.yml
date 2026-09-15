@@ -80,6 +80,35 @@ JsonColumnWithCharsetCastDefault:
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
   min_version: '8.0.13'
+TextColumnWithParenthesizedStringDefault:
+  # MySQL rejects a bare literal DEFAULT on TEXT/BLOB/JSON/GEOMETRY columns
+  # (error 1101) and only accepts it via the parenthesized "expression default"
+  # form, even for a plain string literal. DEFAULT ('foo') must survive as-is
+  # instead of being flattened to the unsupported DEFAULT 'foo'.
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE hello_text (
+      id int NOT NULL AUTO_INCREMENT,
+      note text NOT NULL DEFAULT ('foo'),
+      PRIMARY KEY (id)
+    );
+  min_version: '8.0.13'
+AddColumnWithParenthesizedStringDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hello_text (
+      id int NOT NULL
+    );
+  desired: |
+    CREATE TABLE hello_text (
+      id int NOT NULL,
+      note text NOT NULL DEFAULT ('foo')
+    );
+  up: |
+    ALTER TABLE hello_text ADD COLUMN note text NOT NULL DEFAULT('foo') AFTER id;
+  down: |
+    ALTER TABLE hello_text DROP COLUMN `note`;
+  min_version: '8.0.13'
 CollateOnColumn:
   flavor: "!mariadb"
   desired: |

@@ -10863,7 +10863,11 @@ yydefault:
 	case 500:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.expr = yyDollar[2].expr
+			// Preserve the parentheses instead of collapsing them away: MySQL requires
+			// the explicit DEFAULT (expr) form for BLOB/TEXT/JSON/GEOMETRY columns, even
+			// when expr is a plain literal, so losing this wrapper here would make it
+			// impossible for the generator to tell DEFAULT 'foo' and DEFAULT ('foo') apart.
+			yyVAL.expr = &ParenExpr{Expr: yyDollar[2].expr}
 		}
 	case 501:
 		yyDollar = yyS[yypt-5 : yypt+1]
