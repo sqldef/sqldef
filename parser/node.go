@@ -2601,17 +2601,26 @@ func (node *SubstrExpr) Format(buf *nodeBuffer) {
 
 // TrimExpr represents a TRIM expression.
 type TrimExpr struct {
-	TrimChar Expr
-	String   Expr
+	Direction string
+	TrimChar  Expr
+	String    Expr
 }
 
 // Format formats the node.
 func (node *TrimExpr) Format(buf *nodeBuffer) {
-	if node.TrimChar == nil {
+	direction := strings.ToLower(node.Direction)
+	if direction == "" && node.TrimChar == nil {
 		buf.Printf("trim(%v)", node.String)
 		return
 	}
-	buf.Printf("trim(%v from %v)", node.TrimChar, node.String)
+	buf.Printf("trim(")
+	if direction != "" {
+		buf.Printf("%s ", direction)
+	}
+	if node.TrimChar != nil {
+		buf.Printf("%v ", node.TrimChar)
+	}
+	buf.Printf("from %v)", node.String)
 }
 
 // MethodCallExpr represents a SQL Server method call on an expression.

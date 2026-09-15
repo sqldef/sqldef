@@ -279,6 +279,45 @@ func normalizeCheckExprForOutput(expr parser.Expr, mode GeneratorMode) parser.Ex
 	return normalizeCheckExprWith(expr, mode, false)
 }
 
+// normalizeTrimFunction canonicalizes parser implementations that represent TRIM
+// or PostgreSQL's trim-family functions as a function call. PostgreSQL parser
+// implementations may emit these functions either qualified or unqualified, so
+// only non-pg_catalog qualified functions are excluded.
+func normalizeTrimFunction(e *parser.FuncExpr, exprs parser.SelectExprs) (parser.Expr, bool) {
+	name := strings.ToLower(e.Name.Name)
+	direction := ""
+	switch name {
+	case "trim", "btrim":
+	case "ltrim":
+		direction = "leading"
+	case "rtrim":
+		direction = "trailing"
+	default:
+		return nil, false
+	}
+	if !e.Qualifier.IsEmpty() && !strings.EqualFold(e.Qualifier.Name, "pg_catalog") {
+		return nil, false
+	}
+
+	args := make([]parser.Expr, len(exprs))
+	for i, expr := range exprs {
+		aliased, ok := expr.(*parser.AliasedExpr)
+		if !ok {
+			return nil, false
+		}
+		args[i] = aliased.Expr
+	}
+
+	switch len(args) {
+	case 1:
+		return &parser.TrimExpr{Direction: direction, String: args[0]}, true
+	case 2:
+		return &parser.TrimExpr{Direction: direction, TrimChar: args[1], String: args[0]}, true
+	default:
+		return nil, false
+	}
+}
+
 // canonicalizeArrays sorts and deduplicates ANY/ALL array elements, which is wanted when
 // comparing but not when generating DDL.
 func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeArrays bool) parser.Expr {
@@ -359,6 +398,16 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
+	case *parser.TrimExpr:
+		direction := strings.ToLower(e.Direction)
+		if direction == "both" {
+			direction = ""
+		}
+		return &parser.TrimExpr{
+			Direction: direction,
+			TrimChar:  recur(e.TrimChar, mode),
+			String:    recur(e.String, mode),
+		}
 	case *parser.AndExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
 		left := recur(e.Left, mode)
@@ -425,6 +474,9 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			}
 			return arg
 		})
+		if normalized, ok := normalizeTrimFunction(e, normalizedExprs); ok {
+			return normalized
+		}
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
 			return atz
 		}

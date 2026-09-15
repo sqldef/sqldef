@@ -431,6 +431,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <empty> if_not_exists_opt
 %type <expr> when_expression_opt
 %type <str> reserved_keyword non_reserved_keyword col_name_keyword type_func_name_keyword key_kw
+%type <str> trim_direction
 %type <ident> sql_id reserved_sql_id extension_name, col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -7002,6 +7003,14 @@ function_call_keyword:
   {
     $$ = &TrimExpr{TrimChar: $3, String: $5}
   }
+| TRIM '(' trim_direction FROM expression ')'
+  {
+    $$ = &TrimExpr{Direction: $3, String: $5}
+  }
+| TRIM '(' trim_direction expression FROM expression ')'
+  {
+    $$ = &TrimExpr{Direction: $3, TrimChar: $4, String: $6}
+  }
 | TRIM '(' expression ')'
   {
     $$ = &TrimExpr{String: $3}
@@ -7094,6 +7103,19 @@ function_call_keyword:
 | YEAR '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewIdent("year", false), Exprs: $3}
+  }
+
+trim_direction:
+  UNUSED
+  {
+    direction := strings.ToLower($1)
+    switch direction {
+    case "both", "leading", "trailing":
+      $$ = direction
+    default:
+      yylex.Error(fmt.Sprintf("invalid TRIM direction %q", $1))
+      $$ = direction
+    }
   }
 
 /*

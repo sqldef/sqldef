@@ -103,6 +103,35 @@ CREATE TABLEE posts (id INT)": syntax error at line 2, column 8 near 'create'
 	}
 }
 
+func TestParseTrimWithExplicitBoth(t *testing.T) {
+	stmt, err := ParseDDL("CREATE TABLE test (t1 varchar(255), CHECK (TRIM(BOTH ' ' FROM t1)))", ParserModeMysql)
+	if err != nil {
+		t.Fatalf("ParseDDL failed: %v", err)
+	}
+
+	ddl, ok := stmt.(*DDL)
+	if !ok {
+		t.Fatalf("expected *DDL, got %T", stmt)
+	}
+	if len(ddl.TableSpec.Checks) != 1 {
+		t.Fatalf("expected one CHECK constraint, got %d", len(ddl.TableSpec.Checks))
+	}
+
+	trim, ok := ddl.TableSpec.Checks[0].Where.Expr.(*TrimExpr)
+	if !ok {
+		t.Fatalf("expected *TrimExpr, got %T", ddl.TableSpec.Checks[0].Where.Expr)
+	}
+	if trim.Direction != "both" {
+		t.Errorf("TRIM direction = %q, want %q", trim.Direction, "both")
+	}
+	if trim.TrimChar == nil {
+		t.Fatal("expected explicit trim character")
+	}
+	if got := String(trim); got != "trim(both ' ' from t1)" {
+		t.Errorf("TRIM expression = %q, want %q", got, "trim(both ' ' from t1)")
+	}
+}
+
 // TestIntervalColumnType tests INTERVAL support as both a column type and expression
 func TestIntervalColumnType(t *testing.T) {
 	testCases := []struct {
