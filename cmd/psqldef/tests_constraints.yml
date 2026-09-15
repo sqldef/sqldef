@@ -358,7 +358,10 @@ TrimFunctionCheckConstraintsKeepArgumentOrder:
       t3 varchar(255) NOT NULL,
       t4 varchar(255) NOT NULL,
       t5 varchar(255) NOT NULL,
-      t6 varchar(255) NOT NULL
+      t6 varchar(255) NOT NULL,
+      t7 varchar(255) NOT NULL,
+      t8 varchar(255) NOT NULL,
+      t9 varchar(255) NOT NULL
     );
   desired: |
     CREATE TABLE test (
@@ -368,12 +371,18 @@ TrimFunctionCheckConstraintsKeepArgumentOrder:
       t4 varchar(255) NOT NULL,
       t5 varchar(255) NOT NULL,
       t6 varchar(255) NOT NULL,
+      t7 varchar(255) NOT NULL,
+      t8 varchar(255) NOT NULL,
+      t9 varchar(255) NOT NULL,
       CONSTRAINT test_t1_check CHECK (btrim(t1) <> ''),
       CONSTRAINT test_t2_check CHECK (btrim(t2, 'xy') <> ''),
       CONSTRAINT test_t3_check CHECK (ltrim(t3) <> ''),
       CONSTRAINT test_t4_check CHECK (ltrim(t4, 'xy') <> ''),
       CONSTRAINT test_t5_check CHECK (rtrim(t5) <> ''),
-      CONSTRAINT test_t6_check CHECK (rtrim(t6, 'xy') <> '')
+      CONSTRAINT test_t6_check CHECK (rtrim(t6, 'xy') <> ''),
+      CONSTRAINT test_t7_check CHECK (trim(both from t7) <> ''),
+      CONSTRAINT test_t8_check CHECK (trim(leading from t8) <> ''),
+      CONSTRAINT test_t9_check CHECK (trim(trailing from t9) <> '')
     );
   up: |
     ALTER TABLE public.test ADD CONSTRAINT test_t1_check CHECK (trim(t1) <> '');
@@ -382,6 +391,9 @@ TrimFunctionCheckConstraintsKeepArgumentOrder:
     ALTER TABLE public.test ADD CONSTRAINT test_t4_check CHECK (trim(leading 'xy' from t4) <> '');
     ALTER TABLE public.test ADD CONSTRAINT test_t5_check CHECK (trim(trailing from t5) <> '');
     ALTER TABLE public.test ADD CONSTRAINT test_t6_check CHECK (trim(trailing 'xy' from t6) <> '');
+    ALTER TABLE public.test ADD CONSTRAINT test_t7_check CHECK (trim(t7) <> '');
+    ALTER TABLE public.test ADD CONSTRAINT test_t8_check CHECK (trim(leading from t8) <> '');
+    ALTER TABLE public.test ADD CONSTRAINT test_t9_check CHECK (trim(trailing from t9) <> '');
   down: |
     ALTER TABLE public.test DROP CONSTRAINT test_t1_check;
     ALTER TABLE public.test DROP CONSTRAINT test_t2_check;
@@ -389,6 +401,9 @@ TrimFunctionCheckConstraintsKeepArgumentOrder:
     ALTER TABLE public.test DROP CONSTRAINT test_t4_check;
     ALTER TABLE public.test DROP CONSTRAINT test_t5_check;
     ALTER TABLE public.test DROP CONSTRAINT test_t6_check;
+    ALTER TABLE public.test DROP CONSTRAINT test_t7_check;
+    ALTER TABLE public.test DROP CONSTRAINT test_t8_check;
+    ALTER TABLE public.test DROP CONSTRAINT test_t9_check;
   legacy_ignore_quotes: false
 CheckConstraintWithRowConstructor:
   desired: |

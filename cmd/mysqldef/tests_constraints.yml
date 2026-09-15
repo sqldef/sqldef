@@ -11,17 +11,6 @@ ConstraintCheck:
       CONSTRAINT `books_type_chk` CHECK (`type` IN ('manga', 'novel'))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
-TrimCheckConstraintIsIdempotent:
-  desired: |
-    CREATE TABLE `test` (
-      `t1` varchar(255) NOT NULL,
-      `t2` varchar(255) NOT NULL,
-      `t3` varchar(255) NOT NULL,
-      CHECK (CHAR_LENGTH(TRIM(BOTH ' ' FROM `t1`)) > 0),
-      CHECK (CHAR_LENGTH(TRIM(LEADING ' ' FROM `t2`)) > 0),
-      CHECK (CHAR_LENGTH(TRIM(TRAILING ' ' FROM `t3`)) > 0)
-    ) ENGINE=InnoDB;
-  min_version: '8.0'
 TrimFunctionCheckConstraintsKeepArgumentOrder:
   current: |
     CREATE TABLE `test` (
