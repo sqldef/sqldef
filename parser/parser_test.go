@@ -1633,6 +1633,13 @@ func TestExcludeWhereGrammar(t *testing.T) {
 	})
 }
 
+func TestAlterTableAddUniqueOnOnly(t *testing.T) {
+	sql := `ALTER TABLE ONLY public.t ADD CONSTRAINT c UNIQUE (a, b) DEFERRABLE INITIALLY DEFERRED`
+	if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+		t.Fatalf("ALTER TABLE ONLY UNIQUE should parse: %v", err)
+	}
+}
+
 func TestAlterTableAddExclusionGrammar(t *testing.T) {
 	// ALTER TABLE [ONLY] ... ADD CONSTRAINT ... EXCLUDE is the form pg_dump emits.
 	cases := []struct {

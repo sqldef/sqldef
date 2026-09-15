@@ -2142,6 +2142,26 @@ alter_statement:
       IndexCols: $11,
     }
   }
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id UNIQUE nulls_not_distinct_opt '(' index_column_list ')' deferrable_opt initially_deferred_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $5,
+      NewName: $5,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        NullsNotDistinct: bool($10),
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: $14 != nil && bool(*$14),
+          InitiallyDeferred: $15 != nil && bool(*$15),
+        },
+      },
+      IndexCols: $12,
+    }
+  }
 /* For SQL Server */
 | ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE CLUSTERED '(' index_column_list ')' index_option_opt index_partition_opt
   {
