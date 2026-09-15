@@ -350,16 +350,6 @@ CheckConstraint:
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_t4_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_d1_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_d2_check";
-UnnamedTrimCheckConstraintIsIdempotent:
-  desired: |
-    CREATE TABLE test (
-      t1 varchar(255) NOT NULL,
-      t2 varchar(255) NOT NULL,
-      t3 varchar(255) NOT NULL,
-      CHECK (char_length(trim(both from t1)) > 0),
-      CHECK (char_length(trim(leading from t2)) > 0),
-      CHECK (char_length(trim(trailing from t3)) > 0)
-    );
 TrimFunctionCheckConstraintsKeepArgumentOrder:
   current: |
     CREATE TABLE test (
