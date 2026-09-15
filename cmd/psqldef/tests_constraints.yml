@@ -1617,6 +1617,27 @@ AddUniqueConstraint:
     alter table dummy add constraint dummy_uniq unique (column_a, column_b);
   down: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+
+AddUniqueConstraintWithAlterTableOnly:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE dummy (
+      id bigint NOT NULL,
+      column_a bigint NOT NULL,
+      column_b bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE dummy (
+      id bigint NOT NULL,
+      column_a bigint NOT NULL,
+      column_b bigint NOT NULL
+    );
+    ALTER TABLE ONLY public.dummy ADD CONSTRAINT dummy_uniq UNIQUE (column_a, column_b) DEFERRABLE INITIALLY DEFERRED;
+  up: |
+    ALTER TABLE ONLY public.dummy ADD CONSTRAINT dummy_uniq UNIQUE (column_a, column_b) DEFERRABLE INITIALLY DEFERRED;
+  down: |
+    ALTER TABLE public.dummy DROP CONSTRAINT dummy_uniq;
+
 UniqueConstraintNotDeferrable:
   current: |
     create table dummy(
