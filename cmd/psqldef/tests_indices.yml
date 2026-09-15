@@ -851,3 +851,23 @@ CreateIndexOnColumnNamedLanguage:
     CREATE UNIQUE INDEX index_translations_on_tenant_id_and_language ON public.translations USING btree (tenant_id, language);
   down: |
     DROP INDEX public.index_translations_on_tenant_id_and_language;
+
+CreateIndexOnColumnNamedYearMonth:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE monthly_grants (
+      id bigint NOT NULL,
+      account_id bigint NOT NULL,
+      year_month text NOT NULL
+    );
+  desired: |
+    CREATE TABLE monthly_grants (
+      id bigint NOT NULL,
+      account_id bigint NOT NULL,
+      year_month text NOT NULL
+    );
+    CREATE INDEX idx_monthly_grants_account_month ON monthly_grants USING btree (account_id, year_month);
+  up: |
+    CREATE INDEX idx_monthly_grants_account_month ON public.monthly_grants USING btree (account_id, year_month);
+  down: |
+    DROP INDEX public.idx_monthly_grants_account_month;

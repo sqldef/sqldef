@@ -675,6 +675,34 @@ func TestLanguageAsUnquotedIdentifier(t *testing.T) {
 	}
 }
 
+// TestUnusedKeywordsAsUnquotedIdentifiers tests that MySQL keywords such as YEAR_MONTH and XOR
+// are plain identifiers only in PostgreSQL mode, where pg_get_indexdef writes them unquoted.
+func TestUnusedKeywordsAsUnquotedIdentifiers(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE TABLE public.t (id bigint NOT NULL, year_month text NOT NULL, xor integer)`,
+		`CREATE INDEX t_ym ON public.t USING btree (id, year_month)`,
+		`CREATE INDEX t_x ON public.t USING btree (id, xor)`,
+		`CREATE INDEX t_ym ON public.t USING btree (id) WHERE (year_month IS NOT NULL)`,
+		`ALTER TABLE public.t ADD CONSTRAINT t_ym UNIQUE (year_month)`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+			t.Errorf("unquoted year_month/xor should parse in PostgreSQL mode: %v", err)
+		}
+	}
+
+	for _, tc := range []struct {
+		sql  string
+		mode ParserMode
+	}{
+		{`CREATE TABLE t (id int, year_month text)`, ParserModeMysql},
+		{`CREATE TABLE t (id int, both int)`, ParserModePostgres},
+	} {
+		if _, err := ParseDDL(tc.sql, tc.mode); err == nil {
+			t.Errorf("reserved word as an unquoted column name should not parse: %s", tc.sql)
+		}
+	}
+}
+
 func TestAutoRandom(t *testing.T) {
 	testCases := []struct {
 		name      string
