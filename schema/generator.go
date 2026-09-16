@@ -5363,14 +5363,16 @@ func (g *Generator) renamePrivilegeColumn(privilege string, oldColumn, newColumn
 
 // parsePrivilegeColumnList splits the column list of a column-level privilege
 // into identifiers. It is the inverse of parser.FormatColumnPrivilege, so it
-// honors the double quotes that function adds to names that need them.
+// honors the double quotes that function adds to names that need them, and the
+// space that function writes after each separator is dropped rather than
+// trimmed off the name: a quoted name may legitimately begin or end with one.
 func parsePrivilegeColumnList(list string) []Ident {
 	var columns []Ident
 	var name strings.Builder
 	quoted := false
 	inQuotes := false
 	flush := func() {
-		columns = append(columns, Ident{Name: strings.TrimSpace(name.String()), Quoted: quoted})
+		columns = append(columns, Ident{Name: name.String(), Quoted: quoted})
 		name.Reset()
 		quoted = false
 	}
@@ -5384,6 +5386,8 @@ func parsePrivilegeColumnList(list string) []Ident {
 			quoted = true
 		case c == ',' && !inQuotes:
 			flush()
+		case c == ' ' && !inQuotes && name.Len() == 0:
+			// Padding written after the separator, not part of the name.
 		default:
 			name.WriteByte(c)
 		}
