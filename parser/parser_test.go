@@ -934,6 +934,11 @@ func TestSQLiteTableOptions(t *testing.T) {
 			"CREATE TABLE t (id integer PRIMARY KEY, data ANY) STRICT",
 			"create table t (\n\tid integer primary key,\n\tdata ANY\n) STRICT",
 		},
+		{
+			"table option keywords as column names",
+			"CREATE TABLE t (strict integer, without text, pragma text) STRICT",
+			"create table t (\n\tstrict integer,\n\twithout text,\n\tpragma text\n) STRICT",
+		},
 	}
 
 	for _, tc := range testCases {
