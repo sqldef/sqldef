@@ -1186,6 +1186,73 @@ ConstraintCheckNotInOnEnumColumnAdd:
     ALTER TABLE public.products ADD CHECK (status not in ('active', 'pending'));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+ConstraintCheckInColumnReferenceQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      "Status" text,
+      "Fallback" text
+    );
+  desired: |
+    CREATE TABLE products (
+      "Status" text,
+      "Fallback" text,
+      CONSTRAINT products_status_check CHECK ("Status" IN ("Fallback", 'pending'))
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK ("Status" in ("Fallback", 'pending'));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+ConstraintCheckOrChainOnEnumColumnAdd:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE products (
+      id serial,
+      status status_type
+    );
+  desired: |
+    CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE products (
+      id serial,
+      status status_type CHECK (status = 'active' OR status = 'inactive' OR status = 'pending')
+    );
+  up: |
+    ALTER TABLE public.products ADD CHECK (status = 'active' OR status = 'inactive' OR status = 'pending');
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+ConstraintCheckOrChainToInOnEnumColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE products (
+      id serial,
+      status status_type CHECK (status = 'active' OR status = 'inactive' OR status = 'pending')
+    );
+  desired: |
+    CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE products (
+      id serial,
+      status status_type CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  up: ""
+  down: ""
+ConstraintCheckInToOrChainOnEnumColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE products (
+      id serial,
+      status status_type CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  desired: |
+    CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE products (
+      id serial,
+      status status_type CHECK (status = 'active' OR status = 'inactive' OR status = 'pending')
+    );
+  up: ""
+  down: ""
 ConstraintCheckIsNotDistinctFrom:
   legacy_ignore_quotes: false
   desired: |

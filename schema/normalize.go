@@ -444,9 +444,13 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 
 		// Try to convert OR chain of equality comparisons to IN expression
 		// MSSQL transforms IN (a, b, c) to col=a OR col=b OR col=c
-		// We normalize back to IN for comparison
-		if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
-			return inExpr
+		// We normalize back to IN for comparison only; generated DDL keeps the chain as written.
+		// The folded IN goes through the same normalization as a written IN; otherwise the
+		// two spellings would not compare equal. Its operands are already normalized.
+		if canonicalizeArrays {
+			if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
+				return normalizeComparisonExpr(inExpr, mode, func(e parser.Expr, _ GeneratorMode) parser.Expr { return e }, canonicalizeArrays)
+			}
 		}
 
 		return &parser.OrExpr{
@@ -1762,13 +1766,13 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 // tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
 // (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
 // Returns nil if the conversion is not applicable.
-func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
+func tryConvertOrChainToIn(orExpr *parser.OrExpr) *parser.ComparisonExpr {
 	var column parser.Expr
 	var values []parser.Expr
 
 	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
 		cmp, ok := expr.(*parser.ComparisonExpr)
-		if !ok || cmp.Operator != "=" {
+		if !ok || cmp.Operator != "=" || cmp.Any || cmp.All {
 			return nil, nil, false
 		}
 		return cmp.Left, cmp.Right, true
@@ -1786,21 +1790,32 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 		case *parser.OrExpr:
 			return walk(e.Left) && walk(e.Right)
 		case *parser.ComparisonExpr:
-			// Handle IN expressions that were already normalized
+			// Nested ORs arrive already folded: as IN (...), or as = ANY (ARRAY[...]) once
+			// PostgreSQL's comparison normalization has converted that IN.
+			var listed []parser.Expr
+			isList := false
 			if strings.EqualFold(e.Operator, "in") {
+				isList = true
+				if tuple, ok := e.Right.(parser.ValTuple); ok {
+					listed = tuple
+				}
+			} else if e.Operator == "=" && e.Any {
+				isList = true
+				if arrayConst, ok := e.Right.(*parser.ArrayConstructor); ok {
+					listed = arrayConst.Elements
+				}
+			}
+			if isList {
+				if listed == nil {
+					return false
+				}
 				if column == nil {
 					column = e.Left
 				} else if !columnsEqual(column, e.Left) {
 					return false
 				}
-				// Extract values from IN clause
-				if tuple, ok := e.Right.(parser.ValTuple); ok {
-					for _, v := range tuple {
-						values = append(values, v)
-					}
-					return true
-				}
-				return false
+				values = append(values, listed...)
+				return true
 			}
 
 			col, val, ok := extractEqComparison(e)

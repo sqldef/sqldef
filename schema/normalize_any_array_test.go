@@ -153,6 +153,11 @@ func TestNormalizeCheckExprStringQuoteAwareKeepsSpelling(t *testing.T) {
 			expected: "status in ('pending', 'active')",
 		},
 		{
+			name:     "OR chain is not folded into IN",
+			sql:      `CREATE TABLE t (status text, CHECK (status = ANY (ARRAY['active', 'inactive']) OR status = 'pending'))`,
+			expected: "status = ANY (ARRAY['active', 'inactive']) OR status = 'pending'",
+		},
+		{
 			name:     "single element is not folded",
 			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending')))`,
 			expected: "status in ('pending')",
