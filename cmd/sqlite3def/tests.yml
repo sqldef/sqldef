@@ -177,6 +177,29 @@ StrictOnly:
       name text
     ) STRICT;
   legacy_ignore_quotes: false
+TableOptionKeywordsAsColumnNames:
+  current: |
+    CREATE TABLE t (
+      id integer PRIMARY KEY,
+      without integer
+    ) STRICT;
+  desired: |
+    CREATE TABLE t (
+      id integer PRIMARY KEY,
+      without integer,
+      strict integer NOT NULL DEFAULT 0,
+      pragma text
+    ) STRICT;
+    CREATE INDEX idx_strict ON t (strict);
+  up: |
+    ALTER TABLE t ADD COLUMN strict integer NOT NULL DEFAULT 0;
+    ALTER TABLE t ADD COLUMN pragma text;
+    CREATE INDEX idx_strict ON t (strict);
+  down: |
+    DROP INDEX idx_strict;
+    ALTER TABLE t DROP COLUMN pragma;
+    ALTER TABLE t DROP COLUMN strict;
+  legacy_ignore_quotes: false
 ForeignKeyConstraint:
   desired: |
     CREATE TABLE artist(
