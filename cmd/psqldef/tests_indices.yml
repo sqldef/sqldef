@@ -727,6 +727,13 @@ PartialIndexWithWhereIsDistinctFrom:
     CREATE INDEX idx_orders_not_pending ON orders (id)
     WHERE status IS DISTINCT FROM 'pending';
 
+PartialIndexWithWhereIsNotDistinctFromLegacyQuotes:
+  legacy_ignore_quotes: true
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_pending ON orders (id)
+    WHERE status IS NOT DISTINCT FROM 'pending';
+
 PartialIndexWithWhereNotAndPrecedence:
   legacy_ignore_quotes: false
   current: |
