@@ -6767,29 +6767,42 @@ func formatDefaultLiteral(sqlVal *parser.SQLVal) (string, error) {
 	}
 }
 
+// needsMySQLDefaultParens reports whether a literal default value of this type
+// must keep the parenthesized DEFAULT (expr) form on MySQL. TEXT/BLOB/JSON/
+// GEOMETRY columns reject a bare literal default (error 1101) but accept a
+// string or numeric literal wrapped in parentheses. ValArg (CURRENT_TIMESTAMP,
+// NULL, ...) and bool defaults are unaffected and keep round-tripping without
+// parentheses, as before.
+// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+func needsMySQLDefaultParens(valueType ValueType) bool {
+	switch valueType {
+	case ValueTypeStr, ValueTypeInt, ValueTypeFloat, ValueTypeBit:
+		return true
+	default:
+		return false
+	}
+}
+
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
 	expr := defaultDefinition.expression
 
 	if g.mode == GeneratorModeMysql {
-		// MySQL rejects a bare literal default on BLOB/TEXT/JSON/GEOMETRY columns
-		// (error 1101) and only accepts it via the explicit DEFAULT (expr) form, so a
-		// user-written DEFAULT ('foo') must round-trip with its parentheses intact
-		// instead of being flattened to DEFAULT 'foo'.
-		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
 		if paren, ok := expr.(*parser.ParenExpr); ok {
 			if sqlVal, ok := unwrapParenExpr(paren.Expr).(*parser.SQLVal); ok {
-				literal, err := formatDefaultLiteral(sqlVal)
-				if err != nil {
-					return "", err
+				if needsMySQLDefaultParens(parseValue(sqlVal).valueType) {
+					literal, err := formatDefaultLiteral(sqlVal)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("DEFAULT(%s)", literal), nil
 				}
-				return fmt.Sprintf("DEFAULT(%s)", literal), nil
 			}
 		}
-	} else {
-		// Every other dialect keeps its pre-existing behavior of ignoring
-		// parentheses a user wrote around a literal default value.
-		expr = unwrapParenExpr(expr)
 	}
+	// Every other case (non-MySQL dialects, or a MySQL literal kind that doesn't
+	// require the parenthesized form) ignores parentheses a user wrote around a
+	// literal default value.
+	expr = unwrapParenExpr(expr)
 
 	// Type assertion: Check if it's a simple SQLVal
 	if sqlVal, ok := expr.(*parser.SQLVal); ok {

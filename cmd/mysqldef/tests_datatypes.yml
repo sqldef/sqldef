@@ -109,6 +109,61 @@ AddColumnWithParenthesizedStringDefault:
   down: |
     ALTER TABLE hello_text DROP COLUMN `note`;
   min_version: '8.0.13'
+ChangeColumnWithParenthesizedStringDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hello_text (
+      id int NOT NULL AUTO_INCREMENT,
+      note text NOT NULL DEFAULT ('foo'),
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE hello_text (
+      id int NOT NULL AUTO_INCREMENT,
+      note text NOT NULL DEFAULT ('bar'),
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE hello_text CHANGE COLUMN `note` note text NOT NULL DEFAULT('bar');
+  down: |
+    ALTER TABLE hello_text CHANGE COLUMN `note` note text NOT NULL DEFAULT('foo');
+  min_version: '8.0.13'
+AddColumnWithParenthesizedIntDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hello_default (
+      id int NOT NULL
+    );
+  desired: |
+    CREATE TABLE hello_default (
+      id int NOT NULL,
+      score int DEFAULT (5)
+    );
+  min_version: '8.0.13'
+AddColumnWithParenthesizedCurrentTimestampDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hello_default (
+      id int NOT NULL
+    );
+  desired: |
+    CREATE TABLE hello_default (
+      id int NOT NULL,
+      created_at datetime DEFAULT (CURRENT_TIMESTAMP)
+    );
+  min_version: '8.0.13'
+AddColumnWithParenthesizedBooleanDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hello_default (
+      id int NOT NULL
+    );
+  desired: |
+    CREATE TABLE hello_default (
+      id int NOT NULL,
+      enabled tinyint(1) DEFAULT (true)
+    );
+  min_version: '8.0.13'
 CollateOnColumn:
   flavor: "!mariadb"
   desired: |
