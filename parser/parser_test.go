@@ -1885,6 +1885,40 @@ func TestArrayElementColumnReference(t *testing.T) {
 	}
 }
 
+func TestFunctionCallForms(t *testing.T) {
+	// LAG and LEAD without OVER are not standard SQL, but the parser accepts them.
+	testCases := []struct {
+		name     string
+		expr     string
+		expected string
+	}{
+		{name: "no arguments", expr: "f()", expected: "f()"},
+		{name: "arguments", expr: "f(x)", expected: "f(x)"},
+		{name: "distinct arguments", expr: "f(DISTINCT x)", expected: "f(distinct x)"},
+		{name: "no arguments with over", expr: "f() OVER ()", expected: "f() over()"},
+		{name: "arguments with over", expr: "f(x) OVER ()", expected: "f(x) over()"},
+		{name: "arguments with partition by", expr: "f(x) OVER (PARTITION BY y)", expected: "f(x) over(partition by y)"},
+		{name: "within group", expr: "f(x) WITHIN GROUP (ORDER BY y)", expected: "f(x) within group( order by y asc)"},
+		{name: "lag without over", expr: "LAG(x)", expected: "lag(x)"},
+		{name: "lag with over", expr: "LAG(x) OVER (ORDER BY y)", expected: "lag(x) over( order by y asc)"},
+		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x)"},
+		{name: "schema-qualified", expr: "s.f(x)", expected: "s.f(x)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL("CREATE VIEW v AS SELECT "+tc.expr+" FROM t", ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			want := "select " + tc.expected + " from t"
+			if got := String(stmt); !strings.Contains(got, want) {
+				t.Errorf("String() = %q, want it to contain %q", got, want)
+			}
+		})
+	}
+}
+
 func TestParenthesizedSetOperationOperands(t *testing.T) {
 	testCases := []struct {
 		name         string
