@@ -1,3 +1,14 @@
+## [v3.11.22](https://github.com/sqldef/sqldef/compare/v3.11.21...v3.11.22) - 2026-09-16
+
+- parser: simplify string concat CHECK test, keep column-level coverage by @178inaba in https://github.com/sqldef/sqldef/pull/1331
+- Fix TRIM expression normalization for CHECK constraints by @wreulicke in https://github.com/sqldef/sqldef/pull/1349
+- psqldef: parse ALTER TABLE ONLY UNIQUE constraints in the generic parser by @e-koma in https://github.com/sqldef/sqldef/pull/1360
+- psqldef: treat MySQL-only UNUSED keywords as identifiers by @dim0627 in https://github.com/sqldef/sqldef/pull/1358
+- psqldef: make IS NOT DISTINCT FROM idempotent in CHECK constraints and partial indexes by @178inaba in https://github.com/sqldef/sqldef/pull/1342
+- psqldef: accept unquoted key as a column reference in the generic parser by @178inaba in https://github.com/sqldef/sqldef/pull/1330
+- parser: allow STRICT, WITHOUT and PRAGMA as identifiers by @mattn in https://github.com/sqldef/sqldef/pull/1364
+- feat(sqlite3def): support bracket-quoted identifiers by @knaka in https://github.com/sqldef/sqldef/pull/1367
+
 ## [v3.11.21](https://github.com/sqldef/sqldef/compare/v3.11.20...v3.11.21) - 2026-09-13
 
 - parser: disable goyacc line directives by @gfx in https://github.com/sqldef/sqldef/pull/1354
