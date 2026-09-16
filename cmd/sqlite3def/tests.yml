@@ -118,6 +118,20 @@ SingleQuotedID:
     CREATE TABLE 'bigdata' (
       'data' integer
     );
+BracketQuotedIdentifier:
+  current: |
+    CREATE TABLE [bigdata] (
+      [Important Data] integer,
+      [SELECT] text
+    );
+  desired: |
+    CREATE TABLE "bigdata" (
+      "important data" integer,
+      "select" text
+    );
+  up: ''
+  down: ''
+  legacy_ignore_quotes: false
 Index:
   desired: |
     CREATE TABLE bigdata (
