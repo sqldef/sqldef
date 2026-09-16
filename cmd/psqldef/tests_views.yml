@@ -726,3 +726,28 @@ ViewWithDistinctOnMultipleColumns:
     FROM orders;
   down: |
     DROP VIEW public.latest_orders;
+
+ViewWithIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'pending';
+
+ViewWithNotIsDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE NOT (status IS DISTINCT FROM 'pending');
+
+ViewWithIsNotDistinctFromChangedOperand:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'pending';
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'shipped';
+  up: |
+    CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'shipped';
+  down: |
+    CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'pending';
