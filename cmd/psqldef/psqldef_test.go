@@ -981,16 +981,57 @@ func TestPsqldefSkipView(t *testing.T) {
 }
 
 func TestPsqldefSkipExtension(t *testing.T) {
-	resetTestDatabase()
+	const createExtension = "CREATE EXTENSION pgcrypto;\n"
 
-	createExtension := "CREATE EXTENSION pgcrypto;\n"
+	t.Run("live current", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, createExtension)
+		tu.WriteFile("schema.sql", "")
 
-	mustPgExec(testDatabaseName, createExtension)
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
+		assert.Equal(t, nothingModified, output)
+	})
 
-	tu.WriteFile("schema.sql", "")
+	t.Run("desired", func(t *testing.T) {
+		resetTestDatabase()
+		tu.WriteFile("schema.sql", createExtension)
 
-	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
-	assert.Equal(t, nothingModified, output)
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
+		assert.Equal(t, nothingModified, output)
+
+		extensions, err := pgQuery(testDatabaseName, "SELECT extname FROM pg_extension WHERE extname = 'pgcrypto'")
+		assert.NoError(t, err)
+		assert.Empty(t, extensions)
+	})
+
+	t.Run("offline current", func(t *testing.T) {
+		tu.WriteFile("current.sql", createExtension)
+		tu.WriteFile("schema.sql", "")
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs("current.sql", "--skip-extension", "-f", "schema.sql")...)
+		assert.Equal(t, nothingModified, output)
+	})
+
+	t.Run("export", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, createExtension)
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "--export")...)
+		assert.Equal(t, "-- No table exists --\n", output)
+	})
+
+	t.Run("takes precedence over manage.extension", func(t *testing.T) {
+		tu.WriteFile("current.sql", createExtension)
+		tu.WriteFile("schema.sql", "CREATE EXTENSION btree_gist;\n")
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(
+			"current.sql",
+			"--skip-extension",
+			"--config-inline", "manage: {extension: [{target: '.*', drop: true}]}",
+			"-f", "schema.sql",
+		)...)
+		assert.Equal(t, nothingModified, output)
+	})
 }
 
 func TestPsqldefSkipPartition(t *testing.T) {
@@ -1610,6 +1651,7 @@ func TestMain(m *testing.M) {
 	cleanupTestRoles()
 	_ = os.Remove("psqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("current.sql")
 	_ = os.Remove("config.yml")
 	os.Exit(status)
 }

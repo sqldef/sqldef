@@ -546,6 +546,8 @@ $ psqldef -U postgres dbname --apply \
 
 By default, psqldef manages every extension in the database (equivalent to `--skip-extension` being off). Some managed PostgreSQL services (e.g. AlloyDB) auto-install extensions such as `google_columnar_engine` that should never be diffed or dropped, while `--skip-extension` would also stop managing extensions you do want tracked, like `vector` or `pg_trgm`.
 
+`--skip-extension` excludes all extensions from both the current and desired schemas. It applies consistently to live database comparisons, offline comparisons using a current SQL file, and `--export`. The flag takes precedence over `manage.extension`, so no extension is created, dropped, or exported when both are specified. To manage only selected extensions, omit `--skip-extension` and use `manage.extension`.
+
 `manage.extension` restricts management to extensions matching a rule, leaving everything else untouched:
 
 ```yaml

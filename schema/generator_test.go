@@ -23,6 +23,63 @@ func TestStringConstantContainingSingleQuote(t *testing.T) {
 	assert.Equal(t, StringConstant("'example'"), "'''example'''")
 }
 
+func TestSkipExtension(t *testing.T) {
+	manageAllExtensions := &[]database.ManageObjectRule{{Target: ".*", Drop: true}}
+	tests := []struct {
+		name     string
+		desired  string
+		current  string
+		config   database.GeneratorConfig
+		expected []string
+	}{
+		{
+			name:     "desired extension",
+			desired:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true},
+			expected: []string{},
+		},
+		{
+			name:     "current extension",
+			current:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true, EnableDrop: true},
+			expected: []string{},
+		},
+		{
+			name:    "manage.extension match",
+			desired: "CREATE EXTENSION pgcrypto;",
+			config: database.GeneratorConfig{
+				SkipExtension:    true,
+				ManageExtensions: manageAllExtensions,
+			},
+			expected: []string{},
+		},
+		{
+			name:    "non-extension DDL remains",
+			desired: "CREATE EXTENSION pgcrypto; CREATE TABLE users (id bigint);",
+			config:  database.GeneratorConfig{SkipExtension: true},
+			expected: []string{
+				"CREATE TABLE users (id bigint)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.config.LegacyIgnoreQuotes = false
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				tt.config,
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
 func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
 	g := &Generator{mode: GeneratorModeMysql}

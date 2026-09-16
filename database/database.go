@@ -64,6 +64,7 @@ type GeneratorConfig struct {
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
 	BulkAlter               bool     // Bundle multiple ALTER TABLE actions on the same table into a single statement (MySQL only)
 	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
+	SkipExtension           bool
 
 	ManageExtensions *[]ManageObjectRule
 	ManagePrivileges *[]ManageObjectRule // manage.privilege rules: which grantees' privileges are managed and whether REVOKE is allowed
