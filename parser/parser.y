@@ -7586,6 +7586,10 @@ column_name:
   {
     $$ = &ColName{Name: NewIdent($1, false)}
   }
+| PG_KEY
+  {
+    $$ = &ColName{Name: NewIdent($1, false)}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -8029,6 +8033,10 @@ reserved_sql_id:
     $$ = NewIdent($1, false)
   }
 | PG_COMMENT
+  {
+    $$ = NewIdent($1, false)
+  }
+| PG_KEY
   {
     $$ = NewIdent($1, false)
   }
