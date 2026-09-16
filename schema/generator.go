@@ -4543,19 +4543,7 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 					existing.withGrantOption == stmt.withGrantOption &&
 					existing.objectType == stmt.objectType &&
 					sameGranteeSet(existing.grantees, stmt.grantees) {
-					privMap := make(map[string]bool)
-					for _, priv := range existing.privileges {
-						privMap[priv] = true
-					}
-					for _, priv := range stmt.privileges {
-						privMap[priv] = true
-					}
-					mergedPrivs := []string{}
-					for priv := range privMap {
-						mergedPrivs = append(mergedPrivs, priv)
-					}
-					slices.Sort(mergedPrivs)
-					aggregated.Privileges[i].privileges = mergedPrivs
+					aggregated.Privileges[i].privileges = mergePrivileges(existing.privileges, stmt.privileges)
 					merged = true
 					break
 				}
@@ -4583,14 +4571,19 @@ func grantObjectKeyword(objectType string) string {
 	return "TABLE"
 }
 
-func formatPrivilegesForGrant(privileges []string) string {
-	if len(privileges) == 1 && privileges[0] == "ALL" {
+// formatPrivilegeList renders privileges as they appear after GRANT or REVOKE.
+func formatPrivilegeList(privileges []Privilege) string {
+	return strings.Join(util.TransformSlice(privileges, Privilege.String), ", ")
+}
+
+func formatPrivilegesForGrant(privileges []Privilege) string {
+	if len(privileges) == 1 && privileges[0].String() == "ALL" {
 		return "ALL PRIVILEGES"
 	}
 	if len(privileges) == len(postgresTablePrivilegeList) {
 		privMap := make(map[string]bool)
 		for _, priv := range privileges {
-			privMap[priv] = true
+			privMap[priv.String()] = true
 		}
 		allPresent := true
 		for _, reqPriv := range postgresTablePrivilegeList {
@@ -4603,7 +4596,7 @@ func formatPrivilegesForGrant(privileges []string) string {
 			return "ALL PRIVILEGES"
 		}
 	}
-	return strings.Join(privileges, ", ")
+	return formatPrivilegeList(privileges)
 }
 
 // sameGranteeSet reports whether two grantee lists contain the same grantees
@@ -4626,10 +4619,10 @@ func sameGranteeSet(a, b []string) bool {
 // match, so a grantee can still appear in several of them (e.g. TO a, b and
 // TO a). The changes for a grantee are derived from every desired GRANT on the
 // object, so each of those statements would otherwise emit the same change.
-func (g *Generator) claimPrivilegeChanges(action string, desired *GrantPrivilege, grantee string, privileges []string) []string {
-	var claimed []string
+func (g *Generator) claimPrivilegeChanges(action string, desired *GrantPrivilege, grantee string, privileges []Privilege) []Privilege {
+	var claimed []Privilege
 	for _, priv := range privileges {
-		key := strings.Join([]string{action, desired.objectType, g.escapeQualifiedName(desired.tableName), grantee, priv}, "|")
+		key := strings.Join([]string{action, desired.objectType, g.escapeQualifiedName(desired.tableName), grantee, priv.String()}, "|")
 		if !g.emittedPrivileges[key] {
 			g.emittedPrivileges[key] = true
 			claimed = append(claimed, priv)
@@ -4642,13 +4635,13 @@ func (g *Generator) claimPrivilegeChanges(action string, desired *GrantPrivilege
 // the privilege on the object WITH GRANT OPTION. PostgreSQL keeps the grant
 // option when the same privilege is also granted without it, so such a GRANT
 // decides the desired state even if another desired GRANT omits the option.
-func (g *Generator) desiredWithGrantOption(desired *GrantPrivilege, grantee string, priv string) bool {
+func (g *Generator) desiredWithGrantOption(desired *GrantPrivilege, grantee string, priv Privilege) bool {
 	for _, other := range g.desiredPrivileges {
 		if other.withGrantOption &&
 			g.qualifiedNamesEqual(other.tableName, desired.tableName) &&
 			other.objectType == desired.objectType &&
 			slices.Contains(other.grantees, grantee) &&
-			slices.Contains(normalizePrivilegesForComparison(other.privileges, other.objectType), priv) {
+			containsPrivilege(normalizePrivilegesForComparison(other.privileges, other.objectType), priv) {
 			return true
 		}
 	}
@@ -4663,19 +4656,21 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	desiredNormalized := normalizePrivilegesForComparison(desired.privileges, desired.objectType)
 
 	// Track REVOKE operations per grantee
-	revokesByGrantee := make(map[string][]string)
+	revokesByGrantee := make(map[string][]Privilege)
 	// Track REVOKE GRANT OPTION FOR operations per grantee (downgrade: keep the
 	// privilege but drop its grant option)
-	revokeGrantOptionByGrantee := make(map[string][]string)
+	revokeGrantOptionByGrantee := make(map[string][]Privilege)
 	// Track GRANT operations grouped by privileges to grant
 	type grantGroup struct {
-		privileges []string
+		privileges []Privilege
 		grantees   []string
 	}
 	grantsByPrivileges := make(map[string]*grantGroup) // privileges key -> grant group
 
 	for _, grantee := range desired.grantees {
-		existingPrivilegesMap := make(map[string]bool)
+		// Keyed by the privilege's SQL spelling, which is canonical: the same
+		// privilege written differently maps to the same key.
+		existingPrivilegesMap := make(map[string]Privilege)
 		// Per-privilege grant option state in the current schema.
 		existingGrantableMap := make(map[string]bool)
 		for _, currentPriv := range g.currentPrivileges {
@@ -4684,17 +4679,17 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 				if slices.Contains(currentPriv.grantees, grantee) {
 					normalized := normalizePrivilegesForComparison(currentPriv.privileges, currentPriv.objectType)
 					for _, priv := range normalized {
-						existingPrivilegesMap[priv] = true
+						existingPrivilegesMap[priv.String()] = priv
 						if currentPriv.withGrantOption {
-							existingGrantableMap[priv] = true
+							existingGrantableMap[priv.String()] = true
 						}
 					}
 				}
 			}
 		}
 
-		var existingNormalized []string
-		for priv := range existingPrivilegesMap {
+		var existingNormalized []Privilege
+		for _, priv := range existingPrivilegesMap {
 			existingNormalized = append(existingNormalized, priv)
 		}
 		if len(existingNormalized) > 0 {
@@ -4705,7 +4700,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		// the desired grant option state in the current schema.
 		grantOptionMatches := true
 		for _, priv := range desiredNormalized {
-			if existingGrantableMap[priv] != g.desiredWithGrantOption(desired, grantee, priv) {
+			if existingGrantableMap[priv.String()] != g.desiredWithGrantOption(desired, grantee, priv) {
 				grantOptionMatches = false
 				break
 			}
@@ -4715,14 +4710,14 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			continue
 		}
 
-		var privilegesToRevoke []string
+		var privilegesToRevoke []Privilege
 		if len(existingNormalized) > 0 {
 			desiredMap := make(map[string]bool)
 			for _, priv := range desiredNormalized {
-				desiredMap[priv] = true
+				desiredMap[priv.String()] = true
 			}
 			for _, priv := range existingNormalized {
-				if !desiredMap[priv] {
+				if !desiredMap[priv.String()] {
 					// Before revoking, check if this privilege is granted by any other
 					// desired GRANT statement for the same grantee and table
 					grantedByOtherStatement := false
@@ -4731,7 +4726,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 							otherDesired.objectType == desired.objectType &&
 							slices.Contains(otherDesired.grantees, grantee) {
 							otherNormalized := normalizePrivilegesForComparison(otherDesired.privileges, otherDesired.objectType)
-							if slices.Contains(otherNormalized, priv) {
+							if containsPrivilege(otherNormalized, priv) {
 								grantedByOtherStatement = true
 								break
 							}
@@ -4749,17 +4744,17 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 		}
 
-		var privilegesToGrant []string
+		var privilegesToGrant []Privilege
 		if len(existingNormalized) > 0 {
 			existingMap := make(map[string]bool)
 			for _, priv := range existingNormalized {
-				existingMap[priv] = true
+				existingMap[priv.String()] = true
 			}
 			for _, priv := range desiredNormalized {
 				// Grant a privilege that is missing, or re-grant an existing one to
 				// add the grant option (upgrade). Re-granting WITH GRANT OPTION is
 				// idempotent in PostgreSQL.
-				if !existingMap[priv] || (desired.withGrantOption && !existingGrantableMap[priv]) {
+				if !existingMap[priv.String()] || (desired.withGrantOption && !existingGrantableMap[priv.String()]) {
 					privilegesToGrant = append(privilegesToGrant, priv)
 				}
 			}
@@ -4767,9 +4762,9 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			// Downgrade: a privilege kept in the desired schema but without its
 			// current grant option needs REVOKE GRANT OPTION FOR.
 			if !desired.withGrantOption {
-				var toRevokeOption []string
+				var toRevokeOption []Privilege
 				for _, priv := range desiredNormalized {
-					if existingGrantableMap[priv] && !g.desiredWithGrantOption(desired, grantee, priv) {
+					if existingGrantableMap[priv.String()] && !g.desiredWithGrantOption(desired, grantee, priv) {
 						toRevokeOption = append(toRevokeOption, priv)
 					}
 				}
@@ -4786,16 +4781,15 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		if !desired.withGrantOption {
 			grantAction = "GRANT"
 			// The desired GRANT ... WITH GRANT OPTION for the same privilege grants it.
-			privilegesToGrant = slices.DeleteFunc(privilegesToGrant, func(priv string) bool {
+			privilegesToGrant = slices.DeleteFunc(privilegesToGrant, func(priv Privilege) bool {
 				return g.desiredWithGrantOption(desired, grantee, priv)
 			})
 		}
 		privilegesToGrant = g.claimPrivilegeChanges(grantAction, desired, grantee, privilegesToGrant)
 		if len(privilegesToGrant) > 0 {
-			privilegesCopy := make([]string, len(privilegesToGrant))
-			copy(privilegesCopy, privilegesToGrant)
+			privilegesCopy := slices.Clone(privilegesToGrant)
 			sortPrivilegesByCanonicalOrder(privilegesCopy)
-			privilegesKey := strings.Join(privilegesCopy, ",")
+			privilegesKey := privilegeListKey(privilegesCopy)
 
 			if group, exists := grantsByPrivileges[privilegesKey]; exists {
 				group.grantees = append(group.grantees, grantee)
@@ -4814,7 +4808,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			return nil, err
 		}
 		revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
-			strings.Join(privileges, ", "),
+			formatPrivilegeList(privileges),
 			grantObjectKeyword(desired.objectType),
 			g.escapeQualifiedName(desired.tableName),
 			escapedGrantee)
@@ -4827,7 +4821,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			return nil, err
 		}
 		revoke := fmt.Sprintf("REVOKE GRANT OPTION FOR %s ON %s %s FROM %s",
-			strings.Join(privileges, ", "),
+			formatPrivilegeList(privileges),
 			grantObjectKeyword(desired.objectType),
 			g.escapeQualifiedName(desired.tableName),
 			escapedGrantee)
@@ -4903,16 +4897,43 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 	return []string{revoke}, nil
 }
 
-func equalPrivileges(a, b []string) bool {
+// containsPrivilege reports whether privileges holds priv, comparing the
+// privileges by their canonical SQL spelling.
+func containsPrivilege(privileges []Privilege, priv Privilege) bool {
+	return slices.ContainsFunc(privileges, func(p Privilege) bool {
+		return p.String() == priv.String()
+	})
+}
+
+// privilegeListKey builds a map key identifying a list of privileges.
+func privilegeListKey(privileges []Privilege) string {
+	return strings.Join(util.TransformSlice(privileges, Privilege.String), ",")
+}
+
+// mergePrivileges returns the union of two privilege lists, in a deterministic
+// order.
+func mergePrivileges(a, b []Privilege) []Privilege {
+	privMap := make(map[string]Privilege)
+	for _, priv := range slices.Concat(a, b) {
+		privMap[priv.String()] = priv
+	}
+	merged := make([]Privilege, 0, len(privMap))
+	for _, priv := range util.CanonicalMapIter(privMap) {
+		merged = append(merged, priv)
+	}
+	return merged
+}
+
+func equalPrivileges(a, b []Privilege) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	aMap := make(map[string]bool)
 	for _, priv := range a {
-		aMap[priv] = true
+		aMap[priv.String()] = true
 	}
 	for _, priv := range b {
-		if !aMap[priv] {
+		if !aMap[priv.String()] {
 			return false
 		}
 	}
@@ -5598,63 +5619,21 @@ func (g *Generator) renameCurrentPrivilegeColumn(tableName QualifiedName, oldCol
 		if !g.qualifiedNamesEqual(priv.tableName, tableName) {
 			continue
 		}
-		for i, privilege := range priv.privileges {
-			priv.privileges[i] = g.renamePrivilegeColumn(privilege, oldColumn, newColumn)
+		for i := range priv.privileges {
+			g.renamePrivilegeColumn(&priv.privileges[i], oldColumn, newColumn)
 		}
 	}
 }
 
 // renamePrivilegeColumn renames a column in the column list of a column-level
-// privilege ("SELECT (id, secret)"). A privilege without a column list is
-// returned unchanged, and one that does not mention the column is rebuilt into
-// the same string it came from, since it is already canonical.
-func (g *Generator) renamePrivilegeColumn(privilege string, oldColumn, newColumn Ident) string {
-	open := strings.Index(privilege, "(")
-	if open < 0 || !strings.HasSuffix(privilege, ")") {
-		return privilege
-	}
-	columns := parsePrivilegeColumnList(privilege[open+1 : len(privilege)-1])
-	for i, column := range columns {
+// privilege ("SELECT (id, secret)"). A privilege without a column list, or one
+// that does not mention the column, is left alone.
+func (g *Generator) renamePrivilegeColumn(privilege *Privilege, oldColumn, newColumn Ident) {
+	for i, column := range privilege.Columns {
 		if g.identsEqual(column, oldColumn) {
-			columns[i] = newColumn
+			privilege.Columns[i] = newColumn
 		}
 	}
-	return parser.FormatColumnPrivilege(strings.TrimSpace(privilege[:open]), columns)
-}
-
-// parsePrivilegeColumnList splits the column list of a column-level privilege
-// into identifiers. It is the inverse of parser.FormatColumnPrivilege, so it
-// honors the double quotes that function adds to names that need them, and the
-// space that function writes after each separator is dropped rather than
-// trimmed off the name: a quoted name may legitimately begin or end with one.
-func parsePrivilegeColumnList(list string) []Ident {
-	var columns []Ident
-	var name strings.Builder
-	quoted := false
-	inQuotes := false
-	flush := func() {
-		columns = append(columns, Ident{Name: name.String(), Quoted: quoted})
-		name.Reset()
-		quoted = false
-	}
-	for i := 0; i < len(list); i++ {
-		switch c := list[i]; {
-		case c == '"' && inQuotes && i+1 < len(list) && list[i+1] == '"':
-			name.WriteByte('"')
-			i++
-		case c == '"':
-			inQuotes = !inQuotes
-			quoted = true
-		case c == ',' && !inQuotes:
-			flush()
-		case c == ' ' && !inQuotes && name.Len() == 0:
-			// Padding written after the separator, not part of the name.
-		default:
-			name.WriteByte(c)
-		}
-	}
-	flush()
-	return columns
 }
 
 // isCommentOnDroppedTable checks if a comment belongs to a table that has been dropped.
@@ -7437,7 +7416,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			if len(includedGrantees) > 0 {
 				// Sort privileges for consistent key. WITH GRANT OPTION is part of
 				// the key so grants that differ only by grant option are not merged.
-				sortedPrivs := util.SortedCopy(stmt.privileges)
+				sortedPrivs := util.SortedCopy(util.TransformSlice(stmt.privileges, Privilege.String))
 				key := fmt.Sprintf("%s:%s:%s:%t", stmt.objectType, stmt.tableName.RawString(), strings.Join(sortedPrivs, ","), stmt.withGrantOption)
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
@@ -7466,20 +7445,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 				if isManagedGrantee(config, grantee) {
 					key := fmt.Sprintf("%s:%s:%s", stmt.objectType, stmt.tableName.RawString(), grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
-						// Merge privileges
-						privMap := make(map[string]bool)
-						for _, priv := range existing.privileges {
-							privMap[priv] = true
-						}
-						for _, priv := range stmt.privileges {
-							privMap[priv] = true
-						}
-						mergedPrivs := []string{}
-						for priv := range privMap {
-							mergedPrivs = append(mergedPrivs, priv)
-						}
-						slices.Sort(mergedPrivs)
-						existing.privileges = mergedPrivs
+						existing.privileges = mergePrivileges(existing.privileges, stmt.privileges)
 					} else {
 						// Create new revoke for this grantee
 						revokesByTableAndGrantee[key] = &RevokePrivilege{
