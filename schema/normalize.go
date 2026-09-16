@@ -445,7 +445,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			Right: recur(e.Right, mode),
 		}
 	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: recur(e.Expr, mode)}
+		return normalizeNotExpr(recur(e.Expr, mode))
 	case *parser.ComparisonExpr:
 		return normalizeComparisonExpr(e, mode, recur, canonicalizeArrays)
 	case *parser.BinaryExpr:
@@ -891,6 +891,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return &parser.ParenExpr{
 			Expr: normalizedInner,
 		}
+	case *parser.NotExpr:
+		return normalizeNotExpr(normalizeExpr(e.Expr, mode))
 	case *parser.ComparisonExpr:
 		return normalizeComparisonExpr(e, mode, normalizeExpr, true)
 	case *parser.AndExpr:
@@ -1579,6 +1581,32 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 		}
 		return 1
 	})
+}
+
+// normalizeNotExpr folds NOT (a IS DISTINCT FROM b) into a IS NOT DISTINCT FROM b.
+// PostgreSQL rewrites IS NOT DISTINCT FROM into the NOT-wrapped form when it stores an
+// expression, so both spellings have to reach the same shape before they are compared.
+// The fold is one-way: PostgreSQL keeps the extra NOT of NOT (a IS NOT DISTINCT FROM b),
+// so folding only the inner comparison already lands both sides on the same shape.
+//
+// operand is the caller's already normalized operand.
+func normalizeNotExpr(operand parser.Expr) parser.Expr {
+	if comparison, ok := unwrapOutermostParenExpr(operand).(*parser.ComparisonExpr); ok && comparison.Operator == parser.IsDistinctFromStr {
+		return &parser.ComparisonExpr{
+			Operator: parser.IsNotDistinctFromStr,
+			Left:     comparison.Left,
+			Right:    comparison.Right,
+		}
+	}
+	// AND and OR bind looser than NOT, so they need back the parentheses that
+	// normalizeExpr strips. Without them NOT (a AND b) would print as the very
+	// different NOT a AND b. Operands coming from normalizeCheckExprWith keep
+	// their own ParenExpr, so this only fires for the normalizeExpr side.
+	switch operand.(type) {
+	case *parser.AndExpr, *parser.OrExpr:
+		return &parser.NotExpr{Expr: &parser.ParenExpr{Expr: operand}}
+	}
+	return &parser.NotExpr{Expr: operand}
 }
 
 // normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores:

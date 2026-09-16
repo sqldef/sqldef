@@ -1150,6 +1150,54 @@ ConstraintCheckArrayColumnReferenceMixedTypesQuoteAware:
     ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK ("Status" = ANY (ARRAY["Fallback", 'pending']));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+ConstraintCheckIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IS NOT DISTINCT FROM 'pending')
+    );
+
+ConstraintCheckIsNotDistinctFromLegacyQuotes:
+  legacy_ignore_quotes: true
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IS NOT DISTINCT FROM 'pending')
+    );
+
+ConstraintCheckNotIsDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (NOT (status IS DISTINCT FROM 'pending'))
+    );
+
+ConstraintCheckNotIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (NOT (status IS NOT DISTINCT FROM 'pending'))
+    );
+
+ConstraintCheckNotIsDistinctFromAdd:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (NOT (status IS DISTINCT FROM 'pending'))
+    );
+  up: |
+    ALTER TABLE public.products ADD CHECK (status is not distinct from 'pending');
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (
@@ -1617,6 +1665,27 @@ AddUniqueConstraint:
     alter table dummy add constraint dummy_uniq unique (column_a, column_b);
   down: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+
+AddUniqueConstraintWithAlterTableOnly:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE dummy (
+      id bigint NOT NULL,
+      column_a bigint NOT NULL,
+      column_b bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE dummy (
+      id bigint NOT NULL,
+      column_a bigint NOT NULL,
+      column_b bigint NOT NULL
+    );
+    ALTER TABLE ONLY public.dummy ADD CONSTRAINT dummy_uniq UNIQUE (column_a, column_b) DEFERRABLE INITIALLY DEFERRED;
+  up: |
+    ALTER TABLE ONLY public.dummy ADD CONSTRAINT dummy_uniq UNIQUE (column_a, column_b) DEFERRABLE INITIALLY DEFERRED;
+  down: |
+    ALTER TABLE public.dummy DROP CONSTRAINT dummy_uniq;
+
 UniqueConstraintNotDeferrable:
   current: |
     create table dummy(

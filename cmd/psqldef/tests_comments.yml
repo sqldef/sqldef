@@ -573,3 +573,23 @@ RenameIndexWithComment:
     CREATE INDEX old_idx ON public.test (id);
     COMMENT ON INDEX public.old_idx IS 'Old index';
     DROP INDEX public.new_idx;
+
+CommentOnColumnNamedKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      key text NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      key text NOT NULL,
+      PRIMARY KEY (id)
+    );
+    COMMENT ON COLUMN public.users.key IS 'user key';
+  up: |
+    COMMENT ON COLUMN public.users.key IS 'user key';
+  down: |
+    COMMENT ON COLUMN public.users."key" IS NULL;

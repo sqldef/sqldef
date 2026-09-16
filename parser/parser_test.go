@@ -704,6 +704,34 @@ func TestLanguageAsUnquotedIdentifier(t *testing.T) {
 	}
 }
 
+// TestUnusedKeywordsAsUnquotedIdentifiers tests that MySQL keywords such as YEAR_MONTH and XOR
+// are plain identifiers only in PostgreSQL mode, where pg_get_indexdef writes them unquoted.
+func TestUnusedKeywordsAsUnquotedIdentifiers(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE TABLE public.t (id bigint NOT NULL, year_month text NOT NULL, xor integer)`,
+		`CREATE INDEX t_ym ON public.t USING btree (id, year_month)`,
+		`CREATE INDEX t_x ON public.t USING btree (id, xor)`,
+		`CREATE INDEX t_ym ON public.t USING btree (id) WHERE (year_month IS NOT NULL)`,
+		`ALTER TABLE public.t ADD CONSTRAINT t_ym UNIQUE (year_month)`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+			t.Errorf("unquoted year_month/xor should parse in PostgreSQL mode: %v", err)
+		}
+	}
+
+	for _, tc := range []struct {
+		sql  string
+		mode ParserMode
+	}{
+		{`CREATE TABLE t (id int, year_month text)`, ParserModeMysql},
+		{`CREATE TABLE t (id int, both int)`, ParserModePostgres},
+	} {
+		if _, err := ParseDDL(tc.sql, tc.mode); err == nil {
+			t.Errorf("reserved word as an unquoted column name should not parse: %s", tc.sql)
+		}
+	}
+}
+
 func TestAutoRandom(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -905,6 +933,11 @@ func TestSQLiteTableOptions(t *testing.T) {
 			"any type in strict table",
 			"CREATE TABLE t (id integer PRIMARY KEY, data ANY) STRICT",
 			"create table t (\n\tid integer primary key,\n\tdata ANY\n) STRICT",
+		},
+		{
+			"table option keywords as column names",
+			"CREATE TABLE t (strict integer, without text, pragma text) STRICT",
+			"create table t (\n\tstrict integer,\n\twithout text,\n\tpragma text\n) STRICT",
 		},
 	}
 
@@ -1633,6 +1666,13 @@ func TestExcludeWhereGrammar(t *testing.T) {
 	})
 }
 
+func TestAlterTableAddUniqueOnOnly(t *testing.T) {
+	sql := `ALTER TABLE ONLY public.t ADD CONSTRAINT c UNIQUE (a, b) DEFERRABLE INITIALLY DEFERRED`
+	if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+		t.Fatalf("ALTER TABLE ONLY UNIQUE should parse: %v", err)
+	}
+}
+
 func TestAlterTableAddExclusionGrammar(t *testing.T) {
 	// ALTER TABLE [ONLY] ... ADD CONSTRAINT ... EXCLUDE is the form pg_dump emits.
 	cases := []struct {
@@ -2047,4 +2087,166 @@ func TestParenthesizedComparisonAsComparisonOperand(t *testing.T) {
 			t.Errorf("expected *ParenExpr, got %T", check.Where.Expr)
 		}
 	})
+}
+
+// TestKeyKeywordAsColumnReference tests that `key`, an unreserved keyword in
+// PostgreSQL, works as an unquoted column name in column *reference* positions
+// (expressions and qualified names), not just in column declarations and index
+// column lists. The MySQL cases pin both directions of the lexer split: KEY
+// stays an index keyword there, and is still rejected as a bare identifier.
+func TestKeyKeywordAsColumnReference(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		mode        ParserMode
+		shouldParse bool
+	}{
+		// Column references reached through reserved_sql_id.
+		{
+			name:        "COMMENT ON COLUMN with table-qualified key",
+			sql:         "COMMENT ON COLUMN t.key IS 'a key'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "COMMENT ON COLUMN with schema-qualified key",
+			sql:         "COMMENT ON COLUMN public.t.key IS 'a key'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "qualified key in a view select list",
+			sql:         "CREATE VIEW v AS SELECT t.key FROM t",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a REFERENCES column list",
+			sql:         "CREATE TABLE t2 (id int REFERENCES t (key))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a trigger UPDATE OF column list",
+			sql:         "CREATE TRIGGER tr AFTER UPDATE OF key ON t FOR EACH ROW EXECUTE FUNCTION f()",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a column-level GRANT",
+			sql:         "GRANT SELECT (key) ON t TO r",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "NEW.key in a trigger WHEN condition",
+			sql:         "CREATE TRIGGER tr AFTER UPDATE ON t FOR EACH ROW WHEN (NEW.key IS NOT NULL) EXECUTE FUNCTION f()",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+
+		// Column references reached through column_name.
+		{
+			name:        "bare key in a view select list",
+			sql:         "CREATE VIEW v AS SELECT key FROM t",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a view WHERE clause",
+			sql:         "CREATE VIEW v AS SELECT id FROM t WHERE key = 'a'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a partial index predicate",
+			sql:         "CREATE INDEX i ON t (key) WHERE key IS NOT NULL",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a CHECK constraint",
+			sql:         "CREATE TABLE t (key int, CHECK (key > 0))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in GROUP BY",
+			sql:         "CREATE VIEW v AS SELECT key FROM t GROUP BY key",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in ORDER BY",
+			sql:         "CREATE VIEW v AS SELECT key FROM t ORDER BY key",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+
+		// Column declarations and index column lists, already accepted before
+		// this change; kept to catch regressions.
+		{
+			name:        "key as a column declaration",
+			sql:         "CREATE TABLE t (key text NOT NULL)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key as an inline primary key column",
+			sql:         "CREATE TABLE t (key text PRIMARY KEY)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in an index column list",
+			sql:         "CREATE INDEX i ON t (key)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a table-level UNIQUE constraint",
+			sql:         "CREATE TABLE t (id int, key text, UNIQUE (key))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in an added UNIQUE constraint",
+			sql:         "ALTER TABLE t ADD CONSTRAINT c UNIQUE (key)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+
+		// MySQL keeps KEY as an index keyword, so the Postgres-only lexer split
+		// must not leak into MySQL mode.
+		{
+			name:        "MySQL inline KEY index",
+			sql:         "CREATE TABLE t (id int, KEY idx_name (id))",
+			mode:        ParserModeMysql,
+			shouldParse: true,
+		},
+		{
+			name:        "MySQL inline UNIQUE KEY index",
+			sql:         "CREATE TABLE t (id int, UNIQUE KEY idx_name (id))",
+			mode:        ParserModeMysql,
+			shouldParse: true,
+		},
+		{
+			name:        "MySQL bare key as a column reference",
+			sql:         "CREATE VIEW v AS SELECT key FROM t",
+			mode:        ParserModeMysql,
+			shouldParse: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, tc.mode)
+
+			if tc.shouldParse && err != nil {
+				t.Errorf("expected parse to succeed but got error: %v\nSQL: %s", err, tc.sql)
+			} else if !tc.shouldParse && err == nil {
+				t.Errorf("expected parse to fail but it succeeded\nSQL: %s", tc.sql)
+			}
+		})
+	}
 }
