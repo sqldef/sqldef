@@ -1749,25 +1749,21 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 			return nil, fmt.Errorf("unexpected object type in grant statement")
 		}
 
-		var privileges []string
+		var privileges []parser.Privilege
 		if stmt.Privileges == nil {
 			// ALL PRIVILEGES case
-			privileges = []string{"ALL"}
+			privileges = []parser.Privilege{parser.NewPrivilege("ALL", nil)}
 		} else {
 			for _, priv := range stmt.Privileges {
 				if accessPriv, ok := priv.Node.(*pgquery.Node_AccessPriv); ok {
-					if accessPriv.AccessPriv.Cols == nil {
-						privileges = append(privileges, strings.ToUpper(accessPriv.AccessPriv.PrivName))
-					} else {
-						// Column-level privilege: GRANT SELECT (col1, col2) ON ...
-						cols := make([]parser.Ident, 0, len(accessPriv.AccessPriv.Cols))
-						for _, colNode := range accessPriv.AccessPriv.Cols {
-							if str, ok := colNode.Node.(*pgquery.Node_String_); ok {
-								cols = append(cols, parser.NewIdent(str.String_.Sval, false))
-							}
+					// Column-level privilege: GRANT SELECT (col1, col2) ON ...
+					var cols []parser.Ident
+					for _, colNode := range accessPriv.AccessPriv.Cols {
+						if str, ok := colNode.Node.(*pgquery.Node_String_); ok {
+							cols = append(cols, parser.NewIdent(str.String_.Sval, false))
 						}
-						privileges = append(privileges, parser.FormatColumnPrivilege(accessPriv.AccessPriv.PrivName, cols))
 					}
+					privileges = append(privileges, parser.NewPrivilege(accessPriv.AccessPriv.PrivName, cols))
 				}
 			}
 		}

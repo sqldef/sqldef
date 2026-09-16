@@ -33,6 +33,8 @@ type yySymType struct {
 	str                      string
 	ident                    Ident
 	idents                   []Ident
+	privilege                Privilege
+	privileges               []Privilege
 	strs                     []string
 	selectExprs              SelectExprs
 	selectExpr               SelectExpr
@@ -5596,8 +5598,8 @@ var yyPgo = [...]int16{
 	3410, 3402, 3399, 3398, 3397, 3396, 315, 3395, 412, 124,
 	95, 125, 131, 3394, 3393, 91, 3392, 154, 3386, 107,
 	312, 155, 375, 624, 3385, 3384, 3383, 3382, 145, 97,
-	117, 144, 3381, 44, 1, 121, 469, 135, 2, 3251,
-	147, 157, 3380, 3379, 3378, 3377, 3374, 152, 148, 3372,
+	117, 144, 3381, 44, 1, 121, 135, 2, 147, 469,
+	3251, 157, 3380, 3379, 3378, 3377, 3374, 152, 148, 3372,
 	119, 115, 72, 169, 22, 43, 74, 3371, 3369, 3367,
 	3365, 3364, 129, 3363, 3362, 3361, 156, 3360, 3359, 120,
 	137, 146, 165, 3358, 3357, 94, 99, 3356, 142, 3352,
@@ -5694,8 +5696,8 @@ var yyR1 = [...]int16{
 	186, 187, 187, 229, 229, 229, 290, 290, 290, 290,
 	290, 290, 291, 291, 291, 292, 292, 230, 230, 258,
 	258, 259, 259, 262, 262, 262, 263, 263, 263, 263,
-	195, 195, 198, 198, 196, 196, 196, 196, 196, 196,
-	196, 196, 199, 199, 197, 197, 200, 200, 208, 208,
+	195, 195, 197, 197, 199, 199, 199, 199, 199, 199,
+	199, 199, 200, 200, 196, 196, 198, 198, 208, 208,
 	208, 208, 207, 207, 205, 205, 205, 205, 206, 206,
 	206, 310, 33, 34, 34, 35, 35, 35, 35, 35,
 	35, 35, 41, 41, 41, 38, 38, 38, 39, 39,
@@ -5950,7 +5952,7 @@ var yyChk = [...]int16{
 	148, 154, 155, 149, 150, 73, 35, 56, -301, 489,
 	-203, 195, 60, -290, -292, 348, -225, 161, 173, 201,
 	474, 472, 202, 177, 446, 158, 175, 159, 459, 460,
-	178, 462, 82, -199, -196, -133, 445, 23, 168, 201,
+	178, 462, 82, -200, -199, -133, 445, 23, 168, 201,
 	190, -132, 372, 172, 43, 181, 322, 323, 324, 325,
 	326, -127, -128, 63, 153, 234, 449, 83, 27, 29,
 	357, 358, 364, 233, 87, 134, 145, 88, 241, 459,
@@ -5971,7 +5973,7 @@ var yyChk = [...]int16{
 	265, 202, 237, 211, 278, 212, 363, 376, 157, 267,
 	213, 214, 156, 206, 207, 208, 230, 452, 209, 210,
 	196, 195, 193, 45, 485, 474, 476, 475, 477, 478,
-	479, 480, 481, 482, 483, 484, 160, 437, -199, -123,
+	479, 480, 481, 482, 483, 484, 160, 437, -200, -123,
 	164, 160, 175, 173, 58, -33, -310, -132, 248, -204,
 	-182, -132, -128, 180, 181, 65, 38, 261, 201, 160,
 	160, 160, 162, 265, 205, 162, -132, -132, -92, 141,
@@ -5999,7 +6001,7 @@ var yyChk = [...]int16{
 	263, -132, -132, -125, 266, -64, -125, 58, -238, 20,
 	233, 234, 247, 58, 84, 142, 58, 84, -299, 65,
 	-132, 220, 27, 142, 27, -125, -132, 84, -134, -62,
-	159, -57, 451, -62, -196, -198, -133, 451, 159, -57,
+	159, -57, 451, -62, -199, -197, -133, 451, 159, -57,
 	-62, 379, 58, 28, 28, 58, 28, -62, -92, -132,
 	-62, -132, -62, -64, -62, -62, -132, 61, -116, 282,
 	-117, -121, 375, 377, 96, 163, 142, -138, -132, 65,
@@ -6045,8 +6047,8 @@ var yyChk = [...]int16{
 	58, 59, 84, -62, -62, -62, 27, 162, -266, -267,
 	-268, -269, 106, 351, 352, 349, 27, -219, 27, 58,
 	61, 82, 248, -238, -132, 142, -295, 476, 129, -132,
-	-132, 141, 65, -132, -264, 59, 163, -200, -197, -132,
-	219, -62, 163, -133, 13, 13, -200, -137, 167, -188,
+	-132, 141, 65, -132, -264, 59, 163, -198, -196, -132,
+	219, -62, 163, -133, 13, 13, -198, -137, 167, -188,
 	-191, 178, 163, 236, 236, 236, 57, 153, 457, 479,
 	480, 57, 215, 58, 58, 65, 75, 65, 75, 65,
 	75, -62, 65, 75, -266, 65, 75, 65, 75, -62,
@@ -6083,8 +6085,8 @@ var yyChk = [...]int16{
 	-2, 60, -125, 62, 61, -132, -150, -2, -220, 20,
 	217, 218, -62, -240, -240, -109, -133, -241, -238, -133,
 	-296, 58, -77, -77, 58, 58, 84, -265, 33, 84,
-	75, 133, 487, 167, -132, -200, 138, 61, -200, -200,
-	-200, 214, 213, -303, 160, 179, -132, -197, 376, 376,
+	75, 133, 487, 167, -132, -198, 138, 61, -198, -198,
+	-198, 214, 213, -303, 160, 179, -132, -196, 376, 376,
 	376, 236, 167, -188, -191, 163, 236, 236, 236, 57,
 	-62, -62, 103, 62, 103, 377, 381, 382, -48, -48,
 	-83, 26, 84, 75, 76, 77, -48, -77, 23, 24,
@@ -6119,8 +6121,8 @@ var yyChk = [...]int16{
 	-261, 443, -221, 163, 23, 8, 10, 11, 12, 20,
 	-126, 89, 61, 27, -241, -297, 479, 480, 477, -139,
 	475, 475, 28, -232, 75, -132, 60, -132, -302, 60,
-	138, 154, -197, 138, 214, 213, -132, 178, 266, 266,
-	266, 376, -132, -197, 376, 376, 376, 236, 65, 75,
+	138, 154, -196, 138, 214, 213, -132, 178, 266, 266,
+	266, 376, -132, -196, 376, 376, 376, 236, 65, 75,
 	103, 65, 75, 13, 26, 75, 76, 77, -77, -77,
 	-77, -84, -77, -77, -77, -44, 187, 83, -175, 298,
 	138, 139, 138, 139, 363, 62, 62, -48, 62, -106,
@@ -6142,11 +6144,11 @@ var yyChk = [...]int16{
 	92, 62, -104, 264, -103, -103, 92, -263, 58, 75,
 	33, 216, -263, 58, 461, -189, -133, -229, -105, -48,
 	-195, -213, -213, 26, -226, 215, -68, 14, -190, 96,
-	83, 119, -132, -189, -198, 60, 62, 62, 62, 67,
+	83, 119, -132, -189, -197, 60, 62, 62, 62, 67,
 	62, 62, 60, 446, 447, -48, 60, -71, -175, 363,
 	-172, -172, 62, 62, -212, -133, -62, 58, 62, 62,
 	62, 62, 27, -271, 201, -150, 159, 271, -175, -270,
-	33, 96, 215, 186, -223, 59, -198, 235, 280, 192,
+	33, 96, 215, 186, -223, 59, -197, 235, 280, 192,
 	-48, -133, -242, -244, 280, -24, -21, -11, -13, -12,
 	-15, -14, -16, -17, -18, -19, -30, -5, 141, -22,
 	-23, -36, 12, 11, 21, 35, 240, 241, 246, 242,
@@ -6201,7 +6203,7 @@ var yyChk = [...]int16{
 	-216, -132, 67, -235, 58, 79, 67, 65, -235, -235,
 	-235, -235, -235, -236, 231, 232, 67, 65, -237, -236,
 	67, 65, -104, -77, -104, -104, -104, -104, -103, -193,
-	-193, -68, -189, -213, -213, -226, -198, -215, -215, -48,
+	-193, -68, -189, -213, -213, -226, -197, -215, -215, -48,
 	-68, 168, 261, 62, -256, 58, -258, 84, 369, 441,
 	442, 62, 446, 447, 62, 281, 452, 453, 194, 454,
 	215, 455, 456, -105, -212, -213, 60, 59, -111, 463,
@@ -6243,10 +6245,10 @@ var yyChk = [...]int16{
 	444, -52, -51, -52, 48, 48, 53, 48, 53, 48,
 	-59, -45, -45, -87, -89, -88, 60, 62, -139, -66,
 	56, 164, 57, 60, -139, 20, -250, -249, 67, 255,
-	254, 84, 253, -132, -198, 91, -243, 236, 485, 485,
+	254, 84, 253, -132, -197, 91, -243, 236, 485, 485,
 	-296, -256, -215, -215, 62, 65, -49, 13, 67, 62,
 	17, 61, 145, 62, 436, 55, 439, 62, 62, 61,
-	-132, 62, -214, -214, -62, -133, -257, -198, 168, -263,
+	-132, 62, -214, -214, -62, -133, -257, -197, 168, -263,
 	58, -263, 58, 142, -215, -111, -105, -212, -214, 62,
 	-275, -276, -275, 65, 75, 58, 96, 163, 62, 489,
 	60, 60, 62, 60, 60, 62, 62, 62, 91, 93,
@@ -6264,19 +6266,19 @@ var yyChk = [...]int16{
 	-119, -48, -48, 60, -48, -143, 138, -141, 27, -89,
 	60, 60, 60, 60, 62, 61, -249, 91, -242, 65,
 	91, 280, -298, 61, -97, 15, -101, 62, 45, 198,
-	106, -257, -198, 168, -194, 60, -193, -193, -67, -67,
+	106, -257, -197, 168, -194, 60, -193, -193, -67, -67,
 	-105, 249, 61, 62, 62, 205, 200, 62, 62, 205,
 	200, 489, 32, -114, 62, 62, 61, 142, 62, -106,
 	-100, -109, -141, 60, -135, -252, -254, 464, 465, 466,
 	467, 468, 469, 470, 471, -109, -109, -109, -141, -132,
 	91, 489, -243, 485, 202, -98, 16, 145, 138, 199,
-	60, 62, -62, -198, -263, -263, -215, -111, -274, -64,
+	60, 62, -62, -197, -263, -263, -215, -111, -274, -64,
 	-64, -64, -64, 91, 179, 40, -2, 60, -110, -132,
 	-106, 62, -144, -145, -133, 60, 62, 61, 62, 62,
 	62, -66, 91, 489, -242, -48, -85, 439, 60, 194,
 	-85, -194, 60, 61, -214, -215, 60, 60, 60, 60,
 	141, 11, -87, -2, 62, 61, -150, -109, -254, -253,
-	91, 440, -85, 194, -307, 193, 62, -198, 261, -67,
+	91, 440, -85, 194, -307, 193, 62, -197, 261, -67,
 	-46, -46, -46, -46, -115, 62, -145, 65, 27, 62,
 	62, 62, 96, -307, 61, -133, 62, 62, 62, 62,
 	27, 337, -307, -307, -133, 261, 62, 337, -133, -194,
@@ -8107,10 +8109,7 @@ yydefault:
 	case 69:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8145,10 +8144,7 @@ yydefault:
 	case 70:
 		yyDollar = yyS[yypt-10 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8185,10 +8181,7 @@ yydefault:
 	case 71:
 		yyDollar = yyS[yypt-6 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
 				grantees[i] = g.Name
@@ -8223,10 +8216,7 @@ yydefault:
 	case 72:
 		yyDollar = yyS[yypt-9 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
 				grantees[i] = g.Name
@@ -8263,10 +8253,7 @@ yydefault:
 	case 73:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8303,10 +8290,7 @@ yydefault:
 	case 74:
 		yyDollar = yyS[yypt-10 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8345,10 +8329,7 @@ yydefault:
 	case 75:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8385,10 +8366,7 @@ yydefault:
 	case 76:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8423,10 +8401,7 @@ yydefault:
 	case 77:
 		yyDollar = yyS[yypt-8 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8463,10 +8438,7 @@ yydefault:
 	case 78:
 		yyDollar = yyS[yypt-8 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
 				grantees[i] = g.Name
@@ -8503,10 +8475,7 @@ yydefault:
 	case 79:
 		yyDollar = yyS[yypt-6 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
 				grantees[i] = g.Name
@@ -8541,10 +8510,7 @@ yydefault:
 	case 80:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
 				grantees[i] = g.Name
@@ -8581,10 +8547,7 @@ yydefault:
 	case 81:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			privs := make([]string, len(yyDollar[2].idents))
-			for i, p := range yyDollar[2].idents {
-				privs[i] = p.Name
-			}
+			privs := yyDollar[2].privileges
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
 				grantees[i] = g.Name
@@ -12464,52 +12427,52 @@ yydefault:
 	case 824:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.ident = yyDollar[1].ident
+			yyVAL.privilege = NewPrivilege(yyDollar[1].ident.Name, nil)
 		}
 	case 825:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.ident = NewIdent(yyDollar[1].str, false)
+			yyVAL.privilege = NewPrivilege(yyDollar[1].str, nil)
 		}
 	case 826:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
-			yyVAL.ident = NewIdent(FormatColumnPrivilege(yyDollar[1].ident.Name, yyDollar[3].idents), false)
+			yyVAL.privilege = NewPrivilege(yyDollar[1].ident.Name, yyDollar[3].idents)
 		}
 	case 827:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.ident = NewIdent(yyDollar[1].str, false)
+			yyVAL.privilege = NewPrivilege(yyDollar[1].str, nil)
 		}
 	case 828:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.ident = NewIdent("ALL", false)
+			yyVAL.privilege = NewPrivilege("ALL", nil)
 		}
 	case 829:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.ident = NewIdent(yyDollar[1].str, false)
+			yyVAL.privilege = NewPrivilege(yyDollar[1].str, nil)
 		}
 	case 830:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.ident = NewIdent(yyDollar[1].str, false)
+			yyVAL.privilege = NewPrivilege(yyDollar[1].str, nil)
 		}
 	case 831:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.ident = NewIdent(yyDollar[1].str, false)
+			yyVAL.privilege = NewPrivilege(yyDollar[1].str, nil)
 		}
 	case 832:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.idents = []Ident{yyDollar[1].ident}
+			yyVAL.privileges = []Privilege{yyDollar[1].privilege}
 		}
 	case 833:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.idents = append(yyDollar[1].idents, yyDollar[3].ident)
+			yyVAL.privileges = append(yyDollar[1].privileges, yyDollar[3].privilege)
 		}
 	case 834:
 		yyDollar = yyS[yypt-1 : yypt+1]

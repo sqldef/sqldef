@@ -10,6 +10,7 @@ import (
 type (
 	Ident         = database.Ident
 	QualifiedName = database.QualifiedName
+	Privilege     = parser.Privilege
 )
 
 var (
@@ -169,7 +170,7 @@ type GrantPrivilege struct {
 	statement       string
 	tableName       QualifiedName
 	grantees        []string
-	privileges      []string
+	privileges      []Privilege
 	withGrantOption bool
 	objectType      string // "TABLE" or "SEQUENCE"
 }
@@ -178,7 +179,7 @@ type RevokePrivilege struct {
 	statement     string
 	tableName     QualifiedName
 	grantees      []string
-	privileges    []string
+	privileges    []Privilege
 	cascadeOption bool   // CASCADE option for REVOKE
 	objectType    string // "TABLE" or "SEQUENCE"
 }

@@ -1496,31 +1496,40 @@ var postgresSequencePrivilegeList = []string{
 	"USAGE",
 }
 
-func normalizePrivilegesForComparison(privileges []string, objectType string) []string {
-	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
+// privilegesFromNames builds table-level privileges from a list of keywords.
+func privilegesFromNames(names []string) []Privilege {
+	return util.TransformSlice(names, func(name string) Privilege {
+		return Privilege{Name: name}
+	})
+}
+
+func normalizePrivilegesForComparison(privileges []Privilege, objectType string) []Privilege {
+	if len(privileges) == 1 && (privileges[0].String() == "ALL" || privileges[0].String() == "ALL PRIVILEGES") {
 		if objectType == "SEQUENCE" {
-			return postgresSequencePrivilegeList
+			return privilegesFromNames(postgresSequencePrivilegeList)
 		}
-		return postgresTablePrivilegeList
+		return privilegesFromNames(postgresTablePrivilegeList)
 	}
 	return privileges
 }
 
-// Sort privileges in PostgreSQL canonical order
-func sortPrivilegesByCanonicalOrder(privileges []string) {
+// Sort privileges in PostgreSQL canonical order. Column-level privileges are not
+// in that list, so they sort after the table-level ones by their SQL spelling.
+func sortPrivilegesByCanonicalOrder(privileges []Privilege) {
 	orderMap := make(map[string]int)
 	for i, priv := range postgresTablePrivilegeList {
 		orderMap[priv] = i
 	}
 
-	slices.SortFunc(privileges, func(a, b string) int {
-		orderA, hasA := orderMap[a]
-		orderB, hasB := orderMap[b]
+	slices.SortFunc(privileges, func(a, b Privilege) int {
+		nameA, nameB := a.String(), b.String()
+		orderA, hasA := orderMap[nameA]
+		orderB, hasB := orderMap[nameB]
 		if hasA && hasB {
 			return cmp.Compare(orderA, orderB)
 		}
 		if !hasA && !hasB {
-			return cmp.Compare(a, b)
+			return cmp.Compare(nameA, nameB)
 		}
 		if hasA {
 			return -1

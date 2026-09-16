@@ -318,13 +318,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			grantees := stmt.Grant.Grantees
 
 			if len(grantees) > 0 {
-				// Normalize privilege names to uppercase for consistency
-				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, normalizePrivilegeCase)
 				return &GrantPrivilege{
 					statement:       ddl,
 					tableName:       normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:        grantees,
-					privileges:      normalizedPrivileges,
+					privileges:      stmt.Grant.Privileges,
 					withGrantOption: stmt.Grant.WithGrantOption,
 					objectType:      normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
@@ -339,13 +337,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			// For now, return the first grantee as a single statement
 			if len(grantees) > 0 {
-				// Normalize privilege names to uppercase for consistency
-				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, normalizePrivilegeCase)
 				return &RevokePrivilege{
 					statement:     ddl,
 					tableName:     normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
-					privileges:    normalizedPrivileges,
+					privileges:    stmt.Grant.Privileges,
 					cascadeOption: stmt.Grant.CascadeOption,
 					objectType:    normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
@@ -1742,16 +1738,6 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 	}
 
 	return comments
-}
-
-// normalizePrivilegeCase uppercases a privilege name while preserving the case
-// of any parenthesized column list (column names are case-sensitive):
-// "select (Col)" -> "SELECT (Col)".
-func normalizePrivilegeCase(priv string) string {
-	if i := strings.Index(priv, "("); i >= 0 {
-		return strings.ToUpper(strings.TrimRight(priv[:i], " ")) + " " + priv[i:]
-	}
-	return strings.ToUpper(priv)
 }
 
 // normalizeGrantObjectType maps the parser's Grant.ObjectType to the canonical
