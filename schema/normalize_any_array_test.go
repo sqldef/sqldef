@@ -119,16 +119,16 @@ func TestNormalizeSingleElementArrayComparison(t *testing.T) {
 	}
 }
 
-func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
+func TestNormalizeCheckExprStringQuoteAwareKeepsSpelling(t *testing.T) {
 	tests := []struct {
 		name     string
 		sql      string
 		expected string
 	}{
 		{
-			name:     "IN is converted to ANY",
+			name:     "IN is preserved",
 			sql:      `CREATE TABLE t (status text, CHECK (status IN ('active', 'pending')))`,
-			expected: "status = ANY (ARRAY['active', 'pending'])",
+			expected: "status in ('active', 'pending')",
 		},
 		{
 			name:     "explicit ANY is preserved",
@@ -143,24 +143,24 @@ func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 		{
 			name:     "quoted column name is preserved",
 			sql:      `CREATE TABLE t ("Status" text, CHECK ("Status" IN ('active', 'pending')))`,
-			expected: `"Status" = ANY (ARRAY['active', 'pending'])`,
+			expected: `"Status" in ('active', 'pending')`,
 		},
 		{
 			// Generated DDL keeps the authored order even though comparison sorts it,
 			// so applying a change does not rewrite an order that carries meaning.
 			name:     "authored element order is kept",
 			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending', 'active')))`,
-			expected: "status = ANY (ARRAY['pending', 'active'])",
+			expected: "status in ('pending', 'active')",
 		},
 		{
 			name:     "single element is not folded",
 			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending')))`,
-			expected: "status = ANY (ARRAY['pending'])",
+			expected: "status in ('pending')",
 		},
 		{
-			name:     "NOT IN is converted to ALL",
+			name:     "NOT IN is preserved",
 			sql:      `CREATE TABLE t (status text, CHECK (status NOT IN ('deleted', 'cancelled')))`,
-			expected: "status <> ALL (ARRAY['deleted', 'cancelled'])",
+			expected: "status not in ('deleted', 'cancelled')",
 		},
 		{
 			// Dropping the quotes here would silently reference another column, since
@@ -168,6 +168,11 @@ func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 			name:     "quoted column name inside the array is preserved",
 			sql:      `CREATE TABLE t ("Status" text, "Fallback" text, CHECK ("Status" = ANY (ARRAY["Fallback", 'pending'])))`,
 			expected: `"Status" = ANY (ARRAY["Fallback", 'pending'])`,
+		},
+		{
+			name:     "quoted column name inside IN is preserved",
+			sql:      `CREATE TABLE t ("Status" text, "Fallback" text, CHECK ("Status" IN ("Fallback", 'pending')))`,
+			expected: `"Status" in ("Fallback", 'pending')`,
 		},
 	}
 

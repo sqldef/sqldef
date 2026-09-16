@@ -285,7 +285,8 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 }
 
 // normalizeCheckExprForOutput normalizes a CHECK constraint expression for DDL generation.
-// Unlike normalizeCheckExpr it leaves ANY/ALL array elements in the order they were written:
+// Unlike normalizeCheckExpr it keeps IN as written, which the DDL needs in order to run (see
+// normalizeComparisonExpr), and leaves ANY/ALL array elements in the order they were written:
 // comparison canonicalizes both sides anyway, so reordering here would only rewrite the
 // author's schema, discarding an order that often carries meaning (a status lifecycle, say).
 func normalizeCheckExprForOutput(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -1622,13 +1623,15 @@ func normalizeNotExpr(operand parser.Expr) parser.Expr {
 	return &parser.NotExpr{Expr: operand}
 }
 
-// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores:
-// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]).
+// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores.
 //
-// canonicalizeArrays additionally sorts and deduplicates ANY/ALL array elements and
-// collapses a single-element array to a scalar comparison. That is what makes the two
-// spellings PostgreSQL may store compare equal, so it is on when comparing and off when
-// generating DDL, where it would only rewrite the order the author wrote.
+// canonicalizeArrays is on when comparing and off when generating DDL. When on, PostgreSQL's
+// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]), ANY/ALL array
+// elements are sorted and deduplicated, and a single-element array collapses to a scalar
+// comparison. That is what makes the spellings PostgreSQL may store compare equal.
+// When off, IN stays IN: PostgreSQL resolves IN list literals against the left operand's
+// type, but resolves an ARRAY[...] of untyped literals on its own (to text[]), so the ANY
+// spelling fails with "operator does not exist" against an ENUM column.
 //
 // recur is the caller's own normalizer: CHECK constraints and value expressions share
 // this comparison handling but normalize their operands differently. Keeping it in one
@@ -1675,7 +1678,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 	// Handle IN clauses based on mode.
 	if op == "in" || op == "not in" {
 		if tuple, ok := right.(parser.ValTuple); ok {
-			if mode == GeneratorModePostgres {
+			if mode == GeneratorModePostgres && canonicalizeArrays {
 				// Elements are normalized by the ANY/ALL block below.
 				right = &parser.ArrayConstructor{Elements: parser.Exprs(tuple)}
 				if op == "in" {
@@ -1686,7 +1689,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 					allFlag = true
 				}
 			} else {
-				// For other databases, keep IN.
+				// Keep IN for other databases, and for PostgreSQL DDL generation.
 				normalizedElements := util.TransformSlice(tuple, func(elem parser.Expr) parser.Expr {
 					return recur(elem, mode)
 				})
