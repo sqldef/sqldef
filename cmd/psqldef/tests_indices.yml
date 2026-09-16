@@ -699,6 +699,51 @@ PartialIndexWithWhereNotInSingleValue:
     CREATE INDEX idx_orders_not_pending ON orders (id)
     WHERE status NOT IN ('pending');
 
+PartialIndexWithWhereIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_pending ON orders (id)
+    WHERE status IS NOT DISTINCT FROM 'pending';
+
+PartialIndexWithWhereNotIsDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_pending ON orders (id)
+    WHERE NOT (status IS DISTINCT FROM 'pending');
+
+PartialIndexWithWhereNotIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_not_pending ON orders (id)
+    WHERE NOT (status IS NOT DISTINCT FROM 'pending');
+
+PartialIndexWithWhereIsDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_not_pending ON orders (id)
+    WHERE status IS DISTINCT FROM 'pending';
+
+PartialIndexWithWhereNotAndPrecedence:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (id integer, status text, amount numeric);
+    CREATE INDEX idx_large_pending_orders ON orders (id)
+    WHERE NOT (status = 'pending' AND amount > 1000);
+  desired: |
+    CREATE TABLE orders (id integer, status text, amount numeric);
+    CREATE INDEX idx_large_pending_orders ON orders (id)
+    WHERE NOT status = 'pending' AND amount > 1000;
+  up: |
+    DROP INDEX public.idx_large_pending_orders;
+    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE not status = 'pending' and amount > 1000;
+  down: |
+    DROP INDEX public.idx_large_pending_orders;
+    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE not (status = 'pending' and amount > 1000);
+
 PartialIndexWithArrayCastAnyPgDumpStyle:
   legacy_ignore_quotes: false
   desired: |
