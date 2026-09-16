@@ -2333,8 +2333,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
-		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup, g.config.PostgresExtractDatePartEquivalent)
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup, g.config.PostgresExtractDatePartEquivalent)
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 

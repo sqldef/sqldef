@@ -578,6 +578,35 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
 }
 
+func extractFromDatePartCall(mode GeneratorMode, qualifier parser.Ident, funcName string, exprs parser.SelectExprs) (*parser.ExtractExpr, bool) {
+	if mode != GeneratorModePostgres || funcName != "date_part" || len(exprs) != 2 {
+		return nil, false
+	}
+	if !isPostgresCatalogQualifier(qualifier) {
+		return nil, false
+	}
+	fieldArg, fieldOK := exprs[0].(*parser.AliasedExpr)
+	sourceArg, sourceOK := exprs[1].(*parser.AliasedExpr)
+	if !fieldOK || !sourceOK {
+		return nil, false
+	}
+	field, ok := fieldArg.Expr.(*parser.SQLVal)
+	if !ok || field.Type != parser.StrVal {
+		return nil, false
+	}
+	return &parser.ExtractExpr{Field: strings.ToLower(field.Val), Source: sourceArg.Expr}, true
+}
+
+func isPostgresCatalogQualifier(qualifier parser.Ident) bool {
+	if qualifier.IsEmpty() {
+		return true
+	}
+	if qualifier.Quoted {
+		return qualifier.Name == "pg_catalog"
+	}
+	return strings.EqualFold(qualifier.Name, "pg_catalog")
+}
+
 // stripFuncResultTextCasts removes text/character varying casts applied to
 // function call results, e.g. current_setting(...)::text -> current_setting(...).
 // PostgreSQL drops such casts when they are no-ops while storing policy
@@ -663,8 +692,15 @@ func stripFuncResultTextCasts(expr parser.Expr) parser.Expr {
 // normalizeExpr normalizes an expression.
 // This is similar to normalizeCheckExpr but tailored for other contexts.
 func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	return normalizeExprWithCapabilities(expr, mode, false)
+}
+
+func normalizeExprWithCapabilities(expr parser.Expr, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.Expr {
 	if expr == nil {
 		return nil
+	}
+	recur := func(expr parser.Expr) parser.Expr {
+		return normalizeExprWithCapabilities(expr, mode, postgresExtractDatePartEquivalent)
 	}
 
 	switch e := expr.(type) {
@@ -687,7 +723,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 	case *parser.ArrayConstructor:
 		elements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
-			return normalizeExpr(elem, mode)
+			return recur(elem)
 		})
 		return &parser.ArrayConstructor{Elements: elements}
 	case *parser.FuncExpr:
@@ -716,7 +752,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// Expand ARRAY elements into separate normalized arguments
 						for _, elem := range arrayConstr.Elements {
 							normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{
-								Expr: normalizeExpr(elem, mode),
+								Expr: recur(elem),
 							})
 						}
 						continue
@@ -725,11 +761,16 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 
 			// Not an ARRAY, normalize normally
-			normalized := normalizeSelectExpr(arg, mode)
+			normalized := normalizeSelectExprWithCapabilities(arg, mode, postgresExtractDatePartEquivalent)
 			normalizedExprs = append(normalizedExprs, normalized)
 		}
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, funcName, normalizedExprs); ok {
 			return atz
+		}
+		if postgresExtractDatePartEquivalent {
+			if extract, ok := extractFromDatePartCall(mode, e.Qualifier, funcName, normalizedExprs); ok {
+				return extract
+			}
 		}
 		// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
 		// For MySQL, preserve the original case as MySQL preserves case for function names
@@ -738,14 +779,20 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
 		}
 		return &parser.FuncExpr{
-			Qualifier: e.Qualifier,
-			Name:      normalizedName,
-			Distinct:  e.Distinct,
-			Exprs:     normalizedExprs,
-			Over:      e.Over,
+			Qualifier:   e.Qualifier,
+			Name:        normalizedName,
+			Distinct:    e.Distinct,
+			Exprs:       normalizedExprs,
+			WithinGroup: normalizeOrderBy(e.WithinGroup, mode, postgresExtractDatePartEquivalent),
+			Over:        normalizeOver(e.Over, mode, postgresExtractDatePartEquivalent),
+		}
+	case *parser.ExtractExpr:
+		return &parser.ExtractExpr{
+			Field:  strings.ToLower(e.Field),
+			Source: recur(e.Source),
 		}
 	case *parser.CastExpr:
-		normalizedExpr := normalizeExpr(e.Expr, mode)
+		normalizedExpr := recur(e.Expr)
 		// For PostgreSQL, unwrap unnecessary parentheses around simple expressions in casts
 		// PostgreSQL adds parentheses like (amount)::numeric, but we want to normalize to amount::numeric
 		if mode == GeneratorModePostgres {
@@ -871,7 +918,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Type: normalizedType,
 		}
 	case *parser.ParenExpr:
-		normalizedInner := normalizeExpr(e.Expr, mode)
+		normalizedInner := recur(e.Expr)
 		// For PostgreSQL and MySQL, unwrap parentheses around most expressions to normalize
 		// Both databases add parentheses around many expressions, but we want a canonical form
 		// We always unwrap ParenExpr during normalization to get a canonical form
@@ -892,30 +939,32 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Expr: normalizedInner,
 		}
 	case *parser.ComparisonExpr:
-		return normalizeComparisonExpr(e, mode, normalizeExpr, true)
+		return normalizeComparisonExpr(e, mode, func(expr parser.Expr, _ GeneratorMode) parser.Expr {
+			return recur(expr)
+		}, true)
 	case *parser.AndExpr:
 		return &parser.AndExpr{
-			Left:  normalizeExpr(e.Left, mode),
-			Right: normalizeExpr(e.Right, mode),
+			Left:  recur(e.Left),
+			Right: recur(e.Right),
 		}
 	case *parser.OrExpr:
 		return &parser.OrExpr{
-			Left:  normalizeExpr(e.Left, mode),
-			Right: normalizeExpr(e.Right, mode),
+			Left:  recur(e.Left),
+			Right: recur(e.Right),
 		}
 	case *parser.ConcatExpr:
 		return &parser.ConcatExpr{
-			Left:  normalizeExpr(e.Left, mode),
-			Right: normalizeExpr(e.Right, mode),
+			Left:  recur(e.Left),
+			Right: recur(e.Right),
 		}
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
-			Left:     normalizeExpr(e.Left, mode),
-			Right:    normalizeExpr(e.Right, mode),
+			Left:     recur(e.Left),
+			Right:    recur(e.Right),
 		}
 	case *parser.UnaryExpr:
-		normalized := normalizeExpr(e.Expr, mode)
+		normalized := recur(e.Expr)
 
 		// Collapse UnaryExpr with minus/plus on numeric literals to SQLVal
 		// This ensures "-20" and "- 20" (unary minus on 20) are treated the same
@@ -956,7 +1005,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.IsExpr:
 		return &parser.IsExpr{
 			Operator: e.Operator,
-			Expr:     normalizeExpr(e.Expr, mode),
+			Expr:     recur(e.Expr),
 		}
 	case *parser.Subquery:
 		// Recurse into subquery SELECT so that nested FROM clauses receive the
@@ -965,43 +1014,43 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// everywhere including subquery FROM clauses, but user-written DDL
 		// rarely does, causing spurious view re-creations on every diff).
 		return &parser.Subquery{
-			Select: normalizeViewDefinition(e.Select, mode, nil),
+			Select: normalizeViewDefinition(e.Select, mode, nil, postgresExtractDatePartEquivalent),
 		}
 	case *parser.ConvertExpr:
 		// Normalize CAST(expr AS type) to expr::type (CastExpr) for consistency
 		// PostgreSQL represents both forms identically in its internal representation
 		if mode == GeneratorModePostgres && e.Action == parser.CastStr {
-			return normalizeExpr(&parser.CastExpr{
+			return recur(&parser.CastExpr{
 				Expr: e.Expr,
 				Type: e.Type,
-			}, mode)
+			})
 		}
 		return &parser.ConvertExpr{
 			Action: e.Action,
-			Expr:   normalizeExpr(e.Expr, mode),
+			Expr:   recur(e.Expr),
 			Type:   e.Type,
 			Style:  e.Style,
 		}
 	case *parser.CollateExpr:
 		return &parser.CollateExpr{
-			Expr:    normalizeExpr(e.Expr, mode),
+			Expr:    recur(e.Expr),
 			Charset: strings.ToLower(e.Charset),
 		}
 	case *parser.AtTimeZoneExpr:
 		// Recurse so the ::text cast PostgreSQL adds to the zone is stripped.
 		return &parser.AtTimeZoneExpr{
-			Expr: normalizeExpr(e.Expr, mode),
-			Zone: normalizeExpr(e.Zone, mode),
+			Expr: recur(e.Expr),
+			Zone: recur(e.Zone),
 		}
 	case *parser.CaseExpr:
 		normalizedWhens := make([]*parser.When, len(e.Whens))
 		for i, when := range e.Whens {
 			normalizedWhens[i] = &parser.When{
-				Cond: normalizeExpr(when.Cond, mode),
-				Val:  normalizeExpr(when.Val, mode),
+				Cond: recur(when.Cond),
+				Val:  recur(when.Val),
 			}
 		}
-		normalizedElse := normalizeExpr(e.Else, mode)
+		normalizedElse := recur(e.Else)
 		// PostgreSQL adds ELSE NULL to CASE expressions, normalize it away
 		if _, ok := normalizedElse.(*parser.NullVal); ok {
 			normalizedElse = nil
@@ -1013,7 +1062,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 		return &parser.CaseExpr{
-			Expr:  normalizeExpr(e.Expr, mode),
+			Expr:  recur(e.Expr),
 			Whens: normalizedWhens,
 			Else:  normalizedElse,
 		}
@@ -1030,12 +1079,12 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			switch normalizedType {
 			case "integer", "bigint", "smallint", "decimal", "real", "double precision", "boolean",
 				"money", "smallmoney":
-				return normalizeExpr(&parser.CastExpr{
+				return recur(&parser.CastExpr{
 					Expr: e.Value,
 					Type: &parser.ConvertType{Type: normalizedType},
-				}, mode)
+				})
 			}
-			return normalizeExpr(e.Value, mode)
+			return recur(e.Value)
 		}
 		return expr
 	case *parser.IntervalExpr:
@@ -1064,16 +1113,20 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 }
 
 // normalizeSelectExprs normalizes SELECT expressions for comparison
-func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.SelectExprs {
+func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.SelectExprs {
 	normalized := make(parser.SelectExprs, len(exprs))
 	for i, expr := range exprs {
-		normalized[i] = normalizeSelectExpr(expr, mode)
+		normalized[i] = normalizeSelectExprWithCapabilities(expr, mode, postgresExtractDatePartEquivalent)
 	}
 	return normalized
 }
 
 // normalizeSelectExpr normalizes a single SELECT expression for views
 func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
+	return normalizeSelectExprWithCapabilities(expr, mode, false)
+}
+
+func normalizeSelectExprWithCapabilities(expr parser.SelectExpr, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.SelectExpr {
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
 		as := e.As
@@ -1092,7 +1145,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 			}
 		}
 		return &parser.AliasedExpr{
-			Expr: normalizeExpr(e.Expr, mode),
+			Expr: normalizeExprWithCapabilities(e.Expr, mode, postgresExtractDatePartEquivalent),
 			As:   as,
 		}
 	case *parser.StarExpr:
@@ -1103,16 +1156,16 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 }
 
 // normalizeTableExprs normalizes FROM clause table expressions
-func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode, tableLookup TableLookupFunc) parser.TableExprs {
+func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode, tableLookup TableLookupFunc, postgresExtractDatePartEquivalent bool) parser.TableExprs {
 	normalized := make(parser.TableExprs, len(exprs))
 	for i, expr := range exprs {
-		normalized[i] = normalizeTableExpr(expr, mode, tableLookup)
+		normalized[i] = normalizeTableExpr(expr, mode, tableLookup, postgresExtractDatePartEquivalent)
 	}
 	return normalized
 }
 
 // normalizeTableExpr normalizes a single TableExpr
-func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup TableLookupFunc) parser.TableExpr {
+func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup TableLookupFunc, postgresExtractDatePartEquivalent bool) parser.TableExpr {
 	if expr == nil {
 		return nil
 	}
@@ -1132,7 +1185,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 			}
 		case *parser.Subquery:
 			normalizedExpr = &parser.Subquery{
-				Select: normalizeViewDefinition(tableExpr.Select, mode, tableLookup),
+				Select: normalizeViewDefinition(tableExpr.Select, mode, tableLookup, postgresExtractDatePartEquivalent),
 			}
 		}
 		return &parser.AliasedTableExpr{
@@ -1145,22 +1198,22 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 		}
 	case *parser.JoinTableExpr:
 		return &parser.JoinTableExpr{
-			LeftExpr:  normalizeTableExpr(e.LeftExpr, mode, tableLookup),
+			LeftExpr:  normalizeTableExpr(e.LeftExpr, mode, tableLookup, postgresExtractDatePartEquivalent),
 			Join:      e.Join,
-			RightExpr: normalizeTableExpr(e.RightExpr, mode, tableLookup),
-			Condition: normalizeJoinCondition(e.Condition, mode),
+			RightExpr: normalizeTableExpr(e.RightExpr, mode, tableLookup, postgresExtractDatePartEquivalent),
+			Condition: normalizeJoinCondition(e.Condition, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.ParenTableExpr:
 		// PostgreSQL and MariaDB add parentheses around JOINs when storing views.
 		// Unwrap these to get a canonical form.
 		if (mode == GeneratorModePostgres || mode == GeneratorModeMysql) && len(e.Exprs) == 1 {
 			// Single expression in parentheses - unwrap it
-			return normalizeTableExpr(e.Exprs[0], mode, tableLookup)
+			return normalizeTableExpr(e.Exprs[0], mode, tableLookup, postgresExtractDatePartEquivalent)
 		}
 		// Multiple expressions - normalize but keep parens
 		normalized := make(parser.TableExprs, len(e.Exprs))
 		for i, expr := range e.Exprs {
-			normalized[i] = normalizeTableExpr(expr, mode, tableLookup)
+			normalized[i] = normalizeTableExpr(expr, mode, tableLookup, postgresExtractDatePartEquivalent)
 		}
 		return &parser.ParenTableExpr{Exprs: normalized}
 	default:
@@ -1169,13 +1222,13 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 }
 
 // normalizeJoinCondition normalizes the JOIN ON/USING condition
-func normalizeJoinCondition(cond parser.JoinCondition, mode GeneratorMode) parser.JoinCondition {
+func normalizeJoinCondition(cond parser.JoinCondition, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.JoinCondition {
 	if cond.On != nil {
 		// For PostgreSQL and MySQL, preserve table qualifiers in JOIN ON clauses
 		// They're needed for disambiguation (e.g., "u.id = o.user_id")
 		// We only normalize the expression structure (parentheses, etc.), not column qualifiers
 		return parser.JoinCondition{
-			On:    normalizeExprPreservingQualifiers(cond.On, mode),
+			On:    normalizeExprPreservingQualifiersWithCapabilities(cond.On, mode, postgresExtractDatePartEquivalent),
 			Using: cond.Using,
 		}
 	}
@@ -1185,6 +1238,10 @@ func normalizeJoinCondition(cond parser.JoinCondition, mode GeneratorMode) parse
 // normalizeExprPreservingQualifiers is like normalizeExpr but preserves table qualifiers in column references
 // This is used for JOIN ON clauses where qualifiers are semantically important
 func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	return normalizeExprPreservingQualifiersWithCapabilities(expr, mode, false)
+}
+
+func normalizeExprPreservingQualifiersWithCapabilities(expr parser.Expr, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.Expr {
 	if expr == nil {
 		return nil
 	}
@@ -1206,28 +1263,28 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 		}
 	case *parser.AndExpr:
 		return &parser.AndExpr{
-			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
-			Right: normalizeExprPreservingQualifiers(e.Right, mode),
+			Left:  normalizeExprPreservingQualifiersWithCapabilities(e.Left, mode, postgresExtractDatePartEquivalent),
+			Right: normalizeExprPreservingQualifiersWithCapabilities(e.Right, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.OrExpr:
 		return &parser.OrExpr{
-			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
-			Right: normalizeExprPreservingQualifiers(e.Right, mode),
+			Left:  normalizeExprPreservingQualifiersWithCapabilities(e.Left, mode, postgresExtractDatePartEquivalent),
+			Right: normalizeExprPreservingQualifiersWithCapabilities(e.Right, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.ConcatExpr:
 		return &parser.ConcatExpr{
-			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
-			Right: normalizeExprPreservingQualifiers(e.Right, mode),
+			Left:  normalizeExprPreservingQualifiersWithCapabilities(e.Left, mode, postgresExtractDatePartEquivalent),
+			Right: normalizeExprPreservingQualifiersWithCapabilities(e.Right, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.ComparisonExpr:
 		return &parser.ComparisonExpr{
 			Operator: normalizeOperator(e.Operator, mode),
-			Left:     normalizeExprPreservingQualifiers(e.Left, mode),
-			Right:    normalizeExprPreservingQualifiers(e.Right, mode),
-			Escape:   normalizeExprPreservingQualifiers(e.Escape, mode),
+			Left:     normalizeExprPreservingQualifiersWithCapabilities(e.Left, mode, postgresExtractDatePartEquivalent),
+			Right:    normalizeExprPreservingQualifiersWithCapabilities(e.Right, mode, postgresExtractDatePartEquivalent),
+			Escape:   normalizeExprPreservingQualifiersWithCapabilities(e.Escape, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.ParenExpr:
-		normalizedInner := normalizeExprPreservingQualifiers(e.Expr, mode)
+		normalizedInner := normalizeExprPreservingQualifiersWithCapabilities(e.Expr, mode, postgresExtractDatePartEquivalent)
 		// For PostgreSQL and MySQL, unwrap unnecessary parentheses
 		if mode == GeneratorModePostgres || mode == GeneratorModeMysql {
 			return normalizedInner
@@ -1235,44 +1292,60 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 		return &parser.ParenExpr{Expr: normalizedInner}
 	default:
 		// For other expressions, use the regular normalizeExpr
-		return normalizeExpr(expr, mode)
+		return normalizeExprWithCapabilities(expr, mode, postgresExtractDatePartEquivalent)
 	}
 }
 
 // normalizeWhere normalizes WHERE clause
-func normalizeWhere(where *parser.Where, mode GeneratorMode) *parser.Where {
+func normalizeWhere(where *parser.Where, mode GeneratorMode, postgresExtractDatePartEquivalent bool) *parser.Where {
 	if where == nil {
 		return nil
 	}
 	return &parser.Where{
 		Type: where.Type,
-		Expr: normalizeExpr(where.Expr, mode),
+		Expr: normalizeExprWithCapabilities(where.Expr, mode, postgresExtractDatePartEquivalent),
 	}
 }
 
 // normalizeGroupBy normalizes GROUP BY clause
-func normalizeGroupBy(groupBy parser.GroupBy, mode GeneratorMode) parser.GroupBy {
+func normalizeGroupBy(groupBy parser.GroupBy, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.GroupBy {
 	normalized := make(parser.GroupBy, len(groupBy))
 	for i, expr := range groupBy {
-		normalized[i] = normalizeExpr(expr, mode)
+		normalized[i] = normalizeExprWithCapabilities(expr, mode, postgresExtractDatePartEquivalent)
 	}
 	return normalized
 }
 
 // normalizeOrderBy normalizes ORDER BY clause
-func normalizeOrderBy(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
+func normalizeOrderBy(orderBy parser.OrderBy, mode GeneratorMode, postgresExtractDatePartEquivalent bool) parser.OrderBy {
 	normalized := make(parser.OrderBy, len(orderBy))
 	for i, order := range orderBy {
 		normalized[i] = &parser.Order{
-			Expr:      normalizeExpr(order.Expr, mode),
+			Expr:      normalizeExprWithCapabilities(order.Expr, mode, postgresExtractDatePartEquivalent),
 			Direction: order.Direction,
 		}
 	}
 	return normalized
 }
 
+func normalizeOver(over *parser.OverExpr, mode GeneratorMode, postgresExtractDatePartEquivalent bool) *parser.OverExpr {
+	if over == nil {
+		return nil
+	}
+	partitionBy := make(parser.PartitionBy, len(over.PartitionBy))
+	for i, partition := range over.PartitionBy {
+		partitionBy[i] = &parser.Partition{
+			Expr: normalizeExprWithCapabilities(partition.Expr, mode, postgresExtractDatePartEquivalent),
+		}
+	}
+	return &parser.OverExpr{
+		PartitionBy: partitionBy,
+		OrderBy:     normalizeOrderBy(over.OrderBy, mode, postgresExtractDatePartEquivalent),
+	}
+}
+
 // normalizeWith normalizes a WITH clause (Common Table Expressions) for comparison.
-func normalizeWith(with *parser.With, mode GeneratorMode) *parser.With {
+func normalizeWith(with *parser.With, mode GeneratorMode, postgresExtractDatePartEquivalent bool) *parser.With {
 	if with == nil {
 		return nil
 	}
@@ -1282,7 +1355,7 @@ func normalizeWith(with *parser.With, mode GeneratorMode) *parser.With {
 		normalizedCTEs[i] = &parser.CommonTableExpr{
 			Name:       cte.Name,
 			Columns:    cte.Columns,
-			Definition: normalizeViewDefinition(cte.Definition, mode, nil),
+			Definition: normalizeViewDefinition(cte.Definition, mode, nil, postgresExtractDatePartEquivalent),
 		}
 	}
 
@@ -1300,14 +1373,14 @@ type TableLookupFunc func(name QualifiedName) *Table
 // This function removes database-specific formatting differences that don't affect the logical meaning.
 // If tableLookup is provided, SELECT * expressions are expanded to explicit column names
 // (PostgreSQL expands * when storing view definitions).
-func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, tableLookup TableLookupFunc) parser.SelectStatement {
+func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, tableLookup TableLookupFunc, postgresExtractDatePartEquivalent bool) parser.SelectStatement {
 	if stmt == nil {
 		return nil
 	}
 
 	switch s := stmt.(type) {
 	case *parser.Select:
-		normalizedFrom := normalizeTableExprs(s.From, mode, tableLookup)
+		normalizedFrom := normalizeTableExprs(s.From, mode, tableLookup, postgresExtractDatePartEquivalent)
 		selectExprs := s.SelectExprs
 		// Expand SELECT * if we have table lookup capability
 		if tableLookup != nil && hasStarExpr(selectExprs) {
@@ -1324,28 +1397,28 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 			Comments:    nil, // Remove comments for view comparison - they don't affect semantic meaning
 			Distinct:    s.Distinct,
 			Hints:       s.Hints,
-			SelectExprs: normalizeSelectExprs(selectExprs, mode),
+			SelectExprs: normalizeSelectExprs(selectExprs, mode, postgresExtractDatePartEquivalent),
 			From:        normalizedFrom,
-			Where:       normalizeWhere(s.Where, mode),
-			GroupBy:     normalizeGroupBy(s.GroupBy, mode),
-			Having:      normalizeWhere(s.Having, mode),
-			OrderBy:     normalizeOrderBy(s.OrderBy, mode),
+			Where:       normalizeWhere(s.Where, mode, postgresExtractDatePartEquivalent),
+			GroupBy:     normalizeGroupBy(s.GroupBy, mode, postgresExtractDatePartEquivalent),
+			Having:      normalizeWhere(s.Having, mode, postgresExtractDatePartEquivalent),
+			OrderBy:     normalizeOrderBy(s.OrderBy, mode, postgresExtractDatePartEquivalent),
 			Limit:       s.Limit,
 			Lock:        s.Lock,
-			With:        normalizeWith(s.With, mode),
+			With:        normalizeWith(s.With, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.Union:
 		return &parser.Union{
 			Type:    s.Type,
-			Left:    normalizeViewDefinition(s.Left, mode, tableLookup),
-			Right:   normalizeViewDefinition(s.Right, mode, tableLookup),
-			OrderBy: normalizeOrderBy(s.OrderBy, mode),
+			Left:    normalizeViewDefinition(s.Left, mode, tableLookup, postgresExtractDatePartEquivalent),
+			Right:   normalizeViewDefinition(s.Right, mode, tableLookup, postgresExtractDatePartEquivalent),
+			OrderBy: normalizeOrderBy(s.OrderBy, mode, postgresExtractDatePartEquivalent),
 			Limit:   s.Limit,
 			Lock:    s.Lock,
-			With:    normalizeWith(s.With, mode),
+			With:    normalizeWith(s.With, mode, postgresExtractDatePartEquivalent),
 		}
 	case *parser.ParenSelect:
-		normalized := normalizeViewDefinition(s.Select, mode, tableLookup)
+		normalized := normalizeViewDefinition(s.Select, mode, tableLookup, postgresExtractDatePartEquivalent)
 		if inner, ok := normalized.(*parser.Select); ok && len(inner.OrderBy) == 0 && inner.Limit == nil && inner.Lock == "" && inner.With == nil {
 			return inner
 		}

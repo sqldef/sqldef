@@ -48,6 +48,41 @@ func TestUnixSocketConnection(t *testing.T) {
 	}
 }
 
+func TestSetGeneratorConfigDefaultsExtractDatePartToFalseOnVersionQueryError(t *testing.T) {
+	sock := testutil.StartDummyUnixSocket(t, "postgres-config-test", ".s.PGSQL.5432")
+	defer sock.Close()
+
+	db, err := NewDatabase(database.Config{Socket: sock.Dir, Port: 5432})
+	require.NoError(t, err)
+	defer db.Close()
+
+	db.SetGeneratorConfig(database.GeneratorConfig{PostgresExtractDatePartEquivalent: true})
+	assert.False(t, db.GetGeneratorConfig().PostgresExtractDatePartEquivalent)
+}
+
+func TestExtractDatePartEquivalent(t *testing.T) {
+	assert.True(t, extractDatePartEquivalent(139999))
+	assert.False(t, extractDatePartEquivalent(140000))
+}
+
+func TestExportMaterializedViewPreservesDatePart(t *testing.T) {
+	db := setupTestDatabase(t)
+	defer db.Close()
+
+	_, err := db.DB().Exec(`
+		CREATE TABLE events (created_at timestamp);
+		CREATE MATERIALIZED VIEW event_years AS
+		SELECT date_part('year', created_at) AS event_year FROM events;
+	`)
+	require.NoError(t, err)
+
+	db.SetGeneratorConfig(database.GeneratorConfig{LegacyIgnoreQuotes: false})
+	exported, err := db.ExportDDLs()
+	require.NoError(t, err)
+	assert.Contains(t, exported, "date_part(")
+	assert.NotContains(t, exported, "EXTRACT(")
+}
+
 // TestExtensionOIDCollisionByInjectedDependency verifies that ExportDDLs correctly
 // handles OID collisions between user objects and extension objects.
 //

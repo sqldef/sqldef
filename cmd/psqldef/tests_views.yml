@@ -493,6 +493,87 @@ ViewWithGroupByAndHaving:
     CREATE VIEW tag_counts AS
     SELECT tag, COUNT(*) AS count
     FROM taggings GROUP BY tag HAVING COUNT(*) > 1;
+ExtractAndDatePartEquivalentBeforePostgres14:
+  max_version: "13"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_years AS
+      SELECT
+        EXTRACT(year FROM created_at) AS event_year,
+        EXTRACT(month FROM created_at) AS event_month
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_years AS
+      SELECT
+        date_part('year', created_at) AS event_year,
+        pg_catalog.date_part('month', created_at) AS event_month
+      FROM events;
+  up: ""
+  down: ""
+ExtractAndDatePartEquivalentInWindowAndWithinGroupBeforePostgres14:
+  max_version: "13"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_windows AS
+      SELECT row_number() OVER (
+        PARTITION BY EXTRACT(month FROM created_at)
+        ORDER BY EXTRACT(year FROM created_at)
+      ) AS row_num
+      FROM events;
+    CREATE VIEW event_percentiles AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY EXTRACT(epoch FROM created_at)
+      ) AS median_epoch
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_windows AS
+      SELECT row_number() OVER (
+        PARTITION BY date_part('month', created_at)
+        ORDER BY date_part('year', created_at)
+      ) AS row_num
+      FROM events;
+    CREATE VIEW event_percentiles AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY date_part('epoch', created_at)
+      ) AS median_epoch
+      FROM events;
+  up: ""
+  down: ""
+ExtractAndDatePartDifferFromPostgres14:
+  min_version: "14"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(year FROM created_at) AS event_year
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_years AS
+      SELECT date_part('year', created_at) AS event_year
+      FROM events;
+  up: |
+    DROP VIEW public.event_years;
+    CREATE VIEW public.event_years AS select date_part('year', created_at) as event_year from events;
+  down: |
+    DROP VIEW public.event_years;
+    CREATE VIEW public.event_years AS select EXTRACT(year FROM created_at) as event_year from events;
 ExtractInMaterializedView:
   desired: |
     CREATE TABLE events (
