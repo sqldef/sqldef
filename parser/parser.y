@@ -146,7 +146,7 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> UNION INTERSECT EXCEPT
 %token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
-%token <str> ROWID STRICT PRAGMA
+%token <str> ROWID PRAGMA
 %token <str> VALUES LAST_INSERT_ID
 %token <str> NEXT VALUE SHARE MODE
 %token <str> SQL_NO_CACHE SQL_CACHE
@@ -222,7 +222,7 @@ func setDDL(yylex any, ddl *DDL) {
  * the parser to prefer shifting WITH/WITHOUT over reducing the empty production
  * in time_zone_opt.                                                              */
 %nonassoc LOWER_THAN_WITH
-%left <str> WITH WITHOUT
+%left <str> WITH WITHOUT STRICT
 /* ---------------- End of Optional Timezone Resolution ------------------------ */
 /* ---------------- Optional IF NOT EXISTS Resolution ---------------------------
  * LOWER_THAN_IF is used to resolve shift/reduce conflicts in optional
@@ -5880,6 +5880,9 @@ grantee_list:
 // rather than explicitly parsing the various keywords for table options,
 // just accept any number of keywords, IDs, strings, numbers, and '='
 table_option_list:
+  /* STRICT/WITHOUT are non-reserved keywords, so after ')' they could also start
+   * a "table_opt_name = value" option. Shift them as sqlite3_table_opt instead. */
+  %prec LOWER_THAN_WITH
   {
     $$ = map[string]string{}
   }
@@ -7586,6 +7589,10 @@ column_name:
   {
     $$ = &ColName{Name: NewIdent($1, false)}
   }
+| PG_KEY
+  {
+    $$ = &ColName{Name: NewIdent($1, false)}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -8032,6 +8039,10 @@ reserved_sql_id:
   {
     $$ = NewIdent($1, false)
   }
+| PG_KEY
+  {
+    $$ = NewIdent($1, false)
+  }
 | TEXT
   {
     $$ = NewIdent($1, false)
@@ -8424,15 +8435,18 @@ non_reserved_keyword:
 | POINT
 | POLICY
 | POLYGON
+| PRAGMA
 | RESTRICTED
 | ROWS
 | SAFE
 | SQL
+| STRICT
 | TYPE
 | STATEMENT
 | STATUS
 | UNSAFE
 | VARIABLES
+| WITHOUT
 | ZONE
 | LEVEL
 | PRIVILEGES

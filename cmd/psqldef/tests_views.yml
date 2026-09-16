@@ -751,3 +751,9 @@ ViewWithIsNotDistinctFromChangedOperand:
     CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'shipped';
   down: |
     CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'pending';
+
+ViewReferencingColumnNamedKey:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (key text, name text);
+    CREATE VIEW users_view AS SELECT key, name FROM users;

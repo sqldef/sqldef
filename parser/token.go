@@ -782,7 +782,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 		case eofChar:
 			return 0, ""
 		case '=', ',', ';', '(', ')', '[', ']', '+', '*', '%', '^', '~':
-			if tkn.mode == ParserModeMssql && ch == '[' {
+			if (tkn.mode == ParserModeMssql || tkn.mode == ParserModeSQLite3) && ch == '[' {
 				return tkn.scanLiteralIdentifier(']')
 			}
 			if tkn.mode == ParserModePostgres && ch == '~' {
