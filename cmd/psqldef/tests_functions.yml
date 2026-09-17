@@ -491,3 +491,17 @@ OverloadedFunctionsBothReplacedInPlace:
   down: |
     CREATE OR REPLACE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
     CREATE OR REPLACE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+
+FunctionReferencingATableOfTheSameSchema:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE OR REPLACE FUNCTION public.count_t() RETURNS bigint
+     LANGUAGE sql
+     STABLE
+    AS $function$
+        SELECT count(*) FROM t
+    $function$;
+
+    CREATE TABLE t (
+      a bigint
+    );
