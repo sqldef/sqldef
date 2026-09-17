@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -760,6 +761,58 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}, nil
 }
 
+// autoIndexName reproduces the name the database gives an index declared without one.
+// PostgreSQL (DefineIndex/ChooseIndexName) joins the table name, the key columns and the
+// INCLUDE columns, and suffixes _key for a UNIQUE constraint but _idx for a bare index.
+func autoIndexName(stmt *parser.DDL, indexColumns []IndexColumn, mode GeneratorMode) string {
+	columnNames := []string{}
+	for _, indexColumn := range indexColumns {
+		columnNames = append(columnNames, autoIndexColumnName(indexColumn, mode, columnNames))
+	}
+	for _, includedColumn := range stmt.IndexSpec.Included {
+		columnNames = append(columnNames, includedColumn.Name)
+	}
+
+	name := stmt.Table.Name.Name
+	for _, columnName := range columnNames {
+		name += fmt.Sprintf("_%s", columnName)
+	}
+	if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && stmt.Action != parser.CreateIndex {
+		return name + "_key"
+	}
+	return name + "_idx"
+}
+
+// autoIndexColumnName is ChooseIndexColumnNames: an expression contributes the name of its
+// function, or "expr", and a name already taken by an earlier column gets a counter appended.
+func autoIndexColumnName(indexColumn IndexColumn, mode GeneratorMode, taken []string) string {
+	if mode != GeneratorModePostgres {
+		return indexColumn.ColumnName()
+	}
+
+	name := indexColumn.ColumnName()
+	if _, ok := indexColumn.columnExpr.(*parser.ColName); !ok {
+		name = "expr"
+		expr := indexColumn.columnExpr
+		for {
+			parenExpr, ok := expr.(*parser.ParenExpr)
+			if !ok {
+				break
+			}
+			expr = parenExpr.Expr
+		}
+		if funcExpr, ok := expr.(*parser.FuncExpr); ok {
+			name = strings.ToLower(funcExpr.Name.Name)
+		}
+	}
+
+	candidate := name
+	for i := 1; slices.Contains(taken, candidate); i++ {
+		candidate = fmt.Sprintf("%s%d", name, i)
+	}
+	return candidate
+}
+
 func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, error) {
 	if stmt.IndexSpec == nil {
 		return Index{}, fmt.Errorf("stmt.IndexSpec was null on parseIndex: %#v", stmt)
@@ -823,20 +876,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	nameIdent := stmt.IndexSpec.Name
 	if nameIdent.IsEmpty() {
-		nameIdent.Name = stmt.Table.Name.Name
-		for _, indexColumn := range indexColumns {
-			nameIdent.Name += fmt.Sprintf("_%s", indexColumn.ColumnName())
-		}
-		// PostgreSQL derives the name from the key columns and the INCLUDE columns alike
-		for _, includedColumn := range stmt.IndexSpec.Included {
-			nameIdent.Name += fmt.Sprintf("_%s", includedColumn.Name)
-		}
-		// Use PostgreSQL naming convention for UNIQUE constraints
-		if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && len(indexColumns) == 1 {
-			nameIdent.Name += "_key"
-		} else {
-			nameIdent.Name += "_idx"
-		}
+		nameIdent.Name = autoIndexName(stmt, indexColumns, mode)
 		// Auto-generated names are unquoted
 		nameIdent.Quoted = false
 	}

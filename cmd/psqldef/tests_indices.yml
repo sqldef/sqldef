@@ -1057,3 +1057,54 @@ UnnamedIndexNameIncludesIncludeColumns:
     CREATE INDEX ON t (a) INCLUDE (b);
   up: ""
   down: ""
+
+UnnamedUniqueIndexIsNamedIdxNotKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE UNIQUE INDEX t_x_idx ON t USING btree (x);
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE UNIQUE INDEX ON t (x);
+  up: ""
+  down: ""
+
+UnnamedExpressionIndexIsNamedAfterTheFunction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX t_lower_idx ON t USING btree (lower(y));
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX ON t ((lower(y)));
+  up: ""
+  down: ""
+
+UnnamedIndexOnRepeatedExpressionsCountsDuplicates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX t_expr_expr1_idx ON t USING btree ((x + 1), (x + 2));
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX ON t ((x + 1), (x + 2));
+  up: ""
+  down: ""
