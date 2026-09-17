@@ -3491,7 +3491,8 @@ func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
 }
 
 // generateIndexColumnDefinition generates one key part of an index column list, with proper quoting.
-// The clauses have to keep this order: PostgreSQL accepts an operator class only before ASC/DESC.
+// The clauses have to keep this order: PostgreSQL accepts a collation only before the operator
+// class, an operator class only before ASC/DESC, and NULLS FIRST/LAST only after them.
 func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 	var column string
 	// For simple column references (ColName), use escapeSQLIdent to preserve quoting
@@ -3512,11 +3513,23 @@ func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) strin
 	if indexColumn.length != nil {
 		column += fmt.Sprintf("(%d)", *indexColumn.length)
 	}
+	if indexColumn.collation != "" {
+		// PostgreSQL collation names are case-sensitive identifiers ("C", "en_US"), and the
+		// database always prints them quoted.
+		if g.mode == GeneratorModePostgres {
+			column += fmt.Sprintf(" COLLATE %s", g.forceEscapeSQLName(indexColumn.collation))
+		} else {
+			column += fmt.Sprintf(" COLLATE %s", indexColumn.collation)
+		}
+	}
 	if indexColumn.operatorClass != "" {
 		column += " " + indexColumn.operatorClass
 	}
 	if indexColumn.direction == DescScr {
 		column += fmt.Sprintf(" %s", indexColumn.direction)
+	}
+	if indexColumn.nullsOrdering != "" {
+		column += fmt.Sprintf(" nulls %s", strings.ToLower(indexColumn.nullsOrdering))
 	}
 	if indexColumn.withoutOverlaps {
 		column += " WITHOUT OVERLAPS"
@@ -6316,6 +6329,12 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
+			return false
+		}
+		if indexA.columns[i].NullsOrdering() != indexB.columns[i].NullsOrdering() {
+			return false
+		}
+		if !strings.EqualFold(indexA.columns[i].collation, indexB.columns[i].collation) {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {

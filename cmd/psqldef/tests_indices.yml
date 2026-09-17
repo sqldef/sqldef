@@ -1108,3 +1108,62 @@ UnnamedIndexOnRepeatedExpressionsCountsDuplicates:
     CREATE INDEX ON t ((x + 1), (x + 2));
   up: ""
   down: ""
+
+CreateIndexWithNullsOrderingAndCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX idx_nulls ON t USING btree (a DESC NULLS LAST);
+    CREATE INDEX idx_coll ON t USING btree (b COLLATE "C");
+  up: |
+    CREATE INDEX idx_nulls ON public.t USING btree (a desc nulls last);
+    CREATE INDEX idx_coll ON public.t USING btree (b COLLATE "C");
+  down: |
+    DROP INDEX public.idx_coll;
+    DROP INDEX public.idx_nulls;
+
+ChangeNullsOrderingOfIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX idx_nulls ON t USING btree (a DESC NULLS LAST);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX idx_nulls ON t USING btree (a DESC);
+  up: |
+    DROP INDEX public.idx_nulls;
+    CREATE INDEX idx_nulls ON public.t USING btree (a desc);
+  down: |
+    DROP INDEX public.idx_nulls;
+    CREATE INDEX idx_nulls ON public.t USING btree (a desc nulls last);
+
+ExplicitDefaultNullsOrderingIsNotAChange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX idx_d ON t USING btree (a DESC);
+    CREATE INDEX idx_a ON t USING btree (b);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX idx_d ON t USING btree (a DESC NULLS FIRST);
+    CREATE INDEX idx_a ON t USING btree (b ASC NULLS LAST);
+  up: ""
+  down: ""

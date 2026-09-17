@@ -305,9 +305,23 @@ type IndexColumn struct {
 	columnExpr    parser.Expr // never nil as it's always initialized in the parser
 	length        *int
 	direction     string
+	nullsOrdering string // "first" or "last" for NULLS FIRST/LAST
+	collation     string
 	operatorClass string
 
 	withoutOverlaps bool
+}
+
+// NullsOrdering returns the NULLS ordering, resolving the default one implied by the sort
+// direction: PostgreSQL sorts nulls last when ascending and first when descending.
+func (ic IndexColumn) NullsOrdering() string {
+	if ic.nullsOrdering != "" {
+		return strings.ToLower(ic.nullsOrdering)
+	}
+	if ic.direction == DescScr {
+		return "first"
+	}
+	return "last"
 }
 
 // ColumnName returns the column name if this is a simple column reference.
