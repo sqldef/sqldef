@@ -1040,3 +1040,20 @@ IncludeColumnsFoldCaseWhenUnquoted:
     CREATE INDEX idx_orders_user ON orders USING btree (USER_ID) INCLUDE (TOTAL_AMOUNT);
   up: ""
   down: ""
+
+UnnamedIndexNameIncludesIncludeColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE INDEX t_a_b_idx ON t USING btree (a) INCLUDE (b);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE INDEX ON t (a) INCLUDE (b);
+  up: ""
+  down: ""

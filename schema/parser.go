@@ -827,6 +827,10 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		for _, indexColumn := range indexColumns {
 			nameIdent.Name += fmt.Sprintf("_%s", indexColumn.ColumnName())
 		}
+		// PostgreSQL derives the name from the key columns and the INCLUDE columns alike
+		for _, includedColumn := range stmt.IndexSpec.Included {
+			nameIdent.Name += fmt.Sprintf("_%s", includedColumn.Name)
+		}
 		// Use PostgreSQL naming convention for UNIQUE constraints
 		if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && len(indexColumns) == 1 {
 			nameIdent.Name += "_key"
