@@ -1,3 +1,9 @@
+## [v3.11.23](https://github.com/sqldef/sqldef/compare/v3.11.22...v3.11.23) - 2026-09-17
+
+- parser: drop the never-reduced duplicate rule in function_call_generic by @178inaba in https://github.com/sqldef/sqldef/pull/1356
+- psqldef: emit the operator class before ASC/DESC on index columns by @moznion in https://github.com/sqldef/sqldef/pull/1288
+- psqldef: stop losing index clauses in quote-aware mode by @gfx in https://github.com/sqldef/sqldef/pull/1372
+
 ## [v3.11.22](https://github.com/sqldef/sqldef/compare/v3.11.21...v3.11.22) - 2026-09-16
 
 - parser: simplify string concat CHECK test, keep column-level coverage by @178inaba in https://github.com/sqldef/sqldef/pull/1331
