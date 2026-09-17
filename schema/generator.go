@@ -1695,16 +1695,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
-			if renameFromIndex != nil && !g.areSameIndexes(*renameFromIndex, desiredIndex) {
-				// See generateDDLsForCreateIndex: a changed definition cannot be renamed into place.
-				ddls = g.appendRecreate(ddls,
-					g.generateDropIndex(desired.table.name, renameFromIndex.name, renameFromIndex.constraint),
-					g.generateAddIndex(desired.table.name, desiredIndex),
-				)
-			} else if renameFromIndex != nil {
-				// Generate RENAME INDEX DDL
-				renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
-				ddls = append(ddls, renameDDLs...)
+			if renameFromIndex != nil {
+				if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+					renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+					ddls = append(ddls, renameDDLs...)
+				} else {
+					// See generateDDLsForCreateIndex: a changed definition cannot be renamed into place.
+					ddls = g.appendRecreate(ddls,
+						g.generateDropIndex(desired.table.name, renameFromIndex.name, renameFromIndex.constraint),
+						g.generateAddIndex(desired.table.name, desiredIndex),
+					)
+				}
 			} else {
 				// Index not found and not a rename, add index.
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
@@ -2063,11 +2064,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 					g.generateDropIndex(tableName, currentIndex.name, currentIndex.constraint),
 					statement,
 				)
-				for i, viewIndex := range currentView.indexes {
-					if g.identsEqual(viewIndex.name, desiredIndex.name) {
-						currentView.indexes[i] = desiredIndex
-					}
-				}
+				currentView.indexes = g.replaceIndex(currentView.indexes, desiredIndex.name, desiredIndex)
 			}
 		} else {
 			// Check if the view exists in desired views (might be created in the same migration)
@@ -2100,23 +2097,20 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 			renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
-		if renameFromIndex != nil && !g.areSameIndexes(*renameFromIndex, desiredIndex) {
-			// The definition changed as well, so the index has to be rebuilt anyway and there is
-			// nothing for the rename to preserve.
-			ddls = g.appendRecreate(ddls,
-				g.generateDropIndex(currentTable.name, renameFromIndex.name, renameFromIndex.constraint),
-				statement,
-			)
-			g.trackDroppedIndex(currentTable, *renameFromIndex)
-			currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
-		} else if renameFromIndex != nil {
-			// Generate RENAME INDEX DDL
-			renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
-			ddls = append(ddls, renameDDLs...)
+		if renameFromIndex != nil {
+			if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+				renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+				ddls = append(ddls, renameDDLs...)
+			} else {
+				// A changed definition has to be rebuilt anyway, so there is nothing for the
+				// rename to preserve.
+				ddls = g.appendRecreate(ddls,
+					g.generateDropIndex(currentTable.name, renameFromIndex.name, renameFromIndex.constraint),
+					statement,
+				)
+			}
 			// PostgreSQL automatically transfers comments when renaming indexes
 			g.trackDroppedIndex(currentTable, *renameFromIndex)
-
-			// Update the current table's indexes to reflect the rename
 			currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
 		} else {
 			// Index not found and not a rename, add index.
@@ -2131,15 +2125,8 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				statement,
 			)
 
-			newIndexes := []Index{}
-			for _, currentIndex := range currentTable.indexes {
-				if g.identsEqual(currentIndex.name, desiredIndex.name) {
-					newIndexes = append(newIndexes, desiredIndex)
-				} else {
-					newIndexes = append(newIndexes, currentIndex)
-				}
-			}
-			currentTable.indexes = newIndexes // simulate index change. TODO: use []*Index in table and destructively modify it
+			// simulate index change. TODO: use []*Index in table and destructively modify it
+			currentTable.indexes = g.replaceIndex(currentTable.indexes, desiredIndex.name, desiredIndex)
 		}
 	}
 
