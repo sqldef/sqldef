@@ -622,22 +622,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		nameIdent := indexDef.Info.Name
 		if nameIdent.IsEmpty() {
-			// Auto-generate index/constraint name based on database conventions
 			tableName := stmt.Table.Name.Name
 			if tableName == "" {
 				tableName = stmt.NewName.Name.Name
 			}
-			if mode == GeneratorModePostgres && indexDef.Info.Unique {
-				columnNames := util.TransformSlice(indexColumns, func(column IndexColumn) string {
-					return column.ColumnName()
-				})
-				nameIdent = buildPostgresConstraintNameIdent(tableName, strings.Join(columnNames, "_"), "key")
-			} else {
-				columnName := indexColumns[0].ColumnName()
-				// Auto-generated names are unquoted
-				nameIdent.Name = columnName
-				nameIdent.Quoted = false
-			}
+			nameIdent = autoIndexName(tableName, indexColumns, indexDef.Included, indexDef.Info.Unique, indexDef.Info.Primary, true, mode)
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -764,61 +753,71 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}, nil
 }
 
-// autoIndexName reproduces the name the database gives an index declared without one.
-// PostgreSQL (DefineIndex/ChooseIndexName) joins the table name, the key columns and the
-// INCLUDE columns, and suffixes _key for a UNIQUE constraint but _idx for a bare index.
-// A primary key is named after the table alone.
-func autoIndexName(stmt *parser.DDL, indexColumns []IndexColumn, mode GeneratorMode) string {
+// autoIndexName reproduces the name the database gives an index or constraint declared
+// without one. PostgreSQL (ChooseIndexName) joins the table name, the key columns and the
+// INCLUDE columns, truncated to NAMEDATALEN, and suffixes _key for a UNIQUE constraint but
+// _idx for a bare index; a primary key is named after the table alone. The other engines
+// name it after the first column, as MySQL does.
+func autoIndexName(tableName string, indexColumns []IndexColumn, included []Ident, unique bool, primary bool, constraint bool, mode GeneratorMode) Ident {
+	if mode != GeneratorModePostgres {
+		if primary {
+			return parser.NewIdent("PRIMARY", false)
+		}
+		return parser.NewIdent(indexColumns[0].ColumnName(), false)
+	}
+
+	if primary {
+		return NewIdentWithQuoteDetected(buildPostgresPrimaryKeyName(tableName))
+	}
+
 	columnNames := []string{}
 	for _, indexColumn := range indexColumns {
-		columnNames = append(columnNames, autoIndexColumnName(indexColumn, mode, columnNames))
+		columnNames = append(columnNames, autoIndexColumnName(indexColumn, columnNames))
 	}
-	for _, includedColumn := range stmt.IndexSpec.Included {
+	for _, includedColumn := range included {
 		columnNames = append(columnNames, includedColumn.Name)
 	}
 
-	if mode == GeneratorModePostgres && stmt.Action == parser.AddPrimaryKey {
-		return stmt.Table.Name.Name + "_pkey"
+	suffix := "idx"
+	if unique && constraint {
+		suffix = "key"
 	}
-
-	name := stmt.Table.Name.Name
-	for _, columnName := range columnNames {
-		name += fmt.Sprintf("_%s", columnName)
-	}
-	if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && stmt.Action != parser.CreateIndex {
-		return name + "_key"
-	}
-	return name + "_idx"
+	return buildPostgresConstraintNameIdent(tableName, strings.Join(columnNames, "_"), suffix)
 }
 
-// autoIndexColumnName is ChooseIndexColumnNames: an expression contributes the name of its
-// function, or "expr", and a name already taken by an earlier column gets a counter appended.
-func autoIndexColumnName(indexColumn IndexColumn, mode GeneratorMode, taken []string) string {
-	if mode != GeneratorModePostgres {
-		return indexColumn.ColumnName()
-	}
-
-	name := indexColumn.ColumnName()
-	if _, ok := indexColumn.columnExpr.(*parser.ColName); !ok {
-		name = "expr"
-		expr := indexColumn.columnExpr
-		for {
-			parenExpr, ok := expr.(*parser.ParenExpr)
-			if !ok {
-				break
-			}
-			expr = parenExpr.Expr
-		}
-		if funcExpr, ok := expr.(*parser.FuncExpr); ok {
-			name = strings.ToLower(funcExpr.Name.Name)
-		}
-	}
+// autoIndexColumnName is PostgreSQL's ChooseIndexColumnNames: a name already taken by an
+// earlier column gets a counter appended.
+func autoIndexColumnName(indexColumn IndexColumn, taken []string) string {
+	name := figureIndexColumnName(indexColumn.columnExpr)
 
 	candidate := name
 	for i := 1; slices.Contains(taken, candidate); i++ {
 		candidate = fmt.Sprintf("%s%d", name, i)
 	}
 	return candidate
+}
+
+// figureIndexColumnName is PostgreSQL's FigureIndexColname: it looks through the wrappers that
+// name nothing themselves, takes a function call's name, and falls back to "expr".
+func figureIndexColumnName(expr parser.Expr) string {
+	switch expr := expr.(type) {
+	case *parser.ColName:
+		return expr.Name.Name
+	case *parser.ParenExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.CollateExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.CastExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.ConvertExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.FuncExpr:
+		return strings.ToLower(expr.Name.Name)
+	case *parser.CaseExpr:
+		return "case"
+	default:
+		return "expr"
+	}
 }
 
 func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, error) {
@@ -886,9 +885,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	nameIdent := stmt.IndexSpec.Name
 	if nameIdent.IsEmpty() {
-		nameIdent.Name = autoIndexName(stmt, indexColumns, mode)
-		// Auto-generated names are unquoted
-		nameIdent.Quoted = false
+		nameIdent = autoIndexName(stmt.Table.Name.Name, indexColumns, stmt.IndexSpec.Included, stmt.IndexSpec.Unique, stmt.IndexSpec.Primary, stmt.Action != parser.CreateIndex, mode)
 	}
 
 	// Extract index comments and look for @renamed annotation
