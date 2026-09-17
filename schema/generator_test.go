@@ -1201,3 +1201,31 @@ func TestDropFunctionDDL(t *testing.T) {
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
 	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
 }
+
+func TestRenamePrivilegeColumn(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres}
+
+	tests := []struct {
+		privilege string
+		oldColumn Ident
+		newColumn Ident
+		expected  string
+	}{
+		{"SELECT (id, secret)", Ident{Name: "secret"}, Ident{Name: "secret_v2"}, "SELECT (id, secret_v2)"},
+		// The column list is re-sorted, and a name is quoted only where it has to be
+		{"SELECT (id, secret)", Ident{Name: "id"}, Ident{Name: "Key"}, `SELECT ("Key", secret)`},
+		// A quoted name may contain the separator and a doubled quote
+		{`UPDATE ("Odd, ""Name")`, Ident{Name: `Odd, "Name`, Quoted: true}, Ident{Name: "plain"}, "UPDATE (plain)"},
+		// A quoted name may begin or end with the space used as the separator padding
+		{`SELECT (" secret ", id)`, Ident{Name: " secret ", Quoted: true}, Ident{Name: "secret_v2"}, "SELECT (id, secret_v2)"},
+		// ... and it survives the rename of another column in the same list
+		{`SELECT (" secret ", id)`, Ident{Name: "id"}, Ident{Name: "id_v2"}, `SELECT (" secret ", id_v2)`},
+		// Privileges that are not column-level, or do not mention the column
+		{"SELECT", Ident{Name: "secret"}, Ident{Name: "secret_v2"}, "SELECT"},
+		{"SELECT (id)", Ident{Name: "secret"}, Ident{Name: "secret_v2"}, "SELECT (id)"},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.expected, g.renamePrivilegeColumn(test.privilege, test.oldColumn, test.newColumn))
+	}
+}
