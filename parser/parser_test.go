@@ -747,6 +747,42 @@ func TestUnusedKeywordsAsUnquotedIdentifiers(t *testing.T) {
 	}
 }
 
+// TestSQLServerKeywordsAsUnquotedIdentifiers tests that words lexed as keywords only for
+// SQL Server syntax are not reserved, so they parse as identifiers.
+// The keyword table is shared by all modes, so every mode must accept them.
+func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
+	words := []string{
+		"newid", "newsequentialid", "getutcdate", "sysutcdatetime", "try_cast",
+		"openjson", "string_split", "apply", "columnstore",
+		"pad_index", "ignore_dup_key", "statistics_norecompute", "statistics_incremental", "allow_row_locks", "allow_page_locks",
+	}
+	modes := []struct {
+		name string
+		mode ParserMode
+	}{
+		{"mysql", ParserModeMysql},
+		{"postgres", ParserModePostgres},
+		{"sqlite3", ParserModeSQLite3},
+		{"mssql", ParserModeMssql},
+	}
+
+	for _, m := range modes {
+		for _, word := range words {
+			t.Run(m.name+"/"+word, func(t *testing.T) {
+				for _, sql := range []string{
+					`CREATE TABLE t (` + word + ` int)`,
+					`CREATE INDEX t_` + word + ` ON t (` + word + `)`,
+					`CREATE VIEW v AS SELECT ` + word + ` FROM t`,
+				} {
+					if _, err := ParseDDL(sql, m.mode); err != nil {
+						t.Errorf("ParseDDL(%q) failed: %v", sql, err)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestAutoRandom(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -910,6 +946,11 @@ func TestDefaultFunctionExpressions(t *testing.T) {
 		{
 			name: "SQL Server NEWSEQUENTIALID default",
 			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWSEQUENTIALID())",
+			mode: ParserModeMssql,
+		},
+		{
+			name: "SQL Server GETUTCDATE default",
+			sql:  "CREATE TABLE t (created_at datetime2 DEFAULT GETUTCDATE())",
 			mode: ParserModeMssql,
 		},
 	}
