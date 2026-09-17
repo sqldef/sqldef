@@ -6320,6 +6320,15 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 	return g.identsSliceEqual(indexA.included, indexB.included)
 }
 
+// areSameCollations compares two index-column collation names. PostgreSQL collation names are
+// case-sensitive identifiers ("C" and "c" name different collations); the other engines fold case.
+func (g *Generator) areSameCollations(a, b string) bool {
+	if g.mode == GeneratorModePostgres {
+		return a == b
+	}
+	return strings.EqualFold(a, b)
+}
+
 // areSameOperatorClasses reports whether two index columns use the same operator class.
 // Operator classes are unquoted identifiers, so they're compared case-insensitively. The database
 // omits the default operator class from the DDL it exports, so a default written explicitly in the
@@ -6376,7 +6385,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		if indexA.columns[i].NullsOrdering() != indexB.columns[i].NullsOrdering() {
 			return false
 		}
-		if !strings.EqualFold(indexA.columns[i].collation, indexB.columns[i].collation) {
+		if !g.areSameCollations(indexA.columns[i].collation, indexB.columns[i].collation) {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
