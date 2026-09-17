@@ -35,6 +35,7 @@ type PostgresDatabase struct {
 	db               *sql.DB
 	defaultSchema    *string
 	hasConperiod     *bool           // cached: whether pg_constraint has conperiod column (PG18+)
+	hasIndnkeyatts   *bool           // cached: whether pg_index has indnkeyatts column (PG11+)
 	defaultOpclasses map[string]bool // cached: see defaultOperatorClasses()
 }
 
@@ -120,6 +121,34 @@ func (d *PostgresDatabase) supportsConperiod() bool {
 	}
 	d.hasConperiod = &exists
 	return exists
+}
+
+// supportsIndexIncluding returns true if pg_index has the indnkeyatts column (PG11+), which is
+// also the version that introduced INCLUDE columns. The result is cached after the first call.
+func (d *PostgresDatabase) supportsIndexIncluding() bool {
+	if d.hasIndnkeyatts != nil {
+		return *d.hasIndnkeyatts
+	}
+	var exists bool
+	err := d.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_attribute
+			WHERE attrelid = 'pg_index'::regclass AND attname = 'indnkeyatts'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		exists = false
+	}
+	d.hasIndnkeyatts = &exists
+	return exists
+}
+
+// SessionSetupQueries turns off function body validation while the DDLs are applied. A function
+// body is validated against the objects it references, and functions are created before the
+// tables they read, so a SQL-language function would fail to be created on an empty database.
+// pg_dump turns the check off for the same reason.
+func (d *PostgresDatabase) SessionSetupQueries() []string {
+	return []string{"SET check_function_bodies = off"}
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
@@ -961,21 +990,22 @@ type CheckConstraint struct {
 }
 
 type TableDDLComponents struct {
-	TableName         string
-	Columns           []column
-	PrimaryKeyName    Ident
-	PrimaryKeyCols    []string
-	PrimaryKeyPeriod  bool
-	IndexDefs         []string
-	ForeignDefs       []string
-	ExclusionDefs     []string
-	RLSDefs           []string
-	PolicyDefs        []string
-	Comments          []string
-	CheckConstraints  []CheckConstraint
-	UniqueConstraints map[string]string
-	PrivilegeDefs     []string
-	DefaultSchema     string
+	TableName          string
+	Columns            []column
+	PrimaryKeyName     Ident
+	PrimaryKeyCols     []string
+	PrimaryKeyPeriod   bool
+	PrimaryKeyIncluded []string
+	IndexDefs          []string
+	ForeignDefs        []string
+	ExclusionDefs      []string
+	RLSDefs            []string
+	PolicyDefs         []string
+	Comments           []string
+	CheckConstraints   []CheckConstraint
+	UniqueConstraints  map[string]string
+	PrivilegeDefs      []string
+	DefaultSchema      string
 }
 
 func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponentsCache) (string, error) {
@@ -994,6 +1024,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		}
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
+		components.PrimaryKeyIncluded = pkInfo.included
 	}
 	components.IndexDefs = cache.indexDefs[table]
 	components.ForeignDefs = cache.foreignDefs[table]
@@ -1048,6 +1079,9 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (%s)", d.quoteIdent(components.PrimaryKeyName), strings.Join(quotedCols, ", "))
 		} else {
 			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		}
+		if len(components.PrimaryKeyIncluded) > 0 {
+			fmt.Fprintf(&queryBuilder, " INCLUDE (\"%s\")", strings.Join(components.PrimaryKeyIncluded, "\", \""))
 		}
 	}
 
@@ -1215,8 +1249,9 @@ func normalizePostgresTypeCasts(sql string) string {
 }
 
 type primaryKeyInfo struct {
-	name   Ident
-	period bool
+	name     Ident
+	period   bool
+	included []string
 }
 
 var (
@@ -1285,6 +1320,10 @@ func postgresBuildDSN(config database.Config) string {
 	}
 	if sslkey, ok := os.LookupEnv("PGSSLKEY"); ok {
 		options.Set("sslkey", sslkey)
+	}
+
+	if pgoptions, ok := os.LookupEnv("PGOPTIONS"); ok {
+		options.Set("options", pgoptions)
 	}
 
 	dsn.RawQuery = options.Encode()
@@ -1605,14 +1644,23 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 	} else {
 		selectCols = "con.conname, false"
 	}
+	// The columns past indnkeyatts are the INCLUDE columns of a covering primary key.
+	includedCols := "NULL::text[]"
+	if d.supportsIndexIncluding() {
+		includedCols = `(SELECT array_agg(att.attname ORDER BY key.ord)
+		   FROM unnest(idx.indkey) WITH ORDINALITY AS key(attnum, ord)
+		   JOIN pg_attribute att ON att.attrelid = cls.oid AND att.attnum = key.attnum
+		   WHERE key.ord > idx.indnkeyatts)`
+	}
 	query := fmt.Sprintf(`
-		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s, %s
 		FROM pg_constraint con
 		JOIN pg_class cls ON cls.oid = con.conrelid
 		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+		JOIN pg_index idx ON idx.indexrelid = con.conindid
 		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
 		AND con.contype = 'p'
-	`, selectCols)
+	`, selectCols, includedCols)
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {
@@ -1624,13 +1672,15 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 	for rows.Next() {
 		var tableName, keyName string
 		var period bool
-		err = rows.Scan(&tableName, &keyName, &period)
+		var included []string
+		err = rows.Scan(&tableName, &keyName, &period, pq.Array(&included))
 		if err != nil {
 			return nil, err
 		}
 		result[tableName] = primaryKeyInfo{
-			name:   NewIdentWithQuoteDetected(keyName),
-			period: period,
+			name:     NewIdentWithQuoteDetected(keyName),
+			period:   period,
+			included: included,
 		}
 	}
 	return result, nil

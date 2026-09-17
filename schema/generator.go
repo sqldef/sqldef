@@ -107,6 +107,12 @@ type Generator struct {
 	// Key is "schema.index_name"
 	droppedIndexes map[string]bool
 
+	// Track indexes whose recreation enable_drop held back, under both the name they still
+	// have and the name they would have had. A COMMENT on either would describe an index
+	// that was never recreated.
+	// Key is "schema.index_name"
+	heldBackIndexes map[string]bool
+
 	// Map index names to their owning tables (for comment cleanup after table drops)
 	// Key is "schema.index_name", value is the table's QualifiedName
 	indexToTable map[string]QualifiedName
@@ -204,6 +210,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		droppedTables:       make(map[string]bool),
 		droppedColumns:      make(map[string]bool),
 		droppedIndexes:      make(map[string]bool),
+		heldBackIndexes:     make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
 		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
 	}
@@ -328,6 +335,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			indexDDLs = append(indexDDLs, idxDDLs...)
+		case *AddPrimaryKey:
+			// aggregateDDLsToSchema has already folded this into the desired table, and the
+			// primary key of a table is diffed there.
 		case *AddForeignKey:
 			fkeyDDLs, err := g.generateDDLsForAddForeignKey(desired.tableName, desired.foreignKey, "ALTER TABLE", ddl.Statement())
 			if err != nil {
@@ -771,6 +781,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 
+		if g.isCommentOnHeldBackIndex(currentComment) {
+			slog.Debug("Skipping comment cleanup for held back index",
+				"object", currentComment.comment.Object)
+			continue
+		}
+
 		// Check if this comment still exists in desired comments
 		desiredComment := g.findCommentByObject(g.desiredComments, &currentComment.comment)
 		// Only generate NULL statement if the comment is completely absent from desired schema
@@ -878,12 +894,18 @@ func commentOutDropStatements(ddls []string, config database.GeneratorConfig) []
 			continue
 		}
 		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
-			result[i] = "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
+			result[i] = skippedStatement(ddl)
 		} else {
 			result[i] = ddl
 		}
 	}
 	return result
+}
+
+// skippedStatement comments a statement out. Every line is commented so that a multi-line
+// statement can never leak executable SQL after the first line.
+func skippedStatement(ddl string) string {
+	return "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
 }
 
 // isDropStatement checks if a DDL statement is a destructive DROP or REVOKE
@@ -1677,8 +1699,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
-				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+				ddls, _ = g.appendRecreate(ddls,
+					g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint),
+					g.generateAddIndex(desired.table.name, desiredIndex),
+				)
 			}
 		} else {
 			// Check if this is a renamed index
@@ -1688,9 +1712,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 
 			if renameFromIndex != nil {
-				// Generate RENAME INDEX DDL
-				renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
-				ddls = append(ddls, renameDDLs...)
+				if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+					renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+					ddls = append(ddls, renameDDLs...)
+				} else {
+					// See generateDDLsForCreateIndex: a changed definition cannot be renamed into place.
+					ddls, _ = g.appendRecreate(ddls,
+						g.generateDropIndex(desired.table.name, renameFromIndex.name, renameFromIndex.constraint),
+						g.generateAddIndex(desired.table.name, desiredIndex),
+					)
+				}
 			} else {
 				// Index not found and not a rename, add index.
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
@@ -2043,6 +2074,18 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				// Index not found, add index.
 				ddls = append(ddls, statement)
 				currentView.indexes = append(currentView.indexes, desiredIndex)
+			} else if !g.areSameIndexes(*currentIndex, desiredIndex) {
+				// An index on a materialized view is changed the same way as one on a table.
+				var recreated bool
+				ddls, recreated = g.appendRecreate(ddls,
+					g.generateDropIndex(tableName, currentIndex.name, currentIndex.constraint),
+					statement,
+				)
+				if recreated {
+					currentView.indexes = g.replaceIndex(currentView.indexes, desiredIndex.name, desiredIndex)
+				} else {
+					g.trackHeldBackIndex(tableName, desiredIndex.name)
+				}
 			}
 		} else {
 			// Check if the view exists in desired views (might be created in the same migration)
@@ -2076,23 +2119,26 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 		}
 
 		if renameFromIndex != nil {
-			// Generate RENAME INDEX DDL
-			renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
-			ddls = append(ddls, renameDDLs...)
-			// PostgreSQL automatically transfers comments when renaming indexes
-			g.trackDroppedIndex(currentTable, *renameFromIndex)
-
-			// Update the current table's indexes to reflect the rename
-			newIndexes := []Index{}
-			for _, idx := range currentTable.indexes {
-				if g.identsEqual(idx.name, renameFromIndex.name) {
-					// Replace with the renamed index
-					newIndexes = append(newIndexes, desiredIndex)
-				} else {
-					newIndexes = append(newIndexes, idx)
-				}
+			renamed := true
+			if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+				renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+				ddls = append(ddls, renameDDLs...)
+			} else {
+				// A changed definition has to be rebuilt anyway, so there is nothing for the
+				// rename to preserve.
+				ddls, renamed = g.appendRecreate(ddls,
+					g.generateDropIndex(currentTable.name, renameFromIndex.name, renameFromIndex.constraint),
+					statement,
+				)
 			}
-			currentTable.indexes = newIndexes
+			if renamed {
+				// PostgreSQL automatically transfers comments when renaming indexes
+				g.trackDroppedIndex(currentTable, *renameFromIndex)
+				currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
+			} else {
+				g.trackHeldBackIndex(currentTable.name, renameFromIndex.name)
+				g.trackHeldBackIndex(currentTable.name, desiredIndex.name)
+			}
 		} else {
 			// Index not found and not a rename, add index.
 			ddls = append(ddls, statement)
@@ -2101,18 +2147,17 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 	} else {
 		// Index found. If it's different, drop and add index.
 		if !g.areSameIndexes(*currentIndex, desiredIndex) {
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
-			ddls = append(ddls, statement)
-
-			newIndexes := []Index{}
-			for _, currentIndex := range currentTable.indexes {
-				if g.identsEqual(currentIndex.name, desiredIndex.name) {
-					newIndexes = append(newIndexes, desiredIndex)
-				} else {
-					newIndexes = append(newIndexes, currentIndex)
-				}
+			var recreated bool
+			ddls, recreated = g.appendRecreate(ddls,
+				g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint),
+				statement,
+			)
+			if recreated {
+				// simulate index change. TODO: use []*Index in table and destructively modify it
+				currentTable.indexes = g.replaceIndex(currentTable.indexes, desiredIndex.name, desiredIndex)
+			} else {
+				g.trackHeldBackIndex(currentTable.name, desiredIndex.name)
 			}
-			currentTable.indexes = newIndexes // simulate index change. TODO: use []*Index in table and destructively modify it
 		}
 	}
 
@@ -2199,8 +2244,10 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(currentPolicy.name), g.escapeTableName(currentTable)))
-			ddls = append(ddls, statement)
+			ddls, _ = g.appendRecreate(ddls,
+				fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(currentPolicy.name), g.escapeTableName(currentTable)),
+				statement,
+			)
 		}
 	}
 
@@ -2366,13 +2413,13 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				// When dropping views that may have dependents, we need to handle them
 				// For PostgreSQL, find dependent views and recreate them after
-				var dependentViewDDLs []string
+				var recreateDDLs, dependentViewDDLs []string
 				if g.mode == GeneratorModePostgres {
 					// Find all views that depend on this view
 					dependentViews := g.findDependentViews(desiredView.name)
 					// Drop them first (in reverse dependency order)
 					for _, depView := range slices.Backward(dependentViews) {
-						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
+						recreateDDLs = append(recreateDDLs, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
 					}
 					// Store DDLs to recreate dependent views after the base view
 					for _, depView := range dependentViews {
@@ -2380,10 +2427,13 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 						dependentViewDDLs = append(dependentViewDDLs, fmt.Sprintf("CREATE %s %s AS %s", depView.viewType, g.escapeViewName(depView), depViewDef))
 					}
 				}
-				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName))
-				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
+				recreateDDLs = append(recreateDDLs,
+					fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName),
+					fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause),
+				)
 				// Recreate dependent views
-				ddls = append(ddls, dependentViewDDLs...)
+				recreateDDLs = append(recreateDDLs, dependentViewDDLs...)
+				ddls, _ = g.appendRecreate(ddls, recreateDDLs...)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
@@ -2549,14 +2599,20 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 			case GeneratorModeMssql:
 				ddls = append(ddls, "CREATE OR ALTER "+triggerDefinition)
 			case GeneratorModePostgres:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(triggerName), g.escapeQualifiedName(desiredTrigger.tableName)))
-				ddls = append(ddls, "CREATE "+triggerDefinition)
+				ddls, _ = g.appendRecreate(ddls,
+					fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(triggerName), g.escapeQualifiedName(desiredTrigger.tableName)),
+					"CREATE "+triggerDefinition,
+				)
 			case GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
-				ddls = append(ddls, triggerDefinition)
+				ddls, _ = g.appendRecreate(ddls,
+					fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)),
+					triggerDefinition,
+				)
 			default:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
-				ddls = append(ddls, "CREATE "+triggerDefinition)
+				ddls, _ = g.appendRecreate(ddls,
+					fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)),
+					"CREATE "+triggerDefinition,
+				)
 			}
 		}
 	}
@@ -3038,6 +3094,10 @@ func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstra
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
+	if g.isCommentOnHeldBackIndex(desired) {
+		return ddls, nil
+	}
+
 	currentComment := g.findCommentByObject(g.currentComments, &desired.comment)
 
 	// If both current and desired comments are NULL/empty, no change is needed.
@@ -3491,7 +3551,8 @@ func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
 }
 
 // generateIndexColumnDefinition generates one key part of an index column list, with proper quoting.
-// The clauses have to keep this order: PostgreSQL accepts an operator class only before ASC/DESC.
+// The clauses have to keep this order: PostgreSQL accepts a collation only before the operator
+// class, an operator class only before ASC/DESC, and NULLS FIRST/LAST only after them.
 func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 	var column string
 	// For simple column references (ColName), use escapeSQLIdent to preserve quoting
@@ -3512,11 +3573,23 @@ func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) strin
 	if indexColumn.length != nil {
 		column += fmt.Sprintf("(%d)", *indexColumn.length)
 	}
+	if indexColumn.collation != "" {
+		// PostgreSQL collation names are case-sensitive identifiers ("C", "en_US"), and the
+		// database always prints them quoted.
+		if g.mode == GeneratorModePostgres {
+			column += fmt.Sprintf(" COLLATE %s", g.forceEscapeSQLName(indexColumn.collation))
+		} else {
+			column += fmt.Sprintf(" COLLATE %s", indexColumn.collation)
+		}
+	}
 	if indexColumn.operatorClass != "" {
 		column += " " + indexColumn.operatorClass
 	}
 	if indexColumn.direction == DescScr {
 		column += fmt.Sprintf(" %s", indexColumn.direction)
+	}
+	if indexColumn.nullsOrdering != "" {
+		column += fmt.Sprintf(" nulls %s", strings.ToLower(indexColumn.nullsOrdering))
 	}
 	if indexColumn.withoutOverlaps {
 		column += " WITHOUT OVERLAPS"
@@ -3553,6 +3626,11 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	}
 
 	ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
+
+	if len(index.included) > 0 {
+		ddl += fmt.Sprintf(" INCLUDE (%s)", g.escapeAndJoinNames(index.included))
+	}
+
 	if index.nullsNotDistinct {
 		ddl += " NULLS NOT DISTINCT"
 	}
@@ -3565,7 +3643,11 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 
 	// Add WHERE clause for partial indexes
 	if index.where != nil {
-		ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
+		if g.config.LegacyIgnoreQuotes {
+			ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
+		} else {
+			ddl += fmt.Sprintf(" WHERE %s", g.formatExprQuoteAware(index.where))
+		}
 	}
 
 	return ddl
@@ -3681,7 +3763,11 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 			}
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
-		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
+		ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
+		if len(index.included) > 0 {
+			ddl += fmt.Sprintf(" INCLUDE (%s)", g.escapeAndJoinNames(index.included))
+		}
+		ddl += optionDefinition + constraintOptions
 		return ddl
 	default:
 		// Construct index type with optional VECTOR keyword for MariaDB vector indexes
@@ -3910,7 +3996,36 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 	return ddls
 }
 
-// generateDropIndex generates a DDL statement to drop an index.
+// replaceIndex returns indexes with the one named name replaced by replacement.
+func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index) []Index {
+	result := make([]Index, 0, len(indexes))
+	for _, index := range indexes {
+		if g.identsEqual(index.name, name) {
+			result = append(result, replacement)
+		} else {
+			result = append(result, index)
+		}
+	}
+	return result
+}
+
+// appendRecreate emits statements that drop an object and recreate it, and reports whether they
+// will run. When enable_drop leaves a drop among them commented out, the rest has to be held
+// back as well: it would run against the object that is still there and fail with "already
+// exists". The caller must then leave the object as it is in its model of the current schema,
+// or a later statement, such as a COMMENT ON the recreated object, would be generated for an
+// object that was never recreated. A drop that enable_drop does not gate, such as ALTER TABLE
+// DROP CONSTRAINT, is unaffected.
+func (g *Generator) appendRecreate(ddls []string, statements ...string) ([]string, bool) {
+	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDropStatement) {
+		return append(ddls, statements...), true
+	}
+	for _, statement := range statements {
+		ddls = append(ddls, skippedStatement(statement))
+	}
+	return ddls, false
+}
+
 func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) string {
 	switch g.mode {
 	case GeneratorModeMysql:
@@ -5414,8 +5529,21 @@ func (g *Generator) droppedIndexKey(schema, indexName Ident) string {
 // This is used to skip generating COMMENT ... IS NULL for dropped indexes,
 // since PostgreSQL automatically removes index comments when the index is dropped.
 func (g *Generator) isCommentOnDroppedIndex(comment *Comment) bool {
+	key, ok := g.commentIndexKey(comment)
+	return ok && g.droppedIndexes[key]
+}
+
+// isCommentOnHeldBackIndex checks if a comment belongs to an index whose recreation was held
+// back by enable_drop, and which therefore is not the index the comment describes.
+func (g *Generator) isCommentOnHeldBackIndex(comment *Comment) bool {
+	key, ok := g.commentIndexKey(comment)
+	return ok && g.heldBackIndexes[key]
+}
+
+// commentIndexKey returns the index-tracking key of a COMMENT ON INDEX statement.
+func (g *Generator) commentIndexKey(comment *Comment) (string, bool) {
 	if comment.comment.ObjectType != "OBJECT_INDEX" {
-		return false
+		return "", false
 	}
 
 	object := comment.comment.Object
@@ -5427,11 +5555,19 @@ func (g *Generator) isCommentOnDroppedIndex(comment *Comment) bool {
 		schemaIdent = parser.NewIdent(g.defaultSchema, false)
 		indexIdent = object[0]
 	} else {
-		return false
+		return "", false
 	}
 
-	key := g.droppedIndexKey(schemaIdent, indexIdent)
-	return g.droppedIndexes[key]
+	return g.droppedIndexKey(schemaIdent, indexIdent), true
+}
+
+// trackHeldBackIndex records an index whose recreation enable_drop held back.
+func (g *Generator) trackHeldBackIndex(table QualifiedName, indexName Ident) {
+	tableSchema := table.Schema
+	if tableSchema.IsEmpty() {
+		tableSchema = parser.NewIdent(g.defaultSchema, false)
+	}
+	g.heldBackIndexes[g.droppedIndexKey(tableSchema, indexName)] = true
 }
 
 // buildIndexToTableMap builds a mapping from index names to their owning tables.
@@ -6251,8 +6387,18 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 			return false
 		}
 	}
-	// For primary keys, we don't need to check other properties like where, included, options
-	return true
+	// A covering primary key differs in its INCLUDE columns; the rest (where, options) cannot
+	// appear on a primary key.
+	return g.identsSliceEqual(indexA.included, indexB.included)
+}
+
+// areSameCollations compares two index-column collation names. PostgreSQL collation names are
+// case-sensitive identifiers ("C" and "c" name different collations); the other engines fold case.
+func (g *Generator) areSameCollations(a, b string) bool {
+	if g.mode == GeneratorModePostgres {
+		return a == b
+	}
+	return strings.EqualFold(a, b)
 }
 
 // areSameOperatorClasses reports whether two index columns use the same operator class.
@@ -6308,6 +6454,12 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
 		}
+		if indexA.columns[i].NullsOrdering() != indexB.columns[i].NullsOrdering() {
+			return false
+		}
+		if !g.areSameCollations(indexA.columns[i].collation, indexB.columns[i].collation) {
+			return false
+		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
 			return false
 		}
@@ -6319,13 +6471,8 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 
-	if len(indexA.included) != len(indexB.included) {
+	if !g.identsSliceEqual(indexA.included, indexB.included) {
 		return false
-	}
-	for i, indexAIncluded := range indexA.included {
-		if indexAIncluded != indexB.included[i] {
-			return false
-		}
 	}
 
 	// For MSSQL UNIQUE constraints (not regular indexes), don't compare options

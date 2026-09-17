@@ -593,6 +593,21 @@ func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
 	}
 }
 
+func TestConstraintIncludeColumnsFormatting(t *testing.T) {
+	sql := `CREATE TABLE test (a integer, b integer, c integer, CONSTRAINT x UNIQUE (a) INCLUDE (b, c))`
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse UNIQUE ... INCLUDE constraint: %v", err)
+	}
+
+	got := String(statement)
+	want := "create table test (\n\ta integer,\n\tb integer,\n\tc integer,\n\tunique x (a) include (b, c)\n)"
+	if got != want {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 // TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
 // can be used as unquoted column names in index definitions
 func TestTypeKeywordsAsIndexColumns(t *testing.T) {

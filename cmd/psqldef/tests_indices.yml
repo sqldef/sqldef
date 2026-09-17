@@ -766,10 +766,10 @@ PartialIndexWithWhereNotAndPrecedence:
     WHERE NOT status = 'pending' AND amount > 1000;
   up: |
     DROP INDEX public.idx_large_pending_orders;
-    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE not status = 'pending' and amount > 1000;
+    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE NOT status = 'pending' AND amount > 1000;
   down: |
     DROP INDEX public.idx_large_pending_orders;
-    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE not (status = 'pending' and amount > 1000);
+    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE NOT (status = 'pending' AND amount > 1000);
 
 PartialIndexWithArrayCastAnyPgDumpStyle:
   legacy_ignore_quotes: false
@@ -943,3 +943,324 @@ CreateIndexOnColumnNamedYearMonth:
     CREATE INDEX idx_monthly_grants_account_month ON public.monthly_grants USING btree (account_id, year_month);
   down: |
     DROP INDEX public.idx_monthly_grants_account_month;
+
+CreateCoveringIndexPreservingQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      "totalAmount" numeric NOT NULL
+    );
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      "totalAmount" numeric NOT NULL
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (id, "totalAmount");
+  up: |
+    CREATE INDEX idx_orders_user ON public.orders USING btree (user_id) INCLUDE (id, "totalAmount");
+  down: |
+    DROP INDEX public.idx_orders_user;
+
+AddIncludeToExistingIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      status text NOT NULL
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id);
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      status text NOT NULL
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (status);
+  up: |
+    DROP INDEX public.idx_orders_user;
+    CREATE INDEX idx_orders_user ON public.orders USING btree (user_id) INCLUDE (status);
+  down: |
+    DROP INDEX public.idx_orders_user;
+    CREATE INDEX idx_orders_user ON public.orders USING btree (user_id);
+
+CreateCoveringPartialIndexConcurrently:
+  legacy_ignore_quotes: false
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE stories (
+      id bigint NOT NULL,
+      story_uuid text NOT NULL,
+      status text NOT NULL,
+      category text
+    );
+  desired: |
+    CREATE TABLE stories (
+      id bigint NOT NULL,
+      story_uuid text NOT NULL,
+      status text NOT NULL,
+      category text
+    );
+    CREATE INDEX idx_stories_latest_nondraft ON stories USING btree (story_uuid, id DESC) INCLUDE (status, category) WHERE status <> 'DRAFT';
+  up: |
+    CREATE INDEX CONCURRENTLY idx_stories_latest_nondraft ON public.stories USING btree (story_uuid, id desc) INCLUDE (status, category) WHERE status != 'DRAFT';
+  down: |
+    DROP INDEX public.idx_stories_latest_nondraft;
+
+CreateUniqueIndexWithIncludeAndNullsNotDistinct:
+  legacy_ignore_quotes: false
+  min_version: "15"
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint,
+      total_amount numeric
+    );
+    CREATE UNIQUE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (total_amount) NULLS NOT DISTINCT;
+
+IncludeColumnsFoldCaseWhenUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      total_amount numeric
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (total_amount);
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      total_amount numeric
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (USER_ID) INCLUDE (TOTAL_AMOUNT);
+  up: ""
+  down: ""
+
+UnnamedIndexNameIncludesIncludeColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE INDEX t_a_b_idx ON t USING btree (a) INCLUDE (b);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE INDEX ON t (a) INCLUDE (b);
+  up: ""
+  down: ""
+
+UnnamedUniqueIndexIsNamedIdxNotKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE UNIQUE INDEX t_x_idx ON t USING btree (x);
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE UNIQUE INDEX ON t (x);
+  up: ""
+  down: ""
+
+UnnamedExpressionIndexIsNamedAfterTheFunction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX t_lower_idx ON t USING btree (lower(y));
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX ON t ((lower(y)));
+  up: ""
+  down: ""
+
+UnnamedIndexOnRepeatedExpressionsCountsDuplicates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX t_expr_expr1_idx ON t USING btree ((x + 1), (x + 2));
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    CREATE INDEX ON t ((x + 1), (x + 2));
+  up: ""
+  down: ""
+
+CreateIndexWithNullsOrderingAndCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX idx_nulls ON t USING btree (a DESC NULLS LAST);
+    CREATE INDEX idx_coll ON t USING btree (b COLLATE "C");
+  up: |
+    CREATE INDEX idx_nulls ON public.t USING btree (a desc nulls last);
+    CREATE INDEX idx_coll ON public.t USING btree (b COLLATE "C");
+  down: |
+    DROP INDEX public.idx_coll;
+    DROP INDEX public.idx_nulls;
+
+ChangeNullsOrderingOfIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX idx_nulls ON t USING btree (a DESC NULLS LAST);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX idx_nulls ON t USING btree (a DESC);
+  up: |
+    DROP INDEX public.idx_nulls;
+    CREATE INDEX idx_nulls ON public.t USING btree (a desc);
+  down: |
+    DROP INDEX public.idx_nulls;
+    CREATE INDEX idx_nulls ON public.t USING btree (a desc nulls last);
+
+ExplicitDefaultNullsOrderingIsNotAChange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX idx_d ON t USING btree (a DESC);
+    CREATE INDEX idx_a ON t USING btree (b);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX idx_d ON t USING btree (a DESC NULLS FIRST);
+    CREATE INDEX idx_a ON t USING btree (b ASC NULLS LAST);
+  up: ""
+  down: ""
+
+CreatePartialIndexOnQuotedColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      "userId" bigint,
+      "isActive" boolean
+    );
+  desired: |
+    CREATE TABLE t (
+      "userId" bigint,
+      "isActive" boolean
+    );
+    CREATE INDEX idx_active ON t USING btree ("userId") WHERE "isActive";
+  up: |
+    CREATE INDEX idx_active ON public.t USING btree ("userId") WHERE "isActive";
+  down: |
+    DROP INDEX public.idx_active;
+
+IndexRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a) INCLUDE (b);
+  up: |
+    -- Skipped: DROP INDEX public.t_a_idx;
+    -- Skipped: CREATE INDEX t_a_idx ON public.t USING btree (a) INCLUDE (b);
+  down: ""
+
+CreateIndexConcurrentlyWithComment:
+  legacy_ignore_quotes: false
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+    COMMENT ON INDEX t_a_idx IS 'lookup by a';
+  up: |
+    CREATE INDEX CONCURRENTLY t_a_idx ON public.t USING btree (a);
+    COMMENT ON INDEX public.t_a_idx IS 'lookup by a';
+  down: |
+    DROP INDEX public.t_a_idx;
+
+UnnamedIndexWithAccessMethod:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+  desired: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+    CREATE INDEX ON t USING btree (y);
+  up: |
+    CREATE INDEX t_y_idx ON public.t USING btree (y);
+  down: |
+    DROP INDEX public.t_y_idx;
+
+ChangeCollationOfIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a COLLATE "C");
+  desired: |
+    CREATE TABLE t (
+      a text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a COLLATE "POSIX");
+  up: |
+    DROP INDEX public.t_a_idx;
+    CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "POSIX");
+  down: |
+    DROP INDEX public.t_a_idx;
+    CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "C");

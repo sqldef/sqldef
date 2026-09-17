@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -588,6 +589,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 					columnExpr:      columnExpr,
 					length:          length,
 					direction:       column.Direction,
+					nullsOrdering:   column.NullsOrdering,
+					collation:       column.Collation,
 					operatorClass:   column.OperatorClass,
 					withoutOverlaps: column.WithoutOverlaps,
 				},
@@ -619,22 +622,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		nameIdent := indexDef.Info.Name
 		if nameIdent.IsEmpty() {
-			// Auto-generate index/constraint name based on database conventions
 			tableName := stmt.Table.Name.Name
 			if tableName == "" {
 				tableName = stmt.NewName.Name.Name
 			}
-			if mode == GeneratorModePostgres && indexDef.Info.Unique {
-				columnNames := util.TransformSlice(indexColumns, func(column IndexColumn) string {
-					return column.ColumnName()
-				})
-				nameIdent = buildPostgresConstraintNameIdent(tableName, strings.Join(columnNames, "_"), "key")
-			} else {
-				columnName := indexColumns[0].ColumnName()
-				// Auto-generated names are unquoted
-				nameIdent.Name = columnName
-				nameIdent.Quoted = false
-			}
+			nameIdent = autoIndexName(tableName, indexColumns, indexDef.Included, indexDef.Info.Unique, indexDef.Info.Primary, true, mode)
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -664,6 +656,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			vector:           indexDef.Info.Vector,
 			clustered:        bool(indexDef.Info.Clustered),
 			nullsNotDistinct: indexDef.NullsNotDistinct,
+			included:         indexDef.Included,
 			options:          indexOptions,
 			partition:        indexPartition,
 
@@ -760,6 +753,73 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}, nil
 }
 
+// autoIndexName reproduces the name the database gives an index or constraint declared
+// without one. PostgreSQL (ChooseIndexName) joins the table name, the key columns and the
+// INCLUDE columns, truncated to NAMEDATALEN, and suffixes _key for a UNIQUE constraint but
+// _idx for a bare index; a primary key is named after the table alone. The other engines
+// name it after the first column, as MySQL does.
+func autoIndexName(tableName string, indexColumns []IndexColumn, included []Ident, unique bool, primary bool, constraint bool, mode GeneratorMode) Ident {
+	if mode != GeneratorModePostgres {
+		if primary {
+			return parser.NewIdent("PRIMARY", false)
+		}
+		return parser.NewIdent(indexColumns[0].ColumnName(), false)
+	}
+
+	if primary {
+		return NewIdentWithQuoteDetected(buildPostgresPrimaryKeyName(tableName))
+	}
+
+	columnNames := []string{}
+	for _, indexColumn := range indexColumns {
+		columnNames = append(columnNames, autoIndexColumnName(indexColumn, columnNames))
+	}
+	for _, includedColumn := range included {
+		columnNames = append(columnNames, includedColumn.Name)
+	}
+
+	suffix := "idx"
+	if unique && constraint {
+		suffix = "key"
+	}
+	return buildPostgresConstraintNameIdent(tableName, strings.Join(columnNames, "_"), suffix)
+}
+
+// autoIndexColumnName is PostgreSQL's ChooseIndexColumnNames: a name already taken by an
+// earlier column gets a counter appended.
+func autoIndexColumnName(indexColumn IndexColumn, taken []string) string {
+	name := figureIndexColumnName(indexColumn.columnExpr)
+
+	candidate := name
+	for i := 1; slices.Contains(taken, candidate); i++ {
+		candidate = fmt.Sprintf("%s%d", name, i)
+	}
+	return candidate
+}
+
+// figureIndexColumnName is PostgreSQL's FigureIndexColname: it looks through the wrappers that
+// name nothing themselves, takes a function call's name, and falls back to "expr".
+func figureIndexColumnName(expr parser.Expr) string {
+	switch expr := expr.(type) {
+	case *parser.ColName:
+		return expr.Name.Name
+	case *parser.ParenExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.CollateExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.CastExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.ConvertExpr:
+		return figureIndexColumnName(expr.Expr)
+	case *parser.FuncExpr:
+		return strings.ToLower(expr.Name.Name)
+	case *parser.CaseExpr:
+		return "case"
+	default:
+		return "expr"
+	}
+}
+
 func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, error) {
 	if stmt.IndexSpec == nil {
 		return Index{}, fmt.Errorf("stmt.IndexSpec was null on parseIndex: %#v", stmt)
@@ -785,6 +845,8 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 				columnExpr:      columnExpr,
 				length:          length,
 				direction:       column.Direction,
+				nullsOrdering:   column.NullsOrdering,
+				collation:       column.Collation,
 				operatorClass:   column.OperatorClass,
 				withoutOverlaps: column.WithoutOverlaps,
 			},
@@ -799,10 +861,6 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 			where = parenExpr.Expr
 		}
 	}
-
-	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn Ident) string {
-		return includedColumn.Name
-	})
 
 	indexOptions := util.TransformSlice(stmt.IndexSpec.Options, func(option *parser.IndexOption) IndexOption {
 		return IndexOption{
@@ -827,18 +885,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	nameIdent := stmt.IndexSpec.Name
 	if nameIdent.IsEmpty() {
-		nameIdent.Name = stmt.Table.Name.Name
-		for _, indexColumn := range indexColumns {
-			nameIdent.Name += fmt.Sprintf("_%s", indexColumn.ColumnName())
-		}
-		// Use PostgreSQL naming convention for UNIQUE constraints
-		if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && len(indexColumns) == 1 {
-			nameIdent.Name += "_key"
-		} else {
-			nameIdent.Name += "_idx"
-		}
-		// Auto-generated names are unquoted
-		nameIdent.Quoted = false
+		nameIdent = autoIndexName(stmt.Table.Name.Name, indexColumns, stmt.IndexSpec.Included, stmt.IndexSpec.Unique, stmt.IndexSpec.Primary, stmt.Action != parser.CreateIndex, mode)
 	}
 
 	// Extract index comments and look for @renamed annotation
@@ -852,7 +899,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		name:              nameIdent,
 		indexType:         stmt.IndexSpec.Type.Name,
 		columns:           indexColumns,
-		primary:           false, // not supported in parser yet
+		primary:           stmt.IndexSpec.Primary,
 		unique:            stmt.IndexSpec.Unique,
 		vector:            stmt.IndexSpec.Vector,
 		constraint:        stmt.IndexSpec.Constraint,
@@ -862,7 +909,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		constraintOptions: constraintOptions,
 		clustered:         stmt.IndexSpec.Clustered,
 		where:             where,
-		included:          includedColumns,
+		included:          stmt.IndexSpec.Included,
 		options:           indexOptions,
 		partition:         indexPartition,
 		renamedFrom:       renameFrom,

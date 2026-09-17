@@ -1277,3 +1277,123 @@ func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
 	assert.Contains(t, g.generateCreateIndexStatement(table, index), "(name text_pattern_ops desc)")
 	assert.Contains(t, g.generateAddIndex(table, index), "(name text_pattern_ops desc)")
 }
+
+// TestCreateIndexStatementRoundTrip guards the clause loss that quote-aware mode is prone to:
+// it regenerates a CREATE INDEX from the parsed index, so any clause the model does not carry
+// disappears from the statement — and, because both sides of a comparison go through the same
+// model, disappears from the diff as well. Parsing the regenerated statement back has to yield
+// the same index.
+func TestCreateIndexStatementRoundTrip(t *testing.T) {
+	statements := []string{
+		`CREATE INDEX i ON public.t USING btree (a)`,
+		`CREATE UNIQUE INDEX i ON public.t USING btree (a, b)`,
+		`CREATE INDEX i ON public.t USING btree (a) INCLUDE (b)`,
+		`CREATE INDEX i ON public.t USING btree (a) INCLUDE (b, "C")`,
+		`CREATE UNIQUE INDEX i ON public.t USING btree (a) INCLUDE (b) NULLS NOT DISTINCT`,
+		`CREATE INDEX i ON public.t USING btree (a DESC NULLS LAST, b NULLS FIRST)`,
+		`CREATE INDEX i ON public.t USING btree (b COLLATE "C")`,
+		`CREATE INDEX i ON public.t USING btree (b text_pattern_ops)`,
+		`CREATE INDEX i ON public.t USING gin (b gin_trgm_ops)`,
+		`CREATE INDEX i ON public.t USING btree (lower(b))`,
+		`CREATE INDEX i ON public.t USING btree (a) WHERE a > 0`,
+		`CREATE INDEX i ON public.t USING btree (a) WHERE "isActive"`,
+		`CREATE INDEX i ON public.t USING btree (a) WITH (fillfactor = 70)`,
+		`CREATE INDEX i ON public."T" USING btree ("A") INCLUDE ("B")`,
+	}
+
+	sqlParser := database.NewParser(parser.ParserModePostgres)
+	g := &Generator{mode: GeneratorModePostgres, config: database.GeneratorConfig{LegacyIgnoreQuotes: false}}
+
+	parseIndexOf := func(t *testing.T, statement string) (QualifiedName, Index) {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, sqlParser, statement+";", "public")
+		require.NoError(t, err)
+		require.Len(t, ddls, 1)
+		createIndex, ok := ddls[0].(*CreateIndex)
+		require.True(t, ok)
+		return createIndex.tableName, createIndex.index
+	}
+
+	for _, statement := range statements {
+		t.Run(statement, func(t *testing.T) {
+			tableName, index := parseIndexOf(t, statement)
+
+			generated := g.generateCreateIndexStatement(tableName, index)
+			_, regenerated := parseIndexOf(t, generated)
+
+			assert.Equal(t, index.name, regenerated.name)
+			assert.Equal(t, index.indexType, regenerated.indexType)
+			assert.Equal(t, index.options, regenerated.options)
+			assert.Equal(t, index.included, regenerated.included)
+			assert.True(t, g.areSameIndexes(index, regenerated),
+				"regenerated statement describes a different index:\n%s\n%s", statement, generated)
+		})
+	}
+}
+
+// TestAutoIndexName covers the names PostgreSQL and MySQL give an index or constraint declared
+// without one. A name that does not match what the server chose makes the desired schema differ
+// from the exported one on every run, so the index is dropped and recreated each time.
+func TestAutoIndexName(t *testing.T) {
+	nameOf := func(t *testing.T, mode GeneratorMode, parserMode parser.ParserMode, statement string) string {
+		t.Helper()
+		ddls, err := ParseDDLs(mode, database.NewParser(parserMode), statement+";", "public")
+		require.NoError(t, err)
+		require.Len(t, ddls, 1)
+		switch ddl := ddls[0].(type) {
+		case *CreateIndex:
+			return ddl.index.name.Name
+		case *AddIndex:
+			return ddl.index.name.Name
+		case *AddPrimaryKey:
+			return ddl.index.name.Name
+		default:
+			t.Fatalf("unexpected DDL type %T", ddl)
+			return ""
+		}
+	}
+
+	postgres := []struct {
+		statement string
+		expected  string
+	}{
+		{`CREATE INDEX ON t (a)`, "t_a_idx"},
+		{`CREATE UNIQUE INDEX ON t (a)`, "t_a_idx"},
+		{`CREATE INDEX ON t (a) INCLUDE (b, c)`, "t_a_b_c_idx"},
+		{`CREATE INDEX ON t (lower(a), lower(b))`, "t_lower_lower1_idx"},
+		{`CREATE INDEX ON t ((a::text))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((a COLLATE "C"))`, "t_a_idx"},
+		{`CREATE INDEX ON t (((a COLLATE "C")))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((CAST(a AS text)))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((CASE WHEN a > 0 THEN 1 ELSE 0 END))`, "t_case_idx"},
+		{`CREATE INDEX ON t ((a + b))`, "t_expr_idx"},
+		{`ALTER TABLE t ADD UNIQUE (a, b)`, "t_a_b_key"},
+		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "t_pkey"},
+		{
+			`CREATE INDEX ON a_table_whose_name_is_quite_long_and_will_certainly_be_truncated (a)`,
+			"a_table_whose_name_is_quite_long_and_will_certainly_be_tr_a_idx",
+		},
+		{
+			`ALTER TABLE a_table_whose_name_is_quite_long_and_will_certainly_be_truncated ADD PRIMARY KEY (a)`,
+			"a_table_whose_name_is_quite_long_and_will_certainly_be_tru_pkey",
+		},
+	}
+	for _, tt := range postgres {
+		t.Run(tt.statement, func(t *testing.T) {
+			assert.Equal(t, tt.expected, nameOf(t, GeneratorModePostgres, parser.ParserModePostgres, tt.statement))
+		})
+	}
+
+	mysql := []struct {
+		statement string
+		expected  string
+	}{
+		{`ALTER TABLE t ADD UNIQUE (a, b)`, "a"},
+		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "PRIMARY"},
+	}
+	for _, tt := range mysql {
+		t.Run("mysql "+tt.statement, func(t *testing.T) {
+			assert.Equal(t, tt.expected, nameOf(t, GeneratorModeMysql, parser.ParserModeMysql, tt.statement))
+		})
+	}
+}
