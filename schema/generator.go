@@ -2238,8 +2238,10 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(currentPolicy.name), g.escapeTableName(currentTable)))
-			ddls = append(ddls, statement)
+			ddls, _ = g.appendRecreate(ddls,
+				fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(currentPolicy.name), g.escapeTableName(currentTable)),
+				statement,
+			)
 		}
 	}
 
@@ -2405,13 +2407,13 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				// When dropping views that may have dependents, we need to handle them
 				// For PostgreSQL, find dependent views and recreate them after
-				var dependentViewDDLs []string
+				var recreateDDLs, dependentViewDDLs []string
 				if g.mode == GeneratorModePostgres {
 					// Find all views that depend on this view
 					dependentViews := g.findDependentViews(desiredView.name)
 					// Drop them first (in reverse dependency order)
 					for _, depView := range slices.Backward(dependentViews) {
-						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
+						recreateDDLs = append(recreateDDLs, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
 					}
 					// Store DDLs to recreate dependent views after the base view
 					for _, depView := range dependentViews {
@@ -2419,10 +2421,13 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 						dependentViewDDLs = append(dependentViewDDLs, fmt.Sprintf("CREATE %s %s AS %s", depView.viewType, g.escapeViewName(depView), depViewDef))
 					}
 				}
-				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName))
-				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
+				recreateDDLs = append(recreateDDLs,
+					fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName),
+					fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause),
+				)
 				// Recreate dependent views
-				ddls = append(ddls, dependentViewDDLs...)
+				recreateDDLs = append(recreateDDLs, dependentViewDDLs...)
+				ddls, _ = g.appendRecreate(ddls, recreateDDLs...)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
@@ -2588,14 +2593,20 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 			case GeneratorModeMssql:
 				ddls = append(ddls, "CREATE OR ALTER "+triggerDefinition)
 			case GeneratorModePostgres:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(triggerName), g.escapeQualifiedName(desiredTrigger.tableName)))
-				ddls = append(ddls, "CREATE "+triggerDefinition)
+				ddls, _ = g.appendRecreate(ddls,
+					fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(triggerName), g.escapeQualifiedName(desiredTrigger.tableName)),
+					"CREATE "+triggerDefinition,
+				)
 			case GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
-				ddls = append(ddls, triggerDefinition)
+				ddls, _ = g.appendRecreate(ddls,
+					fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)),
+					triggerDefinition,
+				)
 			default:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
-				ddls = append(ddls, "CREATE "+triggerDefinition)
+				ddls, _ = g.appendRecreate(ddls,
+					fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)),
+					"CREATE "+triggerDefinition,
+				)
 			}
 		}
 	}
@@ -3992,21 +4003,21 @@ func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index)
 	return result
 }
 
-// appendRecreate emits the drop of an object and the statement that recreates it, and reports
-// whether they will run. When enable_drop leaves the drop commented out, the recreate has to be
-// held back as well: it would run against the object that is still there and fail with "already
+// appendRecreate emits statements that drop an object and recreate it, and reports whether they
+// will run. When enable_drop leaves a drop among them commented out, the rest has to be held
+// back as well: it would run against the object that is still there and fail with "already
 // exists". The caller must then leave the object as it is in its model of the current schema,
 // or a later statement, such as a COMMENT ON the recreated object, would be generated for an
 // object that was never recreated. A drop that enable_drop does not gate, such as ALTER TABLE
 // DROP CONSTRAINT, is unaffected.
-func (g *Generator) appendRecreate(ddls []string, dropDDL string, createDDL string) ([]string, bool) {
-	if !g.config.EnableDrop && isDropStatement(dropDDL) {
-		return append(ddls,
-			"-- Skipped: "+strings.ReplaceAll(dropDDL, "\n", "\n-- "),
-			"-- Skipped: "+strings.ReplaceAll(createDDL, "\n", "\n-- "),
-		), false
+func (g *Generator) appendRecreate(ddls []string, statements ...string) ([]string, bool) {
+	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDropStatement) {
+		return append(ddls, statements...), true
 	}
-	return append(ddls, dropDDL, createDDL), true
+	for _, statement := range statements {
+		ddls = append(ddls, "-- Skipped: "+strings.ReplaceAll(statement, "\n", "\n-- "))
+	}
+	return ddls, false
 }
 
 func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) string {

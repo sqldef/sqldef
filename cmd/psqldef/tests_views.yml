@@ -755,3 +755,23 @@ ChangeIndexOnMaterializedView:
   down: |
     DROP INDEX public.mv_a_idx;
     CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a);
+
+ViewRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE VIEW v AS SELECT a, b FROM t;
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE VIEW v AS SELECT a FROM t;
+  up: |
+    -- Skipped: DROP VIEW public.v;
+    -- Skipped: CREATE VIEW public.v AS select a from t;
+  down: ""
