@@ -11,7 +11,6 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 ## General Rules
 
-* Never commit changes unless the user explicitly requests it
 * Only write comments to explain non-obvious code. Focus on explaining the "why" rather than the "what"
 * Format SQL in string literals
 * Use `log/slog` to trace internal state. Set `LOG_LEVEL=debug` to enable debug logging
@@ -21,6 +20,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
   * `legacy_ignore_quotes: false` (quote-aware) generates SQL with identifiers quoted only when they are quoted in the input SQL
 * If you encounter an unsupported feature, don't rewrite tests to avoid it. Instead, comment out the test case and mark it as `FIXME`
 * Avoid defensive programming
+* Fix pre-existing bugs when you find them during development.
 
 ## Environment
 
@@ -47,20 +47,22 @@ To update the generic SQL parser, edit `parser/parser.y` and regenerate:
 make parser  # regenerate parser/parser.go from parser/parser.y
 ```
 
-Requirements:
+### Requirements
+
 - No reduce/reduce conflicts are allowed
 - Do not introduce new shift/reduce conflicts unless absolutely necessary
 - `make parser` prints the conflict summary to stdout (`conflicts: N shift/reduce, M reduce/reduce`)
 - To resolve individual conflicts, inspect `y.output`, which `make parser` also writes (it is gitignored)
 
-Usage notes:
+### Notes for Developing the Parser
+
 - `psqldef` uses the **generic parser** by default with fallback to `go-pgquery` (native PostgreSQL parser)
 - During development, always set `PSQLDEF_PARSER=generic`:
   - `PSQLDEF_PARSER=generic` - Use only the generic parser (no fallback to pgquery)
   - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
   - Not set (default) - Use generic parser with fallback to pgquery
 - The generic parser builds ASTs that the generator uses for normalization and comparison. Do not parse SQL with regular expressions
-- pgquery is not maintained; any fallback to it is a bug. Fix the gap in the generic parser (`parser/parser.y`), never with regexes or workarounds. Auto mode routes the whole file to pgquery when the generic parser fails on any statement — detect it via the `WARN Generic parser failed ... using pgquery fallback` log line, and verify fixes with `PSQLDEF_PARSER=generic`
+- pgquery is no longer maintained; any fallback to it is a bug. Fix the gap in the generic parser (`parser/parser.y`), never with regexes or workarounds. Auto mode routes the whole file to pgquery when the generic parser fails on any statement — detect it via the `WARN Generic parser failed ... using pgquery fallback` log line, and verify fixes with `PSQLDEF_PARSER=generic`
 - Map iteration order is non-deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order
 
 ## Local Development
@@ -316,9 +318,12 @@ Markdown files document the usage of each command. Keep them up to date:
 
 ## Task Completion Checklist
 
-Before considering a task complete, run these commands to ensure the code is in a good state:
+Before considering a task complete, run these steps to ensure the code is in a good state:
 
 * `make build`
 * `make test-all-flavors`
 * `make format`
 * `make lint`
+* Look at the whole diff and simplify the code and comments (with `/simplify`, if available).
+* Perform code review (with `/code-review`, if available). Do not edit or commit during code-review.
+
