@@ -35,6 +35,7 @@ type PostgresDatabase struct {
 	db               *sql.DB
 	defaultSchema    *string
 	hasConperiod     *bool           // cached: whether pg_constraint has conperiod column (PG18+)
+	hasIndnkeyatts   *bool           // cached: whether pg_index has indnkeyatts column (PG11+)
 	defaultOpclasses map[string]bool // cached: see defaultOperatorClasses()
 }
 
@@ -119,6 +120,26 @@ func (d *PostgresDatabase) supportsConperiod() bool {
 		exists = false
 	}
 	d.hasConperiod = &exists
+	return exists
+}
+
+// supportsIndexIncluding returns true if pg_index has the indnkeyatts column (PG11+), which is
+// also the version that introduced INCLUDE columns. The result is cached after the first call.
+func (d *PostgresDatabase) supportsIndexIncluding() bool {
+	if d.hasIndnkeyatts != nil {
+		return *d.hasIndnkeyatts
+	}
+	var exists bool
+	err := d.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_attribute
+			WHERE attrelid = 'pg_index'::regclass AND attname = 'indnkeyatts'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		exists = false
+	}
+	d.hasIndnkeyatts = &exists
 	return exists
 }
 
@@ -1624,19 +1645,22 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 		selectCols = "con.conname, false"
 	}
 	// The columns past indnkeyatts are the INCLUDE columns of a covering primary key.
-	query := fmt.Sprintf(`
-		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s,
-		  (SELECT array_agg(att.attname ORDER BY key.ord)
+	includedCols := "NULL::text[]"
+	if d.supportsIndexIncluding() {
+		includedCols = `(SELECT array_agg(att.attname ORDER BY key.ord)
 		   FROM unnest(idx.indkey) WITH ORDINALITY AS key(attnum, ord)
 		   JOIN pg_attribute att ON att.attrelid = cls.oid AND att.attnum = key.attnum
-		   WHERE key.ord > idx.indnkeyatts)
+		   WHERE key.ord > idx.indnkeyatts)`
+	}
+	query := fmt.Sprintf(`
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s, %s
 		FROM pg_constraint con
 		JOIN pg_class cls ON cls.oid = con.conrelid
 		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
 		JOIN pg_index idx ON idx.indexrelid = con.conindid
 		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
 		AND con.contype = 'p'
-	`, selectCols)
+	`, selectCols, includedCols)
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {
