@@ -1028,6 +1028,31 @@ create_statement:
       IndexExpr: $11.IndexExpr,
     }
   }
+/* For PostgreSQL: an unnamed index with an access method */
+| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt index_option_opt where_expression_opt
+  {
+    indexSpec := &IndexSpec{
+      Name: NewIdent("", false),
+      Type: $8,
+      Unique: bool($2[0]),
+      Async: $4 == byte(2),
+      Concurrently: $4 == byte(1),
+      NullsNotDistinct: bool($13),
+      Where: NewWhere(WhereStr, $15),
+      Included: $12,
+    }
+    if $14 != nil && len($14) > 0 {
+      indexSpec.Options = $14
+    }
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: indexSpec,
+      IndexCols: $10.IndexCols,
+      IndexExpr: $10.IndexExpr,
+    }
+  }
 /* For PostgreSQL: CREATE INDEX IF NOT EXISTS ... USING */
 | CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt index_option_opt where_expression_opt
   {
@@ -2108,6 +2133,43 @@ alter_statement:
       IndexCols: $10,
     }
   }
+| ALTER ignore_opt TABLE table_name ADD UNIQUE nulls_not_distinct_opt '(' index_column_list ')' include_columns_opt deferrable_opt initially_deferred_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: NewIdent("", false),
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        NullsNotDistinct: bool($7),
+        Included: $11,
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: $12 != nil && bool(*$12),
+          InitiallyDeferred: $13 != nil && bool(*$13),
+        },
+      },
+      IndexCols: $9,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD PRIMARY key_kw '(' index_column_list ')' include_columns_opt
+  {
+    $$ = &DDL{
+      Action: AddPrimaryKey,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: NewIdent("", false),
+        Type: NewIdent("PRIMARY KEY", false),
+        Unique: true,
+        Primary: true,
+        Included: $11,
+      },
+      IndexCols: $9,
+    }
+  }
 | ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY key_kw '(' index_column_list ')' include_columns_opt
   {
     $$ = &DDL{
@@ -2116,7 +2178,8 @@ alter_statement:
       NewName: $5,
       IndexSpec: &IndexSpec{
         Name: $8,
-        Unique: false,
+        Type: NewIdent("PRIMARY KEY", false),
+        Unique: true,
         Primary: true,
         Included: $14,
       },

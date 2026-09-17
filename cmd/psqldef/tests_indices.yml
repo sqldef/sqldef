@@ -1227,3 +1227,21 @@ CreateIndexConcurrentlyWithComment:
     COMMENT ON INDEX public.t_a_idx IS 'lookup by a';
   down: |
     DROP INDEX public.t_a_idx;
+
+UnnamedIndexWithAccessMethod:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+  desired: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+    CREATE INDEX ON t USING btree (y);
+  up: |
+    CREATE INDEX t_y_idx ON public.t USING btree (y);
+  down: |
+    DROP INDEX public.t_y_idx;

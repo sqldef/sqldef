@@ -2488,3 +2488,37 @@ ChangeIncludeColumnsOfPrimaryKey:
   down: |
     ALTER TABLE public.t DROP CONSTRAINT t_pk;
     ALTER TABLE public.t ADD CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b);
+
+AddUnnamedPrimaryKeyConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+    ALTER TABLE t ADD PRIMARY KEY (x);
+  desired: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+    ALTER TABLE t ADD PRIMARY KEY (x);
+  up: ""
+  down: ""
+
+AddUnnamedUniqueConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    ALTER TABLE t ADD UNIQUE (x, y);
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    ALTER TABLE t ADD UNIQUE (x, y);
+  up: ""
+  down: ""

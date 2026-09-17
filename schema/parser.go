@@ -767,6 +767,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 // autoIndexName reproduces the name the database gives an index declared without one.
 // PostgreSQL (DefineIndex/ChooseIndexName) joins the table name, the key columns and the
 // INCLUDE columns, and suffixes _key for a UNIQUE constraint but _idx for a bare index.
+// A primary key is named after the table alone.
 func autoIndexName(stmt *parser.DDL, indexColumns []IndexColumn, mode GeneratorMode) string {
 	columnNames := []string{}
 	for _, indexColumn := range indexColumns {
@@ -774,6 +775,10 @@ func autoIndexName(stmt *parser.DDL, indexColumns []IndexColumn, mode GeneratorM
 	}
 	for _, includedColumn := range stmt.IndexSpec.Included {
 		columnNames = append(columnNames, includedColumn.Name)
+	}
+
+	if mode == GeneratorModePostgres && stmt.Action == parser.AddPrimaryKey {
+		return stmt.Table.Name.Name + "_pkey"
 	}
 
 	name := stmt.Table.Name.Name
@@ -897,7 +902,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		name:              nameIdent,
 		indexType:         stmt.IndexSpec.Type.Name,
 		columns:           indexColumns,
-		primary:           false, // not supported in parser yet
+		primary:           stmt.IndexSpec.Primary,
 		unique:            stmt.IndexSpec.Unique,
 		vector:            stmt.IndexSpec.Vector,
 		constraint:        stmt.IndexSpec.Constraint,
