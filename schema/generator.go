@@ -3952,11 +3952,12 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 }
 
 // generateDropIndex generates a DDL statement to drop an index.
-// appendRecreate emits the drop of an object and the statement that recreates it. Without
-// enable_drop the drop is only commented out, so the recreate has to be held back as well:
-// it would run against the object that is still there and fail with "already exists".
+// appendRecreate emits the drop of an object and the statement that recreates it. When
+// enable_drop leaves the drop commented out, the recreate has to be held back as well: it
+// would run against the object that is still there and fail with "already exists". A drop
+// that enable_drop does not gate, such as ALTER TABLE DROP CONSTRAINT, is unaffected.
 func (g *Generator) appendRecreate(ddls []string, dropDDL string, createDDL string) []string {
-	if !g.config.EnableDrop {
+	if !g.config.EnableDrop && isDropStatement(dropDDL) {
 		return append(ddls,
 			"-- Skipped: "+strings.ReplaceAll(dropDDL, "\n", "\n-- "),
 			"-- Skipped: "+strings.ReplaceAll(createDDL, "\n", "\n-- "),

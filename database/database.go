@@ -234,82 +234,103 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 		logger.Println("-- Apply --")
 	}
 
-	ddlsInTx := []string{}
-	ddlsNotInTx := []string{}
-
-	if d.GetConfig().DisableDdlTransaction {
-		ddlsNotInTx = ddls
-	} else {
-		for _, ddl := range ddls {
-			if TransactionSupported(ddl) {
-				ddlsInTx = append(ddlsInTx, ddl)
-			} else {
-				ddlsNotInTx = append(ddlsNotInTx, ddl)
-			}
-		}
-	}
-
 	txQueries := d.GetTransactionQueries()
-
-	var transaction *sql.Tx
-	var err error
-
-	if len(ddlsInTx) > 0 || len(beforeApply) > 0 {
-		transaction, err = d.DB().Begin()
-		if err != nil {
-			return err
-		}
-
-		logger.Printf("%s;\n", txQueries.Begin)
-	}
+	runner := ddlRunner{db: d, txQueries: txQueries, ddlSuffix: ddlSuffix, logger: logger}
 
 	if len(beforeApply) > 0 {
-		// beforeApply is executed in transaction
+		if err := runner.begin(); err != nil {
+			return err
+		}
 		logger.Println(beforeApply)
-		if _, err := transaction.Exec(beforeApply); err != nil {
-			_ = transaction.Rollback()
-			logger.Printf("%s;\n", txQueries.Rollback)
+		if _, err := runner.transaction.Exec(beforeApply); err != nil {
+			runner.rollback()
 			return err
 		}
 	}
 
-	// DDLs in transaction
-	for _, ddl := range ddlsInTx {
-		logger.Printf("%s;\n", ddl)
-
-		if isCommentedOut(ddl) {
-			// Skip commented DDLs (e.g., "-- Skipped: ...")
-			continue
-		}
-
-		logger.Print(ddlSuffix)
-		_, err = transaction.Exec(ddl)
-		if err != nil {
-			_ = transaction.Rollback()
-			logger.Printf("%s;\n", txQueries.Rollback)
-			return err
-		}
-	}
-
-	// Only commit if we started a transaction
-	if transaction != nil {
-		if err := transaction.Commit(); err != nil {
-			return err
-		}
-		logger.Printf("%s;\n", txQueries.Commit)
-	}
-
-	// DDLs not in transaction
-	for _, ddl := range ddlsNotInTx {
-		logger.Printf("%s;\n", ddl)
-		// Skip ddlSuffix and execution for commented DDLs (e.g., "-- Skipped: ...")
-		if !isCommentedOut(ddl) {
-			logger.Print(ddlSuffix)
-			_, err = d.DB().Exec(ddl)
-			if err != nil {
+	// A statement is executed in the order it was generated: a later statement may depend on
+	// an earlier one (a COMMENT ON INDEX, or a foreign key over a unique index). Statements
+	// that cannot run inside a transaction, such as CREATE INDEX CONCURRENTLY, therefore end
+	// the transaction that precedes them rather than being deferred to the end.
+	inTransaction := !d.GetConfig().DisableDdlTransaction
+	for _, ddl := range ddls {
+		if inTransaction && TransactionSupported(ddl) {
+			if err := runner.begin(); err != nil {
 				return err
 			}
+		} else if err := runner.commit(); err != nil {
+			return err
 		}
+
+		if err := runner.exec(ddl); err != nil {
+			return err
+		}
+	}
+
+	return runner.commit()
+}
+
+// ddlRunner executes DDLs, keeping at most one open transaction.
+type ddlRunner struct {
+	db          Database
+	txQueries   TransactionQueries
+	ddlSuffix   string
+	logger      Logger
+	transaction *sql.Tx
+}
+
+func (r *ddlRunner) begin() error {
+	if r.transaction != nil {
+		return nil
+	}
+	transaction, err := r.db.DB().Begin()
+	if err != nil {
+		return err
+	}
+	r.transaction = transaction
+	r.logger.Printf("%s;\n", r.txQueries.Begin)
+	return nil
+}
+
+func (r *ddlRunner) commit() error {
+	if r.transaction == nil {
+		return nil
+	}
+	transaction := r.transaction
+	r.transaction = nil
+	if err := transaction.Commit(); err != nil {
+		return err
+	}
+	r.logger.Printf("%s;\n", r.txQueries.Commit)
+	return nil
+}
+
+func (r *ddlRunner) rollback() {
+	if r.transaction == nil {
+		return
+	}
+	_ = r.transaction.Rollback()
+	r.transaction = nil
+	r.logger.Printf("%s;\n", r.txQueries.Rollback)
+}
+
+func (r *ddlRunner) exec(ddl string) error {
+	r.logger.Printf("%s;\n", ddl)
+	if isCommentedOut(ddl) {
+		// Skip commented DDLs (e.g., "-- Skipped: ...")
+		return nil
+	}
+
+	r.logger.Print(r.ddlSuffix)
+	var err error
+	if r.transaction != nil {
+		_, err = r.transaction.Exec(ddl)
+	} else {
+		_, err = r.db.DB().Exec(ddl)
+	}
+	if err != nil {
+		r.rollback()
+		return err
 	}
 	return nil
 }
