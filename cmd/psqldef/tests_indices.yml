@@ -943,3 +943,70 @@ CreateIndexOnColumnNamedYearMonth:
     CREATE INDEX idx_monthly_grants_account_month ON public.monthly_grants USING btree (account_id, year_month);
   down: |
     DROP INDEX public.idx_monthly_grants_account_month;
+
+CreateCoveringIndexPreservingQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      "totalAmount" numeric NOT NULL
+    );
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      "totalAmount" numeric NOT NULL
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (id, "totalAmount");
+  up: |
+    CREATE INDEX idx_orders_user ON public.orders USING btree (user_id) INCLUDE (id, "totalAmount");
+  down: |
+    DROP INDEX public.idx_orders_user;
+
+AddIncludeToExistingIndexPreservingQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      status text NOT NULL
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id);
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      status text NOT NULL
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (status);
+  up: |
+    DROP INDEX public.idx_orders_user;
+    CREATE INDEX idx_orders_user ON public.orders USING btree (user_id) INCLUDE (status);
+  down: |
+    DROP INDEX public.idx_orders_user;
+    CREATE INDEX idx_orders_user ON public.orders USING btree (user_id);
+
+CreateCoveringPartialIndexConcurrentlyPreservingQuotes:
+  legacy_ignore_quotes: false
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE stories (
+      id bigint NOT NULL,
+      story_uuid text NOT NULL,
+      status text NOT NULL,
+      category text
+    );
+  desired: |
+    CREATE TABLE stories (
+      id bigint NOT NULL,
+      story_uuid text NOT NULL,
+      status text NOT NULL,
+      category text
+    );
+    CREATE INDEX idx_stories_latest_nondraft ON stories USING btree (story_uuid, id DESC) INCLUDE (status, category) WHERE status <> 'DRAFT';
+  up: |
+    CREATE INDEX CONCURRENTLY idx_stories_latest_nondraft ON public.stories USING btree (story_uuid, id desc) INCLUDE (status, category) WHERE status != 'DRAFT';
+  down: |
+    DROP INDEX public.idx_stories_latest_nondraft;

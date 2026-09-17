@@ -800,10 +800,6 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		}
 	}
 
-	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn Ident) string {
-		return includedColumn.Name
-	})
-
 	indexOptions := util.TransformSlice(stmt.IndexSpec.Options, func(option *parser.IndexOption) IndexOption {
 		return IndexOption{
 			optionName: option.Name,
@@ -862,7 +858,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		constraintOptions: constraintOptions,
 		clustered:         stmt.IndexSpec.Clustered,
 		where:             where,
-		included:          includedColumns,
+		included:          stmt.IndexSpec.Included,
 		options:           indexOptions,
 		partition:         indexPartition,
 		renamedFrom:       renameFrom,
