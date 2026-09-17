@@ -1271,3 +1271,29 @@ ChangeCollationOfIndex:
   down: |
     DROP INDEX public.t_a_idx;
     CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "C");
+
+CreateIndexOnTableNamedStream:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE stream (
+      id bigint NOT NULL PRIMARY KEY,
+      start_at timestamp
+    );
+    CREATE TABLE stream_comment (
+      id bigint NOT NULL,
+      stream_id bigint NOT NULL REFERENCES stream (id)
+    );
+  desired: |
+    CREATE TABLE stream (
+      id bigint NOT NULL PRIMARY KEY,
+      start_at timestamp
+    );
+    CREATE TABLE stream_comment (
+      id bigint NOT NULL,
+      stream_id bigint NOT NULL REFERENCES stream (id)
+    );
+    CREATE INDEX idx_stream_start_at ON stream USING btree (id, start_at) WHERE (start_at IS NOT NULL);
+  up: |
+    CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE start_at is not null;
+  down: |
+    DROP INDEX public.idx_stream_start_at;
