@@ -107,6 +107,12 @@ type Generator struct {
 	// Key is "schema.index_name"
 	droppedIndexes map[string]bool
 
+	// Track indexes whose recreation enable_drop held back, under both the name they still
+	// have and the name they would have had. A COMMENT on either would describe an index
+	// that was never recreated.
+	// Key is "schema.index_name"
+	heldBackIndexes map[string]bool
+
 	// Map index names to their owning tables (for comment cleanup after table drops)
 	// Key is "schema.index_name", value is the table's QualifiedName
 	indexToTable map[string]QualifiedName
@@ -204,6 +210,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		droppedTables:       make(map[string]bool),
 		droppedColumns:      make(map[string]bool),
 		droppedIndexes:      make(map[string]bool),
+		heldBackIndexes:     make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
 		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
 	}
@@ -770,6 +777,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// PostgreSQL automatically removes index comments when the index is dropped
 		if g.isCommentOnDroppedIndex(currentComment) {
 			slog.Debug("Skipping comment cleanup for dropped index",
+				"object", currentComment.comment.Object)
+			continue
+		}
+
+		if g.isCommentOnHeldBackIndex(currentComment) {
+			slog.Debug("Skipping comment cleanup for held back index",
 				"object", currentComment.comment.Object)
 			continue
 		}
@@ -1680,7 +1693,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = g.appendRecreate(ddls,
+				ddls, _ = g.appendRecreate(ddls,
 					g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint),
 					g.generateAddIndex(desired.table.name, desiredIndex),
 				)
@@ -1698,7 +1711,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, renameDDLs...)
 				} else {
 					// See generateDDLsForCreateIndex: a changed definition cannot be renamed into place.
-					ddls = g.appendRecreate(ddls,
+					ddls, _ = g.appendRecreate(ddls,
 						g.generateDropIndex(desired.table.name, renameFromIndex.name, renameFromIndex.constraint),
 						g.generateAddIndex(desired.table.name, desiredIndex),
 					)
@@ -2057,11 +2070,16 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				currentView.indexes = append(currentView.indexes, desiredIndex)
 			} else if !g.areSameIndexes(*currentIndex, desiredIndex) {
 				// An index on a materialized view is changed the same way as one on a table.
-				ddls = g.appendRecreate(ddls,
+				var recreated bool
+				ddls, recreated = g.appendRecreate(ddls,
 					g.generateDropIndex(tableName, currentIndex.name, currentIndex.constraint),
 					statement,
 				)
-				currentView.indexes = g.replaceIndex(currentView.indexes, desiredIndex.name, desiredIndex)
+				if recreated {
+					currentView.indexes = g.replaceIndex(currentView.indexes, desiredIndex.name, desiredIndex)
+				} else {
+					g.trackHeldBackIndex(tableName, desiredIndex.name)
+				}
 			}
 		} else {
 			// Check if the view exists in desired views (might be created in the same migration)
@@ -2095,20 +2113,26 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 		}
 
 		if renameFromIndex != nil {
+			renamed := true
 			if g.areSameIndexes(*renameFromIndex, desiredIndex) {
 				renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 				ddls = append(ddls, renameDDLs...)
 			} else {
 				// A changed definition has to be rebuilt anyway, so there is nothing for the
 				// rename to preserve.
-				ddls = g.appendRecreate(ddls,
+				ddls, renamed = g.appendRecreate(ddls,
 					g.generateDropIndex(currentTable.name, renameFromIndex.name, renameFromIndex.constraint),
 					statement,
 				)
 			}
-			// PostgreSQL automatically transfers comments when renaming indexes
-			g.trackDroppedIndex(currentTable, *renameFromIndex)
-			currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
+			if renamed {
+				// PostgreSQL automatically transfers comments when renaming indexes
+				g.trackDroppedIndex(currentTable, *renameFromIndex)
+				currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
+			} else {
+				g.trackHeldBackIndex(currentTable.name, renameFromIndex.name)
+				g.trackHeldBackIndex(currentTable.name, desiredIndex.name)
+			}
 		} else {
 			// Index not found and not a rename, add index.
 			ddls = append(ddls, statement)
@@ -2117,13 +2141,17 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 	} else {
 		// Index found. If it's different, drop and add index.
 		if !g.areSameIndexes(*currentIndex, desiredIndex) {
-			ddls = g.appendRecreate(ddls,
+			var recreated bool
+			ddls, recreated = g.appendRecreate(ddls,
 				g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint),
 				statement,
 			)
-
-			// simulate index change. TODO: use []*Index in table and destructively modify it
-			currentTable.indexes = g.replaceIndex(currentTable.indexes, desiredIndex.name, desiredIndex)
+			if recreated {
+				// simulate index change. TODO: use []*Index in table and destructively modify it
+				currentTable.indexes = g.replaceIndex(currentTable.indexes, desiredIndex.name, desiredIndex)
+			} else {
+				g.trackHeldBackIndex(currentTable.name, desiredIndex.name)
+			}
 		}
 	}
 
@@ -3049,6 +3077,10 @@ func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstra
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
+	if g.isCommentOnHeldBackIndex(desired) {
+		return ddls, nil
+	}
+
 	currentComment := g.findCommentByObject(g.currentComments, &desired.comment)
 
 	// If both current and desired comments are NULL/empty, no change is needed.
@@ -3947,7 +3979,6 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 	return ddls
 }
 
-// generateDropIndex generates a DDL statement to drop an index.
 // replaceIndex returns indexes with the one named name replaced by replacement.
 func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index) []Index {
 	result := make([]Index, 0, len(indexes))
@@ -3961,18 +3992,21 @@ func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index)
 	return result
 }
 
-// appendRecreate emits the drop of an object and the statement that recreates it. When
-// enable_drop leaves the drop commented out, the recreate has to be held back as well: it
-// would run against the object that is still there and fail with "already exists". A drop
-// that enable_drop does not gate, such as ALTER TABLE DROP CONSTRAINT, is unaffected.
-func (g *Generator) appendRecreate(ddls []string, dropDDL string, createDDL string) []string {
+// appendRecreate emits the drop of an object and the statement that recreates it, and reports
+// whether they will run. When enable_drop leaves the drop commented out, the recreate has to be
+// held back as well: it would run against the object that is still there and fail with "already
+// exists". The caller must then leave the object as it is in its model of the current schema,
+// or a later statement, such as a COMMENT ON the recreated object, would be generated for an
+// object that was never recreated. A drop that enable_drop does not gate, such as ALTER TABLE
+// DROP CONSTRAINT, is unaffected.
+func (g *Generator) appendRecreate(ddls []string, dropDDL string, createDDL string) ([]string, bool) {
 	if !g.config.EnableDrop && isDropStatement(dropDDL) {
 		return append(ddls,
 			"-- Skipped: "+strings.ReplaceAll(dropDDL, "\n", "\n-- "),
 			"-- Skipped: "+strings.ReplaceAll(createDDL, "\n", "\n-- "),
-		)
+		), false
 	}
-	return append(ddls, dropDDL, createDDL)
+	return append(ddls, dropDDL, createDDL), true
 }
 
 func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) string {
@@ -5478,8 +5512,21 @@ func (g *Generator) droppedIndexKey(schema, indexName Ident) string {
 // This is used to skip generating COMMENT ... IS NULL for dropped indexes,
 // since PostgreSQL automatically removes index comments when the index is dropped.
 func (g *Generator) isCommentOnDroppedIndex(comment *Comment) bool {
+	key, ok := g.commentIndexKey(comment)
+	return ok && g.droppedIndexes[key]
+}
+
+// isCommentOnHeldBackIndex checks if a comment belongs to an index whose recreation was held
+// back by enable_drop, and which therefore is not the index the comment describes.
+func (g *Generator) isCommentOnHeldBackIndex(comment *Comment) bool {
+	key, ok := g.commentIndexKey(comment)
+	return ok && g.heldBackIndexes[key]
+}
+
+// commentIndexKey returns the index-tracking key of a COMMENT ON INDEX statement.
+func (g *Generator) commentIndexKey(comment *Comment) (string, bool) {
 	if comment.comment.ObjectType != "OBJECT_INDEX" {
-		return false
+		return "", false
 	}
 
 	object := comment.comment.Object
@@ -5491,11 +5538,19 @@ func (g *Generator) isCommentOnDroppedIndex(comment *Comment) bool {
 		schemaIdent = parser.NewIdent(g.defaultSchema, false)
 		indexIdent = object[0]
 	} else {
-		return false
+		return "", false
 	}
 
-	key := g.droppedIndexKey(schemaIdent, indexIdent)
-	return g.droppedIndexes[key]
+	return g.droppedIndexKey(schemaIdent, indexIdent), true
+}
+
+// trackHeldBackIndex records an index whose recreation enable_drop held back.
+func (g *Generator) trackHeldBackIndex(table QualifiedName, indexName Ident) {
+	tableSchema := table.Schema
+	if tableSchema.IsEmpty() {
+		tableSchema = parser.NewIdent(g.defaultSchema, false)
+	}
+	g.heldBackIndexes[g.droppedIndexKey(tableSchema, indexName)] = true
 }
 
 // buildIndexToTableMap builds a mapping from index names to their owning tables.

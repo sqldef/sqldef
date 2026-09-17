@@ -277,3 +277,25 @@ RenamedIndexWhoseDefinitionAlsoChanged:
   down: |
     CREATE INDEX old_idx ON public.t USING btree (a);
     DROP INDEX public.new_idx;
+
+RenamedIndexWhoseDefinitionAlsoChangedIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX old_idx ON t USING btree (a);
+    COMMENT ON INDEX old_idx IS 'an index';
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX new_idx /* @renamed from=old_idx */ ON t USING btree (a) INCLUDE (b);
+    COMMENT ON INDEX new_idx IS 'an index';
+  up: |
+    -- Skipped: DROP INDEX public.old_idx;
+    -- Skipped: CREATE INDEX new_idx ON public.t USING btree (a) INCLUDE (b);
+  down: ""
