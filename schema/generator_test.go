@@ -1201,3 +1201,79 @@ func TestDropFunctionDDL(t *testing.T) {
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
 	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
 }
+
+func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
+	// PostgreSQL parses an index key part as `expr [opclass] [ASC|DESC]`, so the operator class
+	// has to be emitted before the direction.
+	g := &Generator{mode: GeneratorModePostgres}
+
+	tests := []struct {
+		name        string
+		indexColumn IndexColumn
+		expected    string
+	}{
+		{
+			name: "column",
+			indexColumn: IndexColumn{
+				columnExpr:    &parser.ColName{Name: parser.NewIdent("name", false)},
+				operatorClass: "text_pattern_ops",
+				direction:     DescScr,
+			},
+			expected: "name text_pattern_ops desc",
+		},
+		{
+			name: "expression",
+			indexColumn: IndexColumn{
+				columnExpr: &parser.BinaryExpr{
+					Operator: "||",
+					Left:     &parser.ColName{Name: parser.NewIdent("a", false)},
+					Right:    &parser.ColName{Name: parser.NewIdent("b", false)},
+				},
+				operatorClass: "text_pattern_ops",
+				direction:     DescScr,
+			},
+			expected: "(a || b) text_pattern_ops desc",
+		},
+		{
+			name: "no direction",
+			indexColumn: IndexColumn{
+				columnExpr:    &parser.ColName{Name: parser.NewIdent("name", false)},
+				operatorClass: "text_pattern_ops",
+			},
+			expected: "name text_pattern_ops",
+		},
+		{
+			name: "no operator class",
+			indexColumn: IndexColumn{
+				columnExpr: &parser.ColName{Name: parser.NewIdent("name", false)},
+				direction:  DescScr,
+			},
+			expected: "name desc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, g.generateIndexColumnDefinition(tt.indexColumn))
+		})
+	}
+}
+
+// generateAddIndex has no PostgreSQL-reachable path carrying an operator class today, so the
+// key-part ordering of both index generators is asserted here instead of in cmd/psqldef.
+func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres}
+	table := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "products"}}
+	index := Index{
+		name:      Ident{Name: "idx_name"},
+		indexType: "INDEX",
+		columns: []IndexColumn{{
+			columnExpr:    &parser.ColName{Name: parser.NewIdent("name", false)},
+			operatorClass: "text_pattern_ops",
+			direction:     DescScr,
+		}},
+	}
+
+	assert.Contains(t, g.generateCreateIndexStatement(table, index), "(name text_pattern_ops desc)")
+	assert.Contains(t, g.generateAddIndex(table, index), "(name text_pattern_ops desc)")
+}
