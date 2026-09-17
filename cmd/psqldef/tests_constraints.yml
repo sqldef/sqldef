@@ -2522,3 +2522,24 @@ AddUnnamedUniqueConstraint:
     ALTER TABLE t ADD UNIQUE (x, y);
   up: ""
   down: ""
+
+ChangePrimaryKeyDeclaredWithAlterTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b bigint NOT NULL
+    );
+    ALTER TABLE ONLY t ADD CONSTRAINT t_pk PRIMARY KEY (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b bigint NOT NULL
+    );
+    ALTER TABLE ONLY t ADD CONSTRAINT t_pk PRIMARY KEY (b);
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pk;
+    ALTER TABLE public.t ADD PRIMARY KEY (b);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pkey;
+    ALTER TABLE public.t ADD PRIMARY KEY (a);

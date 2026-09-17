@@ -329,11 +329,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			indexDDLs = append(indexDDLs, idxDDLs...)
 		case *AddPrimaryKey:
-			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
-			if err != nil {
-				return nil, err
-			}
-			indexDDLs = append(indexDDLs, idxDDLs...)
+			// aggregateDDLsToSchema has already folded this into the desired table, and the
+			// primary key of a table is diffed there.
 		case *AddForeignKey:
 			fkeyDDLs, err := g.generateDDLsForAddForeignKey(desired.tableName, desired.foreignKey, "ALTER TABLE", ddl.Statement())
 			if err != nil {
