@@ -2045,6 +2045,17 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				// Index not found, add index.
 				ddls = append(ddls, statement)
 				currentView.indexes = append(currentView.indexes, desiredIndex)
+			} else if !g.areSameIndexes(*currentIndex, desiredIndex) {
+				// An index on a materialized view is changed the same way as one on a table.
+				ddls = g.appendRecreate(ddls,
+					g.generateDropIndex(tableName, currentIndex.name, currentIndex.constraint),
+					statement,
+				)
+				for i, viewIndex := range currentView.indexes {
+					if g.identsEqual(viewIndex.name, desiredIndex.name) {
+						currentView.indexes[i] = desiredIndex
+					}
+				}
 			}
 		} else {
 			// Check if the view exists in desired views (might be created in the same migration)

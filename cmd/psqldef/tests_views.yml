@@ -732,3 +732,26 @@ ViewReferencingColumnNamedKey:
   desired: |
     CREATE TABLE users (key text, name text);
     CREATE VIEW users_view AS SELECT key, name FROM users;
+
+ChangeIndexOnMaterializedView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a) INCLUDE (b);
+  up: |
+    DROP INDEX public.mv_a_idx;
+    CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a) INCLUDE (b);
+  down: |
+    DROP INDEX public.mv_a_idx;
+    CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a);
