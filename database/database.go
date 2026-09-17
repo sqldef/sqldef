@@ -3,6 +3,7 @@ package database
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"log"
 	"log/slog"
@@ -202,6 +203,11 @@ type Database interface {
 	GetGeneratorConfig() GeneratorConfig
 	GetTransactionQueries() TransactionQueries
 	GetConfig() Config
+
+	// SessionSetupQueries returns the statements to run on the connection that applies the
+	// DDLs, before the first of them. They configure the session, so they must not be run on
+	// a connection the pool may hand to someone else.
+	SessionSetupQueries() []string
 }
 
 func isDryRun(d Database) bool {
@@ -234,8 +240,22 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 		logger.Println("-- Apply --")
 	}
 
-	txQueries := d.GetTransactionQueries()
-	runner := ddlRunner{db: d, txQueries: txQueries, ddlSuffix: ddlSuffix, logger: logger}
+	// Every statement runs on one connection: a session setting made by SessionSetupQueries or
+	// by beforeApply has to still be in effect when a later statement runs, and the pool would
+	// otherwise hand out a connection that never saw it.
+	conn, err := d.DB().Conn(context.Background())
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	runner := ddlRunner{conn: conn, txQueries: d.GetTransactionQueries(), ddlSuffix: ddlSuffix, logger: logger}
+
+	for _, query := range d.SessionSetupQueries() {
+		if _, err := conn.ExecContext(context.Background(), query); err != nil {
+			return err
+		}
+	}
 
 	if len(beforeApply) > 0 {
 		if err := runner.begin(); err != nil {
@@ -254,6 +274,13 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	// the transaction that precedes them rather than being deferred to the end.
 	inTransaction := !d.GetConfig().DisableDdlTransaction
 	for _, ddl := range ddls {
+		// A statement the generator commented out is only printed, so it must not decide
+		// whether the transaction around it stays open.
+		if isCommentedOut(ddl) {
+			logger.Printf("%s;\n", ddl)
+			continue
+		}
+
 		if inTransaction && TransactionSupported(ddl) {
 			if err := runner.begin(); err != nil {
 				return err
@@ -270,9 +297,9 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	return runner.commit()
 }
 
-// ddlRunner executes DDLs, keeping at most one open transaction.
+// ddlRunner executes DDLs on one connection, keeping at most one open transaction.
 type ddlRunner struct {
-	db          Database
+	conn        *sql.Conn
 	txQueries   TransactionQueries
 	ddlSuffix   string
 	logger      Logger
@@ -283,7 +310,7 @@ func (r *ddlRunner) begin() error {
 	if r.transaction != nil {
 		return nil
 	}
-	transaction, err := r.db.DB().Begin()
+	transaction, err := r.conn.BeginTx(context.Background(), nil)
 	if err != nil {
 		return err
 	}
@@ -316,17 +343,12 @@ func (r *ddlRunner) rollback() {
 
 func (r *ddlRunner) exec(ddl string) error {
 	r.logger.Printf("%s;\n", ddl)
-	if isCommentedOut(ddl) {
-		// Skip commented DDLs (e.g., "-- Skipped: ...")
-		return nil
-	}
-
 	r.logger.Print(r.ddlSuffix)
 	var err error
 	if r.transaction != nil {
 		_, err = r.transaction.Exec(ddl)
 	} else {
-		_, err = r.db.DB().Exec(ddl)
+		_, err = r.conn.ExecContext(context.Background(), ddl)
 	}
 	if err != nil {
 		r.rollback()
@@ -335,9 +357,13 @@ func (r *ddlRunner) exec(ddl string) error {
 	return nil
 }
 
+// nonTransactionalDDL matches the statements PostgreSQL and Aurora DSQL refuse to run inside a
+// transaction. The keyword is matched where the syntax puts it: looking for it anywhere in the
+// statement would also find it in an identifier, a string literal or a comment.
+var nonTransactionalDDL = regexp.MustCompile(`(?i)^\s*(?:CREATE(?:\s+UNIQUE)?\s+INDEX|DROP\s+INDEX)\s+(?:CONCURRENTLY|ASYNC)\b`)
+
 func TransactionSupported(ddl string) bool {
-	ddlLower := strings.ToLower(ddl)
-	return !strings.Contains(ddlLower, "concurrently") && !strings.Contains(ddlLower, "async")
+	return !nonTransactionalDDL.MatchString(ddl)
 }
 
 func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {

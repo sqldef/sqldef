@@ -122,6 +122,14 @@ func (d *PostgresDatabase) supportsConperiod() bool {
 	return exists
 }
 
+// SessionSetupQueries turns off function body validation while the DDLs are applied. A function
+// body is validated against the objects it references, and functions are created before the
+// tables they read, so a SQL-language function would fail to be created on an empty database.
+// pg_dump turns the check off for the same reason.
+func (d *PostgresDatabase) SessionSetupQueries() []string {
+	return []string{"SET check_function_bodies = off"}
+}
+
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
 	return database.TransactionQueries{
 		Begin:    "BEGIN",
@@ -1293,14 +1301,9 @@ func postgresBuildDSN(config database.Config) string {
 		options.Set("sslkey", sslkey)
 	}
 
-	// A function body is validated against the objects it references, and functions are
-	// created before the tables they read, so a SQL-language function would fail to be
-	// created on an empty database. pg_dump turns the check off for the same reason.
-	serverOptions := "-c check_function_bodies=off"
 	if pgoptions, ok := os.LookupEnv("PGOPTIONS"); ok {
-		serverOptions += " " + pgoptions
+		options.Set("options", pgoptions)
 	}
-	options.Set("options", serverOptions)
 
 	dsn.RawQuery = options.Encode()
 	return dsn.String()

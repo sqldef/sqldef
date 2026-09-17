@@ -394,7 +394,7 @@ func TestPsqldefCreateView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createView, wrapWithTransaction(fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
 			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
@@ -563,7 +563,7 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 		assertApplyOutput(t, createTable, wrapWithTransaction(expectedOutput))
 		// The unmanaged helper function remains outside the desired schema, so the
 		// second apply still reports the skipped drop instead of becoming a no-op.
-		assertApplyOutput(t, createTable, wrapWithTransaction(fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)))
+		assertApplyOutput(t, createTable, applyPrefix+fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema))
 	}
 }
 

@@ -51,6 +51,10 @@ func (d *FileDatabase) GetTransactionQueries() database.TransactionQueries {
 	}
 }
 
+func (d *FileDatabase) SessionSetupQueries() []string {
+	return nil
+}
+
 func (d *FileDatabase) GetConfig() database.Config {
 	return database.Config{}
 }
