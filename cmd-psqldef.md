@@ -197,8 +197,8 @@ Some can also be used in the input schema.sql file.
 
 - Tables: CREATE TABLE, DROP TABLE, ALTER TABLE RENAME TO, COMMENT ON TABLE
 - Columns: ADD COLUMN, ALTER COLUMN, DROP COLUMN, ALTER COLUMN RENAME TO, GENERATED AS IDENTITY, COMMENT ON COLUMN
-- Constraints: PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE, EXCLUDE, ADD CONSTRAINT, DROP CONSTRAINT
-- Indexes: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX, ALTER INDEX RENAME TO, CREATE INDEX CONCURRENTLY, INCLUDE, WHERE
+- Constraints: PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE, EXCLUDE, ADD CONSTRAINT, DROP CONSTRAINT, INCLUDE, NULLS NOT DISTINCT
+- Indexes: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX, ALTER INDEX RENAME TO, CREATE INDEX CONCURRENTLY, INCLUDE, WHERE, COLLATE, operator classes, ASC/DESC, NULLS FIRST/LAST, NULLS NOT DISTINCT
 - Views: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW, CREATE MATERIALIZED VIEW, DROP MATERIALIZED VIEW
 - Schemas: CREATE SCHEMA
 - Extensions: CREATE EXTENSION, CREATE EXTENSION IF NOT EXISTS, DROP EXTENSION
@@ -259,10 +259,16 @@ BEGIN;
 ALTER TABLE users ADD COLUMN email VARCHAR(255);
 COMMIT;
 CREATE INDEX CONCURRENTLY idx_users_email ON users (email);  # Runs outside transaction
-CREATE INDEX CONCURRENTLY idx_users_name ON users (name);    # Runs outside transaction
+BEGIN;
+COMMENT ON INDEX idx_users_email IS 'lookup by email';
+COMMIT;
 ```
 
-Note: CREATE INDEX CONCURRENTLY operations must run outside of transactions. When enabled, psqldef automatically separates these operations from the transaction block.
+Note: CREATE INDEX CONCURRENTLY operations must run outside of transactions. psqldef runs every
+statement in the order it generated them, so such a statement commits the transaction that
+precedes it and the statements after it run in a new one. A run that creates an index
+concurrently is therefore not atomic: if a later statement fails, what was committed before it
+stays applied.
 
 ### ADD FOREIGN KEY
 
