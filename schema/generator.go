@@ -894,12 +894,18 @@ func commentOutDropStatements(ddls []string, config database.GeneratorConfig) []
 			continue
 		}
 		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
-			result[i] = "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
+			result[i] = skippedStatement(ddl)
 		} else {
 			result[i] = ddl
 		}
 	}
 	return result
+}
+
+// skippedStatement comments a statement out. Every line is commented so that a multi-line
+// statement can never leak executable SQL after the first line.
+func skippedStatement(ddl string) string {
+	return "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
 }
 
 // isDropStatement checks if a DDL statement is a destructive DROP or REVOKE
@@ -4015,7 +4021,7 @@ func (g *Generator) appendRecreate(ddls []string, statements ...string) ([]strin
 		return append(ddls, statements...), true
 	}
 	for _, statement := range statements {
-		ddls = append(ddls, "-- Skipped: "+strings.ReplaceAll(statement, "\n", "\n-- "))
+		ddls = append(ddls, skippedStatement(statement))
 	}
 	return ddls, false
 }
