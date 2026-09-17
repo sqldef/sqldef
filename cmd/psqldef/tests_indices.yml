@@ -1185,3 +1185,23 @@ CreatePartialIndexOnQuotedColumns:
     CREATE INDEX idx_active ON public.t USING btree ("userId") WHERE "isActive";
   down: |
     DROP INDEX public.idx_active;
+
+IndexRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a) INCLUDE (b);
+  up: |
+    -- Skipped: DROP INDEX public.t_a_idx;
+    -- Skipped: CREATE INDEX t_a_idx ON public.t USING btree (a) INCLUDE (b);
+  down: ""

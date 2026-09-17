@@ -1677,8 +1677,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
-				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+				ddls = g.appendRecreate(ddls,
+					g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint),
+					g.generateAddIndex(desired.table.name, desiredIndex),
+				)
 			}
 		} else {
 			// Check if this is a renamed index
@@ -2101,8 +2103,10 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 	} else {
 		// Index found. If it's different, drop and add index.
 		if !g.areSameIndexes(*currentIndex, desiredIndex) {
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
-			ddls = append(ddls, statement)
+			ddls = g.appendRecreate(ddls,
+				g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint),
+				statement,
+			)
 
 			newIndexes := []Index{}
 			for _, currentIndex := range currentTable.indexes {
@@ -3937,6 +3941,19 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 }
 
 // generateDropIndex generates a DDL statement to drop an index.
+// appendRecreate emits the drop of an object and the statement that recreates it. Without
+// enable_drop the drop is only commented out, so the recreate has to be held back as well:
+// it would run against the object that is still there and fail with "already exists".
+func (g *Generator) appendRecreate(ddls []string, dropDDL string, createDDL string) []string {
+	if !g.config.EnableDrop {
+		return append(ddls,
+			"-- Skipped: "+strings.ReplaceAll(dropDDL, "\n", "\n-- "),
+			"-- Skipped: "+strings.ReplaceAll(createDDL, "\n", "\n-- "),
+		)
+	}
+	return append(ddls, dropDDL, createDDL)
+}
+
 func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) string {
 	switch g.mode {
 	case GeneratorModeMysql:
