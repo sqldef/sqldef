@@ -766,10 +766,10 @@ PartialIndexWithWhereNotAndPrecedence:
     WHERE NOT status = 'pending' AND amount > 1000;
   up: |
     DROP INDEX public.idx_large_pending_orders;
-    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE not status = 'pending' and amount > 1000;
+    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE NOT status = 'pending' AND amount > 1000;
   down: |
     DROP INDEX public.idx_large_pending_orders;
-    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE not (status = 'pending' and amount > 1000);
+    CREATE INDEX idx_large_pending_orders ON public.orders (id) WHERE NOT (status = 'pending' AND amount > 1000);
 
 PartialIndexWithArrayCastAnyPgDumpStyle:
   legacy_ignore_quotes: false
@@ -1167,3 +1167,21 @@ ExplicitDefaultNullsOrderingIsNotAChange:
     CREATE INDEX idx_a ON t USING btree (b ASC NULLS LAST);
   up: ""
   down: ""
+
+CreatePartialIndexOnQuotedColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      "userId" bigint,
+      "isActive" boolean
+    );
+  desired: |
+    CREATE TABLE t (
+      "userId" bigint,
+      "isActive" boolean
+    );
+    CREATE INDEX idx_active ON t USING btree ("userId") WHERE "isActive";
+  up: |
+    CREATE INDEX idx_active ON public.t USING btree ("userId") WHERE "isActive";
+  down: |
+    DROP INDEX public.idx_active;

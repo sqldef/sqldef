@@ -3583,7 +3583,11 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 
 	// Add WHERE clause for partial indexes
 	if index.where != nil {
-		ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
+		if g.config.LegacyIgnoreQuotes {
+			ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
+		} else {
+			ddl += fmt.Sprintf(" WHERE %s", g.formatExprQuoteAware(index.where))
+		}
 	}
 
 	return ddl
