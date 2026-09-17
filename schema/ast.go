@@ -282,7 +282,7 @@ type Index struct {
 	nullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE indexes and constraints
 	constraintOptions *ConstraintOptions
 	where             parser.Expr    // for Postgres `Partial Indexes`
-	included          []Ident        // covering index columns: Postgres `INCLUDE`, MSSQL `INCLUDE`
+	included          []Ident        // `INCLUDE` columns for Postgres/MSSQL; the key columns for an MSSQL columnstore index
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption

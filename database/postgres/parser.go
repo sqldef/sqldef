@@ -325,16 +325,26 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 		indexCols = append(indexCols, indexCol)
 	}
 
+	var included []parser.Ident
+	for _, includingParam := range stmt.IndexIncludingParams {
+		includedCol, err := p.parseIndexColumn(includingParam)
+		if err != nil {
+			return nil, err
+		}
+		included = append(included, includedCol.Column)
+	}
+
 	return &parser.DDL{
 		Action:  parser.CreateIndex,
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
-			Name:   parser.NewIdent(stmt.Idxname, false),
-			Type:   parser.NewIdent(stmt.AccessMethod, false),
-			Unique: stmt.Unique,
-			Async:  false, // go_pgquery doesn't support ASYNC, will be set by generic parser
-			Where:  where,
+			Name:     parser.NewIdent(stmt.Idxname, false),
+			Type:     parser.NewIdent(stmt.AccessMethod, false),
+			Unique:   stmt.Unique,
+			Async:    false, // go_pgquery doesn't support ASYNC, will be set by generic parser
+			Where:    where,
+			Included: included,
 		},
 		IndexCols: indexCols,
 	}, nil

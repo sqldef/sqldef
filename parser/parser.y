@@ -915,7 +915,7 @@ create_statement:
     }
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -928,8 +928,8 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($11),
-        Included: $12,
+        NullsNotDistinct: bool($12),
+        Included: $11,
         Where: NewWhere(WhereStr, $13),
         Options: $14,
         Partition: $15,
@@ -939,7 +939,7 @@ create_statement:
     }
   }
 /* For PostgreSQL: CREATE INDEX IF NOT EXISTS */
-| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -952,8 +952,8 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($14),
-        Included: $15,
+        NullsNotDistinct: bool($15),
+        Included: $14,
         Where: NewWhere(WhereStr, $16),
         Options: $17,
         Partition: $18,
@@ -962,7 +962,7 @@ create_statement:
       IndexExpr: $12.IndexExpr,
     }
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -975,8 +975,8 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($10),
-        Included: $11,
+        NullsNotDistinct: bool($11),
+        Included: $10,
         Where: NewWhere(WhereStr, $12),
         Options: $13,
         Partition: $14,
@@ -1004,7 +1004,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -1012,9 +1012,9 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      NullsNotDistinct: bool($13),
+      NullsNotDistinct: bool($14),
       Where: NewWhere(WhereStr, $16),
-      Included: $14,
+      Included: $13,
     }
     if $15 != nil && len($15) > 0 {
       indexSpec.Options = $15
@@ -1029,7 +1029,7 @@ create_statement:
     }
   }
 /* For PostgreSQL: CREATE INDEX IF NOT EXISTS ... USING */
-| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $8,
@@ -1037,9 +1037,9 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      NullsNotDistinct: bool($16),
+      NullsNotDistinct: bool($17),
       Where: NewWhere(WhereStr, $19),
-      Included: $17,
+      Included: $16,
     }
     if $18 != nil && len($18) > 0 {
       indexSpec.Options = $18

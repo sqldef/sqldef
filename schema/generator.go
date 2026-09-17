@@ -3554,10 +3554,8 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 
 	ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
 
-	// Covering columns (INCLUDE) come after the key columns in PostgreSQL
 	if len(index.included) > 0 {
-		included := util.TransformSlice(index.included, g.escapeSQLIdent)
-		ddl += fmt.Sprintf(" INCLUDE (%s)", strings.Join(included, ", "))
+		ddl += fmt.Sprintf(" INCLUDE (%s)", g.escapeAndJoinNames(index.included))
 	}
 
 	if index.nullsNotDistinct {
@@ -6326,13 +6324,8 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 
-	if len(indexA.included) != len(indexB.included) {
+	if !g.identsSliceEqual(indexA.included, indexB.included) {
 		return false
-	}
-	for i, indexAIncluded := range indexA.included {
-		if indexAIncluded.Name != indexB.included[i].Name {
-			return false
-		}
 	}
 
 	// For MSSQL UNIQUE constraints (not regular indexes), don't compare options

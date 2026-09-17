@@ -964,7 +964,7 @@ CreateCoveringIndexPreservingQuotes:
   down: |
     DROP INDEX public.idx_orders_user;
 
-AddIncludeToExistingIndexPreservingQuotes:
+AddIncludeToExistingIndex:
   legacy_ignore_quotes: false
   current: |
     CREATE TABLE orders (
@@ -987,7 +987,7 @@ AddIncludeToExistingIndexPreservingQuotes:
     DROP INDEX public.idx_orders_user;
     CREATE INDEX idx_orders_user ON public.orders USING btree (user_id);
 
-CreateCoveringPartialIndexConcurrentlyPreservingQuotes:
+CreateCoveringPartialIndexConcurrently:
   legacy_ignore_quotes: false
   config:
     create_index_concurrently: true
@@ -1010,3 +1010,33 @@ CreateCoveringPartialIndexConcurrentlyPreservingQuotes:
     CREATE INDEX CONCURRENTLY idx_stories_latest_nondraft ON public.stories USING btree (story_uuid, id desc) INCLUDE (status, category) WHERE status != 'DRAFT';
   down: |
     DROP INDEX public.idx_stories_latest_nondraft;
+
+CreateUniqueIndexWithIncludeAndNullsNotDistinct:
+  legacy_ignore_quotes: false
+  min_version: "15"
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint,
+      total_amount numeric
+    );
+    CREATE UNIQUE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (total_amount) NULLS NOT DISTINCT;
+
+IncludeColumnsFoldCaseWhenUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      total_amount numeric
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (user_id) INCLUDE (total_amount);
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      total_amount numeric
+    );
+    CREATE INDEX idx_orders_user ON orders USING btree (USER_ID) INCLUDE (TOTAL_AMOUNT);
+  up: ""
+  down: ""
