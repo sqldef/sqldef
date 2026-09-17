@@ -1695,7 +1695,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
-			if renameFromIndex != nil {
+			if renameFromIndex != nil && !g.areSameIndexes(*renameFromIndex, desiredIndex) {
+				// See generateDDLsForCreateIndex: a changed definition cannot be renamed into place.
+				ddls = g.appendRecreate(ddls,
+					g.generateDropIndex(desired.table.name, renameFromIndex.name, renameFromIndex.constraint),
+					g.generateAddIndex(desired.table.name, desiredIndex),
+				)
+			} else if renameFromIndex != nil {
 				// Generate RENAME INDEX DDL
 				renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 				ddls = append(ddls, renameDDLs...)
@@ -2094,7 +2100,16 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 			renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
-		if renameFromIndex != nil {
+		if renameFromIndex != nil && !g.areSameIndexes(*renameFromIndex, desiredIndex) {
+			// The definition changed as well, so the index has to be rebuilt anyway and there is
+			// nothing for the rename to preserve.
+			ddls = g.appendRecreate(ddls,
+				g.generateDropIndex(currentTable.name, renameFromIndex.name, renameFromIndex.constraint),
+				statement,
+			)
+			g.trackDroppedIndex(currentTable, *renameFromIndex)
+			currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
+		} else if renameFromIndex != nil {
 			// Generate RENAME INDEX DDL
 			renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 			ddls = append(ddls, renameDDLs...)
@@ -2102,16 +2117,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 			g.trackDroppedIndex(currentTable, *renameFromIndex)
 
 			// Update the current table's indexes to reflect the rename
-			newIndexes := []Index{}
-			for _, idx := range currentTable.indexes {
-				if g.identsEqual(idx.name, renameFromIndex.name) {
-					// Replace with the renamed index
-					newIndexes = append(newIndexes, desiredIndex)
-				} else {
-					newIndexes = append(newIndexes, idx)
-				}
-			}
-			currentTable.indexes = newIndexes
+			currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
 		} else {
 			// Index not found and not a rename, add index.
 			ddls = append(ddls, statement)
@@ -3958,6 +3964,19 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 }
 
 // generateDropIndex generates a DDL statement to drop an index.
+// replaceIndex returns indexes with the one named name replaced by replacement.
+func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index) []Index {
+	result := make([]Index, 0, len(indexes))
+	for _, index := range indexes {
+		if g.identsEqual(index.name, name) {
+			result = append(result, replacement)
+		} else {
+			result = append(result, index)
+		}
+	}
+	return result
+}
+
 // appendRecreate emits the drop of an object and the statement that recreates it. When
 // enable_drop leaves the drop commented out, the recreate has to be held back as well: it
 // would run against the object that is still there and fail with "already exists". A drop
