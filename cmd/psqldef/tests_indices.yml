@@ -1245,3 +1245,22 @@ UnnamedIndexWithAccessMethod:
     CREATE INDEX t_y_idx ON public.t USING btree (y);
   down: |
     DROP INDEX public.t_y_idx;
+
+ChangeCollationOfIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a COLLATE "C");
+  desired: |
+    CREATE TABLE t (
+      a text
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a COLLATE "POSIX");
+  up: |
+    DROP INDEX public.t_a_idx;
+    CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "POSIX");
+  down: |
+    DROP INDEX public.t_a_idx;
+    CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "C");

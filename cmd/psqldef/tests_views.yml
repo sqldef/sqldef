@@ -775,3 +775,25 @@ ViewRecreateIsHeldBackWithoutEnableDrop:
     -- Skipped: DROP VIEW public.v;
     -- Skipped: CREATE VIEW public.v AS select a from t;
   down: ""
+
+IndexOnMaterializedViewRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a) INCLUDE (b);
+  up: |
+    -- Skipped: DROP INDEX public.mv_a_idx;
+    -- Skipped: CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a) INCLUDE (b);
+  down: ""

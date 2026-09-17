@@ -582,3 +582,24 @@ AddUnnamedPrimaryKeyConstraint:
     ALTER TABLE t ADD PRIMARY KEY (x);
   up: ""
   down: ""
+
+RenamedIndexWhoseDefinitionAlsoChanged:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint,
+      KEY old_idx (a)
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint,
+      KEY new_idx (a, b) /* @renamed from=old_idx */
+    );
+  up: |
+    ALTER TABLE t DROP INDEX `old_idx`;
+    ALTER TABLE t ADD KEY new_idx (a, b);
+  down: |
+    ALTER TABLE t ADD KEY old_idx (a);
+    ALTER TABLE `t` DROP INDEX `new_idx`;

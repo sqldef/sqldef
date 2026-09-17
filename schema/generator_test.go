@@ -1330,3 +1330,70 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// TestAutoIndexName covers the names PostgreSQL and MySQL give an index or constraint declared
+// without one. A name that does not match what the server chose makes the desired schema differ
+// from the exported one on every run, so the index is dropped and recreated each time.
+func TestAutoIndexName(t *testing.T) {
+	nameOf := func(t *testing.T, mode GeneratorMode, parserMode parser.ParserMode, statement string) string {
+		t.Helper()
+		ddls, err := ParseDDLs(mode, database.NewParser(parserMode), statement+";", "public")
+		require.NoError(t, err)
+		require.Len(t, ddls, 1)
+		switch ddl := ddls[0].(type) {
+		case *CreateIndex:
+			return ddl.index.name.Name
+		case *AddIndex:
+			return ddl.index.name.Name
+		case *AddPrimaryKey:
+			return ddl.index.name.Name
+		default:
+			t.Fatalf("unexpected DDL type %T", ddl)
+			return ""
+		}
+	}
+
+	postgres := []struct {
+		statement string
+		expected  string
+	}{
+		{`CREATE INDEX ON t (a)`, "t_a_idx"},
+		{`CREATE UNIQUE INDEX ON t (a)`, "t_a_idx"},
+		{`CREATE INDEX ON t (a) INCLUDE (b, c)`, "t_a_b_c_idx"},
+		{`CREATE INDEX ON t (lower(a), lower(b))`, "t_lower_lower1_idx"},
+		{`CREATE INDEX ON t ((a::text))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((a COLLATE "C"))`, "t_a_idx"},
+		{`CREATE INDEX ON t (((a COLLATE "C")))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((CAST(a AS text)))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((CASE WHEN a > 0 THEN 1 ELSE 0 END))`, "t_case_idx"},
+		{`CREATE INDEX ON t ((a + b))`, "t_expr_idx"},
+		{`ALTER TABLE t ADD UNIQUE (a, b)`, "t_a_b_key"},
+		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "t_pkey"},
+		{
+			`CREATE INDEX ON a_table_whose_name_is_quite_long_and_will_certainly_be_truncated (a)`,
+			"a_table_whose_name_is_quite_long_and_will_certainly_be_tr_a_idx",
+		},
+		{
+			`ALTER TABLE a_table_whose_name_is_quite_long_and_will_certainly_be_truncated ADD PRIMARY KEY (a)`,
+			"a_table_whose_name_is_quite_long_and_will_certainly_be_tru_pkey",
+		},
+	}
+	for _, tt := range postgres {
+		t.Run(tt.statement, func(t *testing.T) {
+			assert.Equal(t, tt.expected, nameOf(t, GeneratorModePostgres, parser.ParserModePostgres, tt.statement))
+		})
+	}
+
+	mysql := []struct {
+		statement string
+		expected  string
+	}{
+		{`ALTER TABLE t ADD UNIQUE (a, b)`, "a"},
+		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "PRIMARY"},
+	}
+	for _, tt := range mysql {
+		t.Run("mysql "+tt.statement, func(t *testing.T) {
+			assert.Equal(t, tt.expected, nameOf(t, GeneratorModeMysql, parser.ParserModeMysql, tt.statement))
+		})
+	}
+}

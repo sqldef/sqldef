@@ -770,3 +770,67 @@ func TestParseGrantStmtWithPgquery(t *testing.T) {
 	_, err := postgresParser.Parse("GRANT USAGE ON SCHEMA public TO app_user;")
 	require.Error(t, err)
 }
+
+// TestParseIndexColumnWithPgquery covers the clauses the pgquery adapter used to drop. An index
+// parsed without them compares unequal to the one exported from the database, so every run
+// rebuilds it.
+func TestParseIndexColumnWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	sqlParser := NewParser()
+
+	indexSpecOf := func(t *testing.T, sql string) (*parser.IndexSpec, []parser.IndexColumn) {
+		t.Helper()
+		statements, err := sqlParser.Parse(sql + ";")
+		require.NoError(t, err)
+		require.Len(t, statements, 1)
+		ddl, ok := statements[0].Statement.(*parser.DDL)
+		require.True(t, ok)
+		return ddl.IndexSpec, ddl.IndexCols
+	}
+
+	t.Run("collation and operator class", func(t *testing.T) {
+		_, columns := indexSpecOf(t, `CREATE INDEX i ON t (a COLLATE "C" text_pattern_ops)`)
+		require.Len(t, columns, 1)
+		assert.Equal(t, "C", columns[0].Collation)
+		assert.Equal(t, "text_pattern_ops", columns[0].OperatorClass)
+	})
+
+	t.Run("schema qualified collation", func(t *testing.T) {
+		_, columns := indexSpecOf(t, `CREATE INDEX i ON t (a COLLATE pg_catalog."C")`)
+		require.Len(t, columns, 1)
+		assert.Equal(t, "C", columns[0].Collation)
+	})
+
+	t.Run("nulls ordering", func(t *testing.T) {
+		_, columns := indexSpecOf(t, `CREATE INDEX i ON t (a DESC NULLS LAST, b NULLS FIRST, c)`)
+		require.Len(t, columns, 3)
+		assert.Equal(t, parser.DescScr, columns[0].Direction)
+		assert.Equal(t, "last", columns[0].NullsOrdering)
+		assert.Equal(t, "first", columns[1].NullsOrdering)
+		assert.Equal(t, "", columns[2].NullsOrdering)
+	})
+
+	t.Run("quoted column", func(t *testing.T) {
+		_, columns := indexSpecOf(t, `CREATE INDEX i ON t ("A")`)
+		require.Len(t, columns, 1)
+		assert.Equal(t, "A", columns[0].Column.Name)
+		assert.True(t, columns[0].Column.Quoted)
+	})
+
+	t.Run("expression keeps its clauses", func(t *testing.T) {
+		_, columns := indexSpecOf(t, `CREATE INDEX i ON t (lower(a) DESC NULLS FIRST)`)
+		require.Len(t, columns, 1)
+		require.NotNil(t, columns[0].Expression)
+		assert.Equal(t, parser.DescScr, columns[0].Direction)
+		assert.Equal(t, "first", columns[0].NullsOrdering)
+	})
+
+	t.Run("include columns", func(t *testing.T) {
+		indexSpec, _ := indexSpecOf(t, `CREATE INDEX i ON t (a) INCLUDE (b, "C")`)
+		require.Len(t, indexSpec.Included, 2)
+		assert.Equal(t, "b", indexSpec.Included[0].Name)
+		assert.False(t, indexSpec.Included[0].Quoted)
+		assert.Equal(t, "C", indexSpec.Included[1].Name)
+		assert.True(t, indexSpec.Included[1].Quoted)
+	})
+}
