@@ -2445,3 +2445,46 @@ CheckConstraintComparingParenthesizedComparison:
     ALTER TABLE public.assets ADD CONSTRAINT assets_interval_check CHECK ((format = 'animated') = (interval_ms is not null));
   down: |
     ALTER TABLE public.assets DROP CONSTRAINT assets_interval_check;
+
+UniqueConstraintWithIncludeColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text
+    );
+    ALTER TABLE t ADD CONSTRAINT t_uk UNIQUE (b) INCLUDE (c);
+
+PrimaryKeyWithIncludeColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text,
+      CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b)
+    );
+
+ChangeIncludeColumnsOfPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text,
+      CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b)
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text,
+      CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (c)
+    );
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pk;
+    ALTER TABLE public.t ADD CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (c);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pk;
+    ALTER TABLE public.t ADD CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b);

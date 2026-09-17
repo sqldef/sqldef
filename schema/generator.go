@@ -3686,7 +3686,11 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 			}
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
-		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
+		ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
+		if len(index.included) > 0 {
+			ddl += fmt.Sprintf(" INCLUDE (%s)", g.escapeAndJoinNames(index.included))
+		}
+		ddl += optionDefinition + constraintOptions
 		return ddl
 	default:
 		// Construct index type with optional VECTOR keyword for MariaDB vector indexes
@@ -6256,8 +6260,9 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 			return false
 		}
 	}
-	// For primary keys, we don't need to check other properties like where, included, options
-	return true
+	// A covering primary key differs in its INCLUDE columns; the rest (where, options) cannot
+	// appear on a primary key.
+	return g.identsSliceEqual(indexA.included, indexB.included)
 }
 
 // areSameOperatorClasses reports whether two index columns use the same operator class.

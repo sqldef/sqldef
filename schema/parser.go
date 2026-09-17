@@ -665,6 +665,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			vector:           indexDef.Info.Vector,
 			clustered:        bool(indexDef.Info.Clustered),
 			nullsNotDistinct: indexDef.NullsNotDistinct,
+			included:         indexDef.Included,
 			options:          indexOptions,
 			partition:        indexPartition,
 

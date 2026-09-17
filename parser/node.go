@@ -1078,7 +1078,8 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 type IndexDefinition struct {
 	Info              *IndexInfo
 	Columns           []IndexColumn
-	NullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE constraints
+	NullsNotDistinct  bool    // for PostgreSQL 15+ UNIQUE constraints
+	Included          []Ident // for PostgreSQL covering UNIQUE/PRIMARY KEY constraints
 	Options           []*IndexOption
 	Partition         *IndexPartition
 	ConstraintOptions *ConstraintOptions
@@ -1102,6 +1103,17 @@ func (idx *IndexDefinition) Format(buf *nodeBuffer) {
 		}
 	}
 	buf.Printf(")")
+
+	if len(idx.Included) > 0 {
+		buf.Printf(" include (")
+		for i, included := range idx.Included {
+			if i != 0 {
+				buf.Printf(", ")
+			}
+			buf.Printf("%v", included)
+		}
+		buf.Printf(")")
+	}
 
 	for _, opt := range idx.Options {
 		buf.Printf(" %s", opt.Name)

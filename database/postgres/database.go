@@ -961,21 +961,22 @@ type CheckConstraint struct {
 }
 
 type TableDDLComponents struct {
-	TableName         string
-	Columns           []column
-	PrimaryKeyName    Ident
-	PrimaryKeyCols    []string
-	PrimaryKeyPeriod  bool
-	IndexDefs         []string
-	ForeignDefs       []string
-	ExclusionDefs     []string
-	RLSDefs           []string
-	PolicyDefs        []string
-	Comments          []string
-	CheckConstraints  []CheckConstraint
-	UniqueConstraints map[string]string
-	PrivilegeDefs     []string
-	DefaultSchema     string
+	TableName          string
+	Columns            []column
+	PrimaryKeyName     Ident
+	PrimaryKeyCols     []string
+	PrimaryKeyPeriod   bool
+	PrimaryKeyIncluded []string
+	IndexDefs          []string
+	ForeignDefs        []string
+	ExclusionDefs      []string
+	RLSDefs            []string
+	PolicyDefs         []string
+	Comments           []string
+	CheckConstraints   []CheckConstraint
+	UniqueConstraints  map[string]string
+	PrivilegeDefs      []string
+	DefaultSchema      string
 }
 
 func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponentsCache) (string, error) {
@@ -994,6 +995,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		}
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
+		components.PrimaryKeyIncluded = pkInfo.included
 	}
 	components.IndexDefs = cache.indexDefs[table]
 	components.ForeignDefs = cache.foreignDefs[table]
@@ -1048,6 +1050,9 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (%s)", d.quoteIdent(components.PrimaryKeyName), strings.Join(quotedCols, ", "))
 		} else {
 			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		}
+		if len(components.PrimaryKeyIncluded) > 0 {
+			fmt.Fprintf(&queryBuilder, " INCLUDE (\"%s\")", strings.Join(components.PrimaryKeyIncluded, "\", \""))
 		}
 	}
 
@@ -1215,8 +1220,9 @@ func normalizePostgresTypeCasts(sql string) string {
 }
 
 type primaryKeyInfo struct {
-	name   Ident
-	period bool
+	name     Ident
+	period   bool
+	included []string
 }
 
 var (
@@ -1605,11 +1611,17 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 	} else {
 		selectCols = "con.conname, false"
 	}
+	// The columns past indnkeyatts are the INCLUDE columns of a covering primary key.
 	query := fmt.Sprintf(`
-		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s,
+		  (SELECT array_agg(att.attname ORDER BY key.ord)
+		   FROM unnest(idx.indkey) WITH ORDINALITY AS key(attnum, ord)
+		   JOIN pg_attribute att ON att.attrelid = cls.oid AND att.attnum = key.attnum
+		   WHERE key.ord > idx.indnkeyatts)
 		FROM pg_constraint con
 		JOIN pg_class cls ON cls.oid = con.conrelid
 		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+		JOIN pg_index idx ON idx.indexrelid = con.conindid
 		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
 		AND con.contype = 'p'
 	`, selectCols)
@@ -1624,13 +1636,15 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 	for rows.Next() {
 		var tableName, keyName string
 		var period bool
-		err = rows.Scan(&tableName, &keyName, &period)
+		var included []string
+		err = rows.Scan(&tableName, &keyName, &period, pq.Array(&included))
 		if err != nil {
 			return nil, err
 		}
 		result[tableName] = primaryKeyInfo{
-			name:   NewIdentWithQuoteDetected(keyName),
-			period: period,
+			name:     NewIdentWithQuoteDetected(keyName),
+			period:   period,
+			included: included,
 		}
 	}
 	return result, nil
