@@ -1277,3 +1277,53 @@ func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
 	assert.Contains(t, g.generateCreateIndexStatement(table, index), "(name text_pattern_ops desc)")
 	assert.Contains(t, g.generateAddIndex(table, index), "(name text_pattern_ops desc)")
 }
+
+// TestCreateIndexStatementRoundTrip guards the clause loss that quote-aware mode is prone to:
+// it regenerates a CREATE INDEX from the parsed index, so any clause the model does not carry
+// disappears from the statement — and, because both sides of a comparison go through the same
+// model, disappears from the diff as well. Parsing the regenerated statement back has to yield
+// the same index.
+func TestCreateIndexStatementRoundTrip(t *testing.T) {
+	statements := []string{
+		`CREATE INDEX i ON public.t USING btree (a)`,
+		`CREATE UNIQUE INDEX i ON public.t USING btree (a, b)`,
+		`CREATE INDEX i ON public.t USING btree (a) INCLUDE (b)`,
+		`CREATE INDEX i ON public.t USING btree (a) INCLUDE (b, "C")`,
+		`CREATE UNIQUE INDEX i ON public.t USING btree (a) INCLUDE (b) NULLS NOT DISTINCT`,
+		`CREATE INDEX i ON public.t USING btree (a DESC NULLS LAST, b NULLS FIRST)`,
+		`CREATE INDEX i ON public.t USING btree (b COLLATE "C")`,
+		`CREATE INDEX i ON public.t USING btree (b text_pattern_ops)`,
+		`CREATE INDEX i ON public.t USING gin (b gin_trgm_ops)`,
+		`CREATE INDEX i ON public.t USING btree (lower(b))`,
+		`CREATE INDEX i ON public.t USING btree (a) WHERE a > 0`,
+		`CREATE INDEX i ON public.t USING btree (a) WHERE "isActive"`,
+		`CREATE INDEX i ON public.t USING btree (a) WITH (fillfactor = 70)`,
+		`CREATE INDEX i ON public."T" USING btree ("A") INCLUDE ("B")`,
+	}
+
+	sqlParser := database.NewParser(parser.ParserModePostgres)
+	g := &Generator{mode: GeneratorModePostgres, config: database.GeneratorConfig{LegacyIgnoreQuotes: false}}
+
+	parseIndexOf := func(t *testing.T, statement string) (QualifiedName, Index) {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, sqlParser, statement+";", "public")
+		require.NoError(t, err)
+		require.Len(t, ddls, 1)
+		createIndex, ok := ddls[0].(*CreateIndex)
+		require.True(t, ok)
+		return createIndex.tableName, createIndex.index
+	}
+
+	for _, statement := range statements {
+		t.Run(statement, func(t *testing.T) {
+			tableName, index := parseIndexOf(t, statement)
+
+			generated := g.generateCreateIndexStatement(tableName, index)
+			_, regenerated := parseIndexOf(t, generated)
+
+			assert.Equal(t, index.name, regenerated.name)
+			assert.True(t, g.areSameIndexes(index, regenerated),
+				"regenerated statement describes a different index:\n%s\n%s", statement, generated)
+		})
+	}
+}
