@@ -126,7 +126,7 @@
             },
             "owner": {
               "type": "array",
-              "description": "Rules for which owner roles to manage. Ownership is diffed only for roles matching a rule's target, and --export omits the owner of objects held by an unmatched role. An empty array manages all owner roles. Omitting this key leaves ownership unmanaged unless managed_roles is set without manage.privilege.",
+              "description": "Rules for which owner roles to manage. Ownership is diffed only for roles matching a rule's target, and --export omits the owner of objects held by an unmatched role. An empty array manages all owner roles. Omitting this key leaves ownership unmanaged unless manage.privilege or managed_roles enables the backward-compatible fallback.",
               "items": {
                 "type": "object",
                 "properties": {

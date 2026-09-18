@@ -155,9 +155,17 @@ func TestParseGeneratorConfigManageOwner(t *testing.T) {
 	assert.Nil(t, config.ManageOwners)
 	assert.False(t, config.ManagesOwners())
 
-	// manage.privilege supersedes managed_roles, so the ride-along stops with it.
-	config = ParseGeneratorConfigString("managed_roles: [app_user]\nmanage: {privilege: [{target: app_user}]}", GeneratorConfig{})
-	assert.False(t, config.ManagesOwners())
+	for _, yaml := range []string{
+		"manage: {privilege: []}",
+		"manage: {privilege: [{target: app_user}]}",
+		"managed_roles: [app_user]\nmanage: {privilege: [{target: app_user}]}",
+	} {
+		config = ParseGeneratorConfigString(yaml, GeneratorConfig{})
+		assert.True(t, config.ManagesOwners(), yaml)
+		assert.True(t, config.ManagesOwnerRole("anyone"), yaml)
+	}
+	config = ParseGeneratorConfigString("managed_roles: [app_user]\nmanage: {privilege: [], owner: [{target: readonly_user}]}", GeneratorConfig{})
+	assert.True(t, config.ManagesOwnerRole("readonly_user"))
 	assert.False(t, config.ManagesOwnerRole("app_user"))
 
 	// An unrelated manage: key leaves managed_roles, and with it ownership, in effect.

@@ -100,7 +100,7 @@ ManageOwnerEmptyRulesManageEveryRole:
     ALTER TABLE users OWNER TO app_user;
   down: ""
 
-ManageOwnerNotListedLeavesOwnerUnmanaged:
+ManagePrivilegeWithManagedRolesStillManagesOwner:
   legacy_ignore_quotes: false
   managed_roles:
     - app_user
@@ -116,7 +116,8 @@ ManageOwnerNotListedLeavesOwnerUnmanaged:
       id BIGINT PRIMARY KEY
     );
     ALTER TABLE users OWNER TO app_user;
-  up: ""
+  up: |
+    ALTER TABLE users OWNER TO app_user;
   down: ""
 
 ManageOwnerUnmatchedRoleIsIgnored:
@@ -656,3 +657,19 @@ ManageOwnerQuotedViewRecreationWithPrivileges:
     GRANT SELECT ON TABLE public."V.Users" TO "readonly_user";
   down: |
     CREATE OR REPLACE VIEW public."V.Users" AS select id, name from users;
+
+ManageOwnerExplicitRulesOverridePrivilegeFallback:
+  legacy_ignore_quotes: false
+  managed_roles:
+    - app_user
+  manage:
+    privilege: []
+    owner:
+      - target: readonly_user
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    ALTER TABLE users OWNER TO app_user;
+  up: ""
+  down: ""

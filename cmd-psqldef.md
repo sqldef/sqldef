@@ -625,16 +625,16 @@ A role matching no rule is out of scope in both directions: an `OWNER TO` declar
 
 Ownership of sequences, functions, types, domains and schemas is not managed. Owner declarations require a literal role name; `CURRENT_USER`, `CURRENT_ROLE` and `SESSION_USER` are not supported.
 
-Before `manage.owner` existed, ownership rode along with `managed_roles`, for every role, because that was the only mode in which `--export` emitted owners. That fallback is still in place for as long as `managed_roles` itself is: `manage.privilege` is what supersedes `managed_roles`, and it ends the ride-along too.
+When `manage.owner` is omitted, both `manage.privilege` and the deprecated `managed_roles` continue to enable ownership management for every role, preserving existing configurations. Explicit `manage.owner` rules take precedence over that fallback.
 
 | Configuration | Ownership |
 |---------------|-----------|
 | `manage.owner` | managed, restricted by `target` |
-| `managed_roles` without `manage.privilege` | managed, for every role |
-| `manage.privilege` without `manage.owner` | not managed |
-| neither | not managed |
+| `manage.privilege` without `manage.owner` | managed, for every role |
+| `managed_roles` without `manage.owner` | managed, for every role |
+| none of these | not managed |
 
-Migrating from `managed_roles` to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership managed. An unrelated key such as `manage.extension` does not end the fallback.
+Migrating from `managed_roles` to `manage.privilege` preserves ownership management. Add `manage.owner` to restrict the owner roles in scope.
 
 ## Identifier Quoting
 

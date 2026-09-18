@@ -321,16 +321,15 @@ Behavior:
   `ALTER TABLE`, `ALTER VIEW` or `ALTER MATERIALIZED VIEW`. Ownership of sequences, functions,
   types, domains and schemas is not managed
 
-Ownership used to be managed as a side effect of `managed_roles`, because that was the only mode
-in which `--export` emitted owners. That fallback survives for as long as `managed_roles` does:
-`manage.privilege` is what deprecates `managed_roles`, and it ends the fallback too.
+When `manage.owner` is omitted, both `manage.privilege` and `managed_roles` continue to enable
+ownership management for every role. Explicit `manage.owner` rules take precedence.
 
 | Configuration | Ownership |
 |---------------|-----------|
 | `manage.owner` | managed, restricted by `target` |
-| `managed_roles` without `manage.privilege` | managed, for every role |
-| `manage.privilege` without `manage.owner` | not managed |
-| neither | not managed |
+| `manage.privilege` without `manage.owner` | managed, for every role |
+| `managed_roles` without `manage.owner` | managed, for every role |
+| none of these | not managed |
 
 ## Schema Management
 
@@ -404,9 +403,8 @@ When a managed object references an object in an unmanaged schema (e.g., a forei
 | `--skip-partition` | Set `partition: false` on table entries |
 | `managed_roles` | `manage.privilege[].target` |
 
-Note that `managed_roles` also implies owner management, while `manage.privilege` does not.
-Migrating to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership
-managed; see [Owner Management](#owner-management).
+Both `managed_roles` and `manage.privilege` imply owner management when `manage.owner` is omitted.
+Migrating between them preserves this behavior; see [Owner Management](#owner-management).
 
 Transition:
 1. Both old and new options work

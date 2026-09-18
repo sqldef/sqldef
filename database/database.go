@@ -638,20 +638,16 @@ func MatchManageObjectRule(rules []ManageObjectRule, name string) (ManageObjectR
 }
 
 // ManagesOwners reports whether object ownership is diffed at all.
-//
-// manage.owner turns it on explicitly. Before it existed, ownership rode along with managed_roles,
-// because that was the only mode in which --export emitted owners. That fallback stays alive for
-// exactly as long as managed_roles itself does: manage.privilege is what supersedes it, here as in
-// isManagedGrantee.
+// Without explicit owner rules, preserve the ownership behavior of both privilege settings.
 func (config *GeneratorConfig) ManagesOwners() bool {
 	if config.ManageOwners != nil {
 		return true
 	}
-	return config.ManagePrivileges == nil && len(config.ManagedRoles) > 0
+	return config.ManagePrivileges != nil || len(config.ManagedRoles) > 0
 }
 
 // ManagesOwnerRole reports whether ownership by the given role is managed. The legacy
-// managed_roles path has no owner patterns to match, so it manages every role.
+// privilege-management fallback has no owner patterns to match, so it manages every role.
 func (config *GeneratorConfig) ManagesOwnerRole(role string) bool {
 	if !config.ManagesOwners() {
 		return false

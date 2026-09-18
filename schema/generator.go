@@ -6987,7 +6987,7 @@ func filterDesiredOwners(ddls []DDL, config database.GeneratorConfig) []DDL {
 			return false
 		}
 		if !config.ManagesOwners() {
-			slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.owner; owner cannot be diffed against the database", "table", owner.tableName.RawString())
+			slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.owner, manage.privilege or managed_roles; owner cannot be diffed against the database", "table", owner.tableName.RawString())
 			return true
 		}
 		if !config.ManagesOwnerRole(owner.owner) {
