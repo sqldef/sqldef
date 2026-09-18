@@ -134,6 +134,42 @@ error: CREATE TRIGGER requires a FOR EACH clause: notify_change
 CREATE TRIGGER notify_change AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION notify_func();
 ```
 
+### 5. Explicit ownership management required (psqldef)
+
+**Change**: In v4, ownership management requires `manage.owner`. Neither `manage.privilege` nor the deprecated `managed_roles` implicitly enables it. The two settings have independent responsibilities:
+
+| Setting | Managed SQL | What `target` matches |
+|---------|-------------|-----------------------|
+| `manage.owner` | `ALTER ... OWNER TO` | Owner role names |
+| `manage.privilege` | `GRANT` / `REVOKE` | Grantee role names |
+
+Omitting `manage.owner` leaves ownership unmanaged: desired `OWNER TO` declarations are ignored, and `--export` omits ownership statements. `manage.privilege` continues to manage access rights; its `drop` option controls REVOKE operations.
+
+**Before (v3)**: Configuring `manage.privilege` or `managed_roles` also enables ownership management for every owner role, unless explicit `manage.owner` rules override that behavior.
+
+```yaml
+manage:
+  privilege:
+    - target: readonly_user
+      drop: true
+```
+
+**After (v4), preserving the v3 behavior**:
+
+```yaml
+manage:
+  owner: []
+  privilege:
+    - target: readonly_user
+      drop: true
+```
+
+**Migration**: Add `manage.owner: []` to continue managing every owner role. An empty array enables ownership management for all roles; omitting the key disables it in v4. To limit ownership management, specify owner-role targets instead. Copying privilege targets into `manage.owner` would narrow the previous ownership scope, since grantees and owners may be different roles.
+
+Users of `managed_roles` also need an explicit `manage.owner` section to preserve ownership management. When migrating their access-rights configuration to `manage.privilege`, configure owner roles separately.
+
+Explicit `manage.owner` is supported in v3 versions that include this feature, so this configuration can be prepared before upgrading. The implicit fallback remains in v3 for compatibility; its removal is a v4 change.
+
 ## Migration Checklist
 
 Before upgrading to v4:
@@ -142,4 +178,5 @@ Before upgrading to v4:
 - [ ] Test with `--config-inline 'legacy_ignore_quotes: false'` to preview the new quoting behavior
 - [ ] Test with `PSQLDEF_PARSER=generic` (for psqldef users)
 - [ ] Add an explicit `FOR EACH ROW` / `FOR EACH STATEMENT` clause to every `CREATE TRIGGER` in your schema file (for psqldef users)
+- [ ] Add `manage.owner: []` or explicit owner-role targets if you rely on ownership management enabled by `manage.privilege` or `managed_roles` (for psqldef users)
 - [ ] If you have existing tables with mixed-case names created by v3, update your schema file to use quoted identifiers
