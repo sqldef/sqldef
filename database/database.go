@@ -662,3 +662,12 @@ func (config *GeneratorConfig) ManagesOwnerRole(role string) bool {
 	_, matched := MatchManageObjectRule(*config.ManageOwners, role)
 	return matched
 }
+
+// ExportDDLsForDiff retains metadata needed to preserve objects during recreation,
+// even when that metadata is omitted from the user-facing export.
+func ExportDDLsForDiff(db Database) (string, error) {
+	if exporter, ok := db.(interface{ ExportDDLsForDiff() (string, error) }); ok {
+		return exporter.ExportDDLsForDiff()
+	}
+	return db.ExportDDLs()
+}

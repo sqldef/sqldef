@@ -619,11 +619,11 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 The `ALTER VIEW` and `ALTER MATERIALIZED VIEW` spellings are accepted as well as `ALTER TABLE`, which is what `--export` emits.
 
-Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has, whoever that is. A view that has to be dropped and recreated would come back owned by the connecting role, so psqldef restores its previous owner as part of the recreation.
+Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has, whoever that is. When ownership management is enabled, a view that has to be dropped and recreated would come back owned by the connecting role, so psqldef restores its previous owner as part of the recreation.
 
-A role matching no rule is out of scope in both directions: an `OWNER TO` declaration naming it is ignored, and `--export` omits the `OWNER TO` line for objects it owns. Note that this does not make those objects untouchable — an object currently owned by an out-of-scope role has no exported owner to compare against, so a declaration naming an in-scope role still takes ownership away from it.
+A role matching no rule is out of scope in both directions: an `OWNER TO` declaration naming it is ignored, and `--export` omits the `OWNER TO` line for objects it owns. Note that this does not make those objects untouchable — a declaration naming an in-scope role can still take ownership away from an out-of-scope role. During a diff, existing owners are retained internally so that view recreation also preserves out-of-scope owners.
 
-Ownership of sequences, functions, types, domains and schemas is not managed.
+Ownership of sequences, functions, types, domains and schemas is not managed. Owner declarations require a literal role name; `CURRENT_USER`, `CURRENT_ROLE` and `SESSION_USER` are not supported.
 
 Before `manage.owner` existed, ownership rode along with `managed_roles`, for every role, because that was the only mode in which `--export` emitted owners. That fallback is still in place for as long as `managed_roles` itself is: `manage.privilege` is what supersedes `managed_roles`, and it ends the ride-along too.
 

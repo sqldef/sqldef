@@ -429,3 +429,230 @@ ManageOwnerAlterViewSpelling:
     ALTER MATERIALIZED VIEW mv_users OWNER TO app_user;
     ALTER TABLE IF EXISTS users OWNER TO app_user;
   down: ""
+
+ManageOwnerDependentViewRecreationPreservesOwnersAndMetadata:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    CREATE VIEW v_dep AS SELECT id FROM v_base;
+    CREATE VIEW v_leaf AS SELECT id FROM v_dep;
+    ALTER VIEW v_base OWNER TO app_user;
+    ALTER VIEW v_dep OWNER TO app_user;
+    ALTER VIEW v_leaf OWNER TO app_user;
+    COMMENT ON VIEW v_dep IS 'dependent';
+    GRANT SELECT ON v_leaf TO readonly_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id FROM users;
+    CREATE VIEW v_dep AS SELECT id FROM v_base;
+    CREATE VIEW v_leaf AS SELECT id FROM v_dep;
+    COMMENT ON VIEW v_dep IS 'dependent';
+    GRANT SELECT ON v_leaf TO readonly_user;
+  up: |
+    DROP VIEW public.v_leaf;
+    DROP VIEW public.v_dep;
+    DROP VIEW public.v_base;
+    CREATE VIEW public.v_base AS select id from users;
+    ALTER VIEW public.v_base OWNER TO "app_user";
+    CREATE VIEW public.v_dep AS select id from v_base;
+    ALTER VIEW public.v_dep OWNER TO "app_user";
+    CREATE VIEW public.v_leaf AS select id from v_dep;
+    ALTER VIEW public.v_leaf OWNER TO "app_user";
+    COMMENT ON VIEW public.v_dep IS 'dependent';
+    GRANT SELECT ON TABLE public.v_leaf TO "readonly_user";
+  down: |
+    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+
+ManageOwnerOutOfScopeSurvivesRecreation:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: readonly_user
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    ALTER VIEW v_users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_users AS SELECT id FROM users;
+  up: |
+    DROP VIEW public.v_users;
+    CREATE VIEW public.v_users AS select id from users;
+    ALTER VIEW public.v_users OWNER TO "app_user";
+  down: |
+    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+
+ManageOwnerIfExistsMissingObjects:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  desired: |
+    ALTER TABLE IF EXISTS absent_table OWNER TO app_user;
+    ALTER TABLE IF EXISTS ONLY absent_partition OWNER TO app_user;
+    ALTER VIEW IF EXISTS absent_view OWNER TO app_user;
+    ALTER MATERIALIZED VIEW IF EXISTS absent_matview OWNER TO app_user;
+  up: ""
+  down: ""
+
+ManageOwnerIfExistsViewSpellings:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  current: |
+    CREATE VIEW v AS SELECT 1 AS id;
+    CREATE MATERIALIZED VIEW mv AS SELECT 1 AS id;
+  desired: |
+    CREATE VIEW v AS SELECT 1 AS id;
+    CREATE MATERIALIZED VIEW mv AS SELECT 1 AS id;
+    ALTER VIEW IF EXISTS v OWNER TO app_user;
+    ALTER MATERIALIZED VIEW IF EXISTS mv OWNER TO app_user;
+  up: |
+    ALTER VIEW IF EXISTS v OWNER TO app_user;
+    ALTER MATERIALIZED VIEW IF EXISTS mv OWNER TO app_user;
+  down: ""
+
+ManageOwnerDependentMatviewRecreation:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    ALTER VIEW v_base OWNER TO app_user;
+    CREATE MATERIALIZED VIEW mv_dep AS SELECT id FROM v_base WITH NO DATA;
+    CREATE UNIQUE INDEX mv_dep_id ON mv_dep (id);
+    ALTER MATERIALIZED VIEW mv_dep OWNER TO app_user;
+    GRANT SELECT ON mv_dep TO readonly_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id FROM users;
+    CREATE MATERIALIZED VIEW mv_dep AS SELECT id FROM v_base WITH NO DATA;
+    CREATE UNIQUE INDEX mv_dep_id ON mv_dep (id);
+    GRANT SELECT ON mv_dep TO readonly_user;
+  up: |
+    DROP MATERIALIZED VIEW public.mv_dep;
+    DROP VIEW public.v_base;
+    CREATE VIEW public.v_base AS select id from users;
+    ALTER VIEW public.v_base OWNER TO "app_user";
+    CREATE MATERIALIZED VIEW public.mv_dep AS select id from v_base WITH NO DATA;
+    ALTER MATERIALIZED VIEW public.mv_dep OWNER TO "app_user";
+    GRANT SELECT ON TABLE public.mv_dep TO "readonly_user";
+    CREATE UNIQUE INDEX mv_dep_id ON public.mv_dep (id);
+  down: |
+    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+
+ManageOwnerNewDependentViewDuringRecreation:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    ALTER VIEW v_base OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id FROM users;
+    CREATE VIEW v_new AS SELECT id FROM v_base;
+    ALTER VIEW v_new OWNER TO app_user;
+  up: |
+    DROP VIEW public.v_base;
+    CREATE VIEW public.v_base AS select id from users;
+    ALTER VIEW public.v_base OWNER TO "app_user";
+    CREATE VIEW v_new AS SELECT id FROM v_base;
+    ALTER VIEW v_new OWNER TO app_user;
+  down: |
+    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    DROP VIEW public.v_new;
+
+ManageOwnerRemovedDependentViewDuringRecreation:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    ALTER VIEW v_base OWNER TO app_user;
+    CREATE VIEW v_old AS SELECT id FROM v_base;
+    ALTER VIEW v_old OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id FROM users;
+  up: |
+    DROP VIEW public.v_old;
+    DROP VIEW public.v_base;
+    CREATE VIEW public.v_base AS select id from users;
+    ALTER VIEW public.v_base OWNER TO "app_user";
+  down: |
+    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    CREATE VIEW v_old AS SELECT id FROM v_base;
+    ALTER VIEW v_old OWNER TO app_user;
+
+ManageOwnerRecreationWithReorderedDependencies:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    ALTER VIEW v_base OWNER TO app_user;
+    CREATE VIEW v_a AS SELECT id FROM v_base;
+    CREATE VIEW v_b AS SELECT id FROM v_a;
+    ALTER VIEW v_a OWNER TO app_user;
+    ALTER VIEW v_b OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id FROM users;
+    CREATE VIEW v_b AS SELECT id FROM v_base;
+    CREATE VIEW v_a AS SELECT id FROM v_b;
+    ALTER VIEW v_a OWNER TO app_user;
+    ALTER VIEW v_b OWNER TO app_user;
+
+ManageOwnerRecreationWithChangedDependency:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    ALTER VIEW v_base OWNER TO app_user;
+    CREATE VIEW v_dep AS SELECT id FROM v_base;
+    ALTER VIEW v_dep OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_dep AS SELECT id FROM users;
+    CREATE VIEW v_base AS SELECT id FROM users;
+    ALTER VIEW v_dep OWNER TO app_user;
+
+ManageOwnerQuotedViewRecreationWithPrivileges:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW "V.Users" AS SELECT id, name FROM users;
+    ALTER VIEW "V.Users" OWNER TO "CamelCaseUser";
+    GRANT SELECT ON "V.Users" TO readonly_user;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW "V.Users" AS SELECT id FROM users;
+    ALTER VIEW "V.Users" OWNER TO "CamelCaseUser";
+    GRANT SELECT ON "V.Users" TO readonly_user;
+  up: |
+    DROP VIEW public."V.Users";
+    CREATE VIEW public."V.Users" AS select id from users;
+    ALTER VIEW public."V.Users" OWNER TO "CamelCaseUser";
+    GRANT SELECT ON TABLE public."V.Users" TO "readonly_user";
+  down: |
+    CREATE OR REPLACE VIEW public."V.Users" AS select id, name from users;

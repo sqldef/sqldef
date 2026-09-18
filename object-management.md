@@ -312,7 +312,7 @@ Behavior:
 - `target` matches owner role names (regexp pattern). An empty section manages every role
 - `drop` has no meaning for ownership and is ignored with a warning
 - Ownership is declare-to-manage: an object with no `ALTER TABLE ... OWNER TO` in the desired
-  schema is left alone whoever owns it, including across a view recreation, which would
+  schema is left alone whoever owns it, including across a view recreation when ownership management is enabled, which would
   otherwise hand the view to the connecting role
 - `--export` emits `ALTER TABLE ... OWNER TO` only for owners in scope. That omits the owner
   line, not the object: a declaration naming an in-scope role can still take ownership away from

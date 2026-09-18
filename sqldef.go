@@ -67,7 +67,13 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	db.SetGeneratorConfig(options.Config)
 	options.Config = db.GetGeneratorConfig()
 
-	currentDDLs, err := db.ExportDDLs()
+	var currentDDLs string
+	var err error
+	if options.Export {
+		currentDDLs, err = db.ExportDDLs()
+	} else {
+		currentDDLs, err = database.ExportDDLsForDiff(db)
+	}
 	if err != nil {
 		log.Fatalf("Error on ExportDDLs: %s", err)
 	}

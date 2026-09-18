@@ -1959,3 +1959,39 @@ func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 		assert.Contains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
 	})
 }
+
+func TestPsqldefSkipViewWithOwners(t *testing.T) {
+	resetTestDatabase()
+	mustPgExec(testDatabaseName, `
+		CREATE TABLE users (id bigint);
+		CREATE VIEW v_users AS SELECT id FROM users;
+		CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+	`)
+	tu.WriteFile("schema.sql", `CREATE TABLE users (id bigint);`)
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--skip-view", "--config-inline", "manage: {owner: []}")...)
+	assert.Equal(t, nothingModified, output)
+}
+
+func TestPsqldefExportOwnerScopeAndRecreationMetadata(t *testing.T) {
+	resetTestDatabase()
+	createTestRole("app_user")
+	mustPgExec(testDatabaseName, `
+		CREATE VIEW owned_view AS SELECT 1 AS id;
+		ALTER VIEW owned_view OWNER TO app_user;
+	`)
+	db, err := connectDatabase(defaultDbConfig)
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer db.Close()
+	rules := []database.ManageObjectRule{{Target: "readonly_user"}}
+	db.SetGeneratorConfig(database.GeneratorConfig{ManageOwners: &rules})
+	internal, err := database.ExportDDLsForDiff(db)
+	assert.NoError(t, err)
+	assert.Contains(t, internal, "ALTER TABLE public.owned_view OWNER TO app_user;")
+	exported, err := db.ExportDDLs()
+	assert.NoError(t, err)
+	assert.Contains(t, exported, "CREATE VIEW public.owned_view")
+	assert.NotContains(t, exported, "OWNER TO")
+	assert.Equal(t, &rules, db.GetGeneratorConfig().ManageOwners)
+}

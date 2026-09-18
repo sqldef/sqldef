@@ -2272,6 +2272,7 @@ alter_statement:
   {
     $$ = &DDL{
       Action: SetTableOwner,
+      IfExists: true,
       Table: $6,
       OwnerRole: $9,
     }
@@ -2291,6 +2292,18 @@ alter_statement:
       Table: $5,
       OwnerRole: $8,
     }
+  }
+| ALTER ignore_opt TABLE IF EXISTS ONLY table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $7, OwnerRole: $10}
+  }
+| ALTER ignore_opt VIEW IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $6, OwnerRole: $9}
+  }
+| ALTER ignore_opt MATERIALIZED VIEW IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $7, OwnerRole: $10}
   }
 | ALTER ignore_opt TABLE table_name ENABLE ROW LEVEL SECURITY
   {

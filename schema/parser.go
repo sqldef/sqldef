@@ -172,6 +172,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.SetTableOwner {
 			return &SetTableOwner{
+				ifExists:  stmt.IfExists,
 				statement: ddl,
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				owner:     foldUnquotedRole(stmt.OwnerRole),

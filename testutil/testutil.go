@@ -418,7 +418,7 @@ func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser 
 	db.SetGeneratorConfig(config)
 	config = db.GetGeneratorConfig()
 
-	currentDDLs, err := db.ExportDDLs()
+	currentDDLs, err := database.ExportDDLsForDiff(db)
 	if err != nil {
 		return "", err
 	}
@@ -618,7 +618,7 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 	}
 
 	// Test idempotency of current schema
-	currentDDLs, err := db.ExportDDLs()
+	currentDDLs, err := database.ExportDDLsForDiff(db)
 	if err != nil {
 		r.Fatal(err)
 	}
@@ -631,7 +631,7 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 	}
 
 	// Main test
-	currentDDLs, err = db.ExportDDLs()
+	currentDDLs, err = database.ExportDDLsForDiff(db)
 	if err != nil {
 		r.Fatal(err)
 	}
@@ -667,7 +667,7 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 		}
 
 		// PHASE 2: Test idempotency of desired schema
-		currentDDLs, err = db.ExportDDLs()
+		currentDDLs, err = database.ExportDDLsForDiff(db)
 		if err != nil {
 			r.Fatal(err)
 		}
@@ -682,7 +682,7 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 		}
 
 		// PHASE 3: Test reverse migration (desired → current) should produce Down
-		currentDDLs, err = db.ExportDDLs()
+		currentDDLs, err = database.ExportDDLsForDiff(db)
 		if err != nil {
 			r.Fatal(err)
 		}
@@ -703,7 +703,7 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 		}
 
 		// PHASE 4: Test idempotency of current schema after reverse migration
-		currentDDLs, err = db.ExportDDLs()
+		currentDDLs, err = database.ExportDDLsForDiff(db)
 		if err != nil {
 			r.Fatal(err)
 		}
@@ -741,7 +741,7 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 		}
 
 		// Test idempotency of desired schema
-		currentDDLs, err = db.ExportDDLs()
+		currentDDLs, err = database.ExportDDLsForDiff(db)
 		if err != nil {
 			r.Fatal(err)
 		}
