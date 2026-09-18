@@ -244,6 +244,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	foreignKeyDDLs := []string{}
 	exclusionDDLs := []string{}
 	viewDDLs := []string{}
+	ownerDDLs := []string{} // Owners must come after CREATE VIEW, which resets them
 
 	// bulkAlter fuses per-table ALTER TABLE actions when --bulk-alter is set (MySQL only).
 	bulkAlter := newAlterBundler(g, g.config.BulkAlter && g.mode == GeneratorModeMysql)
@@ -357,11 +358,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			interDDLs = append(interDDLs, policyDDLs...)
 		case *SetTableOwner:
-			ownerDDLs, err := g.generateDDLsForSetTableOwner(desired)
+			ddls, err := g.generateDDLsForSetTableOwner(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, ownerDDLs...)
+			ownerDDLs = append(ownerDDLs, ddls...)
 		case *SetRowLevelSecurity:
 			rlsDDLs, err := g.generateDDLsForSetRowLevelSecurity(desired)
 			if err != nil {
@@ -449,6 +450,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, viewDDLs...)
+	// After viewDDLs: a recreated view is owned by the connecting role until this runs.
+	ddls = append(ddls, ownerDDLs...)
 	ddls = append(ddls, indexDDLs...)
 	ddls = append(ddls, indexCommentDDLs...) // Index comments must come after CREATE INDEX
 	ddls = append(ddls, foreignKeyDDLs...)
@@ -2417,9 +2420,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 				// When dropping views that may have dependents, we need to handle them
 				// For PostgreSQL, find dependent views and recreate them after
 				var recreateDDLs, dependentViewDDLs []string
+				var dependentViews []*View
 				if g.mode == GeneratorModePostgres {
 					// Find all views that depend on this view
-					dependentViews := g.findDependentViews(desiredView.name)
+					dependentViews = g.findDependentViews(desiredView.name)
 					// Drop them first (in reverse dependency order)
 					for _, depView := range slices.Backward(dependentViews) {
 						recreateDDLs = append(recreateDDLs, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
@@ -2436,7 +2440,17 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 				)
 				// Recreate dependent views
 				recreateDDLs = append(recreateDDLs, dependentViewDDLs...)
-				ddls, _ = g.appendRecreate(ddls, recreateDDLs...)
+				var recreated bool
+				ddls, recreated = g.appendRecreate(ddls, recreateDDLs...)
+				if recreated {
+					// A recreated view comes back owned by the connecting role. Forgetting the
+					// owner here is what makes generateDDLsForSetTableOwner, which runs after all
+					// of viewDDLs, declare it again.
+					currentView.owner = ""
+					for _, depView := range dependentViews {
+						depView.owner = ""
+					}
+				}
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
@@ -4405,7 +4419,8 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				table.rlsEnabled = stmt.value
 			}
 		case *View:
-			aggregated.Views = append(aggregated.Views, stmt)
+			view := *stmt // copy view, so that SetTableOwner below does not write through to the DDL
+			aggregated.Views = append(aggregated.Views, &view)
 		case *Trigger:
 			aggregated.Triggers = append(aggregated.Triggers, stmt)
 		case *Event:
@@ -6894,6 +6909,8 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 			tables = append(tables, stmt.tableName.RawString())
 		case *AddPrimaryKey:
 			tables = append(tables, stmt.tableName.RawString())
+		case *SetTableOwner:
+			tables = append(tables, stmt.tableName.RawString())
 		case *AddForeignKey:
 			tables = append(tables, stmt.tableName.RawString())
 			tables = append(tables, stmt.foreignKey.referenceTableName.RawString())
@@ -6939,6 +6956,8 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 			views = append(views, stmt.tableName.RawString())
 		case *View:
 			views = append(views, stmt.name.RawString())
+		case *SetTableOwner:
+			views = append(views, stmt.tableName.RawString())
 		}
 
 		if skipViews(views, config) {
