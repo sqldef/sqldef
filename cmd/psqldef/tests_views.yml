@@ -727,8 +727,98 @@ ViewWithDistinctOnMultipleColumns:
   down: |
     DROP VIEW public.latest_orders;
 
+ViewWithIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'pending';
+
+ViewWithNotIsDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE NOT (status IS DISTINCT FROM 'pending');
+
+ViewWithIsNotDistinctFromChangedOperand:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'pending';
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'shipped';
+  up: |
+    CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'shipped';
+  down: |
+    CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'pending';
+
 ViewReferencingColumnNamedKey:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (key text, name text);
     CREATE VIEW users_view AS SELECT key, name FROM users;
+
+ChangeIndexOnMaterializedView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a) INCLUDE (b);
+  up: |
+    DROP INDEX public.mv_a_idx;
+    CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a) INCLUDE (b);
+  down: |
+    DROP INDEX public.mv_a_idx;
+    CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a);
+
+ViewRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE VIEW v AS SELECT a, b FROM t;
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE VIEW v AS SELECT a FROM t;
+  up: |
+    -- Skipped: DROP VIEW public.v;
+    -- Skipped: CREATE VIEW public.v AS select a from t;
+  down: ""
+
+IndexOnMaterializedViewRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE UNIQUE INDEX mv_a_idx ON mv USING btree (a) INCLUDE (b);
+  up: |
+    -- Skipped: DROP INDEX public.mv_a_idx;
+    -- Skipped: CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a) INCLUDE (b);
+  down: ""

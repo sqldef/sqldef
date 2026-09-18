@@ -394,7 +394,7 @@ func TestPsqldefCreateView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createView, wrapWithTransaction(fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
 			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
@@ -563,7 +563,7 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 		assertApplyOutput(t, createTable, wrapWithTransaction(expectedOutput))
 		// The unmanaged helper function remains outside the desired schema, so the
 		// second apply still reports the skipped drop instead of becoming a no-op.
-		assertApplyOutput(t, createTable, wrapWithTransaction(fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)))
+		assertApplyOutput(t, createTable, applyPrefix+fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema))
 	}
 }
 
@@ -1177,6 +1177,24 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	assert.Equal(t, nothingModified, apply)
 }
 
+func TestPsqldefSkipTablesAlsoSkipsExportedOwner(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY);
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+    `)
+
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\nmanage:\n  privilege: []\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
 func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 	resetTestDatabase()
 
@@ -1342,12 +1360,16 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 		assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
 
 		// Verify the structure of the output
+		// The statements keep the order they were generated in: the concurrent index ends
+		// the transaction that precedes it, and a new one opens for what follows.
 		expectedStructure := "-- dry run --\n" + tu.StripHeredoc(`
 			BEGIN;
 			ALTER TABLE "public"."users" ADD COLUMN "age" integer;
-			CREATE INDEX idx_users_age ON users (age);
 			COMMIT;
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
+			BEGIN;
+			CREATE INDEX idx_users_age ON users (age);
+			COMMIT;
 		`)
 
 		assert.Equal(t, expectedStructure, dryRun)
@@ -1389,10 +1411,12 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 			BEGIN;
 			ALTER TABLE "public"."users" ADD COLUMN "name" text;
 			ALTER TABLE "public"."orders" ADD COLUMN "created_at" timestamp;
-			CREATE INDEX idx_orders_status ON orders (status);
 			COMMIT;
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
 			CREATE INDEX CONCURRENTLY idx_orders_user_id ON orders (user_id);
+			BEGIN;
+			CREATE INDEX idx_orders_status ON orders (status);
+			COMMIT;
 		`)
 
 		assertApplyOutput(t, schema, expected)
@@ -1919,19 +1943,31 @@ func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 
 	t.Run("filter to test_owner_a only", func(t *testing.T) {
 		exported := export(t, []string{"test_owner_a"})
-		assert.Contains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
-		assert.NotContains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_a"."widgets" OWNER TO`)
+		assert.NotContains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
 	})
 
 	t.Run("filter to test_owner_b only", func(t *testing.T) {
 		exported := export(t, []string{"test_owner_b"})
-		assert.Contains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
-		assert.NotContains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
+		assert.NotContains(t, exported, `ALTER TABLE "test_owner_a"."widgets" OWNER TO`)
 	})
 
 	t.Run("filter to both schemas", func(t *testing.T) {
 		exported := export(t, []string{"test_owner_a", "test_owner_b"})
-		assert.Contains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
-		assert.Contains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_a"."widgets" OWNER TO`)
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
 	})
+}
+
+func TestPsqldefSkipViewWithOwners(t *testing.T) {
+	resetTestDatabase()
+	mustPgExec(testDatabaseName, `
+		CREATE TABLE users (id bigint);
+		CREATE VIEW v_users AS SELECT id FROM users;
+		CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+	`)
+	tu.WriteFile("schema.sql", `CREATE TABLE users (id bigint);`)
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--skip-view", "--config-inline", "manage: {privilege: []}")...)
+	assert.Equal(t, nothingModified, output)
 }

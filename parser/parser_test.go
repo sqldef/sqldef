@@ -593,6 +593,21 @@ func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
 	}
 }
 
+func TestConstraintIncludeColumnsFormatting(t *testing.T) {
+	sql := `CREATE TABLE test (a integer, b integer, c integer, CONSTRAINT x UNIQUE (a) INCLUDE (b, c))`
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse UNIQUE ... INCLUDE constraint: %v", err)
+	}
+
+	got := String(statement)
+	want := "create table test (\n\ta integer,\n\tb integer,\n\tc integer,\n\tunique x (a) include (b, c)\n)"
+	if got != want {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 // TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
 // can be used as unquoted column names in index definitions
 func TestTypeKeywordsAsIndexColumns(t *testing.T) {
@@ -728,6 +743,42 @@ func TestUnusedKeywordsAsUnquotedIdentifiers(t *testing.T) {
 	} {
 		if _, err := ParseDDL(tc.sql, tc.mode); err == nil {
 			t.Errorf("reserved word as an unquoted column name should not parse: %s", tc.sql)
+		}
+	}
+}
+
+// TestSQLServerKeywordsAsUnquotedIdentifiers tests that words lexed as keywords only for
+// SQL Server syntax are not reserved, so they parse as identifiers.
+// The keyword table is shared by all modes, so every mode must accept them.
+func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
+	words := []string{
+		"newid", "newsequentialid", "getutcdate", "sysutcdatetime", "try_cast",
+		"openjson", "string_split", "apply", "columnstore",
+		"pad_index", "ignore_dup_key", "statistics_norecompute", "statistics_incremental", "allow_row_locks", "allow_page_locks",
+	}
+	modes := []struct {
+		name string
+		mode ParserMode
+	}{
+		{"mysql", ParserModeMysql},
+		{"postgres", ParserModePostgres},
+		{"sqlite3", ParserModeSQLite3},
+		{"mssql", ParserModeMssql},
+	}
+
+	for _, m := range modes {
+		for _, word := range words {
+			t.Run(m.name+"/"+word, func(t *testing.T) {
+				for _, sql := range []string{
+					`CREATE TABLE t (` + word + ` int)`,
+					`CREATE INDEX t_` + word + ` ON t (` + word + `)`,
+					`CREATE VIEW v AS SELECT ` + word + ` FROM t`,
+				} {
+					if _, err := ParseDDL(sql, m.mode); err != nil {
+						t.Errorf("ParseDDL(%q) failed: %v", sql, err)
+					}
+				}
+			})
 		}
 	}
 }
@@ -895,6 +946,11 @@ func TestDefaultFunctionExpressions(t *testing.T) {
 		{
 			name: "SQL Server NEWSEQUENTIALID default",
 			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWSEQUENTIALID())",
+			mode: ParserModeMssql,
+		},
+		{
+			name: "SQL Server GETUTCDATE default",
+			sql:  "CREATE TABLE t (created_at datetime2 DEFAULT GETUTCDATE())",
 			mode: ParserModeMssql,
 		},
 	}
@@ -1880,6 +1936,40 @@ func TestArrayElementColumnReference(t *testing.T) {
 			}
 			if got := String(stmt); !strings.Contains(got, tc.expected) {
 				t.Errorf("String() = %q, want it to contain %q", got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestFunctionCallForms(t *testing.T) {
+	// LAG and LEAD without OVER are not standard SQL, but the parser accepts them.
+	testCases := []struct {
+		name     string
+		expr     string
+		expected string
+	}{
+		{name: "no arguments", expr: "f()", expected: "f()"},
+		{name: "arguments", expr: "f(x)", expected: "f(x)"},
+		{name: "distinct arguments", expr: "f(DISTINCT x)", expected: "f(distinct x)"},
+		{name: "no arguments with over", expr: "f() OVER ()", expected: "f() over()"},
+		{name: "arguments with over", expr: "f(x) OVER ()", expected: "f(x) over()"},
+		{name: "arguments with partition by", expr: "f(x) OVER (PARTITION BY y)", expected: "f(x) over(partition by y)"},
+		{name: "within group", expr: "f(x) WITHIN GROUP (ORDER BY y)", expected: "f(x) within group( order by y asc)"},
+		{name: "lag without over", expr: "LAG(x)", expected: "lag(x)"},
+		{name: "lag with over", expr: "LAG(x) OVER (ORDER BY y)", expected: "lag(x) over( order by y asc)"},
+		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x)"},
+		{name: "schema-qualified", expr: "s.f(x)", expected: "s.f(x)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL("CREATE VIEW v AS SELECT "+tc.expr+" FROM t", ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			want := "select " + tc.expected + " from t"
+			if got := String(stmt); !strings.Contains(got, want) {
+				t.Errorf("String() = %q, want it to contain %q", got, want)
 			}
 		})
 	}

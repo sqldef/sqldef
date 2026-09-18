@@ -1198,6 +1198,33 @@ ConstraintCheckNotIsDistinctFromAdd:
     ALTER TABLE public.products ADD CHECK (status is not distinct from 'pending');
   down: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+
+ConstraintCheckNotBetweenWithoutParentheses:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      price integer,
+      CONSTRAINT products_price_outside_range CHECK (NOT price BETWEEN 100 AND 200)
+    );
+
+ConstraintCheckNotBetweenWithoutParenthesesAdd:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id serial,
+      price integer
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      price integer,
+      CONSTRAINT products_price_outside_range CHECK (NOT price BETWEEN 100 AND 200)
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT products_price_outside_range CHECK (NOT (price >= 100 AND price <= 200));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_price_outside_range;
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (
@@ -2445,3 +2472,101 @@ CheckConstraintComparingParenthesizedComparison:
     ALTER TABLE public.assets ADD CONSTRAINT assets_interval_check CHECK ((format = 'animated') = (interval_ms is not null));
   down: |
     ALTER TABLE public.assets DROP CONSTRAINT assets_interval_check;
+
+UniqueConstraintWithIncludeColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text
+    );
+    ALTER TABLE t ADD CONSTRAINT t_uk UNIQUE (b) INCLUDE (c);
+
+PrimaryKeyWithIncludeColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text,
+      CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b)
+    );
+
+ChangeIncludeColumnsOfPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text,
+      CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b)
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b text,
+      c text,
+      CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (c)
+    );
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pk;
+    ALTER TABLE public.t ADD CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (c);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pk;
+    ALTER TABLE public.t ADD CONSTRAINT t_pk PRIMARY KEY (a) INCLUDE (b);
+
+AddUnnamedPrimaryKeyConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+    ALTER TABLE t ADD PRIMARY KEY (x);
+  desired: |
+    CREATE TABLE t (
+      x bigint NOT NULL,
+      y text
+    );
+    ALTER TABLE t ADD PRIMARY KEY (x);
+  up: ""
+  down: ""
+
+AddUnnamedUniqueConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    ALTER TABLE t ADD UNIQUE (x, y);
+  desired: |
+    CREATE TABLE t (
+      x bigint,
+      y text
+    );
+    ALTER TABLE t ADD UNIQUE (x, y);
+  up: ""
+  down: ""
+
+ChangePrimaryKeyDeclaredWithAlterTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b bigint NOT NULL
+    );
+    ALTER TABLE ONLY t ADD CONSTRAINT t_pk PRIMARY KEY (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      b bigint NOT NULL
+    );
+    ALTER TABLE ONLY t ADD CONSTRAINT t_pk PRIMARY KEY (b);
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pk;
+    ALTER TABLE public.t ADD PRIMARY KEY (b);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pkey;
+    ALTER TABLE public.t ADD PRIMARY KEY (a);

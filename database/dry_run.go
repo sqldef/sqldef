@@ -62,6 +62,10 @@ func (d *DryRunDatabase) GetTransactionQueries() TransactionQueries {
 	return d.wrapped.GetTransactionQueries()
 }
 
+func (d *DryRunDatabase) SessionSetupQueries() []string {
+	return d.wrapped.SessionSetupQueries()
+}
+
 func (d *DryRunDatabase) GetConfig() Config {
 	return d.wrapped.GetConfig()
 }

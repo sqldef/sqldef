@@ -68,3 +68,48 @@ AddColumnBracketedIdentifier:
     ALTER TABLE dbo.users ADD [name] varchar(100);
   down: |
     ALTER TABLE dbo.users DROP COLUMN [name];
+
+CreateWithNonReservedKeywordColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      newid int,
+      newsequentialid int,
+      getutcdate int,
+      sysutcdatetime int,
+      try_cast int,
+      openjson int,
+      string_split int,
+      apply int,
+      columnstore int,
+      pad_index int,
+      ignore_dup_key int,
+      statistics_norecompute int,
+      statistics_incremental int,
+      allow_row_locks int,
+      allow_page_locks int
+    );
+    CREATE INDEX idx_newid ON users (newid, newsequentialid, getutcdate, sysutcdatetime, try_cast, openjson, string_split, apply, columnstore, pad_index, ignore_dup_key, statistics_norecompute, statistics_incremental, allow_row_locks, allow_page_locks);
+  up: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      newid int,
+      newsequentialid int,
+      getutcdate int,
+      sysutcdatetime int,
+      try_cast int,
+      openjson int,
+      string_split int,
+      apply int,
+      columnstore int,
+      pad_index int,
+      ignore_dup_key int,
+      statistics_norecompute int,
+      statistics_incremental int,
+      allow_row_locks int,
+      allow_page_locks int
+    );
+    CREATE INDEX idx_newid ON users (newid, newsequentialid, getutcdate, sysutcdatetime, try_cast, openjson, string_split, apply, columnstore, pad_index, ignore_dup_key, statistics_norecompute, statistics_incremental, allow_row_locks, allow_page_locks);
+  down: |
+    DROP TABLE dbo.users;

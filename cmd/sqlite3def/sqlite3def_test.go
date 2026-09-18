@@ -236,7 +236,7 @@ func TestSQLite3defConfigMerge(t *testing.T) {
 	// inline config should override file config, so posts will be skipped instead of users_10
 	// This means users_10 will be dropped (skipped without --enable-drop) and posts will be kept
 	apply := tu.MustExecute(t, "./sqlite3def", "--config", "config.yml", "--config-inline", "skip_tables: posts", "--file", "schema.sql", "sqlite3def_test")
-	assert.Equal(t, wrapWithTransaction("-- Skipped: DROP TABLE \"users_10\";\n"), apply)
+	assert.Equal(t, applyPrefix+"-- Skipped: DROP TABLE \"users_10\";\n", apply)
 }
 
 func TestSQLite3defMultipleConfigs(t *testing.T) {
@@ -262,7 +262,7 @@ func TestSQLite3defMultipleConfigs(t *testing.T) {
 	// users_10 is NOT in the final skip list, so it will be dropped
 	// comments IS in the final skip list, so it won't be touched (even though it's not in schema.sql)
 	apply := tu.MustExecute(t, "./sqlite3def", "--config", "config1.yml", "--config", "config2.yml", "--config", "config3.yml", "--file", "schema.sql", "sqlite3def_test")
-	assert.Equal(t, wrapWithTransaction("-- Skipped: DROP TABLE \"users_10\";\n"), apply)
+	assert.Equal(t, applyPrefix+"-- Skipped: DROP TABLE \"users_10\";\n", apply)
 }
 
 func TestSQLite3defMultipleInlineConfigs(t *testing.T) {

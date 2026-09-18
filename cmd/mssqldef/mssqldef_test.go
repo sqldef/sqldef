@@ -403,7 +403,7 @@ func TestMssqldefCreateTable(t *testing.T) {
 
 	assertApplyOutput(t, createTable1+createTable2, wrapWithTransaction(createTable1+createTable2))
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
-	assertApplyOutput(t, createTable1, wrapWithTransaction("-- Skipped: DROP TABLE [dbo].[bigdata];\n"))
+	assertApplyOutput(t, createTable1, applyPrefix+"-- Skipped: DROP TABLE [dbo].[bigdata];\n")
 }
 
 func TestMssqldefCreateTableWithDefault(t *testing.T) {
@@ -496,8 +496,8 @@ func TestMssqldefCreateView(t *testing.T) {
 	createView = "CREATE VIEW [dbo].[view_users_new] AS select id from dbo.users with(nolock) where age = 2;\nGO\n"
 	skipDropView := "-- Skipped: DROP VIEW [dbo].[view_users];\n"
 	assertApplyOutput(t, createTable+createView, wrapWithTransaction(createView+skipDropView))
-	assertApplyOutput(t, createTable+createView, wrapWithTransaction(skipDropView))
-	assertApplyOutput(t, "", wrapWithTransaction("-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n-- Skipped: DROP TABLE [dbo].[users];\n"))
+	assertApplyOutput(t, createTable+createView, applyPrefix+skipDropView)
+	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n-- Skipped: DROP TABLE [dbo].[users];\n")
 }
 
 func TestMssqldefTrigger(t *testing.T) {
@@ -995,7 +995,7 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, wrapWithTransaction("-- Skipped: DROP INDEX [ix_users_id] ON [dbo].[users];\n"))
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP INDEX [ix_users_id] ON [dbo].[users];\n")
 	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -1200,7 +1200,7 @@ func TestMssqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex, wrapWithTransaction(createIndex))
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
-	assertApplyOutput(t, createTable, wrapWithTransaction("-- Skipped: DROP INDEX [index_name] ON [dbo].[users];\n"))
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP INDEX [index_name] ON [dbo].[users];\n")
 	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("DROP INDEX [index_name] ON [dbo].[users];\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
