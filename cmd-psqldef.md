@@ -617,20 +617,22 @@ manage:
 
 Rules are evaluated in order; the first match wins. `target` is a regular expression matched against the owner role name, anchored with `^...$` (empty matches all). `drop` has no meaning for ownership and is ignored with a warning.
 
-Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has. Roles matching no rule are left completely untouched: `OWNER TO` declarations naming them are ignored, and objects they own are excluded from `--export` so they never enter the diff.
+Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has, whoever that is.
+
+A role matching no rule is out of scope in both directions: an `OWNER TO` declaration naming it is ignored, and `--export` omits the `OWNER TO` line for objects it owns. Note that this does not make those objects untouchable — an object currently owned by an out-of-scope role has no exported owner to compare against, so a declaration naming an in-scope role still takes ownership away from it.
 
 Ownership of sequences, functions, types, domains and schemas is not managed.
 
-`managed_roles` also turns ownership on, for every role, because it used to be the only mode in which `--export` emitted owners. That stays true for a config with no `manage:` block at all. Once a `manage:` block is present, the allow-list model applies and ownership is managed only when `owner:` is listed:
+Before `manage.owner` existed, ownership rode along with `managed_roles`, for every role, because that was the only mode in which `--export` emitted owners. That fallback is still in place for as long as `managed_roles` itself is: `manage.privilege` is what supersedes `managed_roles`, and it ends the ride-along too.
 
 | Configuration | Ownership |
 |---------------|-----------|
-| neither `managed_roles` nor `manage:` | not managed |
-| `managed_roles`, no `manage:` block | managed, for every role |
-| `manage:` block without `owner:` | not managed |
-| `manage:` block with `owner:` | managed, restricted by `target` |
+| `manage.owner` | managed, restricted by `target` |
+| `managed_roles` without `manage.privilege` | managed, for every role |
+| `manage.privilege` without `manage.owner` | not managed |
+| neither | not managed |
 
-Migrating from `managed_roles` to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership managed.
+Migrating from `managed_roles` to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership managed. An unrelated key such as `manage.extension` does not end the fallback.
 
 ## Identifier Quoting
 

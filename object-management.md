@@ -313,22 +313,22 @@ Behavior:
 - `drop` has no meaning for ownership and is ignored with a warning
 - Ownership is declare-to-manage: an object with no `ALTER TABLE ... OWNER TO` in the desired
   schema is left alone whoever owns it
-- `--export` emits `ALTER TABLE ... OWNER TO` only for owners in scope, so an object held by an
-  unmatched role never enters the diff
+- `--export` emits `ALTER TABLE ... OWNER TO` only for owners in scope. That omits the owner
+  line, not the object: a declaration naming an in-scope role can still take ownership away from
+  an out-of-scope one
 - Covers tables, partitioned tables, views and materialized views. Ownership of sequences,
   functions, types, domains and schemas is not managed
 
 Ownership used to be managed as a side effect of `managed_roles`, because that was the only mode
-in which `--export` emitted owners. That is still true for a config with no `manage:` block. Once
-a `manage:` block is present, the allow-list model applies and ownership is managed only when
-`owner:` is listed:
+in which `--export` emitted owners. That fallback survives for as long as `managed_roles` does:
+`manage.privilege` is what deprecates `managed_roles`, and it ends the fallback too.
 
 | Configuration | Ownership |
 |---------------|-----------|
-| neither `managed_roles` nor `manage:` | not managed |
-| `managed_roles`, no `manage:` block | managed, for every role |
-| `manage:` block without `owner:` | not managed |
-| `manage:` block with `owner:` | managed, restricted by `target` |
+| `manage.owner` | managed, restricted by `target` |
+| `managed_roles` without `manage.privilege` | managed, for every role |
+| `manage.privilege` without `manage.owner` | not managed |
+| neither | not managed |
 
 ## Schema Management
 
@@ -404,7 +404,7 @@ When a managed object references an object in an unmanaged schema (e.g., a forei
 
 Note that `managed_roles` also implies owner management, while `manage.privilege` does not.
 Migrating to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership
-managed.
+managed; see [Owner Management](#owner-management).
 
 Transition:
 1. Both old and new options work
@@ -437,6 +437,7 @@ manage:
   policy:
   extension:
   privilege:
+  owner:
 ```
 
 Users can then:
