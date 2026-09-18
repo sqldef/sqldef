@@ -1,3 +1,9 @@
+## [v3.11.24](https://github.com/sqldef/sqldef/compare/v3.11.23...v3.11.24) - 2026-09-18
+
+- psqldef: cover the NOT expression normalization paths #1342 left untested by @moznion in https://github.com/sqldef/sqldef/pull/1363
+- psqldef: fix ownership diffs and view recreation by @gfx in https://github.com/sqldef/sqldef/pull/1376
+- parser: accept 15 SQL Server keywords as identifiers by @178inaba in https://github.com/sqldef/sqldef/pull/1373
+
 ## [v3.11.23](https://github.com/sqldef/sqldef/compare/v3.11.22...v3.11.23) - 2026-09-17
 
 - parser: drop the never-reduced duplicate rule in function_call_generic by @178inaba in https://github.com/sqldef/sqldef/pull/1356
