@@ -152,11 +152,14 @@ func TestParseGeneratorConfigManageOwner(t *testing.T) {
 	config = ParseGeneratorConfigString("", GeneratorConfig{})
 	assert.False(t, config.ManagesOwners())
 
-	// A manage: block without owner: switches the allow-list model on, so managed_roles no
-	// longer drags ownership in.
+	// manage.privilege supersedes managed_roles, so the ride-along stops with it.
 	config = ParseGeneratorConfigString("managed_roles: [app_user]\nmanage: {privilege: [{target: app_user}]}", GeneratorConfig{})
 	assert.False(t, config.ManagesOwners())
 	assert.False(t, config.ManagesOwnerRole("app_user"))
+
+	// An unrelated manage: key leaves managed_roles, and with it ownership, in effect.
+	config = ParseGeneratorConfigString("managed_roles: [app_user]\nmanage: {extension: [{target: vector}]}", GeneratorConfig{})
+	assert.True(t, config.ManagesOwners())
 
 	// An empty owner section manages every role.
 	config = ParseGeneratorConfigString("manage: {owner: []}", GeneratorConfig{})

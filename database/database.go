@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/parser"
@@ -70,7 +71,6 @@ type GeneratorConfig struct {
 	ManagePrivileges *[]ManageObjectRule // manage.privilege rules: which grantees' privileges are managed and whether REVOKE is allowed
 	ManageFunctions  *[]ManageObjectRule // manage.function rules: which functions are managed and whether DROP is allowed
 	ManageOwners     *[]ManageObjectRule // manage.owner rules: which owner roles are managed
-	ManageSpecified  bool                // Whether a manage: block was given at all, which switches the allow-list model on
 
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
@@ -436,9 +436,6 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManageOwners != nil {
 		result.ManageOwners = override.ManageOwners
 	}
-	if override.ManageSpecified {
-		result.ManageSpecified = override.ManageSpecified
-	}
 	if override.EnableDrop {
 		result.EnableDrop = override.EnableDrop
 	}
@@ -540,7 +537,6 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		ManageFunctions:         manageFunctions,
 		ManagePrivileges:        managePrivileges,
 		ManageOwners:            manageOwners,
-		ManageSpecified:         config.Manage != nil,
 	}
 }
 
@@ -554,11 +550,23 @@ var manageKnownKeys = map[string]bool{
 	"extension": true, "privilege": true, "owner": true,
 }
 
+// compiledManageTargets memoizes CompileManageTarget. Targets are matched once per object in the
+// database and the set of distinct patterns is tiny, so compiling on every call dominates the cost.
+var compiledManageTargets sync.Map
+
 // CompileManageTarget compiles a manage: rule's target pattern into the anchored regexp
 // used to match object names, wrapped in a non-capturing group so alternation (a|b) anchors
 // correctly on both ends.
 func CompileManageTarget(target string) (*regexp.Regexp, error) {
-	return regexp.Compile("^(?:" + target + ")$")
+	if cached, ok := compiledManageTargets.Load(target); ok {
+		return cached.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile("^(?:" + target + ")$")
+	if err != nil {
+		return nil, err
+	}
+	compiledManageTargets.Store(target, re)
+	return re, nil
 }
 
 // manageImplementedKeys are the manage: keys with a working implementation; the other
@@ -631,17 +639,15 @@ func MatchManageObjectRule(rules []ManageObjectRule, name string) (ManageObjectR
 
 // ManagesOwners reports whether object ownership is diffed at all.
 //
-// manage.owner turns it on explicitly. Without it, a manage: block switches the allow-list model
-// on and an unlisted object type is out of scope. Only a config with no manage: block at all falls
-// back to managed_roles, which used to imply owner management before manage.owner existed.
+// manage.owner turns it on explicitly. Before it existed, ownership rode along with managed_roles,
+// because that was the only mode in which --export emitted owners. That fallback stays alive for
+// exactly as long as managed_roles itself does: manage.privilege is what supersedes it, here as in
+// isManagedGrantee.
 func (config *GeneratorConfig) ManagesOwners() bool {
 	if config.ManageOwners != nil {
 		return true
 	}
-	if config.ManageSpecified {
-		return false
-	}
-	return len(config.ManagedRoles) > 0
+	return config.ManagePrivileges == nil && len(config.ManagedRoles) > 0
 }
 
 // ManagesOwnerRole reports whether ownership by the given role is managed. The legacy

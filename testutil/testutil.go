@@ -43,17 +43,12 @@ type TestCase struct {
 		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
 		BulkAlter               bool `yaml:"bulk_alter"`
 	} `yaml:"config"`
-	Manage *ManageConfig `yaml:"manage"`
-}
-
-// ManageConfig mirrors the manage: block of a real config file. It is a pointer on TestCase so
-// that an absent block stays distinguishable from an empty one, which is what switches the
-// allow-list model on.
-type ManageConfig struct {
-	Extension *[]database.ManageObjectRule `yaml:"extension"`
-	Function  *[]database.ManageObjectRule `yaml:"function"`
-	Privilege *[]database.ManageObjectRule `yaml:"privilege"`
-	Owner     *[]database.ManageObjectRule `yaml:"owner"`
+	Manage struct {
+		Extension *[]database.ManageObjectRule `yaml:"extension"`
+		Function  *[]database.ManageObjectRule `yaml:"function"`
+		Privilege *[]database.ManageObjectRule `yaml:"privilege"`
+		Owner     *[]database.ManageObjectRule `yaml:"owner"`
+	} `yaml:"manage"`
 }
 
 func init() {
@@ -189,15 +184,11 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		legacyIgnoreQuotes = *test.LegacyIgnoreQuotes
 	}
 
-	manage := test.Manage
-	if manage == nil {
-		manage = &ManageConfig{}
-	}
 	for name, rules := range map[string]*[]database.ManageObjectRule{
-		"extension": manage.Extension,
-		"function":  manage.Function,
-		"privilege": manage.Privilege,
-		"owner":     manage.Owner,
+		"extension": test.Manage.Extension,
+		"function":  test.Manage.Function,
+		"privilege": test.Manage.Privilege,
+		"owner":     test.Manage.Owner,
 	} {
 		if rules == nil {
 			continue
@@ -214,11 +205,10 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
-		ManageExtensions:        manage.Extension,
-		ManageFunctions:         manage.Function,
-		ManagePrivileges:        manage.Privilege,
-		ManageOwners:            manage.Owner,
-		ManageSpecified:         test.Manage != nil,
+		ManageExtensions:        test.Manage.Extension,
+		ManageFunctions:         test.Manage.Function,
+		ManagePrivileges:        test.Manage.Privilege,
+		ManageOwners:            test.Manage.Owner,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,

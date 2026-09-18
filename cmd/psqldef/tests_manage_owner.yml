@@ -102,6 +102,8 @@ ManageOwnerEmptyRulesManageEveryRole:
 
 ManageOwnerNotListedLeavesOwnerUnmanaged:
   legacy_ignore_quotes: false
+  managed_roles:
+    - app_user
   manage:
     privilege:
       - target: app_user
@@ -167,4 +169,151 @@ ManageOwnerQuotedRoleMatchesUnquotedTarget:
     ALTER TABLE users OWNER TO "user with spaces";
   up: |
     ALTER TABLE users OWNER TO "user with spaces";
+  down: ""
+
+ManagedRolesWithUnrelatedManageKeyStillManagesOwner:
+  legacy_ignore_quotes: false
+  managed_roles:
+    - app_user
+  manage:
+    extension:
+      - target: vector
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: |
+    ALTER TABLE users OWNER TO app_user;
+  down: ""
+
+ManageOwnerUnquotedRoleIsCaseFolded:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: 'app_.*'
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO App_User;
+  up: |
+    ALTER TABLE users OWNER TO App_User;
+  down: ""
+
+ManageOwnerOnMaterializedView:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    ALTER TABLE mv_users OWNER TO app_user;
+  up: |
+    ALTER TABLE mv_users OWNER TO app_user;
+  down: ""
+
+ManageOwnerOnViewCreatedInTheSameRun:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  up: |
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  down: |
+    DROP VIEW public.v_users;
+
+ManageOwnerSurvivesViewRecreate:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  up: |
+    DROP VIEW public.v_users;
+    CREATE VIEW public.v_users AS select id from users;
+    ALTER TABLE v_users OWNER TO app_user;
+  down: |
+    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+
+ManageOwnerOnPartitionedTable:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE logs (
+      id BIGINT NOT NULL,
+      created_at DATE NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024 PARTITION OF logs FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+  desired: |
+    CREATE TABLE logs (
+      id BIGINT NOT NULL,
+      created_at DATE NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024 PARTITION OF logs FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+    ALTER TABLE logs OWNER TO app_user;
+  up: |
+    ALTER TABLE logs OWNER TO app_user;
+  down: ""
+
+ManageOwnerOnQuotedMixedCaseTable:
+  legacy_ignore_quotes: false
+  manage:
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE "MixedCase" (
+      id BIGINT PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE "MixedCase" (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE "MixedCase" OWNER TO app_user;
+  up: |
+    ALTER TABLE "MixedCase" OWNER TO app_user;
   down: ""
