@@ -2329,6 +2329,16 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stri
 		}
 		return ddls, nil
 	}
+	if currentPartition := g.findPartitionOfByName(g.currentPartitionOfs, desired.tableName); currentPartition != nil {
+		if g.findPartitionOfByName(g.desiredPartitionOfs, desired.tableName) == nil {
+			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
+		}
+		if currentPartition.owner != desired.owner {
+			ddls = append(ddls, desired.statement)
+			currentPartition.owner = desired.owner
+		}
+		return ddls, nil
+	}
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
@@ -4414,6 +4424,8 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				table.owner = stmt.owner
 			} else if view := findViewQuoteAware(aggregated.Views, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); view != nil {
 				view.owner = stmt.owner
+			} else if partitionOf := findPartitionOfQuoteAware(aggregated.PartitionOfs, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); partitionOf != nil {
+				partitionOf.owner = stmt.owner
 			} else {
 				return nil, fmt.Errorf("ALTER TABLE ... OWNER TO performed before CREATE TABLE: %s", ddl.Statement())
 			}
@@ -4784,6 +4796,18 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedName) *Table 
 	for _, table := range tables {
 		if g.qualifiedNamesEqual(table.name, name) {
 			return table
+		}
+	}
+	return nil
+}
+
+// findPartitionOfQuoteAware finds a partition child using quote-aware comparison without
+// requiring a Generator.
+func findPartitionOfQuoteAware(partitionOfs []*CreatePartitionOf, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) *CreatePartitionOf {
+	target := normalizeNameKey(name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+	for _, partitionOf := range partitionOfs {
+		if normalizeNameKey(partitionOf.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) == target {
+			return partitionOf
 		}
 	}
 	return nil

@@ -273,8 +273,10 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 	// views(): an owner exported for an object those skip has no CREATE to attach to, and the
 	// generator aborts with "ALTER TABLE ... OWNER TO performed before CREATE TABLE".
 	relkinds := "'r', 'p', 'v', 'm'"
+	partitions := "" // partitionChildTables() exports the CREATE these owners attach to
 	if d.config.SkipPartition {
 		relkinds = "'r', 'v', 'm'"
+		partitions = "AND c.relispartition = false"
 	}
 	query := fmt.Sprintf(`
 		SELECT
@@ -286,13 +288,13 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 		WHERE c.relkind IN (%s)
 		AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'sys')
 		AND c.relpersistence IN ('p', 'u')
-		AND c.relispartition = false
+		%s
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_depend dep
 			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
 		)
 		ORDER BY n.nspname, c.relname
-	`, relkinds)
+	`, relkinds, partitions)
 
 	rows, err := d.db.Query(query)
 	if err != nil {

@@ -149,7 +149,10 @@ func TestParseGeneratorConfigManageOwner(t *testing.T) {
 	assert.True(t, config.ManagesOwners())
 	assert.True(t, config.ManagesOwnerRole("anyone"))
 
-	config = ParseGeneratorConfigString("", GeneratorConfig{})
+	// A real config file with neither key: parseGeneratorConfigFromBytes has to leave ManageOwners
+	// nil, which an empty string would never reach.
+	config = ParseGeneratorConfigString("enable_drop: true", GeneratorConfig{})
+	assert.Nil(t, config.ManageOwners)
 	assert.False(t, config.ManagesOwners())
 
 	// manage.privilege supersedes managed_roles, so the ride-along stops with it.

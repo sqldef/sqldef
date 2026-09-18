@@ -189,6 +189,7 @@ type CreatePartitionOf struct {
 	tableName   QualifiedName
 	parentTable QualifiedName
 	boundSpec   PartitionBound
+	owner       string // PostgreSQL owner role ("" = not tracked/declared)
 }
 
 // PartitionBound represents the partition bound specification

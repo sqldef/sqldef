@@ -607,7 +607,7 @@ When `manage.privilege` is set, the deprecated `managed_roles` option is ignored
 
 ### Managing Object Ownership
 
-`manage.owner` declares which owner roles psqldef manages, so that `ALTER TABLE ... OWNER TO` in the desired schema converges the owner of a table, partitioned table, view or materialized view:
+`manage.owner` declares which owner roles psqldef manages, so that `ALTER TABLE ... OWNER TO` in the desired schema converges the owner of a table, partitioned table, partition child, view or materialized view:
 
 ```yaml
 manage:
