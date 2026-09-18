@@ -274,7 +274,7 @@ ManageOwnerSurvivesViewRecreate:
   up: |
     DROP VIEW public.v_users;
     CREATE VIEW public.v_users AS select id from users;
-    ALTER TABLE v_users OWNER TO app_user;
+    ALTER VIEW public.v_users OWNER TO "app_user";
   down: |
     CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
 
@@ -358,3 +358,27 @@ ManageOwnerInLegacyQuoteMode:
   up: |
     ALTER TABLE users OWNER TO app_user;
   down: ""
+
+ManageOwnerUndeclaredSurvivesViewRecreate:
+  legacy_ignore_quotes: false
+  manage:
+    owner: []
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+  up: |
+    DROP VIEW public.v_users;
+    CREATE VIEW public.v_users AS select id from users;
+    ALTER VIEW public.v_users OWNER TO "app_user";
+  down: |
+    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;

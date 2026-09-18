@@ -615,9 +615,9 @@ manage:
     - target: 'app_.*'
 ```
 
-Rules are evaluated in order; the first match wins. `target` is a regular expression matched against the owner role name, anchored with `^...$` (empty matches all). `drop` has no meaning for ownership and is ignored with a warning.
+Rules are evaluated in order; the first match wins. `target` is a regular expression matched against the owner role name, anchored with `^...$` (empty matches all). An unquoted role name is folded to lower case, as PostgreSQL stores it. `drop` has no meaning for ownership and is ignored with a warning.
 
-Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has, whoever that is.
+Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has, whoever that is. A view that has to be dropped and recreated would come back owned by the connecting role, so psqldef restores its previous owner as part of the recreation.
 
 A role matching no rule is out of scope in both directions: an `OWNER TO` declaration naming it is ignored, and `--export` omits the `OWNER TO` line for objects it owns. Note that this does not make those objects untouchable — an object currently owned by an out-of-scope role has no exported owner to compare against, so a declaration naming an in-scope role still takes ownership away from it.
 

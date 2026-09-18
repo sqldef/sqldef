@@ -2436,17 +2436,16 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 				)
 				// Recreate dependent views
 				recreateDDLs = append(recreateDDLs, dependentViewDDLs...)
-				var recreated bool
-				ddls, recreated = g.appendRecreate(ddls, recreateDDLs...)
-				if recreated {
-					// A recreated view comes back owned by the connecting role. Forgetting the
-					// owner here is what makes generateDDLsForSetTableOwner, which runs after all
-					// of viewDDLs, declare it again.
-					currentView.owner = ""
-					for _, depView := range dependentViews {
-						depView.owner = ""
+				for _, recreatedView := range append([]*View{currentView}, dependentViews...) {
+					ownerDDL, err := g.restoreViewOwnerDDL(recreatedView)
+					if err != nil {
+						return nil, err
+					}
+					if ownerDDL != "" {
+						recreateDDLs = append(recreateDDLs, ownerDDL)
 					}
 				}
+				ddls, _ = g.appendRecreate(ddls, recreateDDLs...)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
@@ -4092,6 +4091,21 @@ func (g *Generator) escapeColumnName(column *Column) string {
 }
 
 // escapeViewName escapes a view name using quote-aware logic.
+// restoreViewOwnerDDL gives a view that is about to be dropped and created again its owner back.
+// The recreated view belongs to the connecting role, which would silently reassign an object the
+// desired schema may say nothing about. A declaration that wants a different owner converges on
+// top of this, in generateDDLsForSetTableOwner.
+func (g *Generator) restoreViewOwnerDDL(view *View) (string, error) {
+	if view == nil || view.owner == "" {
+		return "", nil
+	}
+	owner, err := g.validateAndEscapeGrantee(view.owner)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("ALTER %s %s OWNER TO %s", view.viewType, g.escapeViewName(view), owner), nil
+}
+
 func (g *Generator) escapeViewName(view *View) string {
 	return g.escapeQualifiedName(view.name)
 }
