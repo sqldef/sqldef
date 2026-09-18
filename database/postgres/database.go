@@ -269,21 +269,30 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 		return nil, nil
 	}
 
-	const query = `
+	// The relkind, relpersistence and relispartition filters have to agree with tableNames() and
+	// views(): an owner exported for an object those skip has no CREATE to attach to, and the
+	// generator aborts with "ALTER TABLE ... OWNER TO performed before CREATE TABLE".
+	relkinds := "'r', 'p', 'v', 'm'"
+	if d.config.SkipPartition {
+		relkinds = "'r', 'v', 'm'"
+	}
+	query := fmt.Sprintf(`
 		SELECT
 			n.nspname AS schema_name,
-			n.nspname || '.' || c.relname AS obj_name,
+			c.relname AS relation_name,
 			pg_get_userbyid(c.relowner) AS owner
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind IN ('r', 'p', 'v', 'm')
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		WHERE c.relkind IN (%s)
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'sys')
+		AND c.relpersistence IN ('p', 'u')
+		AND c.relispartition = false
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_depend dep
 			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
 		)
-		ORDER BY obj_name
-	`
+		ORDER BY n.nspname, c.relname
+	`, relkinds)
 
 	rows, err := d.db.Query(query)
 	if err != nil {
@@ -293,8 +302,8 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var schemaName, objName, owner string
-		if err := rows.Scan(&schemaName, &objName, &owner); err != nil {
+		var schemaName, relationName, owner string
+		if err := rows.Scan(&schemaName, &relationName, &owner); err != nil {
 			return nil, fmt.Errorf("failed to scan object owner row: %w", err)
 		}
 		// Apply the same TargetSchema filter as the other export helpers
@@ -310,6 +319,7 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 		if !d.generatorConfig.ManagesOwnerRole(owner) {
 			continue
 		}
+		objName := fmt.Sprintf("%s.%s", d.quoteIdentifierIfNeeded(schemaName), d.quoteIdentifierIfNeeded(relationName))
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s OWNER TO %s;", objName, d.quoteIdentifierIfNeeded(owner)))
 	}
 
