@@ -2268,6 +2268,43 @@ alter_statement:
       OwnerRole: $8,
     }
   }
+| ALTER ignore_opt TABLE IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      IfExists: true,
+      Table: $6,
+      OwnerRole: $9,
+    }
+  }
+| ALTER ignore_opt VIEW table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      Table: $4,
+      OwnerRole: $7,
+    }
+  }
+| ALTER ignore_opt MATERIALIZED VIEW table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      Table: $5,
+      OwnerRole: $8,
+    }
+  }
+| ALTER ignore_opt TABLE IF EXISTS ONLY table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $7, OwnerRole: $10}
+  }
+| ALTER ignore_opt VIEW IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $6, OwnerRole: $9}
+  }
+| ALTER ignore_opt MATERIALIZED VIEW IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $7, OwnerRole: $10}
+  }
 | ALTER ignore_opt TABLE table_name ENABLE ROW LEVEL SECURITY
   {
     $$ = &DDL{

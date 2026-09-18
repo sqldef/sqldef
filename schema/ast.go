@@ -160,6 +160,7 @@ type SetRowLevelSecurity struct {
 // SetTableOwner represents PostgreSQL ALTER TABLE ... OWNER TO (tables and,
 // via the same syntax, views/materialized views).
 type SetTableOwner struct {
+	ifExists  bool
 	statement string
 	tableName QualifiedName
 	owner     string
@@ -189,6 +190,7 @@ type CreatePartitionOf struct {
 	tableName   QualifiedName
 	parentTable QualifiedName
 	boundSpec   PartitionBound
+	owner       string // PostgreSQL owner role ("" = not tracked/declared)
 }
 
 // PartitionBound represents the partition bound specification

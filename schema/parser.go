@@ -172,9 +172,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.SetTableOwner {
 			return &SetTableOwner{
+				ifExists:  stmt.IfExists,
 				statement: ddl,
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
-				owner:     stmt.OwnerRole.Name,
+				owner:     foldUnquotedRole(stmt.OwnerRole),
 			}, nil
 		} else if stmt.Action == parser.EnableRowLevelSecurity || stmt.Action == parser.DisableRowLevelSecurity ||
 			stmt.Action == parser.ForceRowLevelSecurity || stmt.Action == parser.NoForceRowLevelSecurity {
@@ -1808,4 +1809,13 @@ func normalizeGrantObjectType(objectType string) string {
 		return "TABLE"
 	}
 	return objectType
+}
+
+// foldUnquotedRole returns the role name as PostgreSQL stores it, so that a declared owner
+// compares equal to the pg_get_userbyid name --export reports.
+func foldUnquotedRole(role parser.Ident) string {
+	if role.Quoted {
+		return role.Name
+	}
+	return strings.ToLower(role.Name)
 }

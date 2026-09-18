@@ -1397,3 +1397,122 @@ func TestAutoIndexName(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterObjectsOwnerStatements(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint);
+		CREATE VIEW v_users AS SELECT id FROM users;
+		ALTER TABLE users OWNER TO app_user;
+		ALTER TABLE v_users OWNER TO app_user;
+	`
+	parse := func(t *testing.T) []DDL {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ddls
+	}
+	owners := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			if stmt, ok := ddl.(*SetTableOwner); ok {
+				names = append(names, stmt.tableName.RawString())
+			}
+		}
+		return names
+	}
+
+	// target_tables is about tables and does not filter views, so neither owner goes away.
+	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}})
+	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
+
+	// skip_views is about views, so a regexp that happens to match a table name must not reach
+	// the table's owner.
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}})
+	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
+
+	// The owner of a filtered object goes with it.
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}})
+	assert.Equal(t, []string{"public.v_users"}, owners(filtered))
+
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}})
+	assert.Equal(t, []string{"public.users"}, owners(filtered))
+}
+
+func TestDependentViewOwnerManagementDisabled(t *testing.T) {
+	current := `
+		CREATE TABLE users (id bigint, name text);
+		CREATE VIEW v_base AS SELECT id, name FROM users;
+		CREATE VIEW v_dep AS SELECT id FROM v_base;
+	`
+	desired := `
+		CREATE TABLE users (id bigint, name text);
+		CREATE VIEW v_base AS SELECT id FROM users;
+		CREATE VIEW v_dep AS SELECT id FROM v_base;
+		ALTER VIEW v_dep OWNER TO outside_role;
+	`
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), desired, current,
+		database.GeneratorConfig{EnableDrop: true}, "public")
+	assert.NoError(t, err)
+	for _, ddl := range ddls {
+		assert.NotContains(t, ddl, "OWNER TO")
+	}
+}
+
+func TestFilterObjectsOwnerIdentity(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		sql    string
+		config database.GeneratorConfig
+	}{
+		{"legacy case folding", `CREATE TABLE "Users" (id bigint); ALTER TABLE users OWNER TO app_user;`, database.GeneratorConfig{LegacyIgnoreQuotes: true, SkipTables: []string{`public\.Users`}}},
+		{"quoted identifiers", `CREATE TABLE "public"."users" (id bigint); ALTER TABLE users OWNER TO app_user;`, database.GeneratorConfig{SkipTables: []string{`public\.users`}}},
+		{"partition child", `CREATE TABLE logs_2024 PARTITION OF logs FOR VALUES FROM (1) TO (2); ALTER TABLE logs_2024 OWNER TO app_user;`, database.GeneratorConfig{SkipTables: []string{`public\.logs_2024`}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), test.sql, "public")
+			assert.NoError(t, err)
+			assert.Empty(t, FilterObjects(ddls, test.config))
+		})
+	}
+}
+
+func TestRecreatedViewOwnerEscaping(t *testing.T) {
+	rules := []database.ManageObjectRule{}
+	current := `
+		CREATE VIEW v AS SELECT 1 AS id, 2 AS extra;
+		ALTER VIEW v OWNER TO "role;with""quote";
+	`
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+		`CREATE VIEW v AS SELECT 1 AS id;`, current,
+		database.GeneratorConfig{EnableDrop: true, ManagePrivileges: &rules}, "public")
+	assert.NoError(t, err)
+	assert.Contains(t, ddls, `ALTER VIEW public.v OWNER TO "role;with""quote"`)
+}
+
+func TestUnmanagedOwnerWithoutObject(t *testing.T) {
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+		`ALTER TABLE absent OWNER TO outside_role;`, "", database.GeneratorConfig{}, "public")
+	assert.NoError(t, err)
+	assert.Empty(t, ddls)
+}
+
+func TestHeldBackViewRecreationKeepsIndexState(t *testing.T) {
+	current := `
+		CREATE VIEW v AS SELECT 1 AS id, 2 AS extra;
+		CREATE MATERIALIZED VIEW mv AS SELECT id FROM v;
+		CREATE UNIQUE INDEX mv_id ON mv (id);
+	`
+	desired := `
+		CREATE VIEW v AS SELECT 1 AS id;
+		CREATE MATERIALIZED VIEW mv AS SELECT id FROM v;
+		CREATE UNIQUE INDEX mv_id ON mv (id);
+	`
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+		desired, current, database.GeneratorConfig{EnableDrop: false}, "public")
+	assert.NoError(t, err)
+	for _, ddl := range ddls {
+		assert.Contains(t, ddl, "-- Skipped:")
+	}
+}
