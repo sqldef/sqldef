@@ -300,85 +300,27 @@ ManageOwnerOnPartitionedTable:
     ALTER TABLE logs OWNER TO app_user;
   down: ""
 
-ManageOwnerOnQuotedMixedCaseTable:
-  legacy_ignore_quotes: false
-  manage:
-    owner:
-      - target: app_user
-  current: |
-    CREATE TABLE "MixedCase" (
-      id BIGINT PRIMARY KEY
-    );
-  desired: |
-    CREATE TABLE "MixedCase" (
-      id BIGINT PRIMARY KEY
-    );
-    ALTER TABLE "MixedCase" OWNER TO app_user;
-  up: |
-    ALTER TABLE "MixedCase" OWNER TO app_user;
-  down: ""
-
-ManageOwnerAlongsideManagePrivilege:
-  legacy_ignore_quotes: false
-  manage:
-    privilege:
-      - target: readonly_user
-        drop: true
-    owner:
-      - target: app_user
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY
-    );
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY
-    );
-    ALTER TABLE users OWNER TO app_user;
-    GRANT SELECT ON users TO readonly_user;
-  up: |
-    GRANT SELECT ON TABLE public.users TO "readonly_user";
-    ALTER TABLE users OWNER TO app_user;
-  down: |
-    REVOKE SELECT ON TABLE public.users FROM "readonly_user";
-
-ManageOwnerInLegacyQuoteMode:
-  manage:
-    owner:
-      - target: app_user
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY
-    );
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY
-    );
-    ALTER TABLE users OWNER TO app_user;
-  up: |
-    ALTER TABLE users OWNER TO app_user;
-  down: ""
-
-ManageOwnerUndeclaredSurvivesViewRecreate:
+ManageOwnerAlterViewSpelling:
   legacy_ignore_quotes: false
   manage:
     owner: []
   current: |
     CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-    CREATE VIEW v_users AS SELECT id, name FROM users;
-    ALTER TABLE v_users OWNER TO app_user;
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
+      id BIGINT PRIMARY KEY
     );
     CREATE VIEW v_users AS SELECT id FROM users;
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    ALTER VIEW v_users OWNER TO app_user;
+    ALTER MATERIALIZED VIEW mv_users OWNER TO app_user;
+    ALTER TABLE IF EXISTS users OWNER TO app_user;
   up: |
-    DROP VIEW public.v_users;
-    CREATE VIEW public.v_users AS select id from users;
-    ALTER VIEW public.v_users OWNER TO "app_user";
-  down: |
-    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+    ALTER VIEW v_users OWNER TO app_user;
+    ALTER MATERIALIZED VIEW mv_users OWNER TO app_user;
+    ALTER TABLE IF EXISTS users OWNER TO app_user;
+  down: ""

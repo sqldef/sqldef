@@ -317,8 +317,9 @@ Behavior:
 - `--export` emits `ALTER TABLE ... OWNER TO` only for owners in scope. That omits the owner
   line, not the object: a declaration naming an in-scope role can still take ownership away from
   an out-of-scope one
-- Covers tables, partitioned tables, views and materialized views. Ownership of sequences,
-  functions, types, domains and schemas is not managed
+- Covers tables, partitioned tables, partition children, views and materialized views, spelled
+  `ALTER TABLE`, `ALTER VIEW` or `ALTER MATERIALIZED VIEW`. Ownership of sequences, functions,
+  types, domains and schemas is not managed
 
 Ownership used to be managed as a side effect of `managed_roles`, because that was the only mode
 in which `--export` emitted owners. That fallback survives for as long as `managed_roles` does:
