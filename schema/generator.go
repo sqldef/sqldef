@@ -7080,13 +7080,17 @@ func containsRegexpString(strs []string, str string) bool {
 }
 
 func FilterExtensions(ddls []DDL, config database.GeneratorConfig) []DDL {
-	if config.ManageExtensions == nil {
+	if !config.SkipExtension && config.ManageExtensions == nil {
 		return ddls
 	}
 
 	filtered := []DDL{}
 	for _, ddl := range ddls {
 		if stmt, ok := ddl.(*Extension); ok {
+			if config.SkipExtension {
+				slog.Debug("--skip-extension is enabled; excluding extension from management", "extension", stmt.extension.Name.Name)
+				continue
+			}
 			name := stmt.extension.Name.Name
 			if _, matched := matchManageObjectRule(*config.ManageExtensions, name); !matched {
 				slog.Debug("extension matches no manage.extension rule; excluding it from management", "extension", name)

@@ -361,13 +361,13 @@ When a managed object references an object in an unmanaged schema (e.g., a forei
 | `skip_views` | Use allow-list instead |
 | `target_schema` | Use `default_schema` or `schema` field |
 | `--skip-view` | Omit `view` from `manage` |
-| `--skip-extension` | Omit `extension` from `manage` |
+| `--skip-extension` | Use `manage.extension` for selective management; the flag remains an absolute opt-out |
 | `--skip-partition` | Set `partition: false` on table entries |
 | `managed_roles` | `manage.privilege[].target` |
 
 Transition:
 1. Both old and new options work
-2. If `manage:` is specified, deprecated options are ignored
+2. If `manage:` is specified, deprecated options are ignored, except that `--skip-extension` takes precedence over `manage.extension`
 3. Emit deprecation warnings when mixing old and new options
 
 ## Configuration Generation
