@@ -317,3 +317,44 @@ ManageOwnerOnQuotedMixedCaseTable:
   up: |
     ALTER TABLE "MixedCase" OWNER TO app_user;
   down: ""
+
+ManageOwnerAlongsideManagePrivilege:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: readonly_user
+        drop: true
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+    GRANT SELECT ON users TO readonly_user;
+  up: |
+    GRANT SELECT ON TABLE public.users TO "readonly_user";
+    ALTER TABLE users OWNER TO app_user;
+  down: |
+    REVOKE SELECT ON TABLE public.users FROM "readonly_user";
+
+ManageOwnerInLegacyQuoteMode:
+  manage:
+    owner:
+      - target: app_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: |
+    ALTER TABLE users OWNER TO app_user;
+  down: ""

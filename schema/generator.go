@@ -2310,26 +2310,24 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stri
 		return nil, nil
 	}
 
+	// The desired owner is already on the desired table or view: aggregateDDLsToSchema folds
+	// every SetTableOwner in before the diff runs. Only the current side has to be updated, so
+	// that a second declaration for the same object does not emit the ALTER again.
 	var ddls []string
 	if currentTable := g.findTableByName(g.currentTables, desired.tableName); currentTable != nil {
-		desiredTable := g.findTableByName(g.desiredTables, desired.tableName)
-		if desiredTable == nil {
+		if g.findTableByName(g.desiredTables, desired.tableName) == nil {
 			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 		}
 		if currentTable.owner != desired.owner {
 			ddls = append(ddls, desired.statement)
 			currentTable.owner = desired.owner
 		}
-		desiredTable.owner = desired.owner
 		return ddls, nil
 	}
 	if currentView := findViewQuoteAware(g.currentViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); currentView != nil {
 		if currentView.owner != desired.owner {
 			ddls = append(ddls, desired.statement)
 			currentView.owner = desired.owner
-		}
-		if desiredView := findViewQuoteAware(g.desiredViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); desiredView != nil {
-			desiredView.owner = desired.owner
 		}
 		return ddls, nil
 	}
