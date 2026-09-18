@@ -204,6 +204,7 @@ Some can also be used in the input schema.sql file.
 - Extensions: CREATE EXTENSION, CREATE EXTENSION IF NOT EXISTS, DROP EXTENSION
 - Types: CREATE TYPE, ENUM, ALTER TYPE ADD VALUE
 - Privileges: GRANT, REVOKE (with managed_roles configuration)
+- Object ownership: ALTER TABLE ... OWNER TO (with manage.owner configuration)
 
 ## Example
 ### CREATE TABLE
@@ -547,6 +548,7 @@ $ psqldef -U postgres dbname --apply \
 | `manage.extension` | array | List of `{target, drop}` rules for which extensions to manage; see [Managing Extensions](#managing-extensions). |
 | `manage.function` | array | List of `{target, drop}` rules for which functions to manage; see [Managing Functions](#managing-functions). |
 | `manage.privilege` | array | List of `{target, drop}` rules for which grantees' privileges to manage; see [Managing Privileges](#managing-privileges). |
+| `manage.owner` | array | List of `{target}` rules for which owner roles to manage; see [Managing Object Ownership](#managing-object-ownership). |
 
 ### Managing Extensions
 
@@ -565,7 +567,7 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 If `manage.extension` is omitted, all extensions are managed as before. An empty `manage.extension:` section manages all extensions but disables drop for all of them by default.
 
-`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension`, `manage.function` and `manage.privilege`, other `manage:` keys are not implemented yet and are ignored with a warning.
+`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension`, `manage.function`, `manage.privilege` and `manage.owner`, other `manage:` keys are not implemented yet and are ignored with a warning.
 
 ### Managing Functions
 
@@ -602,6 +604,33 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 `drop` (default `false`) controls whether REVOKE statements are emitted for that grantee — for privileges that drifted or were removed from the desired schema, and for `REVOKE GRANT OPTION FOR` downgrades. Unlike the legacy behavior where REVOKE was tied to the global `enable_drop`, the rule's `drop` decides alone: a role with `drop: true` converges even when `enable_drop` is `false` (destructive object drops stay blocked), and a role with `drop: false` only ever gains privileges, with skipped revokes shown as `-- Skipped: ...`.
 
 When `manage.privilege` is set, the deprecated `managed_roles` option is ignored (a warning is logged if both are present). An empty `manage.privilege:` section manages all grantees with REVOKE disabled by default.
+
+### Managing Object Ownership
+
+`manage.owner` declares which owner roles psqldef manages, so that `ALTER TABLE ... OWNER TO` in the desired schema converges the owner of a table, partitioned table, view or materialized view:
+
+```yaml
+manage:
+  owner:
+    - target: 'app_.*'
+```
+
+Rules are evaluated in order; the first match wins. `target` is a regular expression matched against the owner role name, anchored with `^...$` (empty matches all). `drop` has no meaning for ownership and is ignored with a warning.
+
+Ownership is declare-to-manage: an object without an `OWNER TO` declaration in the desired schema keeps whatever owner it has. Roles matching no rule are left completely untouched: `OWNER TO` declarations naming them are ignored, and objects they own are excluded from `--export` so they never enter the diff.
+
+Ownership of sequences, functions, types, domains and schemas is not managed.
+
+`managed_roles` also turns ownership on, for every role, because it used to be the only mode in which `--export` emitted owners. That stays true for a config with no `manage:` block at all. Once a `manage:` block is present, the allow-list model applies and ownership is managed only when `owner:` is listed:
+
+| Configuration | Ownership |
+|---------------|-----------|
+| neither `managed_roles` nor `manage:` | not managed |
+| `managed_roles`, no `manage:` block | managed, for every role |
+| `manage:` block without `owner:` | not managed |
+| `manage:` block with `owner:` | managed, restricted by `target` |
+
+Migrating from `managed_roles` to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership managed.
 
 ## Identifier Quoting
 

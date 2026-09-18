@@ -83,6 +83,9 @@ manage:
     - target: 'readonly_.*'
     - target: 'temp_.*'
       drop: true  # allows REVOKE
+
+  owner:
+    - target: 'app_.*'
 ```
 
 ### MySQL/SQLite Example
@@ -267,6 +270,7 @@ Note: These settings control explicit destructive operations only. Implicit drop
 | `policy` | ✓ | - | - | - |
 | `extension` | ✓ | - | - | - |
 | `privilege` | ✓ | ✓ | ✓ | - |
+| `owner` | ✓ | - | - | - |
 
 Using an unsupported object type emits a warning and is ignored.
 
@@ -292,6 +296,39 @@ Behavior:
 - `drop: true`: both GRANT and REVOKE operations
 - Privileges are managed only on objects listed in other `manage:` sections
 - Roles are cluster-global in PostgreSQL; sqldef manages privileges per-database
+
+## Owner Management
+
+The `owner:` section (psqldef only) controls whether object ownership is diffed at all, and which
+owner roles are in scope.
+
+```yaml
+manage:
+  owner:
+    - target: 'app_.*'
+```
+
+Behavior:
+- `target` matches owner role names (regexp pattern). An empty section manages every role
+- `drop` has no meaning for ownership and is ignored with a warning
+- Ownership is declare-to-manage: an object with no `ALTER TABLE ... OWNER TO` in the desired
+  schema is left alone whoever owns it
+- `--export` emits `ALTER TABLE ... OWNER TO` only for owners in scope, so an object held by an
+  unmatched role never enters the diff
+- Covers tables, partitioned tables, views and materialized views. Ownership of sequences,
+  functions, types, domains and schemas is not managed
+
+Ownership used to be managed as a side effect of `managed_roles`, because that was the only mode
+in which `--export` emitted owners. That is still true for a config with no `manage:` block. Once
+a `manage:` block is present, the allow-list model applies and ownership is managed only when
+`owner:` is listed:
+
+| Configuration | Ownership |
+|---------------|-----------|
+| neither `managed_roles` nor `manage:` | not managed |
+| `managed_roles`, no `manage:` block | managed, for every role |
+| `manage:` block without `owner:` | not managed |
+| `manage:` block with `owner:` | managed, restricted by `target` |
 
 ## Schema Management
 
@@ -364,6 +401,10 @@ When a managed object references an object in an unmanaged schema (e.g., a forei
 | `--skip-extension` | Omit `extension` from `manage` |
 | `--skip-partition` | Set `partition: false` on table entries |
 | `managed_roles` | `manage.privilege[].target` |
+
+Note that `managed_roles` also implies owner management, while `manage.privilege` does not.
+Migrating to `manage.privilege` therefore needs `manage.owner` alongside it to keep ownership
+managed.
 
 Transition:
 1. Both old and new options work
