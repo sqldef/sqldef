@@ -1397,3 +1397,45 @@ func TestAutoIndexName(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterObjectsOwnerStatements(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint);
+		CREATE VIEW v_users AS SELECT id FROM users;
+		ALTER TABLE users OWNER TO app_user;
+		ALTER TABLE v_users OWNER TO app_user;
+	`
+	parse := func(t *testing.T) []DDL {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ddls
+	}
+	owners := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			if stmt, ok := ddl.(*SetTableOwner); ok {
+				names = append(names, stmt.tableName.RawString())
+			}
+		}
+		return names
+	}
+
+	// target_tables is about tables and does not filter views, so neither owner goes away.
+	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}})
+	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
+
+	// skip_views is about views, so a regexp that happens to match a table name must not reach
+	// the table's owner.
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}})
+	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
+
+	// The owner of a filtered object goes with it.
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}})
+	assert.Equal(t, []string{"public.v_users"}, owners(filtered))
+
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}})
+	assert.Equal(t, []string{"public.users"}, owners(filtered))
+}

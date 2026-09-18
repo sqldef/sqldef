@@ -146,8 +146,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	desiredDDLs = FilterTables(desiredDDLs, config)
-	desiredDDLs = FilterViews(desiredDDLs, config)
+	desiredDDLs = FilterObjects(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 	desiredDDLs = FilterExtensions(desiredDDLs, config)
 	desiredDDLs = FilterFunctions(desiredDDLs, config, defaultSchema)
@@ -158,8 +157,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	currentDDLs = FilterTables(currentDDLs, config)
-	currentDDLs = FilterViews(currentDDLs, config)
+	currentDDLs = FilterObjects(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 	currentDDLs = FilterExtensions(currentDDLs, config)
 	currentDDLs = FilterFunctions(currentDDLs, config, defaultSchema)
@@ -6894,6 +6892,49 @@ func generateSridDefinition(sridVal Value) (string, error) {
 	}
 }
 
+// FilterObjects applies the table and view filters, then drops the ALTER ... OWNER TO statements
+// left behind by whatever they removed. The owner statements cannot go through the filters
+// themselves: they name a table or a view and, running before aggregation, the filters cannot
+// tell which, so each would be judged by both target_tables and skip_views.
+func FilterObjects(ddls []DDL, config database.GeneratorConfig) []DDL {
+	filtered := FilterViews(FilterTables(ddls, config), config)
+
+	dropped := createdObjectNames(ddls)
+	for name := range createdObjectNames(filtered) {
+		delete(dropped, name)
+	}
+	if len(dropped) == 0 {
+		return filtered
+	}
+
+	result := make([]DDL, 0, len(filtered))
+	for _, ddl := range filtered {
+		// An owner statement whose object was never created stays, so that aggregation still
+		// reports it as performed before CREATE TABLE.
+		if stmt, ok := ddl.(*SetTableOwner); ok && dropped[stmt.tableName.RawString()] {
+			continue
+		}
+		result = append(result, ddl)
+	}
+	return result
+}
+
+// createdObjectNames collects the names of the tables and views that the DDLs create.
+func createdObjectNames(ddls []DDL) map[string]bool {
+	names := map[string]bool{}
+	for _, ddl := range ddls {
+		switch stmt := ddl.(type) {
+		case *CreateTable:
+			names[stmt.table.name.RawString()] = true
+		case *CreatePartitionOf:
+			names[stmt.tableName.RawString()] = true
+		case *View:
+			names[stmt.name.RawString()] = true
+		}
+	}
+	return names
+}
+
 func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 	filtered := []DDL{}
 
@@ -6906,8 +6947,6 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *CreateIndex:
 			tables = append(tables, stmt.tableName.RawString())
 		case *AddPrimaryKey:
-			tables = append(tables, stmt.tableName.RawString())
-		case *SetTableOwner:
 			tables = append(tables, stmt.tableName.RawString())
 		case *AddForeignKey:
 			tables = append(tables, stmt.tableName.RawString())
@@ -6954,8 +6993,6 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 			views = append(views, stmt.tableName.RawString())
 		case *View:
 			views = append(views, stmt.name.RawString())
-		case *SetTableOwner:
-			views = append(views, stmt.tableName.RawString())
 		}
 
 		if skipViews(views, config) {
