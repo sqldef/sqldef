@@ -4241,7 +4241,11 @@ default_value_expression:
   }
 | '(' default_value_expression ')'
   {
-    $$ = $2
+    // Preserve the parentheses instead of collapsing them away: MySQL requires
+    // the explicit DEFAULT (expr) form for BLOB/TEXT/JSON/GEOMETRY columns, even
+    // when expr is a plain literal, so losing this wrapper here would make it
+    // impossible for the generator to tell DEFAULT 'foo' and DEFAULT ('foo') apart.
+    $$ = &ParenExpr{Expr: $2}
   }
 | default_value_expression AT TIME ZONE default_value_expression %prec AT
   {
