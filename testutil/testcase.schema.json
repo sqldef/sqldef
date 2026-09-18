@@ -65,7 +65,7 @@
         },
         "manage": {
           "type": "object",
-          "description": "manage: config block (see object-management.md). Only manage.extension, manage.function and manage.privilege are implemented.",
+          "description": "manage: config block (see object-management.md). Only manage.extension, manage.function, manage.privilege and manage.owner are implemented.",
           "properties": {
             "extension": {
               "type": "array",
@@ -119,6 +119,20 @@
                     "type": "boolean",
                     "description": "Whether REVOKE is allowed for grantees matched by this rule (independent of enable_drop).",
                     "default": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "owner": {
+              "type": "array",
+              "description": "Rules for which owner roles to manage. Ownership is diffed only for roles matching a rule's target; objects owned by an unmatched role are left untouched. An empty array manages all owner roles. Omitting this key while any other manage key is present leaves ownership unmanaged.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "description": "Regexp pattern matched against the owner role name, anchored with ^...$. Empty matches all."
                   }
                 },
                 "additionalProperties": false

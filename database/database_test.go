@@ -141,3 +141,32 @@ func TestParseGeneratorConfigManageFunction(t *testing.T) {
 	assert.NotNil(t, config.ManageFunctions)
 	assert.NotNil(t, config.ManagePrivileges)
 }
+
+func TestParseGeneratorConfigManageOwner(t *testing.T) {
+	// No manage: section → ownership follows managed_roles, as it did before manage.owner.
+	config := ParseGeneratorConfigString("managed_roles: [app_user]", GeneratorConfig{})
+	assert.Nil(t, config.ManageOwners)
+	assert.True(t, config.ManagesOwners())
+	assert.True(t, config.ManagesOwnerRole("anyone"))
+
+	config = ParseGeneratorConfigString("", GeneratorConfig{})
+	assert.False(t, config.ManagesOwners())
+
+	// A manage: block without owner: switches the allow-list model on, so managed_roles no
+	// longer drags ownership in.
+	config = ParseGeneratorConfigString("managed_roles: [app_user]\nmanage: {privilege: [{target: app_user}]}", GeneratorConfig{})
+	assert.False(t, config.ManagesOwners())
+	assert.False(t, config.ManagesOwnerRole("app_user"))
+
+	// An empty owner section manages every role.
+	config = ParseGeneratorConfigString("manage: {owner: []}", GeneratorConfig{})
+	if assert.NotNil(t, config.ManageOwners) {
+		assert.Equal(t, 0, len(*config.ManageOwners))
+	}
+	assert.True(t, config.ManagesOwnerRole("anyone"))
+
+	// Targets restrict which owner roles are in scope.
+	config = ParseGeneratorConfigString("manage: {owner: [{target: 'app_.*'}]}", GeneratorConfig{})
+	assert.True(t, config.ManagesOwnerRole("app_user"))
+	assert.False(t, config.ManagesOwnerRole("postgres"))
+}

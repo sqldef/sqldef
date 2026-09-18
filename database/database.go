@@ -69,6 +69,8 @@ type GeneratorConfig struct {
 	ManageExtensions *[]ManageObjectRule
 	ManagePrivileges *[]ManageObjectRule // manage.privilege rules: which grantees' privileges are managed and whether REVOKE is allowed
 	ManageFunctions  *[]ManageObjectRule // manage.function rules: which functions are managed and whether DROP is allowed
+	ManageOwners     *[]ManageObjectRule // manage.owner rules: which owner roles are managed
+	ManageSpecified  bool                // Whether a manage: block was given at all, which switches the allow-list model on
 
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
@@ -431,6 +433,12 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManagePrivileges != nil {
 		result.ManagePrivileges = override.ManagePrivileges
 	}
+	if override.ManageOwners != nil {
+		result.ManageOwners = override.ManageOwners
+	}
+	if override.ManageSpecified {
+		result.ManageSpecified = override.ManageSpecified
+	}
 	if override.EnableDrop {
 		result.EnableDrop = override.EnableDrop
 	}
@@ -476,6 +484,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 	manageExtensions := parseManageRules(config.Manage, "extension")
 	manageFunctions := parseManageRules(config.Manage, "function")
 	managePrivileges := parseManageRules(config.Manage, "privilege")
+	manageOwners := parseManageRules(config.Manage, "owner")
 
 	var targetTables []string
 	if config.TargetTables != "" {
@@ -530,17 +539,19 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		ManageExtensions:        manageExtensions,
 		ManageFunctions:         manageFunctions,
 		ManagePrivileges:        managePrivileges,
+		ManageOwners:            manageOwners,
+		ManageSpecified:         config.Manage != nil,
 	}
 }
 
 // manageKnownKeys are the object-type keys defined by the manage: RFC (object-management.md).
-// Only "extension" is implemented; the rest are recognized-but-not-yet-implemented and get a
-// warning. Any other key is a typo, not a forward-compatibility case, and is a hard error.
+// The keys in manageImplementedKeys work; the rest are recognized-but-not-yet-implemented and get
+// a warning. Any other key is a typo, not a forward-compatibility case, and is a hard error.
 var manageKnownKeys = map[string]bool{
 	"schema": true, "table": true, "view": true, "materialized_view": true,
 	"index": true, "function": true, "procedure": true, "trigger": true,
 	"sequence": true, "type": true, "domain": true, "policy": true,
-	"extension": true, "privilege": true,
+	"extension": true, "privilege": true, "owner": true,
 }
 
 // CompileManageTarget compiles a manage: rule's target pattern into the anchored regexp
@@ -556,6 +567,7 @@ var manageImplementedKeys = map[string]bool{
 	"extension": true,
 	"function":  true,
 	"privilege": true,
+	"owner":     true,
 }
 
 func parseManageRules(manage map[string]yaml.RawMessage, want string) *[]ManageObjectRule {
@@ -570,7 +582,7 @@ func parseManageRules(manage map[string]yaml.RawMessage, want string) *[]ManageO
 				log.Fatalf("manage.%s is not a recognized manage: key (typo?)", key)
 			}
 			if !manageImplementedKeys[key] && want == "extension" { // warn once, not per implemented key
-				slog.Warn("manage key is not yet supported and will be ignored; only manage.extension and manage.privilege are currently implemented", "key", key)
+				slog.Warn("manage key is not yet supported and will be ignored; only manage.extension, manage.function, manage.privilege and manage.owner are currently implemented", "key", key)
 			}
 			continue
 		}
@@ -583,6 +595,9 @@ func parseManageRules(manage map[string]yaml.RawMessage, want string) *[]ManageO
 			}
 		}
 		for _, rule := range rules {
+			if want == "owner" && rule.Drop {
+				slog.Warn("manage.owner: drop has no meaning for owners and is ignored", "target", rule.Target)
+			}
 			if rule.Target == "" {
 				continue
 			}
@@ -612,4 +627,32 @@ func MatchManageObjectRule(rules []ManageObjectRule, name string) (ManageObjectR
 		}
 	}
 	return ManageObjectRule{}, false
+}
+
+// ManagesOwners reports whether object ownership is diffed at all.
+//
+// manage.owner turns it on explicitly. Without it, a manage: block switches the allow-list model
+// on and an unlisted object type is out of scope. Only a config with no manage: block at all falls
+// back to managed_roles, which used to imply owner management before manage.owner existed.
+func (config *GeneratorConfig) ManagesOwners() bool {
+	if config.ManageOwners != nil {
+		return true
+	}
+	if config.ManageSpecified {
+		return false
+	}
+	return len(config.ManagedRoles) > 0
+}
+
+// ManagesOwnerRole reports whether ownership by the given role is managed. The legacy
+// managed_roles path has no owner patterns to match, so it manages every role.
+func (config *GeneratorConfig) ManagesOwnerRole(role string) bool {
+	if !config.ManagesOwners() {
+		return false
+	}
+	if config.ManageOwners == nil {
+		return true
+	}
+	_, matched := MatchManageObjectRule(*config.ManageOwners, role)
+	return matched
 }
