@@ -603,6 +603,8 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 When `manage.privilege` is set, the deprecated `managed_roles` option is ignored (a warning is logged if both are present). An empty `manage.privilege:` section manages all grantees with REVOKE disabled by default.
 
+Enabling `manage.privilege` or `managed_roles` also enables ownership management for tables, partition parents and children, views, and materialized views. An `ALTER TABLE`, `ALTER VIEW`, or `ALTER MATERIALIZED VIEW ... OWNER TO` declaration in the desired schema sets the owner; omitting it preserves the current owner, including when a view must be recreated. Privilege targets match grantees and do not restrict owner roles.
+
 ## Identifier Quoting
 
 PostgreSQL distinguishes between quoted and unquoted identifiers:

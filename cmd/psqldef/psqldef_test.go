@@ -1177,6 +1177,24 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	assert.Equal(t, nothingModified, apply)
 }
 
+func TestPsqldefSkipTablesAlsoSkipsExportedOwner(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY);
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+    `)
+
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\nmanage:\n  privilege: []\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
 func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 	resetTestDatabase()
 
@@ -1925,19 +1943,31 @@ func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 
 	t.Run("filter to test_owner_a only", func(t *testing.T) {
 		exported := export(t, []string{"test_owner_a"})
-		assert.Contains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
-		assert.NotContains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_a"."widgets" OWNER TO`)
+		assert.NotContains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
 	})
 
 	t.Run("filter to test_owner_b only", func(t *testing.T) {
 		exported := export(t, []string{"test_owner_b"})
-		assert.Contains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
-		assert.NotContains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
+		assert.NotContains(t, exported, `ALTER TABLE "test_owner_a"."widgets" OWNER TO`)
 	})
 
 	t.Run("filter to both schemas", func(t *testing.T) {
 		exported := export(t, []string{"test_owner_a", "test_owner_b"})
-		assert.Contains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
-		assert.Contains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_a"."widgets" OWNER TO`)
+		assert.Contains(t, exported, `ALTER TABLE "test_owner_b"."gadgets" OWNER TO`)
 	})
+}
+
+func TestPsqldefSkipViewWithOwners(t *testing.T) {
+	resetTestDatabase()
+	mustPgExec(testDatabaseName, `
+		CREATE TABLE users (id bigint);
+		CREATE VIEW v_users AS SELECT id FROM users;
+		CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+	`)
+	tu.WriteFile("schema.sql", `CREATE TABLE users (id bigint);`)
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--skip-view", "--config-inline", "manage: {privilege: []}")...)
+	assert.Equal(t, nothingModified, output)
 }

@@ -121,6 +121,7 @@ type Generator struct {
 
 	desiredComments []*Comment
 	currentComments []*Comment
+	recreatedViews  map[string]*View
 
 	desiredExtensions []*Extension
 	currentExtensions []*Extension
@@ -146,8 +147,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	desiredDDLs = FilterTables(desiredDDLs, config)
-	desiredDDLs = FilterViews(desiredDDLs, config)
+	desiredDDLs = FilterObjects(desiredDDLs, config)
+	desiredDDLs = filterDesiredOwners(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 	desiredDDLs = FilterExtensions(desiredDDLs, config)
 	desiredDDLs = FilterFunctions(desiredDDLs, config, defaultSchema)
@@ -158,8 +159,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	currentDDLs = FilterTables(currentDDLs, config)
-	currentDDLs = FilterViews(currentDDLs, config)
+	currentDDLs = FilterObjects(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 	currentDDLs = FilterExtensions(currentDDLs, config)
 	currentDDLs = FilterFunctions(currentDDLs, config, defaultSchema)
@@ -196,6 +196,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentPartitionOfs: aggregated.PartitionOfs,
 		desiredComments:     desiredAggregated.Comments,
 		currentComments:     aggregated.Comments,
+		recreatedViews:      make(map[string]*View),
 		desiredExtensions:   desiredAggregated.Extensions,
 		currentExtensions:   aggregated.Extensions,
 		desiredSchemas:      desiredAggregated.Schemas,
@@ -244,6 +245,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	foreignKeyDDLs := []string{}
 	exclusionDDLs := []string{}
 	viewDDLs := []string{}
+	ownerDDLs := []string{} // Owners must come after CREATE VIEW, which resets them
+	metadataDDLs := []string{}
 
 	// bulkAlter fuses per-table ALTER TABLE actions when --bulk-alter is set (MySQL only).
 	bulkAlter := newAlterBundler(g, g.config.BulkAlter && g.mode == GeneratorModeMysql)
@@ -357,11 +360,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			interDDLs = append(interDDLs, policyDDLs...)
 		case *SetTableOwner:
-			ownerDDLs, err := g.generateDDLsForSetTableOwner(desired)
+			ddls, err := g.generateDDLsForSetTableOwner(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, ownerDDLs...)
+			ownerDDLs = append(ownerDDLs, ddls...)
 		case *SetRowLevelSecurity:
 			rlsDDLs, err := g.generateDDLsForSetRowLevelSecurity(desired)
 			if err != nil {
@@ -413,7 +416,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if desired.comment.ObjectType == "OBJECT_INDEX" {
 				indexCommentDDLs = append(indexCommentDDLs, commentDDLs...)
 			} else {
-				interDDLs = append(interDDLs, commentDDLs...)
+				metadataDDLs = append(metadataDDLs, commentDDLs...)
 			}
 		case *Extension:
 			extensionDDLs, err := g.generateDDLsForExtension(desired)
@@ -432,13 +435,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, privilegeDDLs...)
+			metadataDDLs = append(metadataDDLs, privilegeDDLs...)
 		case *RevokePrivilege:
 			revokeDDLs, err := g.generateDDLsForRevokePrivilege(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, revokeDDLs...)
+			metadataDDLs = append(metadataDDLs, revokeDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -449,6 +452,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, viewDDLs...)
+	ddls = append(ddls, metadataDDLs...)
+	// After viewDDLs: a recreated view is owned by the connecting role until this runs.
+	ddls = append(ddls, ownerDDLs...)
 	ddls = append(ddls, indexDDLs...)
 	ddls = append(ddls, indexCommentDDLs...) // Index comments must come after CREATE INDEX
 	ddls = append(ddls, foreignKeyDDLs...)
@@ -2295,26 +2301,21 @@ func (g *Generator) generateDDLsForSetRowLevelSecurity(desired *SetRowLevelSecur
 
 // generateDDLsForSetTableOwner converges the owner of a table or view when the
 // desired schema declares one (declare-to-manage: undeclared objects are left
-// untouched). Owner management requires privilege management to be configured
-// (manage.privilege or managed_roles), because --export only emits current
-// owners in that mode; without it the declaration is ignored with a warning.
+// untouched). Ownership has to be managed for this, because --export only emits current owners
+// in that case; otherwise the declaration is ignored with a warning.
 func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]string, error) {
-	if g.config.ManagePrivileges == nil && len(g.config.ManagedRoles) == 0 {
-		slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.privilege or managed_roles; owner cannot be diffed against the database", "table", desired.tableName.RawString())
-		return nil, nil
-	}
-
+	// The desired owner is already on the desired table or view: aggregateDDLsToSchema folds
+	// every SetTableOwner in before the diff runs. Only the current side has to be updated, so
+	// that a second declaration for the same object does not emit the ALTER again.
 	var ddls []string
 	if currentTable := g.findTableByName(g.currentTables, desired.tableName); currentTable != nil {
-		desiredTable := g.findTableByName(g.desiredTables, desired.tableName)
-		if desiredTable == nil {
+		if g.findTableByName(g.desiredTables, desired.tableName) == nil {
 			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 		}
 		if currentTable.owner != desired.owner {
 			ddls = append(ddls, desired.statement)
 			currentTable.owner = desired.owner
 		}
-		desiredTable.owner = desired.owner
 		return ddls, nil
 	}
 	if currentView := findViewQuoteAware(g.currentViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); currentView != nil {
@@ -2322,10 +2323,20 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stri
 			ddls = append(ddls, desired.statement)
 			currentView.owner = desired.owner
 		}
-		if desiredView := findViewQuoteAware(g.desiredViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); desiredView != nil {
-			desiredView.owner = desired.owner
+		return ddls, nil
+	}
+	if currentPartition := g.findPartitionOfByName(g.currentPartitionOfs, desired.tableName); currentPartition != nil {
+		if g.findPartitionOfByName(g.desiredPartitionOfs, desired.tableName) == nil {
+			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
+		}
+		if currentPartition.owner != desired.owner {
+			ddls = append(ddls, desired.statement)
+			currentPartition.owner = desired.owner
 		}
 		return ddls, nil
+	}
+	if desired.ifExists {
+		return nil, nil
 	}
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
@@ -2370,11 +2381,29 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 	currentView := g.findViewByName(g.currentViews, desiredView.name)
 	if currentView == nil {
-		// View not found, add view.
-		ddls = append(ddls, desiredView.statement)
-		view := *desiredView // copy view
-		// Don't copy indexes from desired to current - they'll be added when the CREATE INDEX is processed
-		view.indexes = []Index{}
+		view := *desiredView
+		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		if previous := g.recreatedViews[key]; previous != nil {
+			view.owner = previous.owner
+			recreateDDLs := []string{g.createViewDDL(&view)}
+			if ownerDDL := g.restoreViewOwnerDDL(&view); ownerDDL != "" {
+				recreateDDLs = append(recreateDDLs, ownerDDL)
+			}
+			if g.config.EnableDrop {
+				ddls = append(ddls, recreateDDLs...)
+			} else {
+				for _, ddl := range recreateDDLs {
+					ddls = append(ddls, skippedStatement(ddl))
+				}
+				view = *previous
+			}
+		} else {
+			ddls = append(ddls, desiredView.statement)
+		}
+		// A held-back recreation keeps its existing indexes.
+		if g.recreatedViews[key] == nil || g.config.EnableDrop {
+			view.indexes = nil
+		}
 		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
@@ -2411,28 +2440,27 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 			viewName := g.escapeViewName(desiredView)
 			if g.shouldDropAndCreateView(currentView, desiredView) {
-				// When dropping views that may have dependents, we need to handle them
-				// For PostgreSQL, find dependent views and recreate them after
-				var recreateDDLs, dependentViewDDLs []string
+				var recreateDDLs []string
 				if g.mode == GeneratorModePostgres {
-					// Find all views that depend on this view
-					dependentViews := g.findDependentViews(desiredView.name)
-					// Drop them first (in reverse dependency order)
-					for _, depView := range slices.Backward(dependentViews) {
+					// Drop current dependents first. The main loop recreates them in desired
+					// dependency order, which may differ from the current graph.
+					for _, depView := range slices.Backward(g.findDependentViews(desiredView.name)) {
 						recreateDDLs = append(recreateDDLs, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
-					}
-					// Store DDLs to recreate dependent views after the base view
-					for _, depView := range dependentViews {
-						depViewDef := parser.String(depView.definition)
-						dependentViewDDLs = append(dependentViewDDLs, fmt.Sprintf("CREATE %s %s AS %s", depView.viewType, g.escapeViewName(depView), depViewDef))
+						key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+						g.recreatedViews[key] = depView
+						g.forgetViewMetadata(depView)
+						g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == depView })
 					}
 				}
 				recreateDDLs = append(recreateDDLs,
-					fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName),
-					fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause),
+					fmt.Sprintf("DROP %s %s", currentView.viewType, viewName),
+					g.createViewDDL(desiredView),
 				)
-				// Recreate dependent views
-				recreateDDLs = append(recreateDDLs, dependentViewDDLs...)
+				g.forgetViewMetadata(currentView)
+				if ownerDDL := g.restoreViewOwnerDDL(currentView); ownerDDL != "" {
+					recreateDDLs = append(recreateDDLs, ownerDDL)
+				}
+
 				ddls, _ = g.appendRecreate(ddls, recreateDDLs...)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
@@ -2447,6 +2475,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		}
 	}
 
+	if currentView != nil && (g.config.EnableDrop || !g.shouldDropAndCreateView(currentView, desiredView)) {
+		currentView.definition = desiredView.definition
+	}
+
 	// Examine policies in desiredTable to delete obsoleted policies later
 	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findViewByName(g.desiredViews, desiredView.name) == nil {
@@ -2454,6 +2486,16 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 	}
 
 	return ddls, nil
+}
+
+func (g *Generator) createViewDDL(view *View) string {
+	suffix := ""
+	if view.withNoData {
+		suffix = " WITH NO DATA"
+	} else if view.withData {
+		suffix = " WITH DATA"
+	}
+	return fmt.Sprintf("CREATE %s %s AS %s%s", view.viewType, g.escapeViewName(view), parser.String(view.definition), suffix)
 }
 
 // findDependentViews finds all views that reference the given view name in their definitions.
@@ -2467,7 +2509,7 @@ func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 	viewDeps := make(map[string][]string)
 	viewMap := make(map[string]*View)
 
-	for _, view := range g.desiredViews {
+	for _, view := range g.currentViews {
 		normalizedName := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 		viewMap[normalizedName] = view
 
@@ -2480,14 +2522,14 @@ func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 
 	// Find views that directly or indirectly depend on the target view
 	var dependents []*View
-	for viewKey, deps := range util.CanonicalMapIter(viewDeps) {
+	for viewKey := range util.CanonicalMapIter(viewDeps) {
 		// Skip the target view itself
 		if viewKey == targetName {
 			continue
 		}
 
-		// Check if this view depends on the target view
-		if slices.Contains(deps, targetName) {
+		// Follow the current graph: changing a desired definition does not remove an existing dependency.
+		if dependsOn(viewKey, targetName, viewDeps, map[string]bool{}) {
 			dependents = append(dependents, viewMap[viewKey])
 		}
 	}
@@ -2503,6 +2545,19 @@ func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 	}
 
 	return dependents
+}
+
+func dependsOn(name, target string, deps map[string][]string, visited map[string]bool) bool {
+	if visited[name] {
+		return false
+	}
+	visited[name] = true
+	for _, dep := range deps[name] {
+		if dep == target || dependsOn(dep, target, deps, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 // stripTableQualifiers removes table qualifiers from column references in SQL
@@ -4078,6 +4133,36 @@ func (g *Generator) escapeColumnName(column *Column) string {
 	return g.escapeSQLIdent(column.name)
 }
 
+// A DROP removes this metadata; comparing against it would suppress the DDLs that restore it.
+func (g *Generator) forgetViewMetadata(view *View) {
+	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
+		return
+	}
+	view.indexes = nil
+	g.currentPrivileges = slices.DeleteFunc(g.currentPrivileges, func(priv *GrantPrivilege) bool {
+		return priv.objectType == "TABLE" && g.qualifiedNamesEqual(priv.tableName, view.name)
+	})
+	g.currentComments = slices.DeleteFunc(g.currentComments, func(comment *Comment) bool {
+		switch comment.comment.ObjectType {
+		case "OBJECT_VIEW", "OBJECT_TABLE", "OBJECT_COLUMN":
+			parts := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+			return g.qualifiedNamesEqual(QualifiedName{Schema: parts[0], Name: parts[1]}, view.name)
+		}
+		return false
+	})
+}
+
+// restoreViewOwnerDDL gives a view that is about to be dropped and created again its owner back.
+// The recreated view belongs to the connecting role, which would silently reassign an object the
+// desired schema may say nothing about. A declaration that wants a different owner converges on
+// top of this, in generateDDLsForSetTableOwner.
+func (g *Generator) restoreViewOwnerDDL(view *View) string {
+	if view.owner == "" {
+		return ""
+	}
+	return fmt.Sprintf("ALTER %s %s OWNER TO %s", view.viewType, g.escapeViewName(view), g.forceEscapeSQLName(view.owner))
+}
+
 // escapeViewName escapes a view name using quote-aware logic.
 func (g *Generator) escapeViewName(view *View) string {
 	return g.escapeQualifiedName(view.name)
@@ -4387,7 +4472,9 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				table.owner = stmt.owner
 			} else if view := findViewQuoteAware(aggregated.Views, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); view != nil {
 				view.owner = stmt.owner
-			} else {
+			} else if partitionOf := findPartitionOfQuoteAware(aggregated.PartitionOfs, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); partitionOf != nil {
+				partitionOf.owner = stmt.owner
+			} else if !stmt.ifExists {
 				return nil, fmt.Errorf("ALTER TABLE ... OWNER TO performed before CREATE TABLE: %s", ddl.Statement())
 			}
 		case *SetRowLevelSecurity:
@@ -4402,7 +4489,8 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				table.rlsEnabled = stmt.value
 			}
 		case *View:
-			aggregated.Views = append(aggregated.Views, stmt)
+			view := *stmt // copy view, so that SetTableOwner below does not write through to the DDL
+			aggregated.Views = append(aggregated.Views, &view)
 		case *Trigger:
 			aggregated.Triggers = append(aggregated.Triggers, stmt)
 		case *Event:
@@ -4756,6 +4844,18 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedName) *Table 
 	for _, table := range tables {
 		if g.qualifiedNamesEqual(table.name, name) {
 			return table
+		}
+	}
+	return nil
+}
+
+// findPartitionOfQuoteAware finds a partition child using quote-aware comparison without
+// requiring a Generator.
+func findPartitionOfQuoteAware(partitionOfs []*CreatePartitionOf, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) *CreatePartitionOf {
+	target := normalizeNameKey(name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+	for _, partitionOf := range partitionOfs {
+		if normalizeNameKey(partitionOf.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) == target {
+			return partitionOf
 		}
 	}
 	return nil
@@ -6878,6 +6978,64 @@ func generateSridDefinition(sridVal Value) (string, error) {
 	}
 }
 
+// Ignore disabled owner declarations before aggregation, which requires each owner to have an object.
+func filterDesiredOwners(ddls []DDL, config database.GeneratorConfig) []DDL {
+	return slices.DeleteFunc(ddls, func(ddl DDL) bool {
+		owner, ok := ddl.(*SetTableOwner)
+		if !ok {
+			return false
+		}
+		if config.ManagePrivileges == nil && len(config.ManagedRoles) == 0 {
+			slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.privilege or managed_roles; owner cannot be diffed against the database", "table", owner.tableName.RawString())
+			return true
+		}
+		return false
+	})
+}
+
+// FilterObjects applies the table and view filters, then drops the ALTER ... OWNER TO statements
+// left behind by whatever they removed. The owner statements cannot go through the filters
+// themselves: they name a table or a view and, running before aggregation, the filters cannot
+// tell which, so each would be judged by both target_tables and skip_views.
+func FilterObjects(ddls []DDL, config database.GeneratorConfig) []DDL {
+	filtered := FilterViews(FilterTables(ddls, config), config)
+
+	dropped := createdObjectNames(ddls, config)
+	for name := range util.CanonicalMapIter(createdObjectNames(filtered, config)) {
+		delete(dropped, name)
+	}
+	if len(dropped) == 0 {
+		return filtered
+	}
+
+	result := make([]DDL, 0, len(filtered))
+	for _, ddl := range filtered {
+		// An owner statement whose object was never created stays, so that aggregation still
+		// reports it as performed before CREATE TABLE.
+		if stmt, ok := ddl.(*SetTableOwner); ok && dropped[normalizeNameKey(stmt.tableName, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)] {
+			continue
+		}
+		result = append(result, ddl)
+	}
+	return result
+}
+
+// createdObjectNames collects the names of the tables and views that the DDLs create.
+func createdObjectNames(ddls []DDL, config database.GeneratorConfig) map[string]bool {
+	names := map[string]bool{}
+	for _, ddl := range ddls {
+		switch stmt := ddl.(type) {
+		case *CreateTable:
+			names[normalizeNameKey(stmt.table.name, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)] = true
+		case *CreatePartitionOf:
+			names[normalizeNameKey(stmt.tableName, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)] = true
+		case *View:
+			names[normalizeNameKey(stmt.name, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)] = true
+		}
+	}
+	return names
+}
+
 func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 	filtered := []DDL{}
 
@@ -6887,6 +7045,8 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
 			tables = append(tables, stmt.table.name.RawString())
+		case *CreatePartitionOf:
+			tables = append(tables, stmt.tableName.RawString())
 		case *CreateIndex:
 			tables = append(tables, stmt.tableName.RawString())
 		case *AddPrimaryKey:

@@ -262,29 +262,43 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 
 // objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
 // and materialized views so that owners declared in the desired schema can be
-// diffed. Emitted only when privilege management is configured
-// (manage.privilege or managed_roles), to keep --export output unchanged for
-// users who don't manage privileges. Extension-owned objects are excluded.
+// diffed. Emitted only when manage.privilege or managed_roles is configured.
+// Extension-owned objects are excluded.
 func (d *PostgresDatabase) objectOwners() ([]string, error) {
 	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
 		return nil, nil
 	}
 
-	const query = `
+	// The relkind, relpersistence and relispartition filters have to agree with tableNames() and
+	// views(): an owner exported for an object those skip has no CREATE to attach to, and the
+	// generator aborts with "ALTER TABLE ... OWNER TO performed before CREATE TABLE".
+	relkinds := "'r'"
+	partitions := ""
+	if d.config.SkipPartition {
+		partitions = "AND c.relispartition = false"
+	} else {
+		relkinds += ", 'p'"
+	}
+	if !d.config.SkipView {
+		relkinds += ", 'v', 'm'"
+	}
+	query := fmt.Sprintf(`
 		SELECT
 			n.nspname AS schema_name,
-			n.nspname || '.' || c.relname AS obj_name,
+			c.relname AS relation_name,
 			pg_get_userbyid(c.relowner) AS owner
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind IN ('r', 'p', 'v', 'm')
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		WHERE c.relkind IN (%s)
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'sys')
+		AND c.relpersistence IN ('p', 'u')
+		%s
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_depend dep
 			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
 		)
-		ORDER BY obj_name
-	`
+		ORDER BY n.nspname, c.relname
+	`, relkinds, partitions)
 
 	rows, err := d.db.Query(query)
 	if err != nil {
@@ -294,8 +308,8 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var schemaName, objName, owner string
-		if err := rows.Scan(&schemaName, &objName, &owner); err != nil {
+		var schemaName, relationName, owner string
+		if err := rows.Scan(&schemaName, &relationName, &owner); err != nil {
 			return nil, fmt.Errorf("failed to scan object owner row: %w", err)
 		}
 		// Apply the same TargetSchema filter as the other export helpers
@@ -306,6 +320,7 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schemaName) {
 			continue
 		}
+		objName := fmt.Sprintf("%s.%s", d.quoteIdentifierIfNeeded(schemaName), d.quoteIdentifierIfNeeded(relationName))
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s OWNER TO %s;", objName, d.quoteIdentifierIfNeeded(owner)))
 	}
 
@@ -574,8 +589,15 @@ func (d *PostgresDatabase) views() ([]string, error) {
 				d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), schemaLib.StringConstant(viewComment.String),
 			))
 		}
+		privileges, err := d.getPrivilegeDefsForTables([]string{schema + "." + name})
+		if err != nil {
+			return nil, err
+		}
+		for _, grant := range privileges[schema+"."+name] {
+			ddls = append(ddls, grant+";")
+		}
 	}
-	return ddls, nil
+	return ddls, rows.Err()
 }
 
 func (d *PostgresDatabase) materializedViews() ([]string, error) {
@@ -645,8 +667,15 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		for _, indexDef := range indexDefs {
 			ddls = append(ddls, fmt.Sprintf("%s;", indexDef))
 		}
+		privileges, err := d.getPrivilegeDefsForTables([]string{schema + "." + name})
+		if err != nil {
+			return nil, err
+		}
+		for _, grant := range privileges[schema+"."+name] {
+			ddls = append(ddls, grant+";")
+		}
 	}
-	return ddls, nil
+	return ddls, rows.Err()
 }
 
 func (d *PostgresDatabase) schemas() ([]string, error) {
@@ -2159,17 +2188,31 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 	}
 
 	const query = `
+		WITH relation_privileges AS (
+			SELECT table_schema, table_name, grantee, is_grantable, privilege_type
+			FROM information_schema.table_privileges
+			UNION ALL
+			SELECT n.nspname, c.relname,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END,
+				CASE WHEN acl.is_grantable THEN 'YES' ELSE 'NO' END,
+				acl.privilege_type
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace,
+			LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relkind = 'm'
+		)
 		SELECT
-			table_schema || '.' || table_name AS qualified_table_name,
+			table_schema, table_name,
 			grantee,
 			is_grantable,
-			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
-		FROM information_schema.table_privileges
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+		FROM relation_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
 		AND ($2::text[] IS NULL OR grantee = ANY($2::text[]))
 		AND grantee != (
-			SELECT tableowner FROM pg_tables
-			WHERE schemaname = table_schema AND tablename = table_name
+			SELECT pg_get_userbyid(c.relowner)
+			FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = table_schema AND c.relname = table_name
 		)
 		GROUP BY table_schema, table_name, grantee, is_grantable
 		ORDER BY table_schema, table_name, grantee, is_grantable
@@ -2183,8 +2226,8 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	result := make(map[string][]string, len(tableNames))
 	for rows.Next() {
-		var tableName, grantee, isGrantable, privileges string
-		if err := rows.Scan(&tableName, &grantee, &isGrantable, &privileges); err != nil {
+		var schemaName, relationName, grantee, isGrantable, privileges string
+		if err := rows.Scan(&schemaName, &relationName, &grantee, &isGrantable, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
 		}
 		if !d.isExportedGrantee(grantee) {
@@ -2197,7 +2240,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
 		}
 
-		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, tableName, escapedGrantee)
+		tableName := schemaName + "." + relationName
+		quotedTable := d.quoteIdentifierIfNeeded(schemaName) + "." + d.quoteIdentifierIfNeeded(relationName)
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, quotedTable, escapedGrantee)
 		if isGrantable == "YES" {
 			grant += " WITH GRANT OPTION"
 		}
@@ -2212,7 +2257,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 	// column grants, not ones implied by table-level grants.
 	const columnQuery = `
 		SELECT
-			n.nspname || '.' || c.relname AS qualified_table_name,
+			n.nspname, c.relname,
 			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
 			acl.is_grantable,
 			acl.privilege_type,
@@ -2225,7 +2270,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		AND acl.grantee <> c.relowner
 		AND ($2::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[]))
 		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
-		ORDER BY qualified_table_name, grantee, acl.privilege_type, acl.is_grantable
+		ORDER BY n.nspname, c.relname, grantee, acl.privilege_type, acl.is_grantable
 	`
 
 	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), d.managedGranteeArgs())
@@ -2235,9 +2280,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 	defer colRows.Close()
 
 	for colRows.Next() {
-		var tableName, grantee, privilegeType, columns string
+		var schemaName, relationName, grantee, privilegeType, columns string
 		var isGrantable bool
-		if err := colRows.Scan(&tableName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
+		if err := colRows.Scan(&schemaName, &relationName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
 			return nil, fmt.Errorf("failed to scan column privilege row: %w", err)
 		}
 		if !d.isExportedGrantee(grantee) {
@@ -2255,8 +2300,10 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			escapedCols[i] = d.quoteIdentifierIfNeeded(col)
 		}
 
+		tableName := schemaName + "." + relationName
+		quotedTable := d.quoteIdentifierIfNeeded(schemaName) + "." + d.quoteIdentifierIfNeeded(relationName)
 		grant := fmt.Sprintf("GRANT %s (%s) ON TABLE %s TO %s",
-			privilegeType, strings.Join(escapedCols, ", "), tableName, escapedGrantee)
+			privilegeType, strings.Join(escapedCols, ", "), quotedTable, escapedGrantee)
 		if isGrantable {
 			grant += " WITH GRANT OPTION"
 		}
