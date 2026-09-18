@@ -262,11 +262,10 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 
 // objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
 // and materialized views so that owners declared in the desired schema can be
-// diffed. Emitted only when privilege management is configured
-// (manage.privilege or managed_roles), to keep --export output unchanged for
-// users who don't manage privileges. Extension-owned objects are excluded.
+// diffed. Emitted only when ownership is managed (see GeneratorConfig.ManagesOwners), to keep
+// --export output unchanged for everyone else. Extension-owned objects are excluded.
 func (d *PostgresDatabase) objectOwners() ([]string, error) {
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesOwners() {
 		return nil, nil
 	}
 
@@ -304,6 +303,11 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 		// generator aborts with "ALTER TABLE ... OWNER TO performed before
 		// CREATE TABLE" because there is no matching CREATE in the desired DDL.
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schemaName) {
+			continue
+		}
+		// Exporting an owner outside manage.owner would make the diff want to converge it, so an
+		// object held by an unmanaged role has to stay absent from the current schema entirely.
+		if !d.generatorConfig.ManagesOwnerRole(owner) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s OWNER TO %s;", objName, d.quoteIdentifierIfNeeded(owner)))

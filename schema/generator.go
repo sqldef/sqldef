@@ -2295,12 +2295,15 @@ func (g *Generator) generateDDLsForSetRowLevelSecurity(desired *SetRowLevelSecur
 
 // generateDDLsForSetTableOwner converges the owner of a table or view when the
 // desired schema declares one (declare-to-manage: undeclared objects are left
-// untouched). Owner management requires privilege management to be configured
-// (manage.privilege or managed_roles), because --export only emits current
-// owners in that mode; without it the declaration is ignored with a warning.
+// untouched). Ownership has to be managed for this, because --export only emits current owners
+// in that case; otherwise the declaration is ignored with a warning.
 func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]string, error) {
-	if g.config.ManagePrivileges == nil && len(g.config.ManagedRoles) == 0 {
-		slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.privilege or managed_roles; owner cannot be diffed against the database", "table", desired.tableName.RawString())
+	if !g.config.ManagesOwners() {
+		slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.owner; owner cannot be diffed against the database", "table", desired.tableName.RawString())
+		return nil, nil
+	}
+	if !g.config.ManagesOwnerRole(desired.owner) {
+		slog.Warn("ALTER TABLE ... OWNER TO is ignored because the owner does not match any manage.owner target", "table", desired.tableName.RawString(), "owner", desired.owner)
 		return nil, nil
 	}
 
