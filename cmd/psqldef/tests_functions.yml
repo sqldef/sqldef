@@ -505,3 +505,102 @@ FunctionReferencingATableOfTheSameSchema:
     CREATE TABLE t (
       a bigint
     );
+
+FunctionWithOutParameterAndCanonicalReturnTypeIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_out(IN a int, OUT b int) RETURNS integer AS $$
+    BEGIN
+      b := a;
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithOutParameterAndAliasedReturnTypeIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_out(IN a int, OUT b int) RETURNS int AS $$
+    BEGIN
+      b := a;
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithOutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_out(IN a int, OUT b int) AS $$
+    BEGIN
+      b := a;
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithInoutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_inout(INOUT a int) AS $$
+    BEGIN
+      a := a + 1;
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithMultipleOutParametersAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_record(OUT b int, OUT c int) AS $$
+    BEGIN
+      b := 1;
+      c := 2;
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithVariadicParameterAndAliasedReturnTypeIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_variadic(VARIADIC a int[]) RETURNS int AS $$
+    BEGIN
+      RETURN array_length(a, 1);
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionReturningSetofWithAliasedElementTypeIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_setof(OUT b int) RETURNS SETOF int AS $$
+    SELECT 1
+    $$ LANGUAGE sql;
+
+FunctionWithOmittedReturnsBodyChangeIsReplacedInPlace:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION f_out(IN a int, OUT b int) AS $$
+    BEGIN
+      b := a;
+    END
+    $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION f_out(IN a int, OUT b int) AS $$
+    BEGIN
+      b := a + 1;
+    END
+    $$ LANGUAGE plpgsql;
+  up: |
+    CREATE OR REPLACE FUNCTION f_out(IN a int, OUT b int) AS $$
+    BEGIN
+      b := a + 1;
+    END
+    $$ LANGUAGE plpgsql;
+  down: |
+    CREATE OR REPLACE FUNCTION f_out(IN a int, OUT b int) AS $$
+    BEGIN
+      b := a;
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithTimezoneQualifiedOutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_tz(IN a int, OUT b timestamp with time zone) AS $$
+    BEGIN
+      b := now();
+    END
+    $$ LANGUAGE plpgsql;
