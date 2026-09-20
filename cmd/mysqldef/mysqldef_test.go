@@ -530,6 +530,40 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 
 }
 
+func TestMysqldefConfigIncludesAlgorithmAndLockOnBulkAlterSkipped(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		t.Skip("TiDB has collation handling differences")
+	}
+	resetTestDatabase()
+
+	createTable := tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  new_column varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+		);
+		`,
+	)
+
+	tu.WriteFile("schema.sql", createTable)
+	tu.WriteFile("config.yml", "algorithm: inplace\nlock: none\nbulk_alter: true")
+
+	apply := mustExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assert.Equal(t, wrapWithTransaction(tu.StripHeredoc(`
+	ALTER TABLE `+"`users`"+` ADD COLUMN `+"`new_column` "+`varchar(255) COLLATE utf8mb4_bin DEFAULT null `+"AFTER `id`, "+`ALGORITHM=INPLACE, LOCK=NONE;
+	-- Skipped: ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`, ALGORITHM=INPLACE, LOCK=NONE;
+	`)), apply)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := tu.Execute("./mysqldef", "--help")
 	if err != nil {
