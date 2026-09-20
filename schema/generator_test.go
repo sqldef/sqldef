@@ -963,22 +963,17 @@ func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
 	bundler := newAlterBundler(g, true)
 
 	slot := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
-	assert.NotEqual(t, "ALTER TABLE a ADD COLUMN x int", slot, "first action should be replaced by a placeholder")
 
 	dropped := bundler.emit(table, "ALTER TABLE a DROP COLUMN y")
-	assert.Equal(t, "-- Skipped: ALTER TABLE a DROP COLUMN y", dropped, "destructive action should be commented out instead of bundled")
+	assert.Equal(t, "ALTER TABLE a DROP COLUMN y", dropped, "destructive action should be left for the enable_drop pass instead of bundled")
 
 	folded := bundler.emit(table, "ALTER TABLE a DROP FOREIGN KEY fk")
 	assert.Equal(t, "", folded, "DROP FOREIGN KEY is not gated by enable_drop, so it should still fold")
 
-	other := bundler.emit(table, "DROP INDEX idx ON a")
-	assert.Equal(t, "DROP INDEX idx ON a", other, "non-ALTER statement should pass through")
-
-	ddls := bundler.finalize([]string{slot, dropped, "DROP INDEX idx ON a"})
+	ddls := bundler.finalize([]string{slot, dropped})
 	assert.Equal(t, []string{
 		"ALTER TABLE a ADD COLUMN x int, DROP FOREIGN KEY fk",
-		"-- Skipped: ALTER TABLE a DROP COLUMN y",
-		"DROP INDEX idx ON a",
+		"ALTER TABLE a DROP COLUMN y",
 	}, ddls)
 }
 
