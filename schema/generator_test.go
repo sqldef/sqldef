@@ -930,7 +930,7 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 }
 
 func TestAlterBundler(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
 	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
 	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
 
@@ -952,6 +952,32 @@ func TestAlterBundler(t *testing.T) {
 	assert.Equal(t, []string{
 		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
 		"ALTER TABLE b ADD COLUMN z int",
+		"DROP INDEX idx ON a",
+	}, ddls)
+}
+
+func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: false}}
+	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+
+	bundler := newAlterBundler(g, true)
+
+	slot := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
+	assert.NotEqual(t, "ALTER TABLE a ADD COLUMN x int", slot, "first action should be replaced by a placeholder")
+
+	dropped := bundler.emit(table, "ALTER TABLE a DROP COLUMN y")
+	assert.Equal(t, "-- Skipped: ALTER TABLE a DROP COLUMN y", dropped, "destructive action should be commented out instead of bundled")
+
+	folded := bundler.emit(table, "ALTER TABLE a DROP FOREIGN KEY fk")
+	assert.Equal(t, "", folded, "DROP FOREIGN KEY is not gated by enable_drop, so it should still fold")
+
+	other := bundler.emit(table, "DROP INDEX idx ON a")
+	assert.Equal(t, "DROP INDEX idx ON a", other, "non-ALTER statement should pass through")
+
+	ddls := bundler.finalize([]string{slot, dropped, "DROP INDEX idx ON a"})
+	assert.Equal(t, []string{
+		"ALTER TABLE a ADD COLUMN x int, DROP FOREIGN KEY fk",
+		"-- Skipped: ALTER TABLE a DROP COLUMN y",
 		"DROP INDEX idx ON a",
 	}, ddls)
 }

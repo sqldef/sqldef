@@ -102,3 +102,105 @@ BulkAlterPerTableScope:
   down: |
     ALTER TABLE a DROP COLUMN `y`, DROP COLUMN `x`;
     ALTER TABLE b DROP COLUMN `y`, DROP COLUMN `x`;
+
+BulkAlterDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id;
+    -- Skipped: ALTER TABLE patients DROP COLUMN `c`;
+  down: |
+    -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
+
+# The identifiers are quoted here because the cleanup DROP INDEX carries the
+# current table's name, which always comes quoted from the database: an unquoted
+# desired name would not match the bundle's ALTER TABLE prefix, and the
+# statement would never be fused in the first place.
+BulkAlterDropIndexSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE `patients` (
+      `id` bigint NOT NULL,
+      `b` int,
+      KEY `b_idx` (`b`)
+    );
+  desired: |
+    CREATE TABLE `patients` (
+      `id` bigint NOT NULL,
+      `b` int,
+      `a` int
+    );
+  up: |
+    ALTER TABLE `patients` ADD COLUMN `a` int AFTER `b`;
+    -- Skipped: ALTER TABLE `patients` DROP INDEX `b_idx`;
+  down: |
+    -- Skipped: ALTER TABLE `patients` DROP COLUMN `a`;
+
+BulkAlterDropForeignKeyDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      c int,
+      CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id)
+    );
+  desired: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      KEY pets_owner_fk (owner_id)
+    );
+  up: |
+    ALTER TABLE pets DROP FOREIGN KEY `pets_owner_fk`;
+    -- Skipped: ALTER TABLE pets DROP COLUMN `c`;
+  down: |
+    ALTER TABLE pets ADD CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);
+
+BulkAlterAddIndexDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      KEY a_idx (a)
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id, ADD KEY a_idx (a);
+    -- Skipped: ALTER TABLE patients DROP COLUMN `c`;
+  down: |
+    -- Skipped: ALTER TABLE `patients` DROP INDEX `a_idx`;
+    -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
