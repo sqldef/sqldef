@@ -207,33 +207,21 @@ func normalizeMysqlConvertType(convertType *parser.ConvertType) *parser.ConvertT
 	return &normalized
 }
 
-// nameDataLen is PostgreSQL's NAMEDATALEN - 1: the longest identifier the server stores.
-const nameDataLen = 63
+// checkConstraintNameMaxLen is shorter than SQL Server's 128-character limit so that the names
+// match those of the constraints mssqldef has already added.
+const checkConstraintNameMaxLen = 63
 
-// buildPostgresPrimaryKeyName is buildPostgresConstraintName for a primary key, whose name
-// PostgreSQL builds from the table name alone.
-func buildPostgresPrimaryKeyName(tableName string) string {
-	suffix := "_pkey"
-	if len(tableName)+len(suffix) > nameDataLen {
-		tableName = tableName[:nameDataLen-len(suffix)]
-	}
-	return tableName + suffix
-}
-
-// buildPostgresConstraintName approximates PostgreSQL's base constraint name before
-// the server resolves catalog collisions. It truncates names to 63 bytes using this logic:
-// - If column > 28 bytes: reduce column to 28 first, then apply remaining overflow to table
-// - If column == 28 bytes and table <= 29 bytes: truncate table
-// - If column == 28 bytes and table > 29 bytes: truncate table
-// - If column < 28 bytes: truncate table
-// In summary: when column <= 28 bytes, always truncate the table first
-func buildPostgresConstraintName(tableName, columnName, suffix string) string {
+// buildMssqlCheckConstraintName names the column-level CHECK constraint mssqldef adds as
+// <table>_<column>_check, truncating the table name first unless the column name is longer
+// than 28 bytes.
+func buildMssqlCheckConstraintName(tableName, columnName string) Ident {
+	const suffix = "check"
 	fullName := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix)
-	if len(fullName) <= nameDataLen {
-		return fullName
+	if len(fullName) <= checkConstraintNameMaxLen {
+		return NewIdentWithQuoteDetected(fullName)
 	}
 
-	overflow := len(fullName) - nameDataLen
+	overflow := len(fullName) - checkConstraintNameMaxLen
 	tableLen := len(tableName)
 	columnLen := len(columnName)
 
@@ -256,14 +244,7 @@ func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 	truncatedTable := tableName[:tableLen-tableRemove]
 	truncatedColumn := columnName[:columnLen-columnRemove]
 
-	return fmt.Sprintf("%s_%s_%s", truncatedTable, truncatedColumn, suffix)
-}
-
-// buildPostgresConstraintNameIdent builds the base name approximation and returns it
-// as an Ident with quote information inferred from case.
-func buildPostgresConstraintNameIdent(tableName, columnName, suffix string) Ident {
-	name := buildPostgresConstraintName(tableName, columnName, suffix)
-	return NewIdentWithQuoteDetected(name)
+	return NewIdentWithQuoteDetected(fmt.Sprintf("%s_%s_%s", truncatedTable, truncatedColumn, suffix))
 }
 
 // buildMysqlForeignKeyName builds a MySQL auto-generated foreign key constraint name

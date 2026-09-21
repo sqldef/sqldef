@@ -252,7 +252,7 @@ ForeignKeyConstraintsAreEmittedLast:
     ALTER TABLE "public"."foos" ADD COLUMN "foo_id" bigint NOT NULL;
     ALTER TABLE "public"."foos" ADD COLUMN "bar_id" bigint NOT NULL;
     ALTER TABLE "public"."foos" ADD PRIMARY KEY ("foo_id");
-    ALTER TABLE "public"."foos" ADD CONSTRAINT "foos_bar_id_fkey" FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
+    ALTER TABLE "public"."foos" ADD FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
     ALTER TABLE "public"."bars" DROP COLUMN "dummy_column";
     ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";
   down: |
@@ -300,7 +300,7 @@ ForeignKeyOnReservedName:
       CONSTRAINT users_variable_id_fk FOREIGN KEY (variable_id) REFERENCES variables(id)
     );
   up: |
-    ALTER TABLE "public"."variables" ADD CONSTRAINT "variables_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "public"."companies" ("id");
+    ALTER TABLE "public"."variables" ADD FOREIGN KEY ("company_id") REFERENCES "public"."companies" ("id");
     ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");
   down: |
     ALTER TABLE "public"."users" DROP CONSTRAINT "users_variable_id_fk";
@@ -556,7 +556,7 @@ CreateTableAddAbsentForeignKey:
       user_id INT REFERENCES users(id)
     );
   up: |
-    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+    ALTER TABLE "public"."posts" ADD FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
   down: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_user_id_fkey";
 CreateTableWithConstraintOptions:
@@ -1356,7 +1356,7 @@ ConstraintUniqueAdd:
       UNIQUE (sku)
     );
   up: |
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
+    ALTER TABLE "public"."products" ADD UNIQUE ("sku");
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
 ConstraintUniqueRemove:
@@ -1374,7 +1374,7 @@ ConstraintUniqueRemove:
   up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
   down: |
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
+    ALTER TABLE "public"."products" ADD UNIQUE ("sku");
 ConstraintUniqueNullsNotDistinctAdd:
   legacy_ignore_quotes: false
   min_version: "15"
@@ -1424,7 +1424,7 @@ ConstraintCheckInAndUniqueAdd:
     );
   up: |
     ALTER TABLE "public"."products" ADD CHECK (level in (1, 2, 3, 4));
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
+    ALTER TABLE "public"."products" ADD UNIQUE ("level");
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
@@ -1445,7 +1445,7 @@ ConstraintCheckInAndUniqueRemove:
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
   down: |
     ALTER TABLE "public"."products" ADD CHECK (level in (1, 2, 3, 4));
-    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
+    ALTER TABLE "public"."products" ADD UNIQUE ("level");
 ConstraintCheckInMultipleColumnsWithUnique:
   current: |
     CREATE TABLE orders (
@@ -1463,7 +1463,7 @@ ConstraintCheckInMultipleColumnsWithUnique:
   up: |
     ALTER TABLE "public"."orders" ADD CHECK (priority in (1, 2, 3));
     ALTER TABLE "public"."orders" ADD CHECK (category in (10, 20, 30, 40));
-    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_category_key" UNIQUE ("priority", "category");
+    ALTER TABLE "public"."orders" ADD UNIQUE ("priority", "category");
   down: |
     ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_check";
     ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_category_check";
@@ -1644,7 +1644,7 @@ DropReferences:
     ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";
     ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";
   down: |
-    ALTER TABLE "public"."b" ADD CONSTRAINT "b_a_my_text_fkey" FOREIGN KEY ("a_my_text") REFERENCES "public"."a" ("my_text");
+    ALTER TABLE "public"."b" ADD FOREIGN KEY ("a_my_text") REFERENCES "public"."a" ("my_text");
 ReferencesWithOnDeleteCascade:
   desired: |
     CREATE TABLE customers (
@@ -2673,3 +2673,146 @@ ChangePrimaryKeyDeclaredWithAlterTable:
   down: |
     ALTER TABLE public.t DROP CONSTRAINT t_pkey;
     ALTER TABLE public.t ADD PRIMARY KEY (a);
+
+UnnamedUniqueConstraintWithLongNames:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE tttttttttttttttttttttttttttttttttttttttt (
+      cccccccccccccccccccccccccccccccccccccccc int
+    );
+  desired: |
+    CREATE TABLE tttttttttttttttttttttttttttttttttttttttt (
+      cccccccccccccccccccccccccccccccccccccccc int,
+      UNIQUE (cccccccccccccccccccccccccccccccccccccccc)
+    );
+  up: |
+    ALTER TABLE public.tttttttttttttttttttttttttttttttttttttttt ADD UNIQUE (cccccccccccccccccccccccccccccccccccccccc);
+  down: |
+    ALTER TABLE public.tttttttttttttttttttttttttttttttttttttttt DROP CONSTRAINT ttttttttttttttttttttttttttttt_ccccccccccccccccccccccccccccc_key;
+
+UnnamedUniqueConstraintWithMultibyteNames:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "テーブルテーブルテーブルテーブルテーブル" (
+      "カラムカラムカラムカラムカラムカラム" int
+    );
+  desired: |
+    CREATE TABLE "テーブルテーブルテーブルテーブルテーブル" (
+      "カラムカラムカラムカラムカラムカラム" int,
+      UNIQUE ("カラムカラムカラムカラムカラムカラム")
+    );
+  up: |
+    ALTER TABLE public."テーブルテーブルテーブルテーブルテーブル" ADD UNIQUE ("カラムカラムカラムカラムカラムカラム");
+  down: |
+    ALTER TABLE public."テーブルテーブルテーブルテーブルテーブル" DROP CONSTRAINT "テーブルテーブルテ_カラムカラムカラム_key";
+
+AddUnnamedUniqueConstraintNullsNotDistinct:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint,
+      UNIQUE NULLS NOT DISTINCT (a, b)
+    );
+  up: |
+    ALTER TABLE public.t ADD UNIQUE NULLS NOT DISTINCT (a, b);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_a_b_key;
+  min_version: "15"
+
+AddUnnamedUniqueConstraintWithAlterTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    ALTER TABLE t ADD UNIQUE (a);
+  up: |
+    ALTER TABLE t ADD UNIQUE (a);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_a_key;
+
+AddUnnamedPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL,
+      PRIMARY KEY (a)
+    );
+  up: |
+    ALTER TABLE public.t ADD PRIMARY KEY (a);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pkey;
+
+AddUnnamedPrimaryKeyWithAlterTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint NOT NULL
+    );
+    ALTER TABLE t ADD PRIMARY KEY (a);
+  up: |
+    ALTER TABLE public.t ADD PRIMARY KEY (a);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_pkey;
+
+AddUnnamedForeignKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE p (
+      id bigint PRIMARY KEY
+    );
+    CREATE TABLE c (
+      p_id bigint
+    );
+  desired: |
+    CREATE TABLE p (
+      id bigint PRIMARY KEY
+    );
+    CREATE TABLE c (
+      p_id bigint,
+      FOREIGN KEY (p_id) REFERENCES p (id)
+    );
+  up: |
+    ALTER TABLE public.c ADD FOREIGN KEY (p_id) REFERENCES public.p (id);
+  down: |
+    ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey;
+
+AddUnnamedForeignKeyWithAlterTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE p (
+      id bigint PRIMARY KEY
+    );
+    CREATE TABLE c (
+      p_id bigint
+    );
+  desired: |
+    CREATE TABLE p (
+      id bigint PRIMARY KEY
+    );
+    CREATE TABLE c (
+      p_id bigint
+    );
+    ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES p (id);
+  up: |
+    ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES p (id);
+  down: |
+    ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey;

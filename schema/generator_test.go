@@ -260,6 +260,197 @@ func TestPostgresCheckConstraintMatching(t *testing.T) {
 	}
 }
 
+func TestPostgresIndexMatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		desired  string
+		expected []string
+	}{
+		{
+			name: "one current index is not reused",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX t_a_idx ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);
+				CREATE INDEX ON t (a);`,
+			expected: []string{
+				"CREATE INDEX ON public.t (a)",
+			},
+		},
+		{
+			name: "one desired index is not reused",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX t_a_idx ON t (a);
+				CREATE INDEX t_a_idx1 ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			expected: []string{
+				"DROP INDEX public.t_a_idx1",
+			},
+		},
+		{
+			name: "named indexes match before unnamed indexes",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX my_idx ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);
+				CREATE INDEX my_idx ON t (a);`,
+			expected: []string{
+				"CREATE INDEX ON public.t (a)",
+			},
+		},
+		{
+			name: "current indexes are matched in name order",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX t_a_idx1 ON t (a);
+				CREATE INDEX t_a_idx ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			expected: []string{
+				"DROP INDEX public.t_a_idx1",
+			},
+		},
+		{
+			name: "unnamed current index matches unnamed desired index",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			expected: []string{},
+		},
+		{
+			name: "one current unique constraint is not reused",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT t_a_key UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a),
+				UNIQUE (a)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.t ADD UNIQUE (a)",
+			},
+		},
+		{
+			name: "one desired unique constraint is not reused",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT t_a_key UNIQUE (a),
+				CONSTRAINT t_a_key1 UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.t DROP CONSTRAINT t_a_key1",
+			},
+		},
+		{
+			name: "named unique constraints match before unnamed unique constraints",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT my_key UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a),
+				CONSTRAINT my_key UNIQUE (a)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.t ADD UNIQUE (a)",
+			},
+		},
+		{
+			name: "current unique constraints are matched in name order",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT t_a_key1 UNIQUE (a),
+				CONSTRAINT t_a_key UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.t DROP CONSTRAINT t_a_key1",
+			},
+		},
+		{
+			name: "unnamed current unique constraint matches unnamed desired unique constraint",
+			current: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
+func TestPostgresUnnamedCurrentIndexDropError(t *testing.T) {
+	tests := []struct {
+		name          string
+		current       string
+		desired       string
+		expectedError string
+	}{
+		{
+			name: "remove index",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			desired:       `CREATE TABLE t (a integer);`,
+			expectedError: "cannot drop unnamed PostgreSQL index on table public.t: the current schema does not contain the index name required by DROP INDEX; export the current schema from a live database or specify the index name explicitly",
+		},
+		{
+			name: "remove unique constraint",
+			current: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			desired:       `CREATE TABLE t (a integer);`,
+			expectedError: "cannot drop unnamed PostgreSQL UNIQUE constraint on table public.t: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+
+			require.EqualError(t, err, tt.expectedError)
+			assert.Nil(t, ddls)
+		})
+	}
+}
+
 func TestPostgresUnnamedCurrentCheckDropError(t *testing.T) {
 	const expectedError = "cannot drop unnamed PostgreSQL CHECK constraint on table public.measurements: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly"
 
@@ -333,6 +524,7 @@ func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
 		defaultSchema:      "public",
 		config:             database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
 		postgresCheckPlans: make(map[string]*postgresCheckMatchPlan),
+		postgresIndexPlans: make(map[string]*postgresIndexMatchPlan),
 	}
 }
 
@@ -1409,13 +1601,13 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 	}
 }
 
-// TestAutoIndexName covers the names PostgreSQL and MySQL give an index or constraint declared
-// without one. A name that does not match what the server chose makes the desired schema differ
-// from the exported one on every run, so the index is dropped and recreated each time.
+// TestAutoIndexName covers the names MySQL gives an index or constraint declared without one. A
+// name that does not match what the server chose makes the desired schema differ from the
+// exported one on every run, so the index is dropped and recreated each time.
 func TestAutoIndexName(t *testing.T) {
-	nameOf := func(t *testing.T, mode GeneratorMode, parserMode parser.ParserMode, statement string) string {
+	nameOf := func(t *testing.T, statement string) string {
 		t.Helper()
-		ddls, err := ParseDDLs(mode, database.NewParser(parserMode), statement+";", "public")
+		ddls, err := ParseDDLs(GeneratorModeMysql, database.NewParser(parser.ParserModeMysql), statement+";", "public")
 		require.NoError(t, err)
 		require.Len(t, ddls, 1)
 		switch ddl := ddls[0].(type) {
@@ -1431,37 +1623,6 @@ func TestAutoIndexName(t *testing.T) {
 		}
 	}
 
-	postgres := []struct {
-		statement string
-		expected  string
-	}{
-		{`CREATE INDEX ON t (a)`, "t_a_idx"},
-		{`CREATE UNIQUE INDEX ON t (a)`, "t_a_idx"},
-		{`CREATE INDEX ON t (a) INCLUDE (b, c)`, "t_a_b_c_idx"},
-		{`CREATE INDEX ON t (lower(a), lower(b))`, "t_lower_lower1_idx"},
-		{`CREATE INDEX ON t ((a::text))`, "t_a_idx"},
-		{`CREATE INDEX ON t ((a COLLATE "C"))`, "t_a_idx"},
-		{`CREATE INDEX ON t (((a COLLATE "C")))`, "t_a_idx"},
-		{`CREATE INDEX ON t ((CAST(a AS text)))`, "t_a_idx"},
-		{`CREATE INDEX ON t ((CASE WHEN a > 0 THEN 1 ELSE 0 END))`, "t_case_idx"},
-		{`CREATE INDEX ON t ((a + b))`, "t_expr_idx"},
-		{`ALTER TABLE t ADD UNIQUE (a, b)`, "t_a_b_key"},
-		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "t_pkey"},
-		{
-			`CREATE INDEX ON a_table_whose_name_is_quite_long_and_will_certainly_be_truncated (a)`,
-			"a_table_whose_name_is_quite_long_and_will_certainly_be_tr_a_idx",
-		},
-		{
-			`ALTER TABLE a_table_whose_name_is_quite_long_and_will_certainly_be_truncated ADD PRIMARY KEY (a)`,
-			"a_table_whose_name_is_quite_long_and_will_certainly_be_tru_pkey",
-		},
-	}
-	for _, tt := range postgres {
-		t.Run(tt.statement, func(t *testing.T) {
-			assert.Equal(t, tt.expected, nameOf(t, GeneratorModePostgres, parser.ParserModePostgres, tt.statement))
-		})
-	}
-
 	mysql := []struct {
 		statement string
 		expected  string
@@ -1471,7 +1632,7 @@ func TestAutoIndexName(t *testing.T) {
 	}
 	for _, tt := range mysql {
 		t.Run("mysql "+tt.statement, func(t *testing.T) {
-			assert.Equal(t, tt.expected, nameOf(t, GeneratorModeMysql, parser.ParserModeMysql, tt.statement))
+			assert.Equal(t, tt.expected, nameOf(t, tt.statement))
 		})
 	}
 }

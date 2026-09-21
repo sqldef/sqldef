@@ -822,3 +822,22 @@ IndexOnMaterializedViewRecreateIsHeldBackWithoutEnableDrop:
     -- Skipped: DROP INDEX public.mv_a_idx;
     -- Skipped: CREATE UNIQUE INDEX mv_a_idx ON public.mv USING btree (a) INCLUDE (b);
   down: ""
+
+UnnamedIndexOnMaterializedView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE INDEX ON mv (a);
+  up: |
+    CREATE INDEX ON public.mv (a);
+  down: ""

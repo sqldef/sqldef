@@ -60,6 +60,16 @@ type postgresCheckMatchPlan struct {
 	generated        bool
 }
 
+type postgresIndexMatchPlan struct {
+	// columns resolves omitted index collations; nil for a materialized view.
+	columns          map[string]*Column
+	current          []Index
+	desired          []Index
+	currentToDesired []int
+	desiredToCurrent []int
+	claimed          []bool
+}
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
@@ -117,6 +127,7 @@ type Generator struct {
 	indexToTable map[string]QualifiedName
 
 	postgresCheckPlans map[string]*postgresCheckMatchPlan
+	postgresIndexPlans map[string]*postgresIndexMatchPlan
 
 	// Privilege changes already emitted, so that a grantee listed in several
 	// desired GRANTs on the same object gets each change once.
@@ -219,6 +230,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		indexToTable:        make(map[string]QualifiedName),
 		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
 		emittedPrivileges:   make(map[string]bool),
+		postgresIndexPlans:  make(map[string]*postgresIndexMatchPlan),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -231,7 +243,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 func sortIndexesByName(indexes []Index) []Index {
 	result := make([]Index, len(indexes))
 	copy(result, indexes)
-	slices.SortFunc(result, func(a, b Index) int {
+	slices.SortStableFunc(result, func(a, b Index) int {
 		return strings.Compare(a.name.Name, b.name.Name)
 	})
 	return result
@@ -262,7 +274,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		case *CreateTable:
 			if currentTable := g.findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
-				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desired)
+				tableDDLs, mergedIndexes, err := g.generateDDLsForCreateTable(*currentTable, *desired)
 				if err != nil {
 					return nil, err
 				}
@@ -273,7 +285,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, out)
 					}
 				}
-				mergeTable(currentTable, desired.table)
+				mergeTable(currentTable, desired.table, mergedIndexes)
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if !desired.table.renamedFrom.IsEmpty() {
@@ -293,7 +305,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						oldTable.name = desired.table.name
 
 						// Now generate DDLs for any column/index changes
-						tableDDLs, err := g.generateDDLsForCreateTable(*oldTable, *desired)
+						tableDDLs, mergedIndexes, err := g.generateDDLsForCreateTable(*oldTable, *desired)
 						if err != nil {
 							return nil, err
 						}
@@ -304,7 +316,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 								interDDLs = append(interDDLs, out)
 							}
 						}
-						mergeTable(oldTable, desired.table)
+						mergeTable(oldTable, desired.table, mergedIndexes)
 					} else {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, desired.statement)
@@ -608,24 +620,31 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check indexes
 		// Sort current indexes by name for deterministic DDL ordering (DB may return indexes in different order)
-		for _, index := range sortIndexesByName(currentTable.indexes) {
-
+		currentIndexes := sortIndexesByName(currentTable.indexes)
+		indexExpected := func(_ int, index Index) bool {
+			return g.findIndexByName(desiredTable.indexes, index.name) != nil
+		}
+		if g.mode == GeneratorModePostgres {
+			// The plan holds the indexes as they were before this run added any, sorted by name.
+			plan := g.postgresTableIndexPlan(currentTable)
+			currentIndexes = plan.current
+			indexExpected = func(currentIndex int, _ Index) bool {
+				return plan.currentToDesired[currentIndex] >= 0
+			}
+		}
+		for currentIndex, index := range currentIndexes {
 			// Alter statement for primary key index should be generated above.
-			if index.primary {
+			if index.primary || indexExpected(currentIndex, index) {
 				continue
 			}
 
-			indexExistsInDesired := g.findIndexByName(desiredTable.indexes, index.name) != nil
 			// Also check foreign key index names (these are plain strings)
-			if !indexExistsInDesired {
-				indexExistsInDesired = slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name)
+			if slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name) {
+				continue
 			}
 			// For MySQL, also check if this index supports an unnamed FK (the FK index name might be the column name)
-			if !indexExistsInDesired && g.mode == GeneratorModeMysql {
-				indexExistsInDesired = g.indexSupportsUnnamedForeignKey(index, desiredTable.foreignKeys)
-			}
-			if indexExistsInDesired {
-				continue // Index is expected to exist.
+			if g.mode == GeneratorModeMysql && g.indexSupportsUnnamedForeignKey(index, desiredTable.foreignKeys) {
+				continue
 			}
 
 			// Check if this index was renamed (don't drop if it was renamed)
@@ -645,8 +664,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return ddls, err
 			}
+			if len(indexDDLs) > 0 && index.name.IsEmpty() {
+				return nil, g.unnamedPostgresIndexDropError(currentTable.name, index)
+			}
 			appendDDL(indexDDLs...)
-			g.trackDroppedIndex(currentTable, index)
+			g.trackDroppedIndex(currentTable.name, index)
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
 
@@ -1051,11 +1073,16 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 	return append(ddls, ddl)
 }
 
-// In the caller, `mergeTable` manages `g.currentTables`.
-func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, error) {
+// In the caller, `mergeTable` manages `g.currentTables`. The returned indexes are the desired
+// ones for it to merge, with each unnamed index that matched a current one carrying its name.
+func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, []Index, error) {
 	ddls := []string{}
+	mergedIndexes := desired.table.indexes
+	var indexPlan *postgresIndexMatchPlan
 	if g.mode == GeneratorModePostgres {
 		g.postgresCheckMatchPlan(&currentTable, &desired.table)
+		indexPlan = g.postgresTableIndexPlan(&currentTable)
+		mergedIndexes = slices.Clone(desired.table.indexes)
 	}
 	// Track foreign keys that need to be recreated after primary key changes
 	var fkRecreationDDLs []string
@@ -1072,7 +1099,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if !desiredColumn.renamedFrom.IsEmpty() {
 			// Check for conflict: can't rename a column if the old name still exists
 			if g.findColumnByName(desired.table.columns, desiredColumn.renamedFrom) != nil {
-				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
+				return ddls, nil, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
 					desiredColumn.renamedFrom.Name, desiredColumn.name.Name, desiredColumn.renamedFrom.Name)
 			}
 		}
@@ -1134,7 +1161,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// MySQL uses CHANGE COLUMN for rename
 					definition, err := g.generateColumnDefinition(desiredColumn, true)
 					if err != nil {
-						return ddls, err
+						return ddls, nil, err
 					}
 					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s",
 						g.escapeTableName(&desired.table),
@@ -1170,7 +1197,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn))) {
 						definition, err := g.generateColumnDefinition(desiredColumn, false)
 						if err != nil {
-							return ddls, err
+							return ddls, nil, err
 						}
 						// Use consistent table name format (without default schema prefix)
 						var escapedTableName string
@@ -1195,7 +1222,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 						definition, err := g.generateColumnDefinition(desiredColumn, true)
 						if err != nil {
-							return ddls, err
+							return ddls, nil, err
 						}
 
 						// 1. Add new column with desired name and definition
@@ -1225,7 +1252,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// Fallback to regular ADD for unsupported databases
 					definition, err := g.generateColumnDefinition(desiredColumn, true)
 					if err != nil {
-						return ddls, err
+						return ddls, nil, err
 					}
 					ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(&desired.table), definition)
 					ddls = append(ddls, ddl)
@@ -1240,7 +1267,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 				definition, err := g.generateColumnDefinition(desiredColumn, true)
 				if err != nil {
-					return ddls, err
+					return ddls, nil, err
 				}
 
 				// Column not found, add column.
@@ -1274,7 +1301,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) || !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
-						return ddls, err
+						return ddls, nil, err
 					}
 
 					// MySQL has limitations (Error 3106) with generated columns that require using
@@ -1409,7 +1436,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if desiredColumn.defaultDef != nil {
 						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
-							return ddls, err
+							return ddls, nil, err
 						}
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), definition))
 					}
@@ -1421,7 +1448,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// set - use desiredColumn for escaping to match user's quote style
 						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
-							return ddls, err
+							return ddls, nil, err
 						}
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), definition))
 					}
@@ -1435,7 +1462,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// Change column definition
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
-						return ddls, err
+						return ddls, nil, err
 					}
 					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s", g.escapeTableName(&desired.table), definition)
 					ddls = append(ddls, ddl)
@@ -1459,7 +1486,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if !skipDrop {
 						tableName := desired.table.name.Name.Name
 						columnNameForCheck := desiredColumn.name.Name
-						constraintNameIdent := buildPostgresConstraintNameIdent(tableName, columnNameForCheck, "check")
+						constraintNameIdent := buildMssqlCheckConstraintName(tableName, columnNameForCheck)
 						if currentColumn.check != nil {
 							currentConstraintNameIdent := currentColumn.check.constraintName
 							if currentConstraintNameIdent.IsEmpty() {
@@ -1493,7 +1520,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if desiredColumn.identity != nil {
 						definition, err := g.generateColumnDefinition(desiredColumn, true)
 						if err != nil {
-							return ddls, err
+							return ddls, nil, err
 						}
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), definition))
 					}
@@ -1509,7 +1536,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// set
 						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
-							return ddls, err
+							return ddls, nil, err
 						}
 						var ddl string
 						if !desiredColumn.defaultDef.constraintName.IsEmpty() {
@@ -1527,7 +1554,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	if g.mode == GeneratorModePostgres {
 		checkDDLs, err := g.generatePostgresCheckDDLs(&currentTable, &desired.table)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ddls = append(ddls, checkDDLs...)
 	}
@@ -1556,7 +1583,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			if needsChange {
 				definition, err := g.generateColumnDefinition(*currentColumn, false)
 				if err != nil {
-					return ddls, err
+					return ddls, nil, err
 				}
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(&currentTable), g.escapeColumnName(currentColumn), definition))
 			}
@@ -1633,12 +1660,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				for _, desiredTable := range g.desiredTables {
 					if g.qualifiedNamesEqual(desiredTable.name, refFK.tableName) {
 						desiredTableExists = true
-						for _, fk := range desiredTable.foreignKeys {
-							if g.identsEqual(fk.constraintName, refFK.foreignKey.constraintName) {
-								desiredFK = &fk
-								break
-							}
-						}
+						desiredFK = g.findForeignKeyByName(desiredTable.foreignKeys, refFK.foreignKey.constraintName)
 						break
 					}
 				}
@@ -1689,7 +1711,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							// Instead, we use CHANGE COLUMN with the full column definition
 							definition, err := g.generateColumnDefinition(*desiredColumn, true)
 							if err != nil {
-								return ddls, err
+								return ddls, nil, err
 							}
 							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s",
 								g.escapeTableName(&desired.table),
@@ -1700,7 +1722,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							// Instead, we use ALTER COLUMN with the full column definition
 							definition, err := g.generateColumnDefinition(*desiredColumn, false)
 							if err != nil {
-								return ddls, err
+								return ddls, nil, err
 							}
 							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s",
 								g.escapeTableName(&desired.table),
@@ -1725,12 +1747,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	// Examine each index
-	for _, desiredIndex := range desired.table.indexes {
+	for i, desiredIndex := range desired.table.indexes {
 		if desiredIndex.primary {
 			continue
 		}
 
-		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
+		if indexPlan != nil && desiredIndex.name.IsEmpty() {
+			if matched := g.claimPostgresIndex(indexPlan, desiredIndex); matched != nil {
+				mergedIndexes[i].name = matched.name
+			} else {
+				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+			}
+		} else if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(currentTable.columns, *currentIndex, desiredIndex) {
 				ddls, _ = g.appendRecreate(ddls,
@@ -1777,7 +1805,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			if needsChange {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
-					return ddls, err
+					return ddls, nil, err
 				}
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(&currentTable), g.escapeColumnName(desiredColumn), definition))
 			}
@@ -1802,14 +1830,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				constraintName = matchedCurrentFK.constraintName
 			}
 
-			// If no matching FK found in current state, generate a deterministic name
+			// If no matching FK found in current state, generate a deterministic name.
+			// PostgreSQL names it when the FK is added without one.
 			if constraintName.IsEmpty() {
 				tableName := desired.table.name.Name.Name
 				// Use the first column name for the constraint name
 				columnName := desiredForeignKey.indexColumns[0].Name
 				switch g.mode {
-				case GeneratorModePostgres:
-					constraintName = buildPostgresConstraintNameIdent(tableName, columnName, "fkey")
 				case GeneratorModeMysql:
 					constraintName = buildMysqlForeignKeyNameIdent(tableName, columnName)
 				case GeneratorModeMssql:
@@ -1967,7 +1994,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		ddls = append(ddls, fkRecreationDDLs...)
 	}
 
-	return ddls, nil
+	return ddls, mergedIndexes, nil
 }
 
 // generatePartitionDDLs compares partitions between current and desired tables
@@ -2103,6 +2130,18 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 	if currentTable == nil { // Views or non-existent tables
 		currentView := g.findViewByName(g.currentViews, tableName)
 		if currentView != nil {
+			if g.mode == GeneratorModePostgres {
+				// Built before this statement changes currentView.indexes, even for a named index.
+				desiredView := g.findViewByName(g.desiredViews, tableName)
+				plan := g.postgresIndexMatchPlan(currentView.name, nil, currentView.indexes, desiredView.indexes)
+				if desiredIndex.name.IsEmpty() {
+					if g.claimPostgresIndex(plan, desiredIndex) == nil {
+						ddls = append(ddls, statement)
+						currentView.indexes = append(currentView.indexes, desiredIndex)
+					}
+					return ddls, nil
+				}
+			}
 			currentIndex := g.findIndexByName(currentView.indexes, desiredIndex.name)
 			if currentIndex == nil {
 				// Index not found, add index.
@@ -2144,8 +2183,20 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 		return ddls, nil
 	}
 
-	currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name)
-	if currentIndex == nil {
+	var plan *postgresIndexMatchPlan
+	if g.mode == GeneratorModePostgres {
+		// Built before this statement changes currentTable.indexes, even for a named index.
+		plan = g.postgresTableIndexPlan(currentTable)
+	}
+
+	if plan != nil && desiredIndex.name.IsEmpty() {
+		if matched := g.claimPostgresIndex(plan, desiredIndex); matched != nil {
+			desiredIndex.name = matched.name
+		} else {
+			ddls = append(ddls, statement)
+			currentTable.indexes = append(currentTable.indexes, desiredIndex)
+		}
+	} else if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
 		if !desiredIndex.renamedFrom.IsEmpty() {
@@ -2167,7 +2218,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 			}
 			if renamed {
 				// PostgreSQL automatically transfers comments when renaming indexes
-				g.trackDroppedIndex(currentTable, *renameFromIndex)
+				g.trackDroppedIndex(currentTable.name, *renameFromIndex)
 				currentTable.indexes = g.replaceIndex(currentTable.indexes, renameFromIndex.name, desiredIndex)
 			} else {
 				g.trackHeldBackIndex(currentTable.name, renameFromIndex.name)
@@ -2206,8 +2257,16 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 func (g *Generator) generateDDLsForAddForeignKey(tableName QualifiedName, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
 	var ddls []string
 
+	// Unnamed foreign key: match the server-named one by columns.
+	findForeignKey := func(foreignKeys []ForeignKey) *ForeignKey {
+		if g.mode == GeneratorModePostgres && desiredForeignKey.constraintName.IsEmpty() {
+			return g.findForeignKeyByColumns(foreignKeys, desiredForeignKey)
+		}
+		return g.findForeignKeyByName(foreignKeys, desiredForeignKey.constraintName)
+	}
+
 	currentTable := g.findTableByName(g.currentTables, tableName)
-	currentForeignKey := g.findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
+	currentForeignKey := findForeignKey(currentTable.foreignKeys)
 	if currentForeignKey == nil {
 		// Foreign Key not found, add foreign key
 		ddls = append(ddls, statement)
@@ -2223,7 +2282,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName QualifiedName, desire
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := g.findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findForeignKeyByName(desiredTable.foreignKeys, desiredForeignKey.constraintName) == nil {
+	if findForeignKey(desiredTable.foreignKeys) == nil {
 		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 	}
 
@@ -3708,7 +3767,10 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	if index.async {
 		ddl += " ASYNC"
 	}
-	ddl += fmt.Sprintf(" %s ON %s", g.escapeSQLIdent(index.name), g.escapeQualifiedName(table))
+	if !index.name.IsEmpty() {
+		ddl += " " + g.escapeSQLIdent(index.name)
+	}
+	ddl += " ON " + g.escapeQualifiedName(table)
 
 	// Add index method if specified (e.g., USING btree)
 	if index.indexType != "" && !strings.EqualFold(index.indexType, "INDEX") &&
@@ -3820,39 +3882,18 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 			(!index.name.IsEmpty() && index.name.Name != "PRIMARY" && index.name.Name != index.columns[0].ColumnName()) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(index.name))
 		}
-		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE")
-		if isUniqueConstraint {
-			ddl += "CONSTRAINT"
-		} else {
-			ddl += strings.ToUpper(index.indexType)
-		}
-		if !index.primary {
-			constraintName := index.name
-			if isUniqueConstraint && len(index.columns) == 1 {
-				columnName := index.columns[0].ColumnName()
-
-				// If the current name is just the column name (common with generic parser),
-				// replace it with the PostgreSQL convention
-				if constraintName.Name == columnName {
-					constraintName = buildPostgresConstraintNameIdent(table.Name.Name, columnName, "key")
-					slog.Debug("Auto-generating PostgreSQL UNIQUE constraint name",
-						"table", table.Name.Name,
-						"column", columnName,
-						"generated_name", constraintName.Name,
-						"quoted", constraintName.Quoted)
-				} else {
-					slog.Debug("Using existing UNIQUE constraint name",
-						"table", table.Name.Name,
-						"column", columnName,
-						"constraint_name", constraintName.Name)
-				}
+		if strings.EqualFold(index.indexType, "UNIQUE") {
+			if !index.name.IsEmpty() {
+				ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(index.name))
 			}
-			ddl += fmt.Sprintf(" %s", g.escapeSQLIdent(constraintName))
-		}
-		if isUniqueConstraint {
-			ddl += " UNIQUE"
+			ddl += "UNIQUE"
 			if index.nullsNotDistinct {
 				ddl += " NULLS NOT DISTINCT"
+			}
+		} else {
+			ddl += strings.ToUpper(index.indexType)
+			if !index.primary {
+				ddl += fmt.Sprintf(" %s", g.escapeSQLIdent(index.name))
 			}
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
@@ -3962,8 +4003,11 @@ func (g *Generator) generateConstraintOptions(ConstraintOptions *ConstraintOptio
 func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	// TODO: make string concatenation faster?
 
-	// Empty constraint name is already invalidated in generateDDLsForCreateIndex
-	definition := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY ", g.escapeSQLIdent(foreignKey.constraintName))
+	definition := ""
+	if !foreignKey.constraintName.IsEmpty() {
+		definition = fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(foreignKey.constraintName))
+	}
+	definition += "FOREIGN KEY "
 
 	if !foreignKey.indexName.IsEmpty() {
 		definition += fmt.Sprintf("%s ", g.escapeSQLIdent(foreignKey.indexName))
@@ -4380,7 +4424,7 @@ func (g *Generator) notNull(column Column) bool {
 }
 
 func isAddConstraintForeignKey(ddl string) bool {
-	if strings.HasPrefix(ddl, "ALTER TABLE") && strings.Contains(ddl, "ADD CONSTRAINT") && strings.Contains(ddl, "FOREIGN KEY") {
+	if strings.HasPrefix(ddl, "ALTER TABLE") && (strings.Contains(ddl, "ADD CONSTRAINT") || strings.Contains(ddl, "ADD FOREIGN KEY")) && strings.Contains(ddl, "FOREIGN KEY") {
 		return true
 	}
 	return false
@@ -4412,16 +4456,17 @@ func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 	return false
 }
 
-// Destructively modify table1 to have table2 columns/indexes
-func mergeTable(table1 *Table, table2 Table) {
+// Destructively modify table1 to have table2 columns and the given indexes
+func mergeTable(table1 *Table, table2 Table, indexes []Index) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
 		table1.columns[column.name.Name] = column
 	}
 
-	// Add indexes from table2 that don't exist in table1
-	for _, index := range table2.indexes {
-		if !slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name.Name) {
+	// Add indexes that don't exist in table1. An unnamed index here is one that was added
+	// without a name, so there is nothing to deduplicate it by.
+	for _, index := range indexes {
+		if index.name.IsEmpty() || !slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name.Name) {
 			table1.indexes = append(table1.indexes, index)
 		}
 	}
@@ -5011,7 +5056,11 @@ func (g *Generator) findColumnByName(columns map[string]*Column, name Ident) *Co
 }
 
 // findIndexByName finds an index by its identifier using quote-aware comparison.
+// An unnamed index is never found by name.
 func (g *Generator) findIndexByName(indexes []Index, name Ident) *Index {
+	if name.IsEmpty() {
+		return nil
+	}
 	for _, index := range indexes {
 		if g.identsEqual(index.name, name) {
 			return &index
@@ -5075,47 +5124,65 @@ func (g *Generator) buildPostgresCheckMatchPlan(currentTable, desiredTable *Tabl
 		current: flattenPostgresChecks(currentTable),
 		desired: flattenPostgresChecks(desiredTable),
 	}
-	plan.currentToDesired = make([]int, len(plan.current))
-	for i := range plan.currentToDesired {
-		plan.currentToDesired[i] = -1
+	plan.currentToDesired, plan.desiredToCurrent = matchByNameThenDefinition(
+		plan.current, plan.desired,
+		func(entry postgresCheckEntry) (Ident, bool) { return entry.check.constraintName, true },
+		g.identsEqual,
+		func(current, desired postgresCheckEntry) bool {
+			return g.areSameCheckDefinition(current.check, desired.check)
+		},
+	)
+	return plan
+}
+
+// matchByNameThenDefinition pairs current and desired objects of a table, returning for each
+// side the index of its counterpart on the other side, or -1. An object each side is excluded
+// from, as ident reports with a false, stays unpaired. Each object is paired at most once.
+// Named desired objects are paired by name first so that an unnamed desired object cannot
+// consume a named desired object's identity; unnamed ones are then paired by definition.
+func matchByNameThenDefinition[T any](current, desired []T, ident func(T) (Ident, bool), identsEqual func(a, b Ident) bool, sameDefinition func(current, desired T) bool) (currentToDesired, desiredToCurrent []int) {
+	currentToDesired = make([]int, len(current))
+	for i := range currentToDesired {
+		currentToDesired[i] = -1
 	}
-	plan.desiredToCurrent = make([]int, len(plan.desired))
-	for i := range plan.desiredToCurrent {
-		plan.desiredToCurrent[i] = -1
+	desiredToCurrent = make([]int, len(desired))
+	for i := range desiredToCurrent {
+		desiredToCurrent[i] = -1
 	}
 
-	match := func(desiredIndex int, same func(*CheckDefinition, *CheckDefinition) bool) {
-		for currentIndex := range plan.current {
-			if plan.currentToDesired[currentIndex] >= 0 {
+	match := func(desiredIndex int, same func(current, desired T) bool) {
+		for currentIndex := range current {
+			if currentToDesired[currentIndex] >= 0 {
 				continue
 			}
-			if !same(plan.current[currentIndex].check, plan.desired[desiredIndex].check) {
+			if _, ok := ident(current[currentIndex]); !ok {
 				continue
 			}
-			plan.currentToDesired[currentIndex] = desiredIndex
-			plan.desiredToCurrent[desiredIndex] = currentIndex
+			if !same(current[currentIndex], desired[desiredIndex]) {
+				continue
+			}
+			currentToDesired[currentIndex] = desiredIndex
+			desiredToCurrent[desiredIndex] = currentIndex
 			return
 		}
 	}
-
-	// Reserve explicitly named constraints before definition matching so an
-	// unnamed desired CHECK cannot consume a named desired CHECK's identity.
-	for desiredIndex, desired := range plan.desired {
-		if desired.check.constraintName.IsEmpty() {
-			continue
-		}
-		match(desiredIndex, func(current, desired *CheckDefinition) bool {
-			return g.identsEqual(current.constraintName, desired.constraintName)
-		})
-	}
-	for desiredIndex, desired := range plan.desired {
-		if !desired.check.constraintName.IsEmpty() {
-			continue
-		}
-		match(desiredIndex, g.areSameCheckDefinition)
+	sameName := func(current, desired T) bool {
+		currentName, _ := ident(current)
+		desiredName, _ := ident(desired)
+		return identsEqual(currentName, desiredName)
 	}
 
-	return plan
+	for desiredIndex := range desired {
+		if name, ok := ident(desired[desiredIndex]); ok && !name.IsEmpty() {
+			match(desiredIndex, sameName)
+		}
+	}
+	for desiredIndex := range desired {
+		if name, ok := ident(desired[desiredIndex]); ok && name.IsEmpty() {
+			match(desiredIndex, sameDefinition)
+		}
+	}
+	return currentToDesired, desiredToCurrent
 }
 
 func (g *Generator) postgresCheckMatchPlan(currentTable, desiredTable *Table) *postgresCheckMatchPlan {
@@ -5199,6 +5266,66 @@ func (g *Generator) generatePostgresCheckDDLs(currentTable, desiredTable *Table)
 	return ddls, nil
 }
 
+func (g *Generator) buildPostgresIndexMatchPlan(columns map[string]*Column, currentIndexes, desiredIndexes []Index) *postgresIndexMatchPlan {
+	plan := &postgresIndexMatchPlan{
+		columns: columns,
+		// Sorted by name so that, of current indexes with the same definition, the first one by
+		// name is kept and the rest are dropped.
+		current: sortIndexesByName(currentIndexes),
+		desired: slices.Clone(desiredIndexes),
+	}
+	// A primary key is diffed with the table, not matched here.
+	plan.currentToDesired, plan.desiredToCurrent = matchByNameThenDefinition(
+		plan.current, plan.desired,
+		func(index Index) (Ident, bool) { return index.name, !index.primary },
+		g.identsEqual,
+		func(current, desired Index) bool { return g.areSameIndexes(columns, current, desired) },
+	)
+	plan.claimed = make([]bool, len(plan.desired))
+	return plan
+}
+
+// postgresIndexMatchPlan returns the plan of the table or materialized view, building it on
+// first use. The first use must come before this run adds any index to currentIndexes.
+func (g *Generator) postgresIndexMatchPlan(name QualifiedName, columns map[string]*Column, currentIndexes, desiredIndexes []Index) *postgresIndexMatchPlan {
+	key := normalizeNameKey(name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	if plan := g.postgresIndexPlans[key]; plan != nil {
+		return plan
+	}
+	plan := g.buildPostgresIndexMatchPlan(columns, currentIndexes, desiredIndexes)
+	g.postgresIndexPlans[key] = plan
+	return plan
+}
+
+func (g *Generator) postgresTableIndexPlan(currentTable *Table) *postgresIndexMatchPlan {
+	desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
+	return g.postgresIndexMatchPlan(currentTable.name, currentTable.columns, currentTable.indexes, desiredTable.indexes)
+}
+
+// claimPostgresIndex takes the next unnamed desired index of the plan with the definition of
+// desiredIndex and returns the current index it matched, or nil if it has to be added. Unnamed
+// indexes with the same definition are interchangeable, so which of them is taken does not matter.
+func (g *Generator) claimPostgresIndex(plan *postgresIndexMatchPlan, desiredIndex Index) *Index {
+	for i, desired := range plan.desired {
+		if plan.claimed[i] || desired.primary || !desired.name.IsEmpty() || !g.areSameIndexes(plan.columns, desired, desiredIndex) {
+			continue
+		}
+		plan.claimed[i] = true
+		if currentIndex := plan.desiredToCurrent[i]; currentIndex >= 0 {
+			return &plan.current[currentIndex]
+		}
+		return nil
+	}
+	panic("PostgreSQL desired index not found")
+}
+
+func (g *Generator) unnamedPostgresIndexDropError(tableName QualifiedName, index Index) error {
+	if index.constraint {
+		return fmt.Errorf("cannot drop unnamed PostgreSQL UNIQUE constraint on table %s: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly", g.escapeQualifiedName(tableName))
+	}
+	return fmt.Errorf("cannot drop unnamed PostgreSQL index on table %s: the current schema does not contain the index name required by DROP INDEX; export the current schema from a live database or specify the index name explicitly", g.escapeQualifiedName(tableName))
+}
+
 // findCheckConstraintByName finds a CHECK constraint in a list by name
 func (g *Generator) findCheckConstraintByName(checks []CheckDefinition, constraintName Ident) *CheckDefinition {
 	for _, check := range checks {
@@ -5248,7 +5375,12 @@ func (g *Generator) findCheckConstraintByDefinition(table *Table, check *CheckDe
 	return nil
 }
 
+// findForeignKeyByName finds a foreign key by its constraint name. PostgreSQL names every foreign
+// key, so an unnamed one is never found by name there; it is matched by columns instead.
 func (g *Generator) findForeignKeyByName(foreignKeys []ForeignKey, constraintName Ident) *ForeignKey {
+	if g.mode == GeneratorModePostgres && constraintName.IsEmpty() {
+		return nil
+	}
 	for _, foreignKey := range foreignKeys {
 		if g.identsEqual(foreignKey.constraintName, constraintName) {
 			return &foreignKey
@@ -5758,8 +5890,8 @@ func (g *Generator) isCommentOnDroppedColumn(comment *Comment) bool {
 }
 
 // trackDroppedIndex records an index as dropped for later use in comment cleanup.
-func (g *Generator) trackDroppedIndex(table *Table, index Index) {
-	tableSchema := table.name.Schema
+func (g *Generator) trackDroppedIndex(tableName QualifiedName, index Index) {
+	tableSchema := tableName.Schema
 	if tableSchema.IsEmpty() {
 		tableSchema = parser.NewIdent(g.defaultSchema, false)
 	}
