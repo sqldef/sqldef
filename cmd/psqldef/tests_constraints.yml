@@ -2875,3 +2875,45 @@ UnnamedForeignKeyReferenceChangedWithAlterTable:
   down: |
     ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES p (id);
     ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey1;
+
+UnnamedUniqueConstraintDeclaredTwiceInCreateTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a int,
+      b int
+    );
+  desired: |
+    CREATE TABLE t (
+      a int,
+      b int,
+      UNIQUE (a),
+      UNIQUE (a),
+      UNIQUE (b),
+      CONSTRAINT t_b_uniq UNIQUE (b)
+    );
+  up: |
+    ALTER TABLE public.t ADD UNIQUE (a);
+    ALTER TABLE public.t ADD CONSTRAINT t_b_uniq UNIQUE (b);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_a_key;
+    ALTER TABLE public.t DROP CONSTRAINT t_b_uniq;
+
+UnnamedUniqueConstraintDeclaredTwiceInCreateTableAndWithAlterTable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a int,
+      UNIQUE (a),
+      UNIQUE (a)
+    );
+    ALTER TABLE t ADD UNIQUE (a);
+  up: |
+    CREATE TABLE t (
+      a int,
+      UNIQUE (a),
+      UNIQUE (a)
+    );
+    ALTER TABLE t ADD UNIQUE (a);
+  down: |
+    DROP TABLE public.t;

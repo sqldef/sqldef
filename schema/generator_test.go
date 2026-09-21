@@ -321,6 +321,17 @@ func TestPostgresIndexMatching(t *testing.T) {
 		},
 		{
 			name: "one current unique constraint is not reused",
+			current: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD CONSTRAINT t_a_key UNIQUE (a);`,
+			desired: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD UNIQUE (a);
+				ALTER TABLE t ADD UNIQUE (a);`,
+			expected: []string{
+				"ALTER TABLE t ADD UNIQUE (a)",
+			},
+		},
+		{
+			name: "unnamed unique constraints declared twice in CREATE TABLE are one",
 			current: `CREATE TABLE t (
 				a integer,
 				CONSTRAINT t_a_key UNIQUE (a)
@@ -330,9 +341,7 @@ func TestPostgresIndexMatching(t *testing.T) {
 				UNIQUE (a),
 				UNIQUE (a)
 			);`,
-			expected: []string{
-				"ALTER TABLE public.t ADD UNIQUE (a)",
-			},
+			expected: []string{},
 		},
 		{
 			name: "one desired unique constraint is not reused",
@@ -351,17 +360,13 @@ func TestPostgresIndexMatching(t *testing.T) {
 		},
 		{
 			name: "named unique constraints match before unnamed unique constraints",
-			current: `CREATE TABLE t (
-				a integer,
-				CONSTRAINT my_key UNIQUE (a)
-			);`,
-			desired: `CREATE TABLE t (
-				a integer,
-				UNIQUE (a),
-				CONSTRAINT my_key UNIQUE (a)
-			);`,
+			current: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD CONSTRAINT my_key UNIQUE (a);`,
+			desired: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD UNIQUE (a);
+				ALTER TABLE t ADD CONSTRAINT my_key UNIQUE (a);`,
 			expected: []string{
-				"ALTER TABLE public.t ADD UNIQUE (a)",
+				"ALTER TABLE t ADD UNIQUE (a)",
 			},
 		},
 		{

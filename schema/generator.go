@@ -181,6 +181,12 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 
 	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
+	if mode == GeneratorModePostgres {
+		folder := &Generator{mode: mode, config: config, defaultSchema: defaultSchema}
+		folder.foldPostgresCreateTableIndexes(desiredDDLs)
+		folder.foldPostgresCreateTableIndexes(currentDDLs)
+	}
+
 	aggregated, err := aggregateDDLsToSchema(currentDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 	if err != nil {
 		return nil, err
@@ -5286,6 +5292,43 @@ func (g *Generator) generatePostgresCheckDDLs(currentTable, desiredTable *Table)
 	}
 	plan.generated = true
 	return ddls, nil
+}
+
+// foldPostgresCreateTableIndexes drops each unnamed index constraint of a CREATE TABLE that
+// PostgreSQL does not create: one with the definition of a named one, or of an earlier unnamed
+// one, in the same statement. PostgreSQL creates a single index for them, under the name if one
+// is given. Separate statements are not folded.
+func (g *Generator) foldPostgresCreateTableIndexes(ddls []DDL) {
+	for _, ddl := range ddls {
+		createTable, ok := ddl.(*CreateTable)
+		if !ok {
+			continue
+		}
+		indexes := createTable.table.indexes
+		folded := make([]Index, 0, len(indexes))
+		for i, index := range indexes {
+			if !g.isFoldedPostgresCreateTableIndex(createTable.table.columns, indexes, i) {
+				folded = append(folded, index)
+			}
+		}
+		createTable.table.indexes = folded
+	}
+}
+
+func (g *Generator) isFoldedPostgresCreateTableIndex(columns map[string]*Column, indexes []Index, i int) bool {
+	index := indexes[i]
+	if index.primary || !index.name.IsEmpty() {
+		return false
+	}
+	for j, other := range indexes {
+		if j == i || other.primary || (j > i && other.name.IsEmpty()) {
+			continue
+		}
+		if g.areSameIndexes(columns, other, index) {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Generator) buildPostgresIndexMatchPlan(columns map[string]*Column, currentIndexes, desiredIndexes []Index) *postgresIndexMatchPlan {

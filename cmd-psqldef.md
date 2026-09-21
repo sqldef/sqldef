@@ -244,7 +244,8 @@ Remove the line to DROP INDEX.
 An index, UNIQUE constraint, PRIMARY KEY, or foreign key declared without a name is matched to
 an existing one by its definition, whatever that one is named. psqldef adds a missing one
 without a name (`CREATE INDEX ON users (name)`, `ALTER TABLE users ADD UNIQUE (name)`), so
-PostgreSQL chooses the name. Declared twice with the same definition, it stands for two indexes.
+PostgreSQL chooses the name. Declared twice with the same definition, it stands for two indexes,
+except for two constraints in one `CREATE TABLE`, which PostgreSQL creates as one.
 
 Give an index a name if you refer to it by name, as `COMMENT ON INDEX` and
 `-- @renamed from=old_name` do.
