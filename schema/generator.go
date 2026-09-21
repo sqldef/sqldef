@@ -5080,11 +5080,7 @@ func (g *Generator) findColumnByName(columns map[string]*Column, name Ident) *Co
 }
 
 // findIndexByName finds an index by its identifier using quote-aware comparison.
-// An unnamed index is never found by name.
 func (g *Generator) findIndexByName(indexes []Index, name Ident) *Index {
-	if name.IsEmpty() {
-		return nil
-	}
 	for _, index := range indexes {
 		if g.identsEqual(index.name, name) {
 			return &index

@@ -409,6 +409,13 @@ func TestPostgresIndexMatching(t *testing.T) {
 	}
 }
 
+func TestPostgresIndexMatchInvariantPanics(t *testing.T) {
+	generator := &Generator{mode: GeneratorModePostgres}
+	assert.PanicsWithValue(t, "PostgreSQL desired index not found", func() {
+		generator.claimPostgresIndex(&postgresIndexMatchPlan{}, Index{})
+	})
+}
+
 func TestPostgresUnnamedCurrentIndexDropError(t *testing.T) {
 	tests := []struct {
 		name          string
