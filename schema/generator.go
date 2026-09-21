@@ -5440,18 +5440,23 @@ func (g *Generator) findForeignKeyByColumns(foreignKeys []ForeignKey, desired Fo
 	return nil
 }
 
-// findMatchingDesiredForeignKey finds a desired foreign key that matches the current FK by source columns.
-// This is used to check if a current FK (with an auto-generated name) should be kept or dropped.
-// We only match by source columns (not reference table) because the reference table might change
-// when modifying an FK - in that case, we want to keep the FK for modification rather than dropping it.
+// findMatchingDesiredForeignKey finds an unnamed desired foreign key that the current FK (with an
+// auto-generated name) stands for, to decide whether the current FK should be kept or dropped.
+// MySQL and MSSQL match by source columns only: an FK whose reference changed is recreated under
+// the same generated name, so it must not be dropped here. PostgreSQL adds such an FK under a name
+// of the server's choosing, so the current one is kept only if the whole reference matches.
 func (g *Generator) findMatchingDesiredForeignKey(desiredForeignKeys []ForeignKey, current ForeignKey) *ForeignKey {
+	match := g.foreignKeysMatchBySourceColumns
+	if g.mode == GeneratorModePostgres {
+		match = g.foreignKeysMatchByColumns
+	}
 	for i := range desiredForeignKeys {
 		fk := &desiredForeignKeys[i]
 		// Only match against desired FKs that don't have explicit names
 		if !fk.constraintName.IsEmpty() {
 			continue
 		}
-		if g.foreignKeysMatchBySourceColumns(*fk, current) {
+		if match(*fk, current) {
 			return fk
 		}
 	}

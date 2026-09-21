@@ -2833,3 +2833,45 @@ UnnamedUniqueConstraintDeclaredInlineAndWithAlterTable:
     ALTER TABLE t ADD UNIQUE (a);
   down: |
     DROP TABLE public.t;
+
+UnnamedForeignKeyReferenceChanged:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE p (id int PRIMARY KEY);
+    CREATE TABLE q (id int PRIMARY KEY);
+    CREATE TABLE c (
+      p_id int,
+      FOREIGN KEY (p_id) REFERENCES p (id)
+    );
+  desired: |
+    CREATE TABLE p (id int PRIMARY KEY);
+    CREATE TABLE q (id int PRIMARY KEY);
+    CREATE TABLE c (
+      p_id int,
+      FOREIGN KEY (p_id) REFERENCES q (id)
+    );
+  up: |
+    ALTER TABLE public.c ADD FOREIGN KEY (p_id) REFERENCES public.q (id);
+    ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey;
+  down: |
+    ALTER TABLE public.c ADD FOREIGN KEY (p_id) REFERENCES public.p (id);
+    ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey1;
+
+UnnamedForeignKeyReferenceChangedWithAlterTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE p (id int PRIMARY KEY);
+    CREATE TABLE q (id int PRIMARY KEY);
+    CREATE TABLE c (p_id int);
+    ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES p (id);
+  desired: |
+    CREATE TABLE p (id int PRIMARY KEY);
+    CREATE TABLE q (id int PRIMARY KEY);
+    CREATE TABLE c (p_id int);
+    ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES q (id);
+  up: |
+    ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES q (id);
+    ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey;
+  down: |
+    ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES p (id);
+    ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey1;
