@@ -331,6 +331,19 @@ func TestPostgresIndexMatching(t *testing.T) {
 			},
 		},
 		{
+			name: "unnamed current unique constraints declared twice in CREATE TABLE are one",
+			current: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a),
+				UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{},
+		},
+		{
 			name: "unnamed unique constraints declared twice in CREATE TABLE are one",
 			current: `CREATE TABLE t (
 				a integer,
