@@ -2816,3 +2816,20 @@ AddUnnamedForeignKeyWithAlterTable:
     ALTER TABLE c ADD FOREIGN KEY (p_id) REFERENCES p (id);
   down: |
     ALTER TABLE public.c DROP CONSTRAINT c_p_id_fkey;
+
+UnnamedUniqueConstraintDeclaredInlineAndWithAlterTable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a int,
+      UNIQUE (a)
+    );
+    ALTER TABLE t ADD UNIQUE (a);
+  up: |
+    CREATE TABLE t (
+      a int,
+      UNIQUE (a)
+    );
+    ALTER TABLE t ADD UNIQUE (a);
+  down: |
+    DROP TABLE public.t;

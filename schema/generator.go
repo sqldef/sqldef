@@ -322,12 +322,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, desired.statement)
 						table := desired.table // copy table
 						g.currentTables = append(g.currentTables, &table)
+						g.claimCreatedTablePostgresIndexes(table)
 					}
 				} else {
 					// Table not found and no rename, create table.
 					interDDLs = append(interDDLs, desired.statement)
 					table := desired.table // copy table
 					g.currentTables = append(g.currentTables, &table)
+					g.claimCreatedTablePostgresIndexes(table)
 				}
 			}
 			// Only add to desiredTables if it doesn't already exist (it may have been pre-populated from aggregation)
@@ -5337,6 +5339,22 @@ func (g *Generator) claimPostgresIndex(plan *postgresIndexMatchPlan, desiredInde
 		return nil
 	}
 	panic("PostgreSQL desired index not found")
+}
+
+// claimCreatedTablePostgresIndexes plans a table created in this run. Its inline indexes are
+// added by the CREATE TABLE itself, so they are claimed before a later statement with the same
+// definition could be matched to one of them.
+func (g *Generator) claimCreatedTablePostgresIndexes(table Table) {
+	if g.mode != GeneratorModePostgres {
+		return
+	}
+	desiredTable := g.findTableByName(g.desiredTables, table.name)
+	plan := g.postgresIndexMatchPlan(table.name, table.columns, nil, desiredTable.indexes)
+	for _, index := range table.indexes {
+		if !index.primary && index.name.IsEmpty() {
+			g.claimPostgresIndex(plan, index)
+		}
+	}
 }
 
 func (g *Generator) unnamedPostgresIndexDropError(tableName QualifiedName, index Index) error {

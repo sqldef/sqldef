@@ -1652,12 +1652,21 @@ CreateIndexWithDateColumn_QuoteAware:
 
 UnnamedUniqueConstraintOnUnquotedMixedCaseColumn:
   legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id int,
+      Stateful int
+    );
   desired: |
     CREATE TABLE t (
       id int,
       Stateful int,
       UNIQUE (Stateful)
     );
+  up: |
+    ALTER TABLE public.t ADD UNIQUE (stateful);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_stateful_key;
 
 UnnamedIndexOnUnquotedMixedCaseColumn:
   legacy_ignore_quotes: false
@@ -1679,12 +1688,21 @@ UnnamedIndexOnUnquotedMixedCaseColumn:
 
 UnnamedUniqueConstraintOnUnquotedMixedCaseTable:
   legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Tmixed (
+      id int,
+      a int
+    );
   desired: |
     CREATE TABLE Tmixed (
       id int,
       a int,
       UNIQUE (a)
     );
+  up: |
+    ALTER TABLE public.tmixed ADD UNIQUE (a);
+  down: |
+    ALTER TABLE public.tmixed DROP CONSTRAINT tmixed_a_key;
 
 UnnamedIndexMatchesQuotedMixedCaseName:
   legacy_ignore_quotes: false
