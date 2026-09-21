@@ -432,6 +432,15 @@ func TestPostgresUnnamedCurrentIndexDropError(t *testing.T) {
 			desired:       `CREATE TABLE t (a integer);`,
 			expectedError: "cannot drop unnamed PostgreSQL UNIQUE constraint on table public.t: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly",
 		},
+		{
+			name: "remove index on materialized view",
+			current: `CREATE TABLE t (a integer);
+				CREATE MATERIALIZED VIEW mv AS SELECT a FROM t;
+				CREATE INDEX ON mv (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE MATERIALIZED VIEW mv AS SELECT a FROM t;`,
+			expectedError: "cannot drop unnamed PostgreSQL index on table public.mv: the current schema does not contain the index name required by DROP INDEX; export the current schema from a live database or specify the index name explicitly",
+		},
 	}
 
 	for _, tt := range tests {

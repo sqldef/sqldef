@@ -754,6 +754,30 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
+	// Clean up obsoleted indexes on remaining materialized views
+	if g.mode == GeneratorModePostgres {
+		for _, currentView := range g.currentViews {
+			if currentView.viewType != "MATERIALIZED VIEW" {
+				continue
+			}
+			desiredView := g.findViewByName(g.desiredViews, currentView.name)
+			if desiredView == nil {
+				continue // Already handled in drop views above
+			}
+			plan := g.postgresIndexMatchPlan(currentView.name, nil, currentView.indexes, desiredView.indexes)
+			for currentIndex, index := range plan.current {
+				if plan.currentToDesired[currentIndex] >= 0 {
+					continue
+				}
+				if index.name.IsEmpty() {
+					return nil, g.unnamedPostgresIndexDropError(currentView.name, index)
+				}
+				ddls = append(ddls, g.generateDropIndex(currentView.name, index.name, index.constraint))
+				g.trackDroppedIndex(currentView.name, index)
+			}
+		}
+	}
+
 	// Must run before the ALGORITHM/LOCK suffixing and drop-commenting below so
 	// those passes see each table's fused statement, not the placeholder.
 	ddls = bulkAlter.finalize(ddls)

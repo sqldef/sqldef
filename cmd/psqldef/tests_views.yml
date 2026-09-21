@@ -840,4 +840,48 @@ UnnamedIndexOnMaterializedView:
     CREATE INDEX ON mv (a);
   up: |
     CREATE INDEX ON public.mv (a);
-  down: ""
+  down: |
+    DROP INDEX public.mv_a_idx;
+
+UnnamedIndexOnMaterializedViewDefinitionChanged:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE INDEX ON mv (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE INDEX ON mv (a, b);
+  up: |
+    CREATE INDEX ON public.mv (a, b);
+    DROP INDEX public.mv_a_idx;
+  down: |
+    CREATE INDEX ON public.mv (a);
+    DROP INDEX public.mv_a_b_idx;
+
+DropIndexOnMaterializedView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+    CREATE INDEX mv_a_idx ON mv USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b text
+    );
+    CREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;
+  up: |
+    DROP INDEX public.mv_a_idx;
+  down: |
+    CREATE INDEX mv_a_idx ON public.mv USING btree (a);
