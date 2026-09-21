@@ -27,6 +27,12 @@ func TestBuildMssqlCheckConstraintName(t *testing.T) {
 			expected: strings.Repeat("t", 46) + "_" + strings.Repeat("c", 10) + "_check",
 		},
 		{
+			name:     "column over 28 bytes absorbs the whole overflow",
+			table:    strings.Repeat("t", 10),
+			column:   strings.Repeat("c", 60),
+			expected: strings.Repeat("t", 10) + "_" + strings.Repeat("c", 46) + "_check",
+		},
+		{
 			name:     "column is truncated to 28 bytes before table",
 			table:    strings.Repeat("t", 30),
 			column:   strings.Repeat("c", 40),
