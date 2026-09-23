@@ -6082,8 +6082,11 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	// Strip type casts remaining after normalizeExpr (e.g., custom types like ENUMs/domains).
 	// PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
 	// but users write DEFAULT 'pending' without the cast. Both are semantically identical.
-	normalizedCurrent := unwrapCast(normalizeExpr(currentDefault.expression, g.mode))
-	normalizedDesired := unwrapCast(normalizeExpr(desiredDefault.expression, g.mode))
+	// Also strip any parentheses a user wrote around a literal default (e.g. DEFAULT ('foo'));
+	// normalizeExpr only unwraps those for some modes (see its ParenExpr case), but parentheses
+	// are pure syntax noise for equality regardless of dialect.
+	normalizedCurrent := unwrapCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
+	normalizedDesired := unwrapCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
@@ -6131,6 +6134,19 @@ func unwrapCast(expr parser.Expr) parser.Expr {
 		return expr
 	}
 	return castExpr.Expr
+}
+
+// unwrapCastAndParens repeatedly strips type casts and parentheses (in either
+// order/nesting, e.g. `('pending'::order_status)` or `('foo')::text`) down to
+// the innermost expression, for equality comparison purposes.
+func unwrapCastAndParens(expr parser.Expr) parser.Expr {
+	for {
+		unwrapped := unwrapParenExpr(unwrapCast(expr))
+		if unwrapped == expr {
+			return unwrapped
+		}
+		expr = unwrapped
+	}
 }
 
 // isNumericColumnType determines if a column type should be compared numerically.
@@ -6420,19 +6436,33 @@ func isNullValue(value *Value) bool {
 	return value != nil && value.valueType == ValueTypeValArg && strings.EqualFold(value.raw, "null")
 }
 
+// unwrapParenExpr strips any number of nested parentheses (e.g. `((expr))`)
+// down to the innermost expression, e.g. as written by a user around a
+// literal default value (`DEFAULT ('foo')`).
+func unwrapParenExpr(expr parser.Expr) parser.Expr {
+	for {
+		paren, ok := expr.(*parser.ParenExpr)
+		if !ok {
+			return expr
+		}
+		expr = paren.Expr
+	}
+}
+
 func isNullDefault(def *DefaultDefinition) bool {
 	if def == nil || def.expression == nil {
 		return false
 	}
+	expr := unwrapParenExpr(def.expression)
 
 	// Check if it's a direct SQLVal
-	if sqlVal, ok := def.expression.(*parser.SQLVal); ok {
+	if sqlVal, ok := expr.(*parser.SQLVal); ok {
 		val := parseValue(sqlVal)
 		return isNullValue(val)
 	}
 
 	// Check if it's a CastExpr wrapping a NULL value (e.g., NULL::character varying)
-	if castExpr, ok := def.expression.(*parser.CastExpr); ok {
+	if castExpr, ok := expr.(*parser.CastExpr); ok {
 		if sqlVal, ok := castExpr.Expr.(*parser.SQLVal); ok {
 			val := parseValue(sqlVal)
 			return isNullValue(val)
@@ -6930,34 +6960,81 @@ func generateSequenceClause(sequence *Sequence) string {
 	return strings.TrimSpace(ddl)
 }
 
+// formatDefaultLiteral formats a simple literal default value (string, bool,
+// int, float, bit, or ValArg like NULL/CURRENT_TIMESTAMP), without the
+// leading "DEFAULT " keyword.
+func formatDefaultLiteral(sqlVal *parser.SQLVal) (string, error) {
+	defaultVal := parseValue(sqlVal)
+	switch defaultVal.valueType {
+	case ValueTypeStr:
+		return StringConstant(defaultVal.strVal), nil
+	case ValueTypeBool:
+		return fmt.Sprintf("%t", defaultVal.bitVal), nil
+	case ValueTypeInt:
+		return fmt.Sprintf("%d", defaultVal.intVal), nil
+	case ValueTypeFloat:
+		return fmt.Sprintf("%f", defaultVal.floatVal), nil
+	case ValueTypeBit:
+		// Emit the full bit string; deriving a single bit from bitVal collapsed
+		// multi-bit literals like b'101' to b'0'.
+		return fmt.Sprintf("b'%s'", defaultVal.raw), nil
+	case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
+		return defaultVal.raw, nil
+	default:
+		return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
+	}
+}
+
+// needsMySQLDefaultParens reports whether a literal default value of this type
+// must keep the parenthesized DEFAULT (expr) form on MySQL. TEXT/BLOB/JSON/
+// GEOMETRY columns reject a bare literal default (error 1101) but accept a
+// string or numeric literal wrapped in parentheses. ValArg (CURRENT_TIMESTAMP,
+// NULL, ...) and bool defaults are unaffected and keep round-tripping without
+// parentheses, as before.
+// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+func needsMySQLDefaultParens(valueType ValueType) bool {
+	switch valueType {
+	case ValueTypeStr, ValueTypeInt, ValueTypeFloat, ValueTypeBit:
+		return true
+	default:
+		return false
+	}
+}
+
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
-	// Type assertion: Check if it's a simple SQLVal
-	if sqlVal, ok := defaultDefinition.expression.(*parser.SQLVal); ok {
-		// Simple value path - maintain existing formatting behavior
-		defaultVal := parseValue(sqlVal)
-		switch defaultVal.valueType {
-		case ValueTypeStr:
-			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
-		case ValueTypeBool:
-			return fmt.Sprintf("DEFAULT %t", defaultVal.bitVal), nil
-		case ValueTypeInt:
-			return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
-		case ValueTypeFloat:
-			return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
-		case ValueTypeBit:
-			// Emit the full bit string; deriving a single bit from bitVal collapsed
-			// multi-bit literals like b'101' to b'0'.
-			return fmt.Sprintf("DEFAULT b'%s'", defaultVal.raw), nil
-		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
-			return fmt.Sprintf("DEFAULT %s", defaultVal.raw), nil
-		default:
-			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
+	expr := defaultDefinition.expression
+
+	if g.mode == GeneratorModeMysql {
+		if paren, ok := expr.(*parser.ParenExpr); ok {
+			if sqlVal, ok := unwrapParenExpr(paren.Expr).(*parser.SQLVal); ok {
+				if needsMySQLDefaultParens(parseValue(sqlVal).valueType) {
+					literal, err := formatDefaultLiteral(sqlVal)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("DEFAULT(%s)", literal), nil
+				}
+			}
 		}
+	}
+	// Every other case (non-MySQL dialects, or a MySQL literal kind that doesn't
+	// require the parenthesized form) ignores parentheses a user wrote around a
+	// literal default value.
+	expr = unwrapParenExpr(expr)
+
+	// Type assertion: Check if it's a simple SQLVal
+	if sqlVal, ok := expr.(*parser.SQLVal); ok {
+		// Simple value path - maintain existing formatting behavior
+		literal, err := formatDefaultLiteral(sqlVal)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("DEFAULT %s", literal), nil
 	}
 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
-	normalizedExpr := normalizeExpr(defaultDefinition.expression, g.mode)
+	normalizedExpr := normalizeExpr(expr, g.mode)
 	exprStr := parser.String(normalizedExpr)
 	if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error
