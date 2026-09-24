@@ -6091,6 +6091,14 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	// are pure syntax noise for equality regardless of dialect.
 	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
 	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	// PostgreSQL elides a cast to the type the expression already has (e.g. gen_random_uuid()::uuid
+	// is stored as gen_random_uuid()), so a cast present on only one side is not a difference.
+	_, currentIsCast := normalizedCurrent.(*parser.CastExpr)
+	_, desiredIsCast := normalizedDesired.(*parser.CastExpr)
+	if currentIsCast != desiredIsCast {
+		normalizedCurrent = unwrapParenExpr(unwrapCast(normalizedCurrent))
+		normalizedDesired = unwrapParenExpr(unwrapCast(normalizedDesired))
+	}
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)

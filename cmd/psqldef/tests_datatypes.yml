@@ -127,6 +127,13 @@ ChangeDefaultCastTypeOnFunctionCall:
   down: |
     ALTER TABLE public.test ALTER COLUMN a SET DEFAULT now()::date;
   legacy_ignore_quotes: false
+DefaultSameTypeCastOnFunctionCall:
+  desired: |
+    CREATE TABLE test (
+      a uuid DEFAULT gen_random_uuid()::uuid,
+      b text DEFAULT upper('a')::text
+    );
+  legacy_ignore_quotes: false
 NullCast:
   desired: |
     CREATE TABLE public.test (
