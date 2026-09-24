@@ -1403,7 +1403,7 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 			assert.Equal(t, index.indexType, regenerated.indexType)
 			assert.Equal(t, index.options, regenerated.options)
 			assert.Equal(t, index.included, regenerated.included)
-			assert.True(t, g.areSameIndexes(index, regenerated),
+			assert.True(t, g.areSameIndexes(nil, index, regenerated),
 				"regenerated statement describes a different index:\n%s\n%s", statement, generated)
 		})
 	}

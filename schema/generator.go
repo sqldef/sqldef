@@ -1528,7 +1528,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	currentPrimaryKey := currentTable.PrimaryKey()
 	desiredPrimaryKey := desired.table.PrimaryKey()
 
-	primaryKeysChanged := !g.areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
+	primaryKeysChanged := !g.areSamePrimaryKeys(currentTable.columns, currentPrimaryKey, desiredPrimaryKey)
 
 	// Remove old AUTO_INCREMENT/AUTO_RANDOM from deleted column before deleting key (primary or not)
 	// and if primary key changed
@@ -1725,7 +1725,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
-			if !g.areSameIndexes(*currentIndex, desiredIndex) {
+			if !g.areSameIndexes(currentTable.columns, *currentIndex, desiredIndex) {
 				ddls, _ = g.appendRecreate(ddls,
 					g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint),
 					g.generateAddIndex(desired.table.name, desiredIndex),
@@ -1739,7 +1739,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 
 			if renameFromIndex != nil {
-				if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+				if g.areSameIndexes(currentTable.columns, *renameFromIndex, desiredIndex) {
 					renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 					ddls = append(ddls, renameDDLs...)
 				} else {
@@ -2101,7 +2101,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				// Index not found, add index.
 				ddls = append(ddls, statement)
 				currentView.indexes = append(currentView.indexes, desiredIndex)
-			} else if !g.areSameIndexes(*currentIndex, desiredIndex) {
+			} else if !g.areSameIndexes(nil, *currentIndex, desiredIndex) {
 				// An index on a materialized view is changed the same way as one on a table.
 				var recreated bool
 				ddls, recreated = g.appendRecreate(ddls,
@@ -2147,7 +2147,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 
 		if renameFromIndex != nil {
 			renamed := true
-			if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+			if g.areSameIndexes(currentTable.columns, *renameFromIndex, desiredIndex) {
 				renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 				ddls = append(ddls, renameDDLs...)
 			} else {
@@ -2173,7 +2173,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 		}
 	} else {
 		// Index found. If it's different, drop and add index.
-		if !g.areSameIndexes(*currentIndex, desiredIndex) {
+		if !g.areSameIndexes(currentTable.columns, *currentIndex, desiredIndex) {
 			var recreated bool
 			ddls, recreated = g.appendRecreate(ddls,
 				g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint),
@@ -6501,7 +6501,7 @@ func isNullDefault(def *DefaultDefinition) bool {
 	return false
 }
 
-func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
+func (g *Generator) areSamePrimaryKeys(columns map[string]*Column, primaryKeyA *Index, primaryKeyB *Index) bool {
 	if primaryKeyA != nil && primaryKeyB != nil {
 		// For MSSQL, when comparing PRIMARY KEY constraints,
 		// ignore the name if one is auto-generated (PK__*) and the other is unnamed/synthetic ("PRIMARY")
@@ -6513,7 +6513,7 @@ func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) b
 				return g.areSamePrimaryKeyColumns(*primaryKeyA, *primaryKeyB)
 			}
 		}
-		return g.areSameIndexes(*primaryKeyA, *primaryKeyB)
+		return g.areSameIndexes(columns, *primaryKeyA, *primaryKeyB)
 	} else {
 		return primaryKeyA == nil && primaryKeyB == nil
 	}
@@ -6551,6 +6551,26 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 	return g.identsSliceEqual(indexA.included, indexB.included)
 }
 
+// indexColumnCollation returns the collation the index column sorts with. PostgreSQL omits the
+// COLLATE clause from the DDL it exports whenever it names the collation the column already has, so
+// an omitted clause has to compare equal to one that restates it. "default" names the database
+// default, which the export never writes out either. An index on a materialized view has no column
+// definitions to resolve against, so its collation is compared as written.
+func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
+	collation := indexColumn.collation
+	if collation == "" {
+		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+			if column := g.findColumnByName(columns, colName.Name); column != nil {
+				collation = column.collate
+			}
+		}
+	}
+	if strings.EqualFold(collation, "default") {
+		return ""
+	}
+	return collation
+}
+
 // areSameCollations compares two index-column collation names. PostgreSQL collation names are
 // case-sensitive identifiers ("C" and "c" name different collations); the other engines fold case.
 func (g *Generator) areSameCollations(a, b string) bool {
@@ -6582,7 +6602,7 @@ func (g *Generator) areSameOperatorClasses(indexA Index, indexB Index, columnInd
 	return g.config.PostgresDefaultOperatorClasses[index.AccessMethod()+"."+strings.ToLower(specified)]
 }
 
-func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
+func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, indexB Index) bool {
 	if indexA.unique != indexB.unique {
 		return false
 	}
@@ -6616,7 +6636,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		if indexA.columns[i].NullsOrdering() != indexB.columns[i].NullsOrdering() {
 			return false
 		}
-		if !g.areSameCollations(indexA.columns[i].collation, indexB.columns[i].collation) {
+		if !g.areSameCollations(g.indexColumnCollation(columns, indexA.columns[i]), g.indexColumnCollation(columns, indexB.columns[i])) {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
