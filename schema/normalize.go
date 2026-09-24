@@ -174,6 +174,25 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 	}
 }
 
+// normalizeMysqlConvertType normalizes the target type of CAST/CONVERT to the form MySQL stores.
+// MySQL stores BINARY(N) as CHAR(N) CHARSET binary, and fills in the connection charset for CHAR
+// without a charset. mysqldef always connects with the driver's default utf8mb4, so CHAR CHARSET
+// utf8mb4 is what CHAR without a charset becomes when applied by mysqldef.
+func normalizeMysqlConvertType(convertType *parser.ConvertType) *parser.ConvertType {
+	normalized := *convertType
+	switch strings.ToLower(normalized.Type) {
+	case "binary":
+		normalized.Type = "char"
+		normalized.Charset = "binary"
+		normalized.Operator = parser.CharacterSetStr
+	case "char":
+		if strings.EqualFold(normalized.Charset, "utf8mb4") {
+			normalized.Charset = ""
+		}
+	}
+	return &normalized
+}
+
 // nameDataLen is PostgreSQL's NAMEDATALEN - 1: the longest identifier the server stores.
 const nameDataLen = 63
 
@@ -565,6 +584,11 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 		// Strip the prefix for temporal/json/uuid: pg_get_constraintdef emits typed
 		// literals but user SQL writes bare ones; dropping it on both sides compares equal.
 		return recur(e.Value, mode)
+	case *parser.ConvertExpr:
+		if mode == GeneratorModeMysql {
+			return normalizeExpr(e, mode)
+		}
+		return expr
 	default:
 		// For all other expression types (literals, etc.), return as-is
 		return expr
@@ -991,10 +1015,14 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				Type: e.Type,
 			}, mode)
 		}
+		convertType := e.Type
+		if mode == GeneratorModeMysql {
+			convertType = normalizeMysqlConvertType(convertType)
+		}
 		return &parser.ConvertExpr{
 			Action: e.Action,
 			Expr:   normalizeExpr(e.Expr, mode),
-			Type:   e.Type,
+			Type:   convertType,
 			Style:  e.Style,
 		}
 	case *parser.CollateExpr:

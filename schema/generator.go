@@ -5775,9 +5775,16 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 	if generatedA == nil || generatedB == nil {
 		return false
 	}
+	if generatedA.generatedType != generatedB.generatedType {
+		return false
+	}
+	// MySQL rewrites generated expressions (e.g. adds the implicit charset to CAST AS CHAR),
+	// so compare the normalized ASTs.
+	if g.mode == GeneratorModeMysql && g.areSameExprs(generatedA.exprAST, generatedB.exprAST) {
+		return true
+	}
 	// TODO: Difference between bracketed and unbracketed, as Expr values are not fully comparable.
-	return (generatedA.expr == generatedB.expr || generatedA.expr == "("+generatedB.expr+")") &&
-		generatedA.generatedType == generatedB.generatedType
+	return generatedA.expr == generatedB.expr || generatedA.expr == "("+generatedB.expr+")"
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {

@@ -10,7 +10,6 @@ CreateTableGeneratedAlwaysAs80:
     );
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsChangeExpr80:
-  flavor: "!mariadb"
   current: |
     CREATE TABLE `test_table` (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -351,3 +350,11 @@ ChangeGenerateColumnVirtualToStoredWithCheck:
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
+GeneratedColumnWithCastAsChar:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      num_text varchar(20) AS (CAST(num AS CHAR))
+    );
