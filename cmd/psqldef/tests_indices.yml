@@ -1297,3 +1297,30 @@ CreateIndexOnTableNamedStream:
     CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE start_at is not null;
   down: |
     DROP INDEX public.idx_stream_start_at;
+
+IndexWithExplicitDefaultCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "default");
+
+IndexRestatingTheCollationOfItsColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "C");
+
+IndexInheritingTheCollationOfItsColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name);
+  desired: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "POSIX");
+  up: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name COLLATE "POSIX");
+  down: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name);
