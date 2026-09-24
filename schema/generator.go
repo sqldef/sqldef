@@ -6106,14 +6106,15 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 
-	// Strip type casts remaining after normalizeExpr (e.g., custom types like ENUMs/domains).
-	// PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
+	// Strip type casts remaining after normalizeExpr on literals (e.g., custom types like
+	// ENUMs/domains). PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
 	// but users write DEFAULT 'pending' without the cast. Both are semantically identical.
-	// Also strip any parentheses a user wrote around a literal default (e.g. DEFAULT ('foo'));
+	// Also strip any parentheses a user wrote around a default (e.g. DEFAULT ('foo'));
 	// normalizeExpr only unwraps those for some modes (see its ParenExpr case), but parentheses
 	// are pure syntax noise for equality regardless of dialect.
-	normalizedCurrent := unwrapCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
-	normalizedDesired := unwrapCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
+	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	normalizedCurrent, normalizedDesired = stripElidableCasts(normalizedCurrent, normalizedDesired)
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
@@ -6163,16 +6164,46 @@ func unwrapCast(expr parser.Expr) parser.Expr {
 	return castExpr.Expr
 }
 
-// unwrapCastAndParens repeatedly strips type casts and parentheses (in either
+// unwrapLiteralCastAndParens repeatedly strips type casts and parentheses (in either
 // order/nesting, e.g. `('pending'::order_status)` or `('foo')::text`) down to
-// the innermost expression, for equality comparison purposes.
-func unwrapCastAndParens(expr parser.Expr) parser.Expr {
+// a literal, for equality comparison purposes. Casts on anything else are kept:
+// they change the value (e.g. now()::timestamp vs now()::timestamptz).
+func unwrapLiteralCastAndParens(expr parser.Expr) parser.Expr {
+	inner := expr
 	for {
-		unwrapped := unwrapParenExpr(unwrapCast(expr))
-		if unwrapped == expr {
-			return unwrapped
+		next := unwrapParenExpr(unwrapCast(inner))
+		if next == inner {
+			break
 		}
-		expr = unwrapped
+		inner = next
+	}
+	if _, ok := inner.(*parser.SQLVal); ok {
+		return inner
+	}
+	return unwrapParenExpr(expr)
+}
+
+// stripElidableCasts peels matching casts off both sides, and a cast present on only one side.
+// PostgreSQL elides a cast to the type the expression already has, at any depth (e.g.
+// gen_random_uuid()::uuid::text is stored as (gen_random_uuid())::text), so such a cast is not a
+// difference. It stops at casts to different types, which remain in the comparison.
+func stripElidableCasts(current, desired parser.Expr) (parser.Expr, parser.Expr) {
+	for {
+		currentCast, currentIsCast := current.(*parser.CastExpr)
+		desiredCast, desiredIsCast := desired.(*parser.CastExpr)
+		switch {
+		case currentIsCast && desiredIsCast:
+			if !strings.EqualFold(parser.String(currentCast.Type), parser.String(desiredCast.Type)) {
+				return current, desired
+			}
+			current, desired = unwrapParenExpr(currentCast.Expr), unwrapParenExpr(desiredCast.Expr)
+		case currentIsCast:
+			current = unwrapParenExpr(currentCast.Expr)
+		case desiredIsCast:
+			desired = unwrapParenExpr(desiredCast.Expr)
+		default:
+			return current, desired
+		}
 	}
 }
 

@@ -99,6 +99,42 @@ AddColumnDefaultTimestampWithTimeZoneArrayCast:
     ALTER TABLE "public"."test" ADD COLUMN "a" timestamp WITH TIME ZONE[] DEFAULT '{}'::timestamp with time zone[];
   down: |
     ALTER TABLE "public"."test" DROP COLUMN "a";
+ChangeDefaultCastTimeZoneOnly:
+  current: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone DEFAULT (now())::timestamp(0)
+    );
+  desired: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone
+    );
+  up: |
+    ALTER TABLE public.test ALTER COLUMN a SET DEFAULT now()::timestamp(0) with time zone;
+  down: |
+    ALTER TABLE public.test ALTER COLUMN a SET DEFAULT now()::timestamp(0);
+  legacy_ignore_quotes: false
+ChangeDefaultCastTypeOnFunctionCall:
+  current: |
+    CREATE TABLE test (
+      a text DEFAULT now()::date
+    );
+  desired: |
+    CREATE TABLE test (
+      a text DEFAULT now()::text
+    );
+  up: |
+    ALTER TABLE public.test ALTER COLUMN a SET DEFAULT now()::text;
+  down: |
+    ALTER TABLE public.test ALTER COLUMN a SET DEFAULT now()::date;
+  legacy_ignore_quotes: false
+DefaultSameTypeCastOnFunctionCall:
+  desired: |
+    CREATE TABLE test (
+      a uuid DEFAULT gen_random_uuid()::uuid,
+      b text DEFAULT upper('a')::text,
+      c text DEFAULT gen_random_uuid()::uuid::text
+    );
+  legacy_ignore_quotes: false
 NullCast:
   desired: |
     CREATE TABLE public.test (
