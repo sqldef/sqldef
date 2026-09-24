@@ -6091,14 +6091,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	// are pure syntax noise for equality regardless of dialect.
 	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
 	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
-	// PostgreSQL elides a cast to the type the expression already has (e.g. gen_random_uuid()::uuid
-	// is stored as gen_random_uuid()), so a cast present on only one side is not a difference.
-	_, currentIsCast := normalizedCurrent.(*parser.CastExpr)
-	_, desiredIsCast := normalizedDesired.(*parser.CastExpr)
-	if currentIsCast != desiredIsCast {
-		normalizedCurrent = unwrapParenExpr(unwrapCast(normalizedCurrent))
-		normalizedDesired = unwrapParenExpr(unwrapCast(normalizedDesired))
-	}
+	normalizedCurrent, normalizedDesired = stripElidableCasts(normalizedCurrent, normalizedDesired)
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
@@ -6165,6 +6158,30 @@ func unwrapLiteralCastAndParens(expr parser.Expr) parser.Expr {
 		return inner
 	}
 	return unwrapParenExpr(expr)
+}
+
+// stripElidableCasts peels matching casts off both sides, and a cast present on only one side.
+// PostgreSQL elides a cast to the type the expression already has, at any depth (e.g.
+// gen_random_uuid()::uuid::text is stored as (gen_random_uuid())::text), so such a cast is not a
+// difference. It stops at casts to different types, which remain in the comparison.
+func stripElidableCasts(current, desired parser.Expr) (parser.Expr, parser.Expr) {
+	for {
+		currentCast, currentIsCast := current.(*parser.CastExpr)
+		desiredCast, desiredIsCast := desired.(*parser.CastExpr)
+		switch {
+		case currentIsCast && desiredIsCast:
+			if !strings.EqualFold(parser.String(currentCast.Type), parser.String(desiredCast.Type)) {
+				return current, desired
+			}
+			current, desired = unwrapParenExpr(currentCast.Expr), unwrapParenExpr(desiredCast.Expr)
+		case currentIsCast:
+			current = unwrapParenExpr(currentCast.Expr)
+		case desiredIsCast:
+			desired = unwrapParenExpr(desiredCast.Expr)
+		default:
+			return current, desired
+		}
+	}
 }
 
 // isNumericColumnType determines if a column type should be compared numerically.

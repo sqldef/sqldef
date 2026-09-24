@@ -131,7 +131,8 @@ DefaultSameTypeCastOnFunctionCall:
   desired: |
     CREATE TABLE test (
       a uuid DEFAULT gen_random_uuid()::uuid,
-      b text DEFAULT upper('a')::text
+      b text DEFAULT upper('a')::text,
+      c text DEFAULT gen_random_uuid()::uuid::text
     );
   legacy_ignore_quotes: false
 NullCast:
