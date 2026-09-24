@@ -490,10 +490,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		viewName := g.escapeViewName(currentView)
-		// Privileges exported for this view have no object to be revoked from
-		// once it is dropped; track it like a dropped table so the orphaned
-		// privilege cleanup skips it.
-		g.droppedTableNames = append(g.droppedTableNames, currentView.name)
+		g.forgetViewMetadata(currentView)
 		if currentView.viewType == "MATERIALIZED VIEW" {
 			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
 			continue
@@ -4137,7 +4134,8 @@ func (g *Generator) escapeColumnName(column *Column) string {
 	return g.escapeSQLIdent(column.name)
 }
 
-// A DROP removes this metadata; comparing against it would suppress the DDLs that restore it.
+// A DROP removes this metadata. Comparing against it would suppress the DDLs that restore a
+// recreated view's metadata, and would emit REVOKE or COMMENT for a view that no longer exists.
 func (g *Generator) forgetViewMetadata(view *View) {
 	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
 		return
