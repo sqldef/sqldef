@@ -93,11 +93,10 @@ type Generator struct {
 	// Track tables that have been dropped to skip COMMENT cleanup for them
 	droppedTables map[string]bool
 
-	// Qualified names of the tables dropped and renamed away in this run.
-	// Privilege cleanup compares them through the default-schema normalization,
-	// which a droppedTables key lookup does not apply.
+	// Qualified names of the tables dropped in this run. Privilege cleanup
+	// compares them through the default-schema normalization, which a
+	// droppedTables key lookup does not apply.
 	droppedTableNames []QualifiedName
-	renamedTableNames []QualifiedName
 
 	// Track columns that have been dropped to skip COMMENT cleanup for them
 	// Key is "schema.table.column"
@@ -286,7 +285,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, renameDDL)
 						// PostgreSQL automatically transfers comments when renaming tables
 						g.droppedTables[oldTableName.RawString()] = true
-						g.renamedTableNames = append(g.renamedTableNames, oldTableName)
+						// Privileges are carried over to the new name as well, so from
+						// here on they are the current state of the renamed table.
+						g.renameCurrentPrivileges(oldTableName, desired.table.name)
 
 						// Update the old table's name to the new name
 						oldTable.name = desired.table.name
@@ -826,7 +827,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	if g.mode == GeneratorModePostgres {
 		for _, currentPriv := range g.currentPrivileges {
-			if g.isPrivilegeOnRemovedTable(currentPriv) {
+			if g.isPrivilegeOnDroppedTable(currentPriv) {
 				continue
 			}
 			// Check each grantee individually for orphaned privileges
@@ -1105,6 +1106,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 					// PostgreSQL automatically transfers comments when renaming columns
 					g.trackDroppedColumn(&currentTable, renameFromColumn)
+					// Column-level privileges are carried over under the new column
+					// name as well.
+					g.renameCurrentPrivilegeColumn(desired.table.name, desiredColumn.renamedFrom, desiredColumn.name)
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) {
@@ -5555,15 +5559,10 @@ func (g *Generator) findCommentByObject(comments []*Comment, targetComment *pars
 	return nil
 }
 
-// isPrivilegeOnRemovedTable checks if a privilege belongs to a table that this run
-// drops or renames away. PostgreSQL removes privileges together with the table and
-// carries them over on a rename, so no REVOKE is needed for either.
-func (g *Generator) isPrivilegeOnRemovedTable(priv *GrantPrivilege) bool {
-	for _, renamed := range g.renamedTableNames {
-		if g.qualifiedNamesEqual(priv.tableName, renamed) {
-			return true
-		}
-	}
+// isPrivilegeOnDroppedTable checks if a privilege belongs to a table that this
+// run drops. PostgreSQL removes privileges together with the table, so a REVOKE
+// would only fail with "relation does not exist".
+func (g *Generator) isPrivilegeOnDroppedTable(priv *GrantPrivilege) bool {
 	// Without enable_drop the DROP TABLE is only commented out and the table stays.
 	if !g.config.EnableDrop {
 		return false
@@ -5574,6 +5573,88 @@ func (g *Generator) isPrivilegeOnRemovedTable(priv *GrantPrivilege) bool {
 		}
 	}
 	return false
+}
+
+// renameCurrentPrivileges re-points the privileges of a renamed table to its new
+// name. PostgreSQL keeps the privileges on the renamed table, so they describe
+// the current state of the new name and have to be diffed against the desired
+// GRANTs written under that name: dropping them instead would leave a privilege
+// removed in the same run un-revoked.
+func (g *Generator) renameCurrentPrivileges(oldName, newName QualifiedName) {
+	for _, priv := range g.currentPrivileges {
+		if g.qualifiedNamesEqual(priv.tableName, oldName) {
+			priv.tableName = newName
+		}
+	}
+}
+
+// renameCurrentPrivilegeColumn rewrites a renamed column's name in the
+// column-level privileges of the current schema. PostgreSQL rewrites the column
+// name a privilege carries when the column is renamed, so the current privileges
+// have to follow it: otherwise the diff against the desired GRANT revokes a
+// column name that no longer exists, and the REVOKE fails with 42703.
+func (g *Generator) renameCurrentPrivilegeColumn(tableName QualifiedName, oldColumn, newColumn Ident) {
+	for _, priv := range g.currentPrivileges {
+		if !g.qualifiedNamesEqual(priv.tableName, tableName) {
+			continue
+		}
+		for i, privilege := range priv.privileges {
+			priv.privileges[i] = g.renamePrivilegeColumn(privilege, oldColumn, newColumn)
+		}
+	}
+}
+
+// renamePrivilegeColumn renames a column in the column list of a column-level
+// privilege ("SELECT (id, secret)"). A privilege without a column list is
+// returned unchanged, and one that does not mention the column is rebuilt into
+// the same string it came from, since it is already canonical.
+func (g *Generator) renamePrivilegeColumn(privilege string, oldColumn, newColumn Ident) string {
+	open := strings.Index(privilege, "(")
+	if open < 0 || !strings.HasSuffix(privilege, ")") {
+		return privilege
+	}
+	columns := parsePrivilegeColumnList(privilege[open+1 : len(privilege)-1])
+	for i, column := range columns {
+		if g.identsEqual(column, oldColumn) {
+			columns[i] = newColumn
+		}
+	}
+	return parser.FormatColumnPrivilege(strings.TrimSpace(privilege[:open]), columns)
+}
+
+// parsePrivilegeColumnList splits the column list of a column-level privilege
+// into identifiers. It is the inverse of parser.FormatColumnPrivilege, so it
+// honors the double quotes that function adds to names that need them, and the
+// space that function writes after each separator is dropped rather than
+// trimmed off the name: a quoted name may legitimately begin or end with one.
+func parsePrivilegeColumnList(list string) []Ident {
+	var columns []Ident
+	var name strings.Builder
+	quoted := false
+	inQuotes := false
+	flush := func() {
+		columns = append(columns, Ident{Name: name.String(), Quoted: quoted})
+		name.Reset()
+		quoted = false
+	}
+	for i := 0; i < len(list); i++ {
+		switch c := list[i]; {
+		case c == '"' && inQuotes && i+1 < len(list) && list[i+1] == '"':
+			name.WriteByte('"')
+			i++
+		case c == '"':
+			inQuotes = !inQuotes
+			quoted = true
+		case c == ',' && !inQuotes:
+			flush()
+		case c == ' ' && !inQuotes && name.Len() == 0:
+			// Padding written after the separator, not part of the name.
+		default:
+			name.WriteByte(c)
+		}
+	}
+	flush()
+	return columns
 }
 
 // isCommentOnDroppedTable checks if a comment belongs to a table that has been dropped.
