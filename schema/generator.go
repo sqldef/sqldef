@@ -5833,9 +5833,9 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 	if generatedA.generatedType != generatedB.generatedType {
 		return false
 	}
-	// MySQL rewrites generated expressions (e.g. adds the implicit charset to CAST AS CHAR),
-	// so compare the normalized ASTs.
-	if g.mode == GeneratorModeMysql && g.areSameExprs(generatedA.exprAST, generatedB.exprAST) {
+	// MySQL rewrites generated expressions (e.g. adds the implicit charset to CAST AS CHAR), so compare
+	// the normalized ASTs. Like CHECK, compare case-sensitively to detect case changes in string literals.
+	if g.mode == GeneratorModeMysql && g.areSameCheckExprs(generatedA.exprAST, generatedB.exprAST) {
 		return true
 	}
 	// TODO: Difference between bracketed and unbracketed, as Expr values are not fully comparable.
@@ -5953,16 +5953,21 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		return false
 	}
 
-	normalizedA := normalizeCheckExpr(checkA.definition, g.mode)
-	normalizedB := normalizeCheckExpr(checkB.definition, g.mode)
+	return g.areSameCheckExprs(checkA.definition, checkB.definition) &&
+		checkA.notForReplication == checkB.notForReplication &&
+		checkA.noInherit == checkB.noInherit
+}
+
+// areSameCheckExprs compares two expressions with the CHECK constraint normalization, case-sensitively.
+func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
+	normalizedA := normalizeCheckExpr(exprA, g.mode)
+	normalizedB := normalizeCheckExpr(exprB, g.mode)
 
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
-	return parser.String(normalizedA) == parser.String(normalizedB) &&
-		checkA.notForReplication == checkB.notForReplication &&
-		checkA.noInherit == checkB.noInherit
+	return parser.String(normalizedA) == parser.String(normalizedB)
 }
 
 // unwrapOutermostParenExpr removes the outermost ParenExpr if the expression is wrapped in one.

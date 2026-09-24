@@ -10,6 +10,7 @@ CreateTableGeneratedAlwaysAs80:
     );
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsChangeExpr80:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE `test_table` (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -357,4 +358,31 @@ GeneratedColumnWithCastAsChar:
       id bigint NOT NULL PRIMARY KEY,
       num int,
       num_text varchar(20) AS (CAST(num AS CHAR))
+    );
+ChangeGeneratedColumnStringLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      data json,
+      name varchar(20) AS (json_unquote(json_extract(data, '$.Name')))
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      data json,
+      name varchar(20) AS (json_unquote(json_extract(data, '$.name')))
+    );
+  up: |
+    ALTER TABLE users CHANGE COLUMN `name` name varchar(20) GENERATED ALWAYS AS (json_unquote(json_extract(data, '$.name'))) VIRTUAL;
+  down: |
+    ALTER TABLE users CHANGE COLUMN `name` name varchar(20) GENERATED ALWAYS AS (json_unquote(json_extract(data, '$.Name'))) VIRTUAL;
+GeneratedColumnWithUppercaseFunctionName:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      first_name varchar(20),
+      last_name varchar(20),
+      full_name varchar(41) AS (CONCAT(first_name, ' ', last_name))
     );

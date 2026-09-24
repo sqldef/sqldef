@@ -604,7 +604,12 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		return recur(e.Value, mode)
 	case *parser.ConvertExpr:
 		if mode == GeneratorModeMysql {
-			return normalizeExpr(e, mode)
+			return &parser.ConvertExpr{
+				Action: e.Action,
+				Expr:   recur(e.Expr, mode),
+				Type:   normalizeMysqlConvertType(e.Type),
+				Style:  e.Style,
+			}
 		}
 		return expr
 	default:
