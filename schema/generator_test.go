@@ -23,6 +23,63 @@ func TestStringConstantContainingSingleQuote(t *testing.T) {
 	assert.Equal(t, StringConstant("'example'"), "'''example'''")
 }
 
+func TestSkipExtension(t *testing.T) {
+	manageAllExtensions := &[]database.ManageObjectRule{{Target: ".*", Drop: true}}
+	tests := []struct {
+		name     string
+		desired  string
+		current  string
+		config   database.GeneratorConfig
+		expected []string
+	}{
+		{
+			name:     "desired extension",
+			desired:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true},
+			expected: []string{},
+		},
+		{
+			name:     "current extension",
+			current:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true, EnableDrop: true},
+			expected: []string{},
+		},
+		{
+			name:    "manage.extension match",
+			desired: "CREATE EXTENSION pgcrypto;",
+			config: database.GeneratorConfig{
+				SkipExtension:    true,
+				ManageExtensions: manageAllExtensions,
+			},
+			expected: []string{},
+		},
+		{
+			name:    "non-extension DDL remains",
+			desired: "CREATE EXTENSION pgcrypto; CREATE TABLE users (id bigint);",
+			config:  database.GeneratorConfig{SkipExtension: true},
+			expected: []string{
+				"CREATE TABLE users (id bigint)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.config.LegacyIgnoreQuotes = false
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				tt.config,
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
 func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
 	g := &Generator{mode: GeneratorModeMysql}
@@ -930,7 +987,7 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 }
 
 func TestAlterBundler(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
 	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
 	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
 
@@ -953,6 +1010,27 @@ func TestAlterBundler(t *testing.T) {
 		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
 		"ALTER TABLE b ADD COLUMN z int",
 		"DROP INDEX idx ON a",
+	}, ddls)
+}
+
+func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: false}}
+	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+
+	bundler := newAlterBundler(g, true)
+
+	slot := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
+
+	dropped := bundler.emit(table, "ALTER TABLE a DROP COLUMN y")
+	assert.Equal(t, "ALTER TABLE a DROP COLUMN y", dropped, "destructive action should be left for the enable_drop pass instead of bundled")
+
+	folded := bundler.emit(table, "ALTER TABLE a DROP FOREIGN KEY fk")
+	assert.Equal(t, "", folded, "DROP FOREIGN KEY is not gated by enable_drop, so it should still fold")
+
+	ddls := bundler.finalize([]string{slot, dropped})
+	assert.Equal(t, []string{
+		"ALTER TABLE a ADD COLUMN x int, DROP FOREIGN KEY fk",
+		"ALTER TABLE a DROP COLUMN y",
 	}, ddls)
 }
 
@@ -1200,6 +1278,336 @@ func TestDropFunctionDDL(t *testing.T) {
 	// OUT parameters are not part of the identity: keep the bare form.
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
 	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
+}
+
+func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
+	// PostgreSQL parses an index key part as `expr [opclass] [ASC|DESC]`, so the operator class
+	// has to be emitted before the direction.
+	g := &Generator{mode: GeneratorModePostgres}
+
+	tests := []struct {
+		name        string
+		indexColumn IndexColumn
+		expected    string
+	}{
+		{
+			name: "column",
+			indexColumn: IndexColumn{
+				columnExpr:    &parser.ColName{Name: parser.NewIdent("name", false)},
+				operatorClass: "text_pattern_ops",
+				direction:     DescScr,
+			},
+			expected: "name text_pattern_ops desc",
+		},
+		{
+			name: "expression",
+			indexColumn: IndexColumn{
+				columnExpr: &parser.BinaryExpr{
+					Operator: "||",
+					Left:     &parser.ColName{Name: parser.NewIdent("a", false)},
+					Right:    &parser.ColName{Name: parser.NewIdent("b", false)},
+				},
+				operatorClass: "text_pattern_ops",
+				direction:     DescScr,
+			},
+			expected: "(a || b) text_pattern_ops desc",
+		},
+		{
+			name: "no direction",
+			indexColumn: IndexColumn{
+				columnExpr:    &parser.ColName{Name: parser.NewIdent("name", false)},
+				operatorClass: "text_pattern_ops",
+			},
+			expected: "name text_pattern_ops",
+		},
+		{
+			name: "no operator class",
+			indexColumn: IndexColumn{
+				columnExpr: &parser.ColName{Name: parser.NewIdent("name", false)},
+				direction:  DescScr,
+			},
+			expected: "name desc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, g.generateIndexColumnDefinition(tt.indexColumn))
+		})
+	}
+}
+
+// generateAddIndex has no PostgreSQL-reachable path carrying an operator class today, so the
+// key-part ordering of both index generators is asserted here instead of in cmd/psqldef.
+func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres}
+	table := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "products"}}
+	index := Index{
+		name:      Ident{Name: "idx_name"},
+		indexType: "INDEX",
+		columns: []IndexColumn{{
+			columnExpr:    &parser.ColName{Name: parser.NewIdent("name", false)},
+			operatorClass: "text_pattern_ops",
+			direction:     DescScr,
+		}},
+	}
+
+	assert.Contains(t, g.generateCreateIndexStatement(table, index), "(name text_pattern_ops desc)")
+	assert.Contains(t, g.generateAddIndex(table, index), "(name text_pattern_ops desc)")
+}
+
+// TestCreateIndexStatementRoundTrip guards the clause loss that quote-aware mode is prone to:
+// it regenerates a CREATE INDEX from the parsed index, so any clause the model does not carry
+// disappears from the statement — and, because both sides of a comparison go through the same
+// model, disappears from the diff as well. Parsing the regenerated statement back has to yield
+// the same index.
+func TestCreateIndexStatementRoundTrip(t *testing.T) {
+	statements := []string{
+		`CREATE INDEX i ON public.t USING btree (a)`,
+		`CREATE UNIQUE INDEX i ON public.t USING btree (a, b)`,
+		`CREATE INDEX i ON public.t USING btree (a) INCLUDE (b)`,
+		`CREATE INDEX i ON public.t USING btree (a) INCLUDE (b, "C")`,
+		`CREATE UNIQUE INDEX i ON public.t USING btree (a) INCLUDE (b) NULLS NOT DISTINCT`,
+		`CREATE INDEX i ON public.t USING btree (a DESC NULLS LAST, b NULLS FIRST)`,
+		`CREATE INDEX i ON public.t USING btree (b COLLATE "C")`,
+		`CREATE INDEX i ON public.t USING btree (b text_pattern_ops)`,
+		`CREATE INDEX i ON public.t USING gin (b gin_trgm_ops)`,
+		`CREATE INDEX i ON public.t USING btree (lower(b))`,
+		`CREATE INDEX i ON public.t USING btree (a) WHERE a > 0`,
+		`CREATE INDEX i ON public.t USING btree (a) WHERE "isActive"`,
+		`CREATE INDEX i ON public.t USING btree (a) WITH (fillfactor = 70)`,
+		`CREATE INDEX i ON public."T" USING btree ("A") INCLUDE ("B")`,
+	}
+
+	sqlParser := database.NewParser(parser.ParserModePostgres)
+	g := &Generator{mode: GeneratorModePostgres, config: database.GeneratorConfig{LegacyIgnoreQuotes: false}}
+
+	parseIndexOf := func(t *testing.T, statement string) (QualifiedName, Index) {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, sqlParser, statement+";", "public")
+		require.NoError(t, err)
+		require.Len(t, ddls, 1)
+		createIndex, ok := ddls[0].(*CreateIndex)
+		require.True(t, ok)
+		return createIndex.tableName, createIndex.index
+	}
+
+	for _, statement := range statements {
+		t.Run(statement, func(t *testing.T) {
+			tableName, index := parseIndexOf(t, statement)
+
+			generated := g.generateCreateIndexStatement(tableName, index)
+			_, regenerated := parseIndexOf(t, generated)
+
+			assert.Equal(t, index.name, regenerated.name)
+			assert.Equal(t, index.indexType, regenerated.indexType)
+			assert.Equal(t, index.options, regenerated.options)
+			assert.Equal(t, index.included, regenerated.included)
+			assert.True(t, g.areSameIndexes(nil, index, regenerated),
+				"regenerated statement describes a different index:\n%s\n%s", statement, generated)
+		})
+	}
+}
+
+// TestAutoIndexName covers the names PostgreSQL and MySQL give an index or constraint declared
+// without one. A name that does not match what the server chose makes the desired schema differ
+// from the exported one on every run, so the index is dropped and recreated each time.
+func TestAutoIndexName(t *testing.T) {
+	nameOf := func(t *testing.T, mode GeneratorMode, parserMode parser.ParserMode, statement string) string {
+		t.Helper()
+		ddls, err := ParseDDLs(mode, database.NewParser(parserMode), statement+";", "public")
+		require.NoError(t, err)
+		require.Len(t, ddls, 1)
+		switch ddl := ddls[0].(type) {
+		case *CreateIndex:
+			return ddl.index.name.Name
+		case *AddIndex:
+			return ddl.index.name.Name
+		case *AddPrimaryKey:
+			return ddl.index.name.Name
+		default:
+			t.Fatalf("unexpected DDL type %T", ddl)
+			return ""
+		}
+	}
+
+	postgres := []struct {
+		statement string
+		expected  string
+	}{
+		{`CREATE INDEX ON t (a)`, "t_a_idx"},
+		{`CREATE UNIQUE INDEX ON t (a)`, "t_a_idx"},
+		{`CREATE INDEX ON t (a) INCLUDE (b, c)`, "t_a_b_c_idx"},
+		{`CREATE INDEX ON t (lower(a), lower(b))`, "t_lower_lower1_idx"},
+		{`CREATE INDEX ON t ((a::text))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((a COLLATE "C"))`, "t_a_idx"},
+		{`CREATE INDEX ON t (((a COLLATE "C")))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((CAST(a AS text)))`, "t_a_idx"},
+		{`CREATE INDEX ON t ((CASE WHEN a > 0 THEN 1 ELSE 0 END))`, "t_case_idx"},
+		{`CREATE INDEX ON t ((a + b))`, "t_expr_idx"},
+		{`ALTER TABLE t ADD UNIQUE (a, b)`, "t_a_b_key"},
+		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "t_pkey"},
+		{
+			`CREATE INDEX ON a_table_whose_name_is_quite_long_and_will_certainly_be_truncated (a)`,
+			"a_table_whose_name_is_quite_long_and_will_certainly_be_tr_a_idx",
+		},
+		{
+			`ALTER TABLE a_table_whose_name_is_quite_long_and_will_certainly_be_truncated ADD PRIMARY KEY (a)`,
+			"a_table_whose_name_is_quite_long_and_will_certainly_be_tru_pkey",
+		},
+	}
+	for _, tt := range postgres {
+		t.Run(tt.statement, func(t *testing.T) {
+			assert.Equal(t, tt.expected, nameOf(t, GeneratorModePostgres, parser.ParserModePostgres, tt.statement))
+		})
+	}
+
+	mysql := []struct {
+		statement string
+		expected  string
+	}{
+		{`ALTER TABLE t ADD UNIQUE (a, b)`, "a"},
+		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "PRIMARY"},
+	}
+	for _, tt := range mysql {
+		t.Run("mysql "+tt.statement, func(t *testing.T) {
+			assert.Equal(t, tt.expected, nameOf(t, GeneratorModeMysql, parser.ParserModeMysql, tt.statement))
+		})
+	}
+}
+
+func TestFilterObjectsOwnerStatements(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint);
+		CREATE VIEW v_users AS SELECT id FROM users;
+		ALTER TABLE users OWNER TO app_user;
+		ALTER TABLE v_users OWNER TO app_user;
+	`
+	parse := func(t *testing.T) []DDL {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ddls
+	}
+	owners := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			if stmt, ok := ddl.(*SetTableOwner); ok {
+				names = append(names, stmt.tableName.RawString())
+			}
+		}
+		return names
+	}
+
+	// target_tables is about tables and does not filter views, so neither owner goes away.
+	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}})
+	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
+
+	// skip_views is about views, so a regexp that happens to match a table name must not reach
+	// the table's owner.
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}})
+	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
+
+	// The owner of a filtered object goes with it.
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}})
+	assert.Equal(t, []string{"public.v_users"}, owners(filtered))
+
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}})
+	assert.Equal(t, []string{"public.users"}, owners(filtered))
+}
+
+func TestDependentViewOwnerManagementDisabled(t *testing.T) {
+	current := `
+		CREATE TABLE users (id bigint, name text);
+		CREATE VIEW v_base AS SELECT id, name FROM users;
+		CREATE VIEW v_dep AS SELECT id FROM v_base;
+	`
+	desired := `
+		CREATE TABLE users (id bigint, name text);
+		CREATE VIEW v_base AS SELECT id FROM users;
+		CREATE VIEW v_dep AS SELECT id FROM v_base;
+		ALTER VIEW v_dep OWNER TO outside_role;
+	`
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), desired, current,
+		database.GeneratorConfig{EnableDrop: true}, "public")
+	assert.NoError(t, err)
+	for _, ddl := range ddls {
+		assert.NotContains(t, ddl, "OWNER TO")
+	}
+}
+
+func TestFilterObjectsOwnerIdentity(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		sql    string
+		config database.GeneratorConfig
+	}{
+		{"legacy case folding", `CREATE TABLE "Users" (id bigint); ALTER TABLE users OWNER TO app_user;`, database.GeneratorConfig{LegacyIgnoreQuotes: true, SkipTables: []string{`public\.Users`}}},
+		{"quoted identifiers", `CREATE TABLE "public"."users" (id bigint); ALTER TABLE users OWNER TO app_user;`, database.GeneratorConfig{SkipTables: []string{`public\.users`}}},
+		{"partition child", `CREATE TABLE logs_2024 PARTITION OF logs FOR VALUES FROM (1) TO (2); ALTER TABLE logs_2024 OWNER TO app_user;`, database.GeneratorConfig{SkipTables: []string{`public\.logs_2024`}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), test.sql, "public")
+			assert.NoError(t, err)
+			assert.Empty(t, FilterObjects(ddls, test.config))
+		})
+	}
+}
+
+func TestFilterPrivilegesMergesGranteesOnce(t *testing.T) {
+	sql := `
+		GRANT SELECT ON TABLE users TO app_user, readonly_user WITH GRANT OPTION;
+		GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+	rules := []database.ManageObjectRule{{Target: "app_user|readonly_user"}}
+
+	filtered := FilterPrivileges(ddls, database.GeneratorConfig{ManagePrivileges: &rules})
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, []string{"app_user", "readonly_user"}, filtered[0].(*GrantPrivilege).grantees)
+}
+
+func TestRecreatedViewOwnerEscaping(t *testing.T) {
+	rules := []database.ManageObjectRule{}
+	current := `
+		CREATE VIEW v AS SELECT 1 AS id, 2 AS extra;
+		ALTER VIEW v OWNER TO "role;with""quote";
+	`
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+		`CREATE VIEW v AS SELECT 1 AS id;`, current,
+		database.GeneratorConfig{EnableDrop: true, ManagePrivileges: &rules}, "public")
+	assert.NoError(t, err)
+	assert.Contains(t, ddls, `ALTER VIEW public.v OWNER TO "role;with""quote"`)
+}
+
+func TestUnmanagedOwnerWithoutObject(t *testing.T) {
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+		`ALTER TABLE absent OWNER TO outside_role;`, "", database.GeneratorConfig{}, "public")
+	assert.NoError(t, err)
+	assert.Empty(t, ddls)
+}
+
+func TestHeldBackViewRecreationKeepsIndexState(t *testing.T) {
+	current := `
+		CREATE VIEW v AS SELECT 1 AS id, 2 AS extra;
+		CREATE MATERIALIZED VIEW mv AS SELECT id FROM v;
+		CREATE UNIQUE INDEX mv_id ON mv (id);
+	`
+	desired := `
+		CREATE VIEW v AS SELECT 1 AS id;
+		CREATE MATERIALIZED VIEW mv AS SELECT id FROM v;
+		CREATE UNIQUE INDEX mv_id ON mv (id);
+	`
+	ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+		desired, current, database.GeneratorConfig{EnableDrop: false}, "public")
+	assert.NoError(t, err)
+	for _, ddl := range ddls {
+		assert.Contains(t, ddl, "-- Skipped:")
+	}
 }
 
 func TestRenamePrivilegeColumn(t *testing.T) {

@@ -387,6 +387,7 @@ var keywords = map[string]int{
 	"point":                  POINT,
 	"policy":                 POLICY,
 	"polygon":                POLYGON,
+	"pragma":                 PRAGMA,
 	"precision":              PRECISION,
 	"preserve":               PRESERVE,
 	"primary":                PRIMARY,
@@ -475,7 +476,6 @@ var keywords = map[string]int{
 	"status":                 STATUS,
 	"stored":                 STORED,
 	"straight_join":          STRAIGHT_JOIN,
-	"stream":                 STREAM,
 	"strict":                 STRICT,
 	"table":                  TABLE,
 	"tables":                 TABLES,
@@ -781,7 +781,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 		case eofChar:
 			return 0, ""
 		case '=', ',', ';', '(', ')', '[', ']', '+', '*', '%', '^', '~':
-			if tkn.mode == ParserModeMssql && ch == '[' {
+			if (tkn.mode == ParserModeMssql || tkn.mode == ParserModeSQLite3) && ch == '[' {
 				return tkn.scanLiteralIdentifier(']')
 			}
 			if tkn.mode == ParserModePostgres && ch == '~' {
@@ -1009,6 +1009,14 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			if id1, _ := tkn.peekToken(); id1 != ON {
 				return PG_COMMENT, loweredStr
 			}
+		}
+
+		// UNUSED words are MySQL keywords that PostgreSQL does not reserve (e.g. year_month),
+		// so lex them as plain identifiers there. BOTH, LEADING and TRAILING are the exceptions.
+		if keywordID == UNUSED && tkn.mode == ParserModePostgres &&
+			loweredStr != "both" && loweredStr != "leading" && loweredStr != "trailing" {
+			tkn.lastIdentifierQuoted = false
+			return ID, loweredStr
 		}
 
 		// keyword is case-insensitive

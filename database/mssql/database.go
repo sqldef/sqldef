@@ -894,6 +894,10 @@ func (d *MssqlDatabase) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
 }
 
+func (d *MssqlDatabase) SessionSetupQueries() []string {
+	return nil
+}
+
 func (d *MssqlDatabase) GetTransactionQueries() database.TransactionQueries {
 	return database.TransactionQueries{
 		Begin:    "BEGIN TRANSACTION",

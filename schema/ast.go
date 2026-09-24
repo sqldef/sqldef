@@ -160,6 +160,7 @@ type SetRowLevelSecurity struct {
 // SetTableOwner represents PostgreSQL ALTER TABLE ... OWNER TO (tables and,
 // via the same syntax, views/materialized views).
 type SetTableOwner struct {
+	ifExists  bool
 	statement string
 	tableName QualifiedName
 	owner     string
@@ -189,6 +190,7 @@ type CreatePartitionOf struct {
 	tableName   QualifiedName
 	parentTable QualifiedName
 	boundSpec   PartitionBound
+	owner       string // PostgreSQL owner role ("" = not tracked/declared)
 }
 
 // PartitionBound represents the partition bound specification
@@ -282,7 +284,7 @@ type Index struct {
 	nullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE indexes and constraints
 	constraintOptions *ConstraintOptions
 	where             parser.Expr    // for Postgres `Partial Indexes`
-	included          []string       // for MSSQL
+	included          []Ident        // `INCLUDE` columns for Postgres/MSSQL; the key columns for an MSSQL columnstore index
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption
@@ -305,9 +307,23 @@ type IndexColumn struct {
 	columnExpr    parser.Expr // never nil as it's always initialized in the parser
 	length        *int
 	direction     string
+	nullsOrdering string // "first" or "last" for NULLS FIRST/LAST
+	collation     string
 	operatorClass string
 
 	withoutOverlaps bool
+}
+
+// NullsOrdering returns the NULLS ordering, resolving the default one implied by the sort
+// direction: PostgreSQL sorts nulls last when ascending and first when descending.
+func (ic IndexColumn) NullsOrdering() string {
+	if ic.nullsOrdering != "" {
+		return strings.ToLower(ic.nullsOrdering)
+	}
+	if ic.direction == DescScr {
+		return "first"
+	}
+	return "last"
 }
 
 // ColumnName returns the column name if this is a simple column reference.

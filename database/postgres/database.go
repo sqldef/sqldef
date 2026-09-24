@@ -35,6 +35,7 @@ type PostgresDatabase struct {
 	db               *sql.DB
 	defaultSchema    *string
 	hasConperiod     *bool           // cached: whether pg_constraint has conperiod column (PG18+)
+	hasIndnkeyatts   *bool           // cached: whether pg_index has indnkeyatts column (PG11+)
 	defaultOpclasses map[string]bool // cached: see defaultOperatorClasses()
 }
 
@@ -120,6 +121,34 @@ func (d *PostgresDatabase) supportsConperiod() bool {
 	}
 	d.hasConperiod = &exists
 	return exists
+}
+
+// supportsIndexIncluding returns true if pg_index has the indnkeyatts column (PG11+), which is
+// also the version that introduced INCLUDE columns. The result is cached after the first call.
+func (d *PostgresDatabase) supportsIndexIncluding() bool {
+	if d.hasIndnkeyatts != nil {
+		return *d.hasIndnkeyatts
+	}
+	var exists bool
+	err := d.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_attribute
+			WHERE attrelid = 'pg_index'::regclass AND attname = 'indnkeyatts'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		exists = false
+	}
+	d.hasIndnkeyatts = &exists
+	return exists
+}
+
+// SessionSetupQueries turns off function body validation while the DDLs are applied. A function
+// body is validated against the objects it references, and functions are created before the
+// tables they read, so a SQL-language function would fail to be created on an empty database.
+// pg_dump turns the check off for the same reason.
+func (d *PostgresDatabase) SessionSetupQueries() []string {
+	return []string{"SET check_function_bodies = off"}
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
@@ -233,29 +262,43 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 
 // objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
 // and materialized views so that owners declared in the desired schema can be
-// diffed. Emitted only when privilege management is configured
-// (manage.privilege or managed_roles), to keep --export output unchanged for
-// users who don't manage privileges. Extension-owned objects are excluded.
+// diffed. Emitted only when manage.privilege or managed_roles is configured.
+// Extension-owned objects are excluded.
 func (d *PostgresDatabase) objectOwners() ([]string, error) {
 	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
 		return nil, nil
 	}
 
-	const query = `
+	// The relkind, relpersistence and relispartition filters have to agree with tableNames() and
+	// views(): an owner exported for an object those skip has no CREATE to attach to, and the
+	// generator aborts with "ALTER TABLE ... OWNER TO performed before CREATE TABLE".
+	relkinds := "'r'"
+	partitions := ""
+	if d.config.SkipPartition {
+		partitions = "AND c.relispartition = false"
+	} else {
+		relkinds += ", 'p'"
+	}
+	if !d.config.SkipView {
+		relkinds += ", 'v', 'm'"
+	}
+	query := fmt.Sprintf(`
 		SELECT
 			n.nspname AS schema_name,
-			n.nspname || '.' || c.relname AS obj_name,
+			c.relname AS relation_name,
 			pg_get_userbyid(c.relowner) AS owner
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind IN ('r', 'p', 'v', 'm')
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		WHERE c.relkind IN (%s)
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'sys')
+		AND c.relpersistence IN ('p', 'u')
+		%s
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_depend dep
 			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
 		)
-		ORDER BY obj_name
-	`
+		ORDER BY n.nspname, c.relname
+	`, relkinds, partitions)
 
 	rows, err := d.db.Query(query)
 	if err != nil {
@@ -265,8 +308,8 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var schemaName, objName, owner string
-		if err := rows.Scan(&schemaName, &objName, &owner); err != nil {
+		var schemaName, relationName, owner string
+		if err := rows.Scan(&schemaName, &relationName, &owner); err != nil {
 			return nil, fmt.Errorf("failed to scan object owner row: %w", err)
 		}
 		// Apply the same TargetSchema filter as the other export helpers
@@ -277,6 +320,7 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schemaName) {
 			continue
 		}
+		objName := fmt.Sprintf("%s.%s", d.quoteIdentifierIfNeeded(schemaName), d.quoteIdentifierIfNeeded(relationName))
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s OWNER TO %s;", objName, d.quoteIdentifierIfNeeded(owner)))
 	}
 
@@ -315,25 +359,33 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 		return nil, nil
 	}
 
+	// The ACL holds one entry per grantor; see getPrivilegeDefsForTables.
 	const query = `
-		SELECT
-			n.nspname || '.' || c.relname AS seq_name,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
-		WHERE c.relkind = 'S'
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-		AND acl.grantee <> c.relowner
-		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
-		AND NOT EXISTS (
-			SELECT 1 FROM pg_depend dep
-			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		WITH sequence_privileges AS (
+			SELECT
+				n.nspname || '.' || c.relname AS seq_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relkind = 'S'
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND acl.grantee <> c.relowner
+			AND NOT EXISTS (
+				SELECT 1 FROM pg_depend dep
+				WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+			)
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
 		)
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
-		ORDER BY seq_name, grantee, acl.is_grantable
+		SELECT
+			seq_name, grantee, is_grantable,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+		FROM sequence_privileges
+		WHERE $1::text[] IS NULL OR grantee = ANY($1::text[])
+		GROUP BY seq_name, grantee, is_grantable
+		ORDER BY seq_name, grantee, is_grantable
 	`
 
 	rows, err := d.db.Query(query, d.managedGranteeArgs())
@@ -545,8 +597,15 @@ func (d *PostgresDatabase) views() ([]string, error) {
 				d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), schemaLib.StringConstant(viewComment.String),
 			))
 		}
+		privileges, err := d.getPrivilegeDefsForTables([]string{schema + "." + name})
+		if err != nil {
+			return nil, err
+		}
+		for _, grant := range privileges[schema+"."+name] {
+			ddls = append(ddls, grant+";")
+		}
 	}
-	return ddls, nil
+	return ddls, rows.Err()
 }
 
 func (d *PostgresDatabase) materializedViews() ([]string, error) {
@@ -616,8 +675,15 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		for _, indexDef := range indexDefs {
 			ddls = append(ddls, fmt.Sprintf("%s;", indexDef))
 		}
+		privileges, err := d.getPrivilegeDefsForTables([]string{schema + "." + name})
+		if err != nil {
+			return nil, err
+		}
+		for _, grant := range privileges[schema+"."+name] {
+			ddls = append(ddls, grant+";")
+		}
 	}
-	return ddls, nil
+	return ddls, rows.Err()
 }
 
 func (d *PostgresDatabase) schemas() ([]string, error) {
@@ -961,21 +1027,22 @@ type CheckConstraint struct {
 }
 
 type TableDDLComponents struct {
-	TableName         string
-	Columns           []column
-	PrimaryKeyName    Ident
-	PrimaryKeyCols    []string
-	PrimaryKeyPeriod  bool
-	IndexDefs         []string
-	ForeignDefs       []string
-	ExclusionDefs     []string
-	RLSDefs           []string
-	PolicyDefs        []string
-	Comments          []string
-	CheckConstraints  []CheckConstraint
-	UniqueConstraints map[string]string
-	PrivilegeDefs     []string
-	DefaultSchema     string
+	TableName          string
+	Columns            []column
+	PrimaryKeyName     Ident
+	PrimaryKeyCols     []string
+	PrimaryKeyPeriod   bool
+	PrimaryKeyIncluded []string
+	IndexDefs          []string
+	ForeignDefs        []string
+	ExclusionDefs      []string
+	RLSDefs            []string
+	PolicyDefs         []string
+	Comments           []string
+	CheckConstraints   []CheckConstraint
+	UniqueConstraints  map[string]string
+	PrivilegeDefs      []string
+	DefaultSchema      string
 }
 
 func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponentsCache) (string, error) {
@@ -994,6 +1061,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		}
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
+		components.PrimaryKeyIncluded = pkInfo.included
 	}
 	components.IndexDefs = cache.indexDefs[table]
 	components.ForeignDefs = cache.foreignDefs[table]
@@ -1048,6 +1116,9 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (%s)", d.quoteIdent(components.PrimaryKeyName), strings.Join(quotedCols, ", "))
 		} else {
 			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		}
+		if len(components.PrimaryKeyIncluded) > 0 {
+			fmt.Fprintf(&queryBuilder, " INCLUDE (\"%s\")", strings.Join(components.PrimaryKeyIncluded, "\", \""))
 		}
 	}
 
@@ -1215,8 +1286,9 @@ func normalizePostgresTypeCasts(sql string) string {
 }
 
 type primaryKeyInfo struct {
-	name   Ident
-	period bool
+	name     Ident
+	period   bool
+	included []string
 }
 
 var (
@@ -1285,6 +1357,10 @@ func postgresBuildDSN(config database.Config) string {
 	}
 	if sslkey, ok := os.LookupEnv("PGSSLKEY"); ok {
 		options.Set("sslkey", sslkey)
+	}
+
+	if pgoptions, ok := os.LookupEnv("PGOPTIONS"); ok {
+		options.Set("options", pgoptions)
 	}
 
 	dsn.RawQuery = options.Encode()
@@ -1605,14 +1681,23 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 	} else {
 		selectCols = "con.conname, false"
 	}
+	// The columns past indnkeyatts are the INCLUDE columns of a covering primary key.
+	includedCols := "NULL::text[]"
+	if d.supportsIndexIncluding() {
+		includedCols = `(SELECT array_agg(att.attname ORDER BY key.ord)
+		   FROM unnest(idx.indkey) WITH ORDINALITY AS key(attnum, ord)
+		   JOIN pg_attribute att ON att.attrelid = cls.oid AND att.attnum = key.attnum
+		   WHERE key.ord > idx.indnkeyatts)`
+	}
 	query := fmt.Sprintf(`
-		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s, %s
 		FROM pg_constraint con
 		JOIN pg_class cls ON cls.oid = con.conrelid
 		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+		JOIN pg_index idx ON idx.indexrelid = con.conindid
 		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
 		AND con.contype = 'p'
-	`, selectCols)
+	`, selectCols, includedCols)
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {
@@ -1624,13 +1709,15 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 	for rows.Next() {
 		var tableName, keyName string
 		var period bool
-		err = rows.Scan(&tableName, &keyName, &period)
+		var included []string
+		err = rows.Scan(&tableName, &keyName, &period, pq.Array(&included))
 		if err != nil {
 			return nil, err
 		}
 		result[tableName] = primaryKeyInfo{
-			name:   NewIdentWithQuoteDetected(keyName),
-			period: period,
+			name:     NewIdentWithQuoteDetected(keyName),
+			period:   period,
+			included: included,
 		}
 	}
 	return result, nil
@@ -2108,19 +2195,51 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		return map[string][]string{}, nil
 	}
 
+	// Privileges are read from pg_class.relacl rather than
+	// information_schema.table_privileges, which reports
+	//
+	//     is_grantable = pg_has_role(grantee, relowner, 'USAGE') OR <ACL grant option>
+	//
+	// so every grantee that holds the table owner role (directly or through
+	// another role) is reported as grantable even when the ACL carries no grant
+	// option. The diff then emits REVOKE GRANT OPTION FOR ... on every run, and
+	// the REVOKE cannot take a grant option away from an ACL that never had one,
+	// so the schema never converges. The same view also hides rows from anyone
+	// who is neither the grantor nor a member of the grantee, which leaves a
+	// non-superuser connection seeing no privileges at all.
+	//
+	// relkind and privilege_type keep the coverage the view had ('r', 'v', 'f',
+	// 'p' and the seven SQL-standard privileges) plus the materialized views
+	// added in #1376, so MAINTAIN (PostgreSQL 17+) is not read as an extra
+	// privilege to revoke.
+	//
+	// The ACL holds one entry per grantor, so a privilege granted to the same
+	// grantee by several roles is collapsed into one row that is grantable when
+	// any grantor gave the grant option.
 	const query = `
+		WITH relation_privileges AS (
+			SELECT
+				n.nspname AS table_schema,
+				c.relname AS table_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				CASE WHEN bool_or(acl.is_grantable) THEN 'YES' ELSE 'NO' END AS is_grantable,
+				acl.privilege_type
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace,
+			LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relkind IN ('r', 'v', 'f', 'p', 'm')
+			AND acl.grantee <> c.relowner
+			AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
+		)
 		SELECT
-			table_schema || '.' || table_name AS qualified_table_name,
+			table_schema, table_name,
 			grantee,
 			is_grantable,
-			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
-		FROM information_schema.table_privileges
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+		FROM relation_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
 		AND ($2::text[] IS NULL OR grantee = ANY($2::text[]))
-		AND grantee != (
-			SELECT tableowner FROM pg_tables
-			WHERE schemaname = table_schema AND tablename = table_name
-		)
 		GROUP BY table_schema, table_name, grantee, is_grantable
 		ORDER BY table_schema, table_name, grantee, is_grantable
 	`
@@ -2133,8 +2252,8 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	result := make(map[string][]string, len(tableNames))
 	for rows.Next() {
-		var tableName, grantee, isGrantable, privileges string
-		if err := rows.Scan(&tableName, &grantee, &isGrantable, &privileges); err != nil {
+		var schemaName, relationName, grantee, isGrantable, privileges string
+		if err := rows.Scan(&schemaName, &relationName, &grantee, &isGrantable, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
 		}
 		if !d.isExportedGrantee(grantee) {
@@ -2147,7 +2266,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
 		}
 
-		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, tableName, escapedGrantee)
+		tableName := schemaName + "." + relationName
+		quotedTable := d.quoteIdentifierIfNeeded(schemaName) + "." + d.quoteIdentifierIfNeeded(relationName)
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, quotedTable, escapedGrantee)
 		if isGrantable == "YES" {
 			grant += " WITH GRANT OPTION"
 		}
@@ -2159,23 +2280,31 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	// Column-level privileges (pg_attribute.attacl). Unlike
 	// information_schema.column_privileges, attacl contains only explicit
-	// column grants, not ones implied by table-level grants.
+	// column grants, not ones implied by table-level grants. As with table
+	// privileges, entries from several grantors are collapsed per column.
 	const columnQuery = `
+		WITH column_privileges AS (
+			SELECT
+				n.nspname, c.relname,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type,
+				at.attname
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
+			LATERAL aclexplode(at.attacl) AS acl
+			WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+			AND acl.grantee <> c.relowner
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type, at.attname
+		)
 		SELECT
-			n.nspname || '.' || c.relname AS qualified_table_name,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			acl.privilege_type,
-			string_agg(at.attname, ', ' ORDER BY at.attname) AS columns
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
-		LATERAL aclexplode(at.attacl) AS acl
-		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
-		AND acl.grantee <> c.relowner
-		AND ($2::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[]))
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
-		ORDER BY qualified_table_name, grantee, acl.privilege_type, acl.is_grantable
+			nspname, relname, grantee, is_grantable, privilege_type,
+			string_agg(attname, ', ' ORDER BY attname) AS columns
+		FROM column_privileges
+		WHERE $2::text[] IS NULL OR grantee = ANY($2::text[])
+		GROUP BY nspname, relname, grantee, is_grantable, privilege_type
+		ORDER BY nspname, relname, grantee, privilege_type, is_grantable
 	`
 
 	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), d.managedGranteeArgs())
@@ -2185,9 +2314,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 	defer colRows.Close()
 
 	for colRows.Next() {
-		var tableName, grantee, privilegeType, columns string
+		var schemaName, relationName, grantee, privilegeType, columns string
 		var isGrantable bool
-		if err := colRows.Scan(&tableName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
+		if err := colRows.Scan(&schemaName, &relationName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
 			return nil, fmt.Errorf("failed to scan column privilege row: %w", err)
 		}
 		if !d.isExportedGrantee(grantee) {
@@ -2205,8 +2334,10 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			escapedCols[i] = d.quoteIdentifierIfNeeded(col)
 		}
 
+		tableName := schemaName + "." + relationName
+		quotedTable := d.quoteIdentifierIfNeeded(schemaName) + "." + d.quoteIdentifierIfNeeded(relationName)
 		grant := fmt.Sprintf("GRANT %s (%s) ON TABLE %s TO %s",
-			privilegeType, strings.Join(escapedCols, ", "), tableName, escapedGrantee)
+			privilegeType, strings.Join(escapedCols, ", "), quotedTable, escapedGrantee)
 		if isGrantable {
 			grant += " WITH GRANT OPTION"
 		}

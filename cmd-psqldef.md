@@ -197,8 +197,8 @@ Some can also be used in the input schema.sql file.
 
 - Tables: CREATE TABLE, DROP TABLE, ALTER TABLE RENAME TO, COMMENT ON TABLE
 - Columns: ADD COLUMN, ALTER COLUMN, DROP COLUMN, ALTER COLUMN RENAME TO, GENERATED AS IDENTITY, COMMENT ON COLUMN
-- Constraints: PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE, EXCLUDE, ADD CONSTRAINT, DROP CONSTRAINT
-- Indexes: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX, ALTER INDEX RENAME TO, CREATE INDEX CONCURRENTLY, WHERE
+- Constraints: PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE, EXCLUDE, ADD CONSTRAINT, DROP CONSTRAINT, INCLUDE, NULLS NOT DISTINCT
+- Indexes: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX, ALTER INDEX RENAME TO, CREATE INDEX CONCURRENTLY, INCLUDE, WHERE, COLLATE, operator classes, ASC/DESC, NULLS FIRST/LAST, NULLS NOT DISTINCT
 - Views: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW, CREATE MATERIALIZED VIEW, DROP MATERIALIZED VIEW
 - Schemas: CREATE SCHEMA
 - Extensions: CREATE EXTENSION, CREATE EXTENSION IF NOT EXISTS, DROP EXTENSION
@@ -259,10 +259,16 @@ BEGIN;
 ALTER TABLE users ADD COLUMN email VARCHAR(255);
 COMMIT;
 CREATE INDEX CONCURRENTLY idx_users_email ON users (email);  # Runs outside transaction
-CREATE INDEX CONCURRENTLY idx_users_name ON users (name);    # Runs outside transaction
+BEGIN;
+COMMENT ON INDEX idx_users_email IS 'lookup by email';
+COMMIT;
 ```
 
-Note: CREATE INDEX CONCURRENTLY operations must run outside of transactions. When enabled, psqldef automatically separates these operations from the transaction block.
+Note: CREATE INDEX CONCURRENTLY operations must run outside of transactions. psqldef runs every
+statement in the order it generated them, so such a statement commits the transaction that
+precedes it and the statements after it run in a new one. A run that creates an index
+concurrently is therefore not atomic: if a later statement fails, what was committed before it
+stays applied.
 
 ### ADD FOREIGN KEY
 
@@ -546,6 +552,8 @@ $ psqldef -U postgres dbname --apply \
 
 By default, psqldef manages every extension in the database (equivalent to `--skip-extension` being off). Some managed PostgreSQL services (e.g. AlloyDB) auto-install extensions such as `google_columnar_engine` that should never be diffed or dropped, while `--skip-extension` would also stop managing extensions you do want tracked, like `vector` or `pg_trgm`.
 
+`--skip-extension` excludes all extensions from both the current and desired schemas. It applies consistently to live database comparisons, offline comparisons using a current SQL file, and `--export`. The flag takes precedence over `manage.extension`, so no extension is created, dropped, or exported when both are specified. To manage only selected extensions, omit `--skip-extension` and use `manage.extension`.
+
 `manage.extension` restricts management to extensions matching a rule, leaving everything else untouched:
 
 ```yaml
@@ -596,6 +604,8 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 `drop` (default `false`) controls whether REVOKE statements are emitted for that grantee — for privileges that drifted or were removed from the desired schema, and for `REVOKE GRANT OPTION FOR` downgrades. Unlike the legacy behavior where REVOKE was tied to the global `enable_drop`, the rule's `drop` decides alone: a role with `drop: true` converges even when `enable_drop` is `false` (destructive object drops stay blocked), and a role with `drop: false` only ever gains privileges, with skipped revokes shown as `-- Skipped: ...`.
 
 When `manage.privilege` is set, the deprecated `managed_roles` option is ignored (a warning is logged if both are present). An empty `manage.privilege:` section manages all grantees with REVOKE disabled by default.
+
+Enabling `manage.privilege` or `managed_roles` also enables ownership management for tables, partition parents and children, views, and materialized views. An `ALTER TABLE`, `ALTER VIEW`, or `ALTER MATERIALIZED VIEW ... OWNER TO` declaration in the desired schema sets the owner; omitting it preserves the current owner, including when a view must be recreated. Privilege targets match grantees and do not restrict owner roles.
 
 ## Identifier Quoting
 

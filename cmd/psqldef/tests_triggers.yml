@@ -724,3 +724,41 @@ CreateTriggerWithWhenClauseProcedure:
     DROP TRIGGER track_status_change ON public.items;
     DROP TABLE public.items;
     DROP FUNCTION public.track_status;
+
+TriggerRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE FUNCTION set_timestamp()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER set_created_at
+      BEFORE INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION set_timestamp();
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE FUNCTION set_timestamp()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER set_created_at
+      BEFORE UPDATE ON users
+      FOR EACH ROW EXECUTE FUNCTION set_timestamp();
+  up: |
+    -- Skipped: DROP TRIGGER set_created_at ON public.users;
+    -- Skipped: CREATE TRIGGER set_created_at before update ON public.users FOR EACH ROW EXECUTE FUNCTION set_timestamp();
+  down: ""

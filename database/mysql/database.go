@@ -287,6 +287,10 @@ func (d *MysqlDatabase) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
 }
 
+func (d *MysqlDatabase) SessionSetupQueries() []string {
+	return nil
+}
+
 func (d *MysqlDatabase) GetTransactionQueries() database.TransactionQueries {
 	return database.TransactionQueries{
 		Begin:    "BEGIN",

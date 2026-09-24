@@ -437,4 +437,36 @@ CreateTableWithStringConcatQuotedColumn:
       CONSTRAINT mycol_non_empty CHECK (length("MyCol" || '_x') > 2)
     );
 
+ColumnDefaultIsNotDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE settings (
+      id integer,
+      enabled boolean DEFAULT (current_setting('app.mode', true) IS NOT DISTINCT FROM 'on')
+    );
+
+ColumnDefaultNotIsDistinctFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE settings (
+      id integer,
+      enabled boolean DEFAULT (NOT (current_setting('app.mode', true) IS DISTINCT FROM 'on'))
+    );
+
+AddColumnWithIsNotDistinctFromDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE settings (
+      id integer
+    );
+  desired: |
+    CREATE TABLE settings (
+      id integer,
+      enabled boolean DEFAULT (current_setting('app.mode', true) IS NOT DISTINCT FROM 'on')
+    );
+  up: |
+    ALTER TABLE public.settings ADD COLUMN enabled boolean DEFAULT current_setting('app.mode', true) is not distinct from 'on';
+  down: |
+    ALTER TABLE public.settings DROP COLUMN enabled;
+
 # GiST index with tstzrange type

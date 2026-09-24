@@ -155,6 +155,19 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 	typeStr := convertType.Type
 	isArray := strings.HasSuffix(typeStr, "[]")
 
+	// normalizeTypeName folds timestamptz/timetz (and the spelled-out "with time
+	// zone" forms) down to timestamp/time on the assumption that the timezone
+	// flag lives elsewhere (Column.timezone). ConvertType has no such flag unless
+	// the cast was written out in full and parsed by the generic grammar, so
+	// recover it from the type name here before the alias erases it.
+	timeZone := convertType.TimeZone
+	if timeZone == "" && mode == GeneratorModePostgres {
+		switch strings.ToLower(strings.TrimSuffix(typeStr, "[]")) {
+		case "timestamptz", "timetz", "timestamp with time zone", "time with time zone":
+			timeZone = " with time zone"
+		}
+	}
+
 	// For array types, normalize the base type and then re-append the []
 	if isArray {
 		baseType := strings.TrimSuffix(typeStr, "[]")
@@ -171,7 +184,21 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
+		TimeZone: timeZone,
 	}
+}
+
+// nameDataLen is PostgreSQL's NAMEDATALEN - 1: the longest identifier the server stores.
+const nameDataLen = 63
+
+// buildPostgresPrimaryKeyName is buildPostgresConstraintName for a primary key, whose name
+// PostgreSQL builds from the table name alone.
+func buildPostgresPrimaryKeyName(tableName string) string {
+	suffix := "_pkey"
+	if len(tableName)+len(suffix) > nameDataLen {
+		tableName = tableName[:nameDataLen-len(suffix)]
+	}
+	return tableName + suffix
 }
 
 // buildPostgresConstraintName approximates PostgreSQL's base constraint name before
@@ -183,11 +210,11 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 // In summary: when column <= 28 bytes, always truncate the table first
 func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 	fullName := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix)
-	if len(fullName) <= 63 {
+	if len(fullName) <= nameDataLen {
 		return fullName
 	}
 
-	overflow := len(fullName) - 63
+	overflow := len(fullName) - nameDataLen
 	tableLen := len(tableName)
 	columnLen := len(columnName)
 
@@ -272,18 +299,57 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 }
 
 // normalizeCheckExprForOutput normalizes a CHECK constraint expression for DDL generation.
-// Unlike normalizeCheckExpr it leaves ANY/ALL array elements in the order they were written:
+// Unlike normalizeCheckExpr it keeps IN as written, which the DDL needs in order to run (see
+// normalizeComparisonExpr), and leaves ANY/ALL array elements in the order they were written:
 // comparison canonicalizes both sides anyway, so reordering here would only rewrite the
 // author's schema, discarding an order that often carries meaning (a status lifecycle, say).
 func normalizeCheckExprForOutput(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	return normalizeCheckExprWith(expr, mode, false)
 }
 
-// canonicalizeArrays sorts and deduplicates ANY/ALL array elements, which is wanted when
-// comparing but not when generating DDL.
-func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeArrays bool) parser.Expr {
+// normalizeTrimFunction canonicalizes parser implementations that represent TRIM
+// or PostgreSQL's trim-family functions as a function call. PostgreSQL parser
+// implementations may emit these functions either qualified or unqualified, so
+// only non-pg_catalog qualified functions are excluded.
+func normalizeTrimFunction(e *parser.FuncExpr, exprs parser.SelectExprs) (parser.Expr, bool) {
+	name := strings.ToLower(e.Name.Name)
+	direction := ""
+	switch name {
+	case "trim", "btrim":
+	case "ltrim":
+		direction = "leading"
+	case "rtrim":
+		direction = "trailing"
+	default:
+		return nil, false
+	}
+	if !e.Qualifier.IsEmpty() && !strings.EqualFold(e.Qualifier.Name, "pg_catalog") {
+		return nil, false
+	}
+
+	args := make([]parser.Expr, len(exprs))
+	for i, expr := range exprs {
+		aliased, ok := expr.(*parser.AliasedExpr)
+		if !ok {
+			return nil, false
+		}
+		args[i] = aliased.Expr
+	}
+
+	switch len(args) {
+	case 1:
+		return &parser.TrimExpr{Direction: direction, String: args[0]}, true
+	case 2:
+		return &parser.TrimExpr{Direction: direction, TrimChar: args[1], String: args[0]}, true
+	default:
+		return nil, false
+	}
+}
+
+// forComparison is on when comparing and off when generating DDL; see normalizeComparisonExpr.
+func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison bool) parser.Expr {
 	recur := func(expr parser.Expr, mode GeneratorMode) parser.Expr {
-		return normalizeCheckExprWith(expr, mode, canonicalizeArrays)
+		return normalizeCheckExprWith(expr, mode, forComparison)
 	}
 	if expr == nil {
 		return nil
@@ -359,6 +425,16 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
+	case *parser.TrimExpr:
+		direction := strings.ToLower(e.Direction)
+		if direction == "both" {
+			direction = ""
+		}
+		return &parser.TrimExpr{
+			Direction: direction,
+			TrimChar:  recur(e.TrimChar, mode),
+			String:    recur(e.String, mode),
+		}
 	case *parser.AndExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
 		left := recur(e.Left, mode)
@@ -381,9 +457,13 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 
 		// Try to convert OR chain of equality comparisons to IN expression
 		// MSSQL transforms IN (a, b, c) to col=a OR col=b OR col=c
-		// We normalize back to IN for comparison
-		if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
-			return inExpr
+		// We normalize back to IN for comparison only; generated DDL keeps the chain as written.
+		// The folded IN goes through the same normalization as a written IN; otherwise the
+		// two spellings would not compare equal. Its operands are already normalized.
+		if forComparison {
+			if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
+				return normalizeComparisonExpr(inExpr, mode, func(e parser.Expr, _ GeneratorMode) parser.Expr { return e }, forComparison)
+			}
 		}
 
 		return &parser.OrExpr{
@@ -396,9 +476,9 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			Right: recur(e.Right, mode),
 		}
 	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: recur(e.Expr, mode)}
+		return normalizeNotExpr(recur(e.Expr, mode))
 	case *parser.ComparisonExpr:
-		return normalizeComparisonExpr(e, mode, recur, canonicalizeArrays)
+		return normalizeComparisonExpr(e, mode, recur, forComparison)
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
@@ -425,6 +505,9 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			}
 			return arg
 		})
+		if normalized, ok := normalizeTrimFunction(e, normalizedExprs); ok {
+			return normalized
+		}
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
 			return atz
 		}
@@ -839,6 +922,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return &parser.ParenExpr{
 			Expr: normalizedInner,
 		}
+	case *parser.NotExpr:
+		return normalizeNotExpr(normalizeExpr(e.Expr, mode))
 	case *parser.ComparisonExpr:
 		return normalizeComparisonExpr(e, mode, normalizeExpr, true)
 	case *parser.AndExpr:
@@ -1529,19 +1614,47 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 	})
 }
 
-// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores:
-// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]).
+// normalizeNotExpr folds NOT (a IS DISTINCT FROM b) into a IS NOT DISTINCT FROM b.
+// PostgreSQL rewrites IS NOT DISTINCT FROM into the NOT-wrapped form when it stores an
+// expression, so both spellings have to reach the same shape before they are compared.
+// The fold is one-way: PostgreSQL keeps the extra NOT of NOT (a IS NOT DISTINCT FROM b),
+// so folding only the inner comparison already lands both sides on the same shape.
 //
-// canonicalizeArrays additionally sorts and deduplicates ANY/ALL array elements and
-// collapses a single-element array to a scalar comparison. That is what makes the two
-// spellings PostgreSQL may store compare equal, so it is on when comparing and off when
-// generating DDL, where it would only rewrite the order the author wrote.
+// operand is the caller's already normalized operand.
+func normalizeNotExpr(operand parser.Expr) parser.Expr {
+	if comparison, ok := unwrapOutermostParenExpr(operand).(*parser.ComparisonExpr); ok && comparison.Operator == parser.IsDistinctFromStr {
+		return &parser.ComparisonExpr{
+			Operator: parser.IsNotDistinctFromStr,
+			Left:     comparison.Left,
+			Right:    comparison.Right,
+		}
+	}
+	// AND and OR bind looser than NOT, so they need back the parentheses that
+	// normalizeExpr strips. Without them NOT (a AND b) would print as the very
+	// different NOT a AND b. Operands coming from normalizeCheckExprWith keep
+	// their own ParenExpr, so this only fires for the normalizeExpr side.
+	switch operand.(type) {
+	case *parser.AndExpr, *parser.OrExpr:
+		return &parser.NotExpr{Expr: &parser.ParenExpr{Expr: operand}}
+	}
+	return &parser.NotExpr{Expr: operand}
+}
+
+// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores.
+//
+// forComparison is on when comparing and off when generating DDL. When on, PostgreSQL's
+// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]), IN lists and ANY/ALL
+// arrays are sorted and deduplicated, and a single-element array collapses to a scalar
+// comparison. That is what makes the spellings PostgreSQL may store compare equal.
+// When off, IN stays IN: PostgreSQL resolves IN list literals against the left operand's
+// type, but resolves an ARRAY[...] of untyped literals on its own (to text[]), so the ANY
+// spelling fails with "operator does not exist" against an ENUM column.
 //
 // recur is the caller's own normalizer: CHECK constraints and value expressions share
 // this comparison handling but normalize their operands differently. Keeping it in one
 // place is deliberate — the two used to carry copies of this logic, and fixes to one
 // repeatedly failed to reach the other (see #1182).
-func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur func(parser.Expr, GeneratorMode) parser.Expr, canonicalizeArrays bool) parser.Expr {
+func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur func(parser.Expr, GeneratorMode) parser.Expr, forComparison bool) parser.Expr {
 	left := recur(e.Left, mode)
 	right := recur(e.Right, mode)
 	op := normalizeOperator(e.Operator, mode)
@@ -1582,7 +1695,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 	// Handle IN clauses based on mode.
 	if op == "in" || op == "not in" {
 		if tuple, ok := right.(parser.ValTuple); ok {
-			if mode == GeneratorModePostgres {
+			if mode == GeneratorModePostgres && forComparison {
 				// Elements are normalized by the ANY/ALL block below.
 				right = &parser.ArrayConstructor{Elements: parser.Exprs(tuple)}
 				if op == "in" {
@@ -1593,11 +1706,11 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 					allFlag = true
 				}
 			} else {
-				// For other databases, keep IN.
+				// Keep IN for other databases, and for PostgreSQL DDL generation.
 				normalizedElements := util.TransformSlice(tuple, func(elem parser.Expr) parser.Expr {
 					return recur(elem, mode)
 				})
-				if canonicalizeArrays {
+				if forComparison {
 					normalizedElements = sortAndDeduplicateValues(normalizedElements)
 				}
 				right = parser.ValTuple(normalizedElements)
@@ -1614,7 +1727,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 			})
 			// Element order does not affect ANY/ALL, and PostgreSQL keeps whichever order
 			// was written, so sorting is what lets the two sides compare equal.
-			if canonicalizeArrays {
+			if forComparison {
 				normalizedElements = sortAndDeduplicateValues(normalizedElements)
 			}
 			right = &parser.ArrayConstructor{Elements: normalizedElements}
@@ -1624,7 +1737,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 		// = 'a') but keeps the array for an explicitly written ANY/ALL, so both spellings
 		// have to be folded to compare equal. A single element makes ANY and ALL collapse
 		// to the same comparison whatever the operator is, so this holds beyond = and <>.
-		if arrayConst, ok := right.(*parser.ArrayConstructor); ok && canonicalizeArrays && len(arrayConst.Elements) == 1 {
+		if arrayConst, ok := right.(*parser.ArrayConstructor); ok && forComparison && len(arrayConst.Elements) == 1 {
 			right = arrayConst.Elements[0]
 			anyFlag = false
 			allFlag = false
@@ -1666,61 +1779,50 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 // tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
 // (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
 // Returns nil if the conversion is not applicable.
-func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
+func tryConvertOrChainToIn(orExpr *parser.OrExpr) *parser.ComparisonExpr {
 	var column parser.Expr
 	var values []parser.Expr
 
-	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
-		cmp, ok := expr.(*parser.ComparisonExpr)
-		if !ok || cmp.Operator != "=" {
-			return nil, nil, false
+	// Nested ORs arrive already folded: as IN (...), or as = ANY (ARRAY[...]) once
+	// PostgreSQL's comparison normalization has converted that IN.
+	extractValues := func(cmp *parser.ComparisonExpr) ([]parser.Expr, bool) {
+		switch {
+		case strings.EqualFold(cmp.Operator, "in"):
+			tuple, ok := cmp.Right.(parser.ValTuple)
+			return tuple, ok
+		case cmp.Operator == "=" && cmp.Any:
+			arrayConst, ok := cmp.Right.(*parser.ArrayConstructor)
+			if !ok {
+				return nil, false
+			}
+			return arrayConst.Elements, true
+		case cmp.Operator == "=" && !cmp.All:
+			return []parser.Expr{cmp.Right}, true
 		}
-		return cmp.Left, cmp.Right, true
+		return nil, false
 	}
 
 	columnsEqual := func(col1, col2 parser.Expr) bool {
 		return normalizeName(parser.String(col1)) == normalizeName(parser.String(col2))
 	}
 
-	// Walk the OR chain and collect comparisons
-	// Also handle already-normalized IN expressions from nested ORs
 	var walk func(expr parser.Expr) bool
 	walk = func(expr parser.Expr) bool {
 		switch e := expr.(type) {
 		case *parser.OrExpr:
 			return walk(e.Left) && walk(e.Right)
 		case *parser.ComparisonExpr:
-			// Handle IN expressions that were already normalized
-			if strings.EqualFold(e.Operator, "in") {
-				if column == nil {
-					column = e.Left
-				} else if !columnsEqual(column, e.Left) {
-					return false
-				}
-				// Extract values from IN clause
-				if tuple, ok := e.Right.(parser.ValTuple); ok {
-					for _, v := range tuple {
-						values = append(values, v)
-					}
-					return true
-				}
-				return false
-			}
-
-			col, val, ok := extractEqComparison(e)
+			vals, ok := extractValues(e)
 			if !ok {
 				return false
 			}
 			if column == nil {
-				column = col
-				values = append(values, val)
-				return true
+				column = e.Left
+			} else if !columnsEqual(column, e.Left) {
+				return false
 			}
-			if columnsEqual(column, col) {
-				values = append(values, val)
-				return true
-			}
-			return false
+			values = append(values, vals...)
+			return true
 		default:
 			return false
 		}
@@ -1730,12 +1832,10 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 		return nil
 	}
 
-	sortedValues := sortAndDeduplicateValues(values)
-
 	return &parser.ComparisonExpr{
 		Operator: "in",
 		Left:     column,
-		Right:    parser.ValTuple(sortedValues),
+		Right:    parser.ValTuple(values),
 	}
 }
 

@@ -102,6 +102,7 @@ func (*If) iStatement()              {}
 func (*DDL) iStatement()             {}
 func (*Show) iStatement()            {}
 func (*Use) iStatement()             {}
+func (*Pragma) iStatement()          {}
 func (*Begin) iStatement()           {}
 func (*Commit) iStatement()          {}
 func (*Rollback) iStatement()        {}
@@ -1077,7 +1078,8 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 type IndexDefinition struct {
 	Info              *IndexInfo
 	Columns           []IndexColumn
-	NullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE constraints
+	NullsNotDistinct  bool    // for PostgreSQL 15+ UNIQUE constraints
+	Included          []Ident // for PostgreSQL covering UNIQUE/PRIMARY KEY constraints
 	Options           []*IndexOption
 	Partition         *IndexPartition
 	ConstraintOptions *ConstraintOptions
@@ -1101,6 +1103,17 @@ func (idx *IndexDefinition) Format(buf *nodeBuffer) {
 		}
 	}
 	buf.Printf(")")
+
+	if len(idx.Included) > 0 {
+		buf.Printf(" include (")
+		for i, included := range idx.Included {
+			if i != 0 {
+				buf.Printf(", ")
+			}
+			buf.Printf("%v", included)
+		}
+		buf.Printf(")")
+	}
 
 	for _, opt := range idx.Options {
 		buf.Printf(" %s", opt.Name)
@@ -1378,6 +1391,17 @@ func (node *Use) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("use")
 	}
+}
+
+// Pragma represents a PRAGMA statement. sqldef does not manage pragmas; the node
+// exists so PRAGMA lines in a schema export can be parsed and then ignored.
+type Pragma struct {
+	Name Ident
+}
+
+// Format formats the node.
+func (node *Pragma) Format(buf *nodeBuffer) {
+	buf.Printf("pragma %v", node.Name)
 }
 
 // Begin represents a Begin statement.
@@ -2589,17 +2613,26 @@ func (node *SubstrExpr) Format(buf *nodeBuffer) {
 
 // TrimExpr represents a TRIM expression.
 type TrimExpr struct {
-	TrimChar Expr
-	String   Expr
+	Direction string
+	TrimChar  Expr
+	String    Expr
 }
 
 // Format formats the node.
 func (node *TrimExpr) Format(buf *nodeBuffer) {
-	if node.TrimChar == nil {
+	direction := strings.ToLower(node.Direction)
+	if direction == "" && node.TrimChar == nil {
 		buf.Printf("trim(%v)", node.String)
 		return
 	}
-	buf.Printf("trim(%v from %v)", node.TrimChar, node.String)
+	buf.Printf("trim(")
+	if direction != "" {
+		buf.Printf("%s ", direction)
+	}
+	if node.TrimChar != nil {
+		buf.Printf("%v ", node.TrimChar)
+	}
+	buf.Printf("from %v)", node.String)
 }
 
 // MethodCallExpr represents a SQL Server method call on an expression.
@@ -2688,6 +2721,10 @@ type ConvertType struct {
 	Operator string
 	Charset  string
 	Array    BoolVal
+	// TimeZone holds the timestamp/time timezone modifier for a cast target
+	// (e.g. " with time zone"), emitted after the length so a cast such as
+	// timestamp(0) with time zone round-trips. Empty for other types.
+	TimeZone string
 }
 
 // this string is "character set" and this comment is required
@@ -2697,13 +2734,23 @@ const (
 
 // Format formats the node.
 func (node *ConvertType) Format(buf *nodeBuffer) {
-	buf.Printf("%s", node.Type)
+	// A PostgreSQL array cast keeps the [] suffix in Type, but the length and the
+	// timezone modifier belong to the element type, so they have to be emitted
+	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
+	typeName, isArray := strings.CutSuffix(node.Type, "[]")
+	buf.Printf("%s", typeName)
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)
 		if node.Scale != nil {
 			buf.Printf(", %v", node.Scale)
 		}
 		buf.Printf(")")
+	}
+	if node.TimeZone != "" {
+		buf.Printf("%s", node.TimeZone)
+	}
+	if isArray {
+		buf.Printf("[]")
 	}
 	if node.Charset != "" {
 		buf.Printf("%s %s", node.Operator, node.Charset)

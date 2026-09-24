@@ -103,6 +103,35 @@ CREATE TABLEE posts (id INT)": syntax error at line 2, column 8 near 'create'
 	}
 }
 
+func TestParseTrimWithExplicitBoth(t *testing.T) {
+	stmt, err := ParseDDL("CREATE TABLE test (t1 varchar(255), CHECK (TRIM(BOTH ' ' FROM t1)))", ParserModeMysql)
+	if err != nil {
+		t.Fatalf("ParseDDL failed: %v", err)
+	}
+
+	ddl, ok := stmt.(*DDL)
+	if !ok {
+		t.Fatalf("expected *DDL, got %T", stmt)
+	}
+	if len(ddl.TableSpec.Checks) != 1 {
+		t.Fatalf("expected one CHECK constraint, got %d", len(ddl.TableSpec.Checks))
+	}
+
+	trim, ok := ddl.TableSpec.Checks[0].Where.Expr.(*TrimExpr)
+	if !ok {
+		t.Fatalf("expected *TrimExpr, got %T", ddl.TableSpec.Checks[0].Where.Expr)
+	}
+	if trim.Direction != "both" {
+		t.Errorf("TRIM direction = %q, want %q", trim.Direction, "both")
+	}
+	if trim.TrimChar == nil {
+		t.Fatal("expected explicit trim character")
+	}
+	if got := String(trim); got != "trim(both ' ' from t1)" {
+		t.Errorf("TRIM expression = %q, want %q", got, "trim(both ' ' from t1)")
+	}
+}
+
 // TestIntervalColumnType tests INTERVAL support as both a column type and expression
 func TestIntervalColumnType(t *testing.T) {
 	testCases := []struct {
@@ -266,6 +295,18 @@ func TestIntervalColumnType(t *testing.T) {
 			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT '12:30:45.123'::time(3))",
 			shouldParse: true,
 			description: "Should support ::time(p) casting",
+		},
+		{
+			name:        "TYPECAST to TIMESTAMP with precision and time zone",
+			sql:         "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
+			shouldParse: true,
+			description: "Should support ::timestamp(p) with time zone casting",
+		},
+		{
+			name:        "TYPECAST to TIME with precision and time zone",
+			sql:         "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
+			shouldParse: true,
+			description: "Should support ::time(p) with time zone casting",
 		},
 		{
 			name:        "TYPECAST in VIEW with numeric parameters",
@@ -549,6 +590,35 @@ func TestNowFunctionInDefaultExpression(t *testing.T) {
 	}
 }
 
+func TestTypecastTimestampWithTimeZonePreserved(t *testing.T) {
+	// Regression: a cast to timestamp(p)/time(p) with time zone must keep the
+	// time zone modifier when re-serialized. Dropping it turns the cast into a
+	// different type (without time zone), silently diverging the stored DEFAULT.
+	cases := []struct {
+		sql  string
+		want string
+	}{
+		{
+			sql:  "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
+			want: "a timestamp(0) with time zone default((now())::timestamp(0) with time zone)",
+		},
+		{
+			sql:  "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
+			want: "a time(0) with time zone default((now())::time(0) with time zone)",
+		},
+	}
+	for _, tc := range cases {
+		statement, err := ParseDDL(tc.sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("failed to parse %q: %v", tc.sql, err)
+		}
+		got := String(statement)
+		if !strings.Contains(got, tc.want) {
+			t.Fatalf("time zone modifier not preserved.\nSQL:  %s\nwant substring: %s\ngot:  %s", tc.sql, tc.want, got)
+		}
+	}
+}
+
 func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
 	sql := "CREATE TABLE test (a integer, b integer, CONSTRAINT x UNIQUE NULLS NOT DISTINCT (a, b))"
 
@@ -559,6 +629,21 @@ func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
 
 	got := String(statement)
 	want := "create table test (\n\ta integer,\n\tb integer,\n\tunique x nulls not distinct (a, b)\n)"
+	if got != want {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
+func TestConstraintIncludeColumnsFormatting(t *testing.T) {
+	sql := `CREATE TABLE test (a integer, b integer, c integer, CONSTRAINT x UNIQUE (a) INCLUDE (b, c))`
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse UNIQUE ... INCLUDE constraint: %v", err)
+	}
+
+	got := String(statement)
+	want := "create table test (\n\ta integer,\n\tb integer,\n\tc integer,\n\tunique x (a) include (b, c)\n)"
 	if got != want {
 		t.Fatalf("unexpected normalized SQL:\n%s", got)
 	}
@@ -672,6 +757,96 @@ func TestLanguageAsUnquotedIdentifier(t *testing.T) {
 	sql := `CREATE UNIQUE INDEX index_translations_on_tenant_id_and_language ON translations USING btree (tenant_id, language)`
 	if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
 		t.Fatalf("unquoted language in index column list should parse: %v", err)
+	}
+}
+
+// TestUnusedKeywordsAsUnquotedIdentifiers tests that MySQL keywords such as YEAR_MONTH and XOR
+// are plain identifiers only in PostgreSQL mode, where pg_get_indexdef writes them unquoted.
+func TestUnusedKeywordsAsUnquotedIdentifiers(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE TABLE public.t (id bigint NOT NULL, year_month text NOT NULL, xor integer)`,
+		`CREATE INDEX t_ym ON public.t USING btree (id, year_month)`,
+		`CREATE INDEX t_x ON public.t USING btree (id, xor)`,
+		`CREATE INDEX t_ym ON public.t USING btree (id) WHERE (year_month IS NOT NULL)`,
+		`ALTER TABLE public.t ADD CONSTRAINT t_ym UNIQUE (year_month)`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+			t.Errorf("unquoted year_month/xor should parse in PostgreSQL mode: %v", err)
+		}
+	}
+
+	for _, tc := range []struct {
+		sql  string
+		mode ParserMode
+	}{
+		{`CREATE TABLE t (id int, year_month text)`, ParserModeMysql},
+		{`CREATE TABLE t (id int, both int)`, ParserModePostgres},
+	} {
+		if _, err := ParseDDL(tc.sql, tc.mode); err == nil {
+			t.Errorf("reserved word as an unquoted column name should not parse: %s", tc.sql)
+		}
+	}
+}
+
+// TestSQLServerKeywordsAsUnquotedIdentifiers tests that words lexed as keywords only for
+// SQL Server syntax are not reserved, so they parse as identifiers.
+// The keyword table is shared by all modes, so every mode must accept them.
+func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
+	words := []string{
+		"newid", "newsequentialid", "getutcdate", "sysutcdatetime", "try_cast",
+		"openjson", "string_split", "apply", "columnstore",
+		"pad_index", "ignore_dup_key", "statistics_norecompute", "statistics_incremental", "allow_row_locks", "allow_page_locks",
+	}
+	modes := []struct {
+		name string
+		mode ParserMode
+	}{
+		{"mysql", ParserModeMysql},
+		{"postgres", ParserModePostgres},
+		{"sqlite3", ParserModeSQLite3},
+		{"mssql", ParserModeMssql},
+	}
+
+	for _, m := range modes {
+		for _, word := range words {
+			t.Run(m.name+"/"+word, func(t *testing.T) {
+				for _, sql := range []string{
+					`CREATE TABLE t (` + word + ` int)`,
+					`CREATE INDEX t_` + word + ` ON t (` + word + `)`,
+					`CREATE VIEW v AS SELECT ` + word + ` FROM t`,
+				} {
+					if _, err := ParseDDL(sql, m.mode); err != nil {
+						t.Errorf("ParseDDL(%q) failed: %v", sql, err)
+					}
+				}
+			})
+		}
+	}
+}
+
+// No supported database reserves stream, and pg_get_indexdef writes it unquoted.
+func TestStreamAsUnquotedIdentifier(t *testing.T) {
+	sqls := []string{
+		`CREATE TABLE stream (id bigint NOT NULL, stream text)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (start_at)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE (start_at IS NOT NULL)`,
+		`CREATE INDEX idx_t_stream ON t (stream)`,
+		`ALTER TABLE t ADD CONSTRAINT t_stream_id_fkey FOREIGN KEY (stream_id) REFERENCES stream (id)`,
+	}
+	for _, m := range []struct {
+		name string
+		mode ParserMode
+	}{
+		{"MySQL", ParserModeMysql},
+		{"PostgreSQL", ParserModePostgres},
+		{"SQLite3", ParserModeSQLite3},
+		{"SQL Server", ParserModeMssql},
+	} {
+		for _, sql := range sqls {
+			if _, err := ParseDDL(sql, m.mode); err != nil {
+				t.Errorf("unquoted stream should parse in %s mode: %q: %v", m.name, sql, err)
+			}
+		}
 	}
 }
 
@@ -830,6 +1005,21 @@ func TestDefaultFunctionExpressions(t *testing.T) {
 			sql:  "CREATE TABLE t (created_at timestamp DEFAULT now())",
 			mode: ParserModePostgres,
 		},
+		{
+			name: "SQL Server NEWID default",
+			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWID())",
+			mode: ParserModeMssql,
+		},
+		{
+			name: "SQL Server NEWSEQUENTIALID default",
+			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWSEQUENTIALID())",
+			mode: ParserModeMssql,
+		},
+		{
+			name: "SQL Server GETUTCDATE default",
+			sql:  "CREATE TABLE t (created_at datetime2 DEFAULT GETUTCDATE())",
+			mode: ParserModeMssql,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -867,6 +1057,11 @@ func TestSQLiteTableOptions(t *testing.T) {
 			"CREATE TABLE t (id integer PRIMARY KEY, data ANY) STRICT",
 			"create table t (\n\tid integer primary key,\n\tdata ANY\n) STRICT",
 		},
+		{
+			"table option keywords as column names",
+			"CREATE TABLE t (strict integer, without text, pragma text) STRICT",
+			"create table t (\n\tstrict integer,\n\twithout text,\n\tpragma text\n) STRICT",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -878,6 +1073,34 @@ func TestSQLiteTableOptions(t *testing.T) {
 			got := String(tree)
 			if got != tc.want {
 				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPragmaAndDeleteStatements covers the non-DDL statements that some schema
+// exports (e.g. Cloudflare D1) interleave with the DDL. They parse instead of
+// erroring; the schema layer drops them.
+func TestPragmaAndDeleteStatements(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{"pragma bare", "PRAGMA foreign_keys", "pragma foreign_keys"},
+		{"pragma assignment", "PRAGMA defer_foreign_keys = TRUE", "pragma defer_foreign_keys"},
+		{"pragma call", "PRAGMA table_info('t')", "pragma table_info"},
+		{"delete from", "DELETE FROM sqlite_sequence", "delete from sqlite_sequence"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeSQLite3)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			if got := String(tree); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -983,6 +1206,21 @@ func TestStringConcatOperator(t *testing.T) {
 			{
 				name: "column-level CHECK with concat and comparison",
 				sql:  "CREATE TABLE t (s text CHECK (s || 'x' <> ''))",
+				// Expected AST: ComparisonExpr{Left: ConcatExpr{s, 'x'}, ...}.
+				// Column-level CHECK stores the expression on ColumnType.Check,
+				// a separate grammar production from table-level TableSpec.Checks.
+				checkShape: func(t *testing.T, stmt Statement) {
+					t.Helper()
+					ddl := stmt.(*DDL)
+					expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+					cmp, ok := expr.(*ComparisonExpr)
+					if !ok {
+						t.Fatalf("expected *ComparisonExpr at top, got %T", expr)
+					}
+					if _, ok := cmp.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected *ConcatExpr on ComparisonExpr.Left, got %T", cmp.Left)
+					}
+				},
 			},
 			{
 				name: "chained concat is left-associative",
@@ -1033,7 +1271,7 @@ func TestStringConcatOperator(t *testing.T) {
 		// Right: IsExpr{s, "is null"}}. The shape assertion locks down both
 		// (a) || binds tighter than comparison, and (b) OR is at the outermost
 		// boolean level — independent of how the emitter formats the text.
-		sql := "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
+		sql := "CREATE TABLE t (s text, CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
 		stmt, err := ParseDDL(sql, ParserModePostgres)
 		if err != nil {
 			t.Fatalf("ParseDDL failed: %v", err)
@@ -1047,7 +1285,7 @@ func TestStringConcatOperator(t *testing.T) {
 		}
 
 		ddl := stmt.(*DDL)
-		expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+		expr := ddl.TableSpec.Checks[0].Where.Expr
 		or, ok := expr.(*OrExpr)
 		if !ok {
 			t.Fatalf("expected *OrExpr at top, got %T", expr)
@@ -1551,6 +1789,13 @@ func TestExcludeWhereGrammar(t *testing.T) {
 	})
 }
 
+func TestAlterTableAddUniqueOnOnly(t *testing.T) {
+	sql := `ALTER TABLE ONLY public.t ADD CONSTRAINT c UNIQUE (a, b) DEFERRABLE INITIALLY DEFERRED`
+	if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+		t.Fatalf("ALTER TABLE ONLY UNIQUE should parse: %v", err)
+	}
+}
+
 func TestAlterTableAddExclusionGrammar(t *testing.T) {
 	// ALTER TABLE [ONLY] ... ADD CONSTRAINT ... EXCLUDE is the form pg_dump emits.
 	cases := []struct {
@@ -1763,6 +2008,40 @@ func TestArrayElementColumnReference(t *testing.T) {
 	}
 }
 
+func TestFunctionCallForms(t *testing.T) {
+	// LAG and LEAD without OVER are not standard SQL, but the parser accepts them.
+	testCases := []struct {
+		name     string
+		expr     string
+		expected string
+	}{
+		{name: "no arguments", expr: "f()", expected: "f()"},
+		{name: "arguments", expr: "f(x)", expected: "f(x)"},
+		{name: "distinct arguments", expr: "f(DISTINCT x)", expected: "f(distinct x)"},
+		{name: "no arguments with over", expr: "f() OVER ()", expected: "f() over()"},
+		{name: "arguments with over", expr: "f(x) OVER ()", expected: "f(x) over()"},
+		{name: "arguments with partition by", expr: "f(x) OVER (PARTITION BY y)", expected: "f(x) over(partition by y)"},
+		{name: "within group", expr: "f(x) WITHIN GROUP (ORDER BY y)", expected: "f(x) within group( order by y asc)"},
+		{name: "lag without over", expr: "LAG(x)", expected: "lag(x)"},
+		{name: "lag with over", expr: "LAG(x) OVER (ORDER BY y)", expected: "lag(x) over( order by y asc)"},
+		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x)"},
+		{name: "schema-qualified", expr: "s.f(x)", expected: "s.f(x)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL("CREATE VIEW v AS SELECT "+tc.expr+" FROM t", ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			want := "select " + tc.expected + " from t"
+			if got := String(stmt); !strings.Contains(got, want) {
+				t.Errorf("String() = %q, want it to contain %q", got, want)
+			}
+		})
+	}
+}
+
 func TestParenthesizedSetOperationOperands(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -1917,5 +2196,214 @@ SELECT id FROM items`, ParserModePostgres)
 	}
 	if inner.Limit == nil {
 		t.Error("inner.Limit is nil")
+	}
+}
+
+func TestParenthesizedComparisonAsComparisonOperand(t *testing.T) {
+	// PostgreSQL renders an "if and only if" invariant between two columns in
+	// this shape, and pg_get_constraintdef() returns it verbatim, so it comes
+	// back through --export.
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "both operands parenthesized",
+			sql:  "CREATE TABLE t (a text, b int, CONSTRAINT c CHECK ((a = 'x'::text) = (b IS NOT NULL)))",
+		},
+		{
+			name: "left operand parenthesized",
+			sql:  "CREATE TABLE t (a text, flag bool, CONSTRAINT c CHECK ((a = 'x'::text) = flag))",
+		},
+		{
+			name: "right operand parenthesized",
+			sql:  "CREATE TABLE t (a text, flag bool, CONSTRAINT c CHECK (flag = (a = 'x'::text)))",
+		},
+		{
+			name: "both operands parenthesized inequalities",
+			sql:  "CREATE TABLE t (b int, CONSTRAINT c CHECK ((b > 1) = (b < 5)))",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseDDL(tc.sql, ParserModePostgres); err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+		})
+	}
+
+	t.Run("a parenthesized condition is still a ParenExpr", func(t *testing.T) {
+		sql := "CREATE TABLE t (a text, CONSTRAINT c CHECK ((a = 'x'::text)))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		check := stmt.(*DDL).TableSpec.Checks[0]
+		if _, ok := check.Where.Expr.(*ParenExpr); !ok {
+			t.Errorf("expected *ParenExpr, got %T", check.Where.Expr)
+		}
+	})
+}
+
+// TestKeyKeywordAsColumnReference tests that `key`, an unreserved keyword in
+// PostgreSQL, works as an unquoted column name in column *reference* positions
+// (expressions and qualified names), not just in column declarations and index
+// column lists. The MySQL cases pin both directions of the lexer split: KEY
+// stays an index keyword there, and is still rejected as a bare identifier.
+func TestKeyKeywordAsColumnReference(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		mode        ParserMode
+		shouldParse bool
+	}{
+		// Column references reached through reserved_sql_id.
+		{
+			name:        "COMMENT ON COLUMN with table-qualified key",
+			sql:         "COMMENT ON COLUMN t.key IS 'a key'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "COMMENT ON COLUMN with schema-qualified key",
+			sql:         "COMMENT ON COLUMN public.t.key IS 'a key'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "qualified key in a view select list",
+			sql:         "CREATE VIEW v AS SELECT t.key FROM t",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a REFERENCES column list",
+			sql:         "CREATE TABLE t2 (id int REFERENCES t (key))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a trigger UPDATE OF column list",
+			sql:         "CREATE TRIGGER tr AFTER UPDATE OF key ON t FOR EACH ROW EXECUTE FUNCTION f()",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a column-level GRANT",
+			sql:         "GRANT SELECT (key) ON t TO r",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "NEW.key in a trigger WHEN condition",
+			sql:         "CREATE TRIGGER tr AFTER UPDATE ON t FOR EACH ROW WHEN (NEW.key IS NOT NULL) EXECUTE FUNCTION f()",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+
+		// Column references reached through column_name.
+		{
+			name:        "bare key in a view select list",
+			sql:         "CREATE VIEW v AS SELECT key FROM t",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a view WHERE clause",
+			sql:         "CREATE VIEW v AS SELECT id FROM t WHERE key = 'a'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a partial index predicate",
+			sql:         "CREATE INDEX i ON t (key) WHERE key IS NOT NULL",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a CHECK constraint",
+			sql:         "CREATE TABLE t (key int, CHECK (key > 0))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in GROUP BY",
+			sql:         "CREATE VIEW v AS SELECT key FROM t GROUP BY key",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in ORDER BY",
+			sql:         "CREATE VIEW v AS SELECT key FROM t ORDER BY key",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+
+		// Column declarations and index column lists, already accepted before
+		// this change; kept to catch regressions.
+		{
+			name:        "key as a column declaration",
+			sql:         "CREATE TABLE t (key text NOT NULL)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key as an inline primary key column",
+			sql:         "CREATE TABLE t (key text PRIMARY KEY)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in an index column list",
+			sql:         "CREATE INDEX i ON t (key)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in a table-level UNIQUE constraint",
+			sql:         "CREATE TABLE t (id int, key text, UNIQUE (key))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+		{
+			name:        "key in an added UNIQUE constraint",
+			sql:         "ALTER TABLE t ADD CONSTRAINT c UNIQUE (key)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+		},
+
+		// MySQL keeps KEY as an index keyword, so the Postgres-only lexer split
+		// must not leak into MySQL mode.
+		{
+			name:        "MySQL inline KEY index",
+			sql:         "CREATE TABLE t (id int, KEY idx_name (id))",
+			mode:        ParserModeMysql,
+			shouldParse: true,
+		},
+		{
+			name:        "MySQL inline UNIQUE KEY index",
+			sql:         "CREATE TABLE t (id int, UNIQUE KEY idx_name (id))",
+			mode:        ParserModeMysql,
+			shouldParse: true,
+		},
+		{
+			name:        "MySQL bare key as a column reference",
+			sql:         "CREATE VIEW v AS SELECT key FROM t",
+			mode:        ParserModeMysql,
+			shouldParse: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, tc.mode)
+
+			if tc.shouldParse && err != nil {
+				t.Errorf("expected parse to succeed but got error: %v\nSQL: %s", err, tc.sql)
+			} else if !tc.shouldParse && err == nil {
+				t.Errorf("expected parse to fail but it succeeded\nSQL: %s", tc.sql)
+			}
+		})
 	}
 }

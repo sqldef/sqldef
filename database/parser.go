@@ -41,6 +41,14 @@ func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 		if err != nil {
 			return result, err
 		}
+		// Some schema exports interleave non-DDL statements with the DDL: Cloudflare
+		// D1, for instance, emits `DELETE FROM sqlite_sequence;` and
+		// `PRAGMA defer_foreign_keys=TRUE;` even with --no-data. They carry no schema
+		// meaning, so accept them and drop them here.
+		switch stmt.(type) {
+		case *parser.Delete, *parser.Pragma:
+			continue
+		}
 		result = append(result, DDLStatement{DDL: ddl, Statement: stmt})
 	}
 	return result, nil

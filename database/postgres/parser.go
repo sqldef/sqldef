@@ -325,16 +325,27 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 		indexCols = append(indexCols, indexCol)
 	}
 
+	// INCLUDE takes plain column names, never expressions.
+	var included []parser.Ident
+	for _, includingParam := range stmt.IndexIncludingParams {
+		node, ok := includingParam.Node.(*pgquery.Node_IndexElem)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type in INCLUDE: %#v", includingParam)
+		}
+		included = append(included, NewIdentWithQuoteDetected(node.IndexElem.Name))
+	}
+
 	return &parser.DDL{
 		Action:  parser.CreateIndex,
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
-			Name:   parser.NewIdent(stmt.Idxname, false),
-			Type:   parser.NewIdent(stmt.AccessMethod, false),
-			Unique: stmt.Unique,
-			Async:  false, // go_pgquery doesn't support ASYNC, will be set by generic parser
-			Where:  where,
+			Name:     parser.NewIdent(stmt.Idxname, false),
+			Type:     parser.NewIdent(stmt.AccessMethod, false),
+			Unique:   stmt.Unique,
+			Async:    false, // go_pgquery doesn't support ASYNC, will be set by generic parser
+			Where:    where,
+			Included: included,
 		},
 		IndexCols: indexCols,
 	}, nil
@@ -951,37 +962,66 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 }
 
 func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn, error) {
-	switch node := stmt.Node.(type) {
-	case *pgquery.Node_IndexElem:
-		if node.IndexElem.Expr != nil {
-			expr, err := p.parseExpr(node.IndexElem.Expr)
-			if err != nil {
-				return parser.IndexColumn{}, err
-			}
-
-			return parser.IndexColumn{
-				Expression: expr,
-			}, nil
-		} else {
-			var direction string
-			switch node.IndexElem.Ordering {
-			case pgquery.SortByDir_SORTBY_ASC:
-				direction = parser.AscScr
-			case pgquery.SortByDir_SORTBY_DESC:
-				direction = parser.DescScr
-			case pgquery.SortByDir_SORTBY_DEFAULT:
-				direction = ""
-			default:
-				return parser.IndexColumn{}, fmt.Errorf("unexpected direction in parseIndexColumn: %d", node.IndexElem.Ordering)
-			}
-			return parser.IndexColumn{
-				Column:    parser.NewIdent(node.IndexElem.Name, false),
-				Direction: direction,
-			}, nil
-		}
-	default:
+	node, ok := stmt.Node.(*pgquery.Node_IndexElem)
+	if !ok {
 		return parser.IndexColumn{}, fmt.Errorf("unexpected node type in parseIndexColumn: %#v", stmt)
 	}
+	elem := node.IndexElem
+
+	var direction string
+	switch elem.Ordering {
+	case pgquery.SortByDir_SORTBY_ASC:
+		direction = parser.AscScr
+	case pgquery.SortByDir_SORTBY_DESC:
+		direction = parser.DescScr
+	case pgquery.SortByDir_SORTBY_DEFAULT:
+		direction = ""
+	default:
+		return parser.IndexColumn{}, fmt.Errorf("unexpected direction in parseIndexColumn: %d", elem.Ordering)
+	}
+
+	var nullsOrdering string
+	switch elem.NullsOrdering {
+	case pgquery.SortByNulls_SORTBY_NULLS_FIRST:
+		nullsOrdering = "first"
+	case pgquery.SortByNulls_SORTBY_NULLS_LAST:
+		nullsOrdering = "last"
+	case pgquery.SortByNulls_SORTBY_NULLS_DEFAULT:
+		nullsOrdering = ""
+	default:
+		return parser.IndexColumn{}, fmt.Errorf("unexpected nulls ordering in parseIndexColumn: %d", elem.NullsOrdering)
+	}
+
+	indexColumn := parser.IndexColumn{
+		Direction:     direction,
+		NullsOrdering: nullsOrdering,
+		Collation:     lastNameOf(elem.Collation),
+		OperatorClass: lastNameOf(elem.Opclass),
+	}
+
+	if elem.Expr != nil {
+		expr, err := p.parseExpr(elem.Expr)
+		if err != nil {
+			return parser.IndexColumn{}, err
+		}
+		indexColumn.Expression = expr
+	} else {
+		indexColumn.Column = NewIdentWithQuoteDetected(elem.Name)
+	}
+	return indexColumn, nil
+}
+
+// lastNameOf returns the name of a possibly schema-qualified pgquery name list, which is how a
+// collation and an operator class reach the index column.
+func lastNameOf(names []*pgquery.Node) string {
+	if len(names) == 0 {
+		return ""
+	}
+	name, ok := names[len(names)-1].Node.(*pgquery.Node_String_)
+	if !ok {
+		return ""
+	}
+	return name.String_.Sval
 }
 
 func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.Expr, error) {

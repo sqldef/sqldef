@@ -144,9 +144,9 @@ func setDDL(yylex any, ddl *DDL) {
 
 %token LEX_ERROR
 %left <str> UNION INTERSECT EXCEPT
-%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
+%token <str> SELECT INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
-%token <str> ROWID STRICT
+%token <str> ROWID PRAGMA
 %token <str> VALUES LAST_INSERT_ID
 %token <str> NEXT VALUE SHARE MODE
 %token <str> SQL_NO_CACHE SQL_CACHE
@@ -222,7 +222,7 @@ func setDDL(yylex any, ddl *DDL) {
  * the parser to prefer shifting WITH/WITHOUT over reducing the empty production
  * in time_zone_opt.                                                              */
 %nonassoc LOWER_THAN_WITH
-%left <str> WITH WITHOUT
+%left <str> WITH WITHOUT STRICT
 /* ---------------- End of Optional Timezone Resolution ------------------------ */
 /* ---------------- Optional IF NOT EXISTS Resolution ---------------------------
  * LOWER_THAN_IF is used to resolve shift/reduce conflicts in optional
@@ -240,7 +240,7 @@ func setDDL(yylex any, ddl *DDL) {
  * shifting ')' over reducing productions marked with %prec LOWER_THAN_RPAREN.
  * This resolves conflicts in:
  * - value: INTEGRAL (vs length_opt: '(' INTEGRAL ')')
- * - expression: condition (vs condition: '(' condition ')')
+ * - expression: condition (vs row_tuple: '(' expression_list ')')
  * - select_expression_list reduction (vs function call completion)            */
 %nonassoc LOWER_THAN_RPAREN
 %left ')'
@@ -366,7 +366,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <withClause> with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement pragma_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement drop_statement comment_statement
@@ -431,6 +431,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <empty> if_not_exists_opt
 %type <expr> when_expression_opt
 %type <str> reserved_keyword non_reserved_keyword col_name_keyword type_func_name_keyword key_kw
+%type <str> trim_direction
 %type <ident> sql_id reserved_sql_id extension_name, col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -560,6 +561,8 @@ statement:
 | comment_statement
 | set_statement
 | use_statement
+| delete_statement
+| pragma_statement
 
 use_statement:
   USE sql_id
@@ -912,7 +915,7 @@ create_statement:
     }
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id_opt ON table_name '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -925,8 +928,8 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($11),
-        Included: $12,
+        NullsNotDistinct: bool($12),
+        Included: $11,
         Where: NewWhere(WhereStr, $13),
         Options: $14,
         Partition: $15,
@@ -936,7 +939,7 @@ create_statement:
     }
   }
 /* For PostgreSQL: CREATE INDEX IF NOT EXISTS */
-| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -949,37 +952,14 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($14),
-        Included: $15,
+        NullsNotDistinct: bool($15),
+        Included: $14,
         Where: NewWhere(WhereStr, $16),
         Options: $17,
         Partition: $18,
       },
       IndexCols: $12.IndexCols,
       IndexExpr: $12.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: NewIdent("", false),
-        Type: NewIdent("", false),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Async: $4 == byte(2),
-        Concurrently: $4 == byte(1),
-        NullsNotDistinct: bool($10),
-        Included: $11,
-        Where: NewWhere(WhereStr, $12),
-        Options: $13,
-        Partition: $14,
-      },
-      IndexCols: $8.IndexCols,
-      IndexExpr: $8.IndexExpr,
     }
   }
 /* For MySQL */
@@ -1001,7 +981,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id_opt ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -1009,9 +989,9 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      NullsNotDistinct: bool($13),
+      NullsNotDistinct: bool($14),
       Where: NewWhere(WhereStr, $16),
-      Included: $14,
+      Included: $13,
     }
     if $15 != nil && len($15) > 0 {
       indexSpec.Options = $15
@@ -1026,7 +1006,7 @@ create_statement:
     }
   }
 /* For PostgreSQL: CREATE INDEX IF NOT EXISTS ... USING */
-| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' include_columns_opt nulls_not_distinct_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $8,
@@ -1034,9 +1014,9 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      NullsNotDistinct: bool($16),
+      NullsNotDistinct: bool($17),
       Where: NewWhere(WhereStr, $19),
-      Included: $17,
+      Included: $16,
     }
     if $18 != nil && len($18) > 0 {
       indexSpec.Options = $18
@@ -2105,7 +2085,44 @@ alter_statement:
       IndexCols: $10,
     }
   }
-| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY key_kw '(' index_column_list ')'
+| ALTER ignore_opt TABLE table_name ADD UNIQUE nulls_not_distinct_opt '(' index_column_list ')' include_columns_opt deferrable_opt initially_deferred_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: NewIdent("", false),
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        NullsNotDistinct: bool($7),
+        Included: $11,
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: $12 != nil && bool(*$12),
+          InitiallyDeferred: $13 != nil && bool(*$13),
+        },
+      },
+      IndexCols: $9,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD PRIMARY key_kw '(' index_column_list ')' include_columns_opt
+  {
+    $$ = &DDL{
+      Action: AddPrimaryKey,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: NewIdent("", false),
+        Type: NewIdent("PRIMARY KEY", false),
+        Unique: true,
+        Primary: true,
+        Included: $11,
+      },
+      IndexCols: $9,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY key_kw '(' index_column_list ')' include_columns_opt
   {
     $$ = &DDL{
       Action: AddPrimaryKey,
@@ -2113,13 +2130,15 @@ alter_statement:
       NewName: $5,
       IndexSpec: &IndexSpec{
         Name: $8,
-        Unique: false,
+        Type: NewIdent("PRIMARY KEY", false),
+        Unique: true,
         Primary: true,
+        Included: $14,
       },
       IndexCols: $12,
     }
   }
-| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE nulls_not_distinct_opt '(' index_column_list ')' deferrable_opt initially_deferred_opt
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE nulls_not_distinct_opt '(' index_column_list ')' include_columns_opt deferrable_opt initially_deferred_opt
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -2131,12 +2150,34 @@ alter_statement:
         Primary: false,
         Constraint: true,
         NullsNotDistinct: bool($9),
+        Included: $13,
         ConstraintOptions: &ConstraintOptions{
-          Deferrable: $13 != nil && bool(*$13),
-          InitiallyDeferred: $14 != nil && bool(*$14),
+          Deferrable: $14 != nil && bool(*$14),
+          InitiallyDeferred: $15 != nil && bool(*$15),
         },
       },
       IndexCols: $11,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id UNIQUE nulls_not_distinct_opt '(' index_column_list ')' include_columns_opt deferrable_opt initially_deferred_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $5,
+      NewName: $5,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        NullsNotDistinct: bool($10),
+        Included: $14,
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: $15 != nil && bool(*$15),
+          InitiallyDeferred: $16 != nil && bool(*$16),
+        },
+      },
+      IndexCols: $12,
     }
   }
 /* For SQL Server */
@@ -2226,6 +2267,43 @@ alter_statement:
       Table: $5,
       OwnerRole: $8,
     }
+  }
+| ALTER ignore_opt TABLE IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      IfExists: true,
+      Table: $6,
+      OwnerRole: $9,
+    }
+  }
+| ALTER ignore_opt VIEW table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      Table: $4,
+      OwnerRole: $7,
+    }
+  }
+| ALTER ignore_opt MATERIALIZED VIEW table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      Table: $5,
+      OwnerRole: $8,
+    }
+  }
+| ALTER ignore_opt TABLE IF EXISTS ONLY table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $7, OwnerRole: $10}
+  }
+| ALTER ignore_opt VIEW IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $6, OwnerRole: $9}
+  }
+| ALTER ignore_opt MATERIALIZED VIEW IF EXISTS table_name OWNER TO grantee
+  {
+    $$ = &DDL{Action: SetTableOwner, IfExists: true, Table: $7, OwnerRole: $10}
   }
 | ALTER ignore_opt TABLE table_name ENABLE ROW LEVEL SECURITY
   {
@@ -2468,6 +2546,33 @@ delete_statement:
   {
     $$ = &Delete{Comments: Comments($2), Targets: $3, TableExprs: $5, Where: NewWhere(WhereStr, $6)}
   }
+
+// sqldef does not manage pragmas. This rule exists only so that schema exports
+// which emit PRAGMA lines (Cloudflare D1, for one) parse instead of erroring;
+// the statement is dropped by the caller.
+pragma_statement:
+  PRAGMA sql_id
+  {
+    $$ = &Pragma{Name: $2}
+  }
+| PRAGMA sql_id '=' pragma_value
+  {
+    $$ = &Pragma{Name: $2}
+  }
+| PRAGMA sql_id '(' pragma_value ')'
+  {
+    $$ = &Pragma{Name: $2}
+  }
+
+pragma_value:
+  sql_id
+| STRING
+| INTEGRAL
+| FLOAT
+| ON
+| OFF
+| TRUE
+| FALSE
 
 from_or_using:
   FROM {}
@@ -4065,14 +4170,6 @@ default_value_expression:
   {
     $$ = $1
   }
-| NEWID '(' ')'
-  {
-    $$ = &FuncExpr{Name: NewIdent($1, false)}
-  }
-| NEWSEQUENTIALID '(' ')'
-  {
-    $$ = &FuncExpr{Name: NewIdent($1, false)}
-  }
 | typed_literal
   {
     $$ = $1
@@ -4093,7 +4190,7 @@ default_value_expression:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -4144,7 +4241,11 @@ default_value_expression:
   }
 | '(' default_value_expression ')'
   {
-    $$ = $2
+    // Preserve the parentheses instead of collapsing them away: MySQL requires
+    // the explicit DEFAULT (expr) form for BLOB/TEXT/JSON/GEOMETRY columns, even
+    // when expr is a plain literal, so losing this wrapper here would make it
+    // impossible for the generator to tell DEFAULT 'foo' and DEFAULT ('foo') apart.
+    $$ = &ParenExpr{Expr: $2}
   }
 | default_value_expression AT TIME ZONE default_value_expression %prec AT
   {
@@ -5547,48 +5648,52 @@ match_type_opt:
   }
 
 primary_key_definition:
-  CONSTRAINT sql_id PRIMARY key_kw clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  CONSTRAINT sql_id PRIMARY key_kw clustered_opt '(' index_column_list ')' include_columns_opt index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $3 + " " + $4, Name: $2, Primary: true, Unique: true, Clustered: $5},
       Columns: $7,
-      Options: $9,
-      Partition: $10,
+      Included: $9,
+      Options: $10,
+      Partition: $11,
     }
   }
 /* For SQLite3 // SQLite Syntax: table-constraint https://www.sqlite.org/syntax/table-constraint.html */
-| PRIMARY key_kw clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+| PRIMARY key_kw clustered_opt '(' index_column_list ')' include_columns_opt index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $1 + " " + $2, Name: NewIdent("PRIMARY", false), Primary: true, Unique: true, Clustered: $3},
       Columns: $5,
-      Options: $7,
-      Partition: $8,
+      Included: $7,
+      Options: $8,
+      Partition: $9,
     }
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt nulls_not_distinct_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt nulls_not_distinct_opt '(' index_column_list ')' include_columns_opt index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $3, Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $7,
       NullsNotDistinct: bool($5),
-      Options: $9,
-      Partition: $10,
-      ConstraintOptions: &ConstraintOptions{Deferrable: $11 != nil && bool(*$11), InitiallyDeferred: $12 != nil && bool(*$12)},
+      Included: $9,
+      Options: $10,
+      Partition: $11,
+      ConstraintOptions: &ConstraintOptions{Deferrable: $12 != nil && bool(*$12), InitiallyDeferred: $13 != nil && bool(*$13)},
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt nulls_not_distinct_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
+| UNIQUE clustered_opt nulls_not_distinct_opt '(' index_column_list ')' include_columns_opt index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $1, Primary: false, Unique: true, Clustered: $2},
       Columns: $5,
       NullsNotDistinct: bool($3),
-      Options: $7,
-      Partition: $8,
-      ConstraintOptions: &ConstraintOptions{Deferrable: $9 != nil && bool(*$9), InitiallyDeferred: $10 != nil && bool(*$10)},
+      Included: $7,
+      Options: $8,
+      Partition: $9,
+      ConstraintOptions: &ConstraintOptions{Deferrable: $10 != nil && bool(*$10), InitiallyDeferred: $11 != nil && bool(*$11)},
     }
   }
 
@@ -5838,6 +5943,9 @@ grantee_list:
 // rather than explicitly parsing the various keywords for table options,
 // just accept any number of keywords, IDs, strings, numbers, and '='
 table_option_list:
+  /* STRICT/WITHOUT are non-reserved keywords, so after ')' they could also start
+   * a "table_opt_name = value" option. Shift them as sqlite3_table_opt instead. */
+  %prec LOWER_THAN_WITH
   {
     $$ = map[string]string{}
   }
@@ -6570,10 +6678,6 @@ condition:
   {
     $$ = &UpdateFuncExpr{Name: nil}
   }
-| '(' condition ')'
-  {
-    $$ = &ParenExpr{Expr: $2}
-  }
 
 is_suffix:
   NULL
@@ -6859,7 +6963,7 @@ value_expression:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -6912,10 +7016,6 @@ function_call_generic:
   sql_id '(' ')'
   {
     $$ = &FuncExpr{Name: $1}
-  }
-| sql_id '(' select_expression_list ')'
-  {
-    $$ = &FuncExpr{Name: $1, Exprs: $3}
   }
 | sql_id '(' DISTINCT select_expression_list ')'
   {
@@ -6984,6 +7084,14 @@ function_call_keyword:
 | TRIM '(' expression FROM expression ')'
   {
     $$ = &TrimExpr{TrimChar: $3, String: $5}
+  }
+| TRIM '(' trim_direction FROM expression ')'
+  {
+    $$ = &TrimExpr{Direction: $3, String: $5}
+  }
+| TRIM '(' trim_direction expression FROM expression ')'
+  {
+    $$ = &TrimExpr{Direction: $3, TrimChar: $4, String: $6}
   }
 | TRIM '(' expression ')'
   {
@@ -7077,6 +7185,19 @@ function_call_keyword:
 | YEAR '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewIdent("year", false), Exprs: $3}
+  }
+
+trim_direction:
+  UNUSED
+  {
+    direction := strings.ToLower($1)
+    switch direction {
+    case "both", "leading", "trailing":
+      $$ = direction
+    default:
+      yylex.Error(fmt.Sprintf("invalid TRIM direction %q", $1))
+      $$ = direction
+    }
   }
 
 /*
@@ -7428,17 +7549,25 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
-| TIMESTAMP '(' INTEGRAL ')'
+| TIMESTAMP '(' INTEGRAL ')' time_zone_opt
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    ct := &ConvertType{Type: $1, Length: NewIntVal($3)}
+    if bool($5) {
+      ct.TimeZone = " with time zone"
+    }
+    $$ = ct
   }
 | TIMESTAMP %prec LOWER_THAN_WITH
   {
     $$ = &ConvertType{Type: $1}
   }
-| TIME '(' INTEGRAL ')'
+| TIME '(' INTEGRAL ')' time_zone_opt
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    ct := &ConvertType{Type: $1, Length: NewIntVal($3)}
+    if bool($5) {
+      ct.TimeZone = " with time zone"
+    }
+    $$ = ct
   }
 | TIME %prec LOWER_THAN_WITH
   {
@@ -7524,6 +7653,10 @@ column_name:
     $$ = &ColName{Name: NewIdent("VALUE", false)}
   }
 | PG_COMMENT
+  {
+    $$ = &ColName{Name: NewIdent($1, false)}
+  }
+| PG_KEY
   {
     $$ = &ColName{Name: NewIdent($1, false)}
   }
@@ -7973,6 +8106,10 @@ reserved_sql_id:
   {
     $$ = NewIdent($1, false)
   }
+| PG_KEY
+  {
+    $$ = NewIdent($1, false)
+  }
 | TEXT
   {
     $$ = NewIdent($1, false)
@@ -8131,7 +8268,7 @@ array_element:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -8143,7 +8280,7 @@ array_element:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -8365,15 +8502,18 @@ non_reserved_keyword:
 | POINT
 | POLICY
 | POLYGON
+| PRAGMA
 | RESTRICTED
 | ROWS
 | SAFE
 | SQL
+| STRICT
 | TYPE
 | STATEMENT
 | STATUS
 | UNSAFE
 | VARIABLES
+| WITHOUT
 | ZONE
 | LEVEL
 | PRIVILEGES
@@ -8406,6 +8546,21 @@ non_reserved_keyword:
 | ENDS
 | TRIGGER
 | INDEX
+| NEWID
+| NEWSEQUENTIALID
+| GETUTCDATE
+| SYSUTCDATETIME
+| TRY_CAST
+| OPENJSON
+| STRING_SPLIT
+| APPLY
+| COLUMNSTORE
+| PAD_INDEX
+| IGNORE_DUP_KEY
+| STATISTICS_NORECOMPUTE
+| STATISTICS_INCREMENTAL
+| ALLOW_ROW_LOCKS
+| ALLOW_PAGE_LOCKS
 | LANGUAGE
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
