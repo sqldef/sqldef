@@ -7,6 +7,8 @@ SQLDEF=$(shell pwd)
 
 # https://pkg.go.dev/golang.org/x/tools/cmd/goyacc
 GOYACC_VERSION=v0.40.0
+PARSER_Y=parser/parser.y
+PARSER_GO=parser/parser.go
 
 ifeq ($(GOOS), windows)
   SUFFIX=.exe
@@ -30,22 +32,22 @@ all: build
 build: build-mysqldef build-sqlite3def build-mssqldef build-psqldef
 .PHONY: build
 
-build-mysqldef:
+build-mysqldef: $(PARSER_GO)
 	mkdir -p $(BUILD_DIR)
 	cd cmd/mysqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef$(SUFFIX)
 .PHONY: build-mysqldef
 
-build-sqlite3def:
+build-sqlite3def: $(PARSER_GO)
 	mkdir -p $(BUILD_DIR)
 	cd cmd/sqlite3def && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def$(SUFFIX)
 .PHONY: build-sqlite3def
 
-build-mssqldef:
+build-mssqldef: $(PARSER_GO)
 	mkdir -p $(BUILD_DIR)
 	cd cmd/mssqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef$(SUFFIX)
 .PHONY: build-mssqldef
 
-build-psqldef:
+build-psqldef: $(PARSER_GO)
 	mkdir -p $(BUILD_DIR)
 	cd cmd/psqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)
 .PHONY: build-psqldef
@@ -77,36 +79,45 @@ package-tar.gz: build
 	cd $(BUILD_DIR) && GZIP=-9 tar zcf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX)
 .PHONY: package-tar.gz
 
+# parser.go is a generated file. Pull requests must not contain it: it is
+# regenerated on master by .github/workflows/parser.yml, so that concurrent
+# grammar changes never conflict on the generated output.
+$(PARSER_GO): $(PARSER_Y)
+	go run golang.org/x/tools/cmd/goyacc@$(GOYACC_VERSION) -l -o $(PARSER_GO) $(PARSER_Y)
+	gofmt -w ./$(PARSER_GO)
+
+# Regenerate unconditionally, ignoring timestamps. Checkouts (CI, Docker) give
+# every file the same mtime, so the file rule alone cannot be trusted there.
 parser:
-	go run golang.org/x/tools/cmd/goyacc@$(GOYACC_VERSION) -l -o parser/parser.go parser/parser.y
-	gofmt -w ./parser/parser.go
+	@rm -f $(PARSER_GO)
+	@$(MAKE) $(PARSER_GO)
 .PHONY: parser
 
-test:
+test: $(PARSER_GO)
 	$(GOTEST) $(GOTESTFLAGS) ./...
 .PHONY: test
 
-test-mysqldef:
+test-mysqldef: $(PARSER_GO)
 	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} $(GOTEST) ./cmd/mysqldef ./database/mysql
 .PHONY: test-mysqldef
 
-test-psqldef:
+test-psqldef: $(PARSER_GO)
 	$(GOTEST) ./cmd/psqldef ./database/postgres
 .PHONY: test-psqldef
 
-test-sqlite3def:
+test-sqlite3def: $(PARSER_GO)
 	$(GOTEST) ./cmd/sqlite3def
 .PHONY: test-sqlite3def
 
-test-mssqldef:
+test-mssqldef: $(PARSER_GO)
 	$(GOTEST) ./cmd/mssqldef ./database/mssql
 .PHONY: test-mssqldef
 
-test-core:
+test-core: $(PARSER_GO)
 	$(GOTEST) ./database ./parser ./schema ./util
 .PHONY: test-core
 
-test-example-offline:
+test-example-offline: $(PARSER_GO)
 	./example/run-offline.sh psqldef
 	./example/run-offline.sh mysqldef
 	./example/run-offline.sh sqlite3def
@@ -119,14 +130,14 @@ test-all-flavors: test
 	PG_FLAVOR=pgvector PGPORT=55432 $(GOTEST) ./cmd/psqldef
 .PHONY: test-all-flavors
 
-test-example:
+test-example: $(PARSER_GO)
 	./example/run.sh psqldef
 	./example/run.sh mysqldef
 	./example/run.sh sqlite3def
 	./example/run.sh mssqldef
 .PHONY: test-example
 
-test-cov:
+test-cov: $(PARSER_GO)
 	go test $(GOTESTFLAGS) -coverprofile=coverage.out -coverpkg=./... ./...
 	@grep -v -e "parser.y" -e "parser/parser.go" -e "testutils.go" coverage.out > coverage_filtered.out
 	@go tool cover -func=coverage_filtered.out
@@ -141,7 +152,7 @@ format:
 	go fmt ./...
 .PHONY: format
 
-lint:
+lint: $(PARSER_GO)
 	go vet ./...
 .PHONY: lint
 
