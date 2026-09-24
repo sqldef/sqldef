@@ -490,6 +490,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		viewName := g.escapeViewName(currentView)
+		// Privileges exported for this view have no object to be revoked from
+		// once it is dropped; track it like a dropped table so the orphaned
+		// privilege cleanup skips it.
+		g.droppedTableNames = append(g.droppedTableNames, currentView.name)
 		if currentView.viewType == "MATERIALIZED VIEW" {
 			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
 			continue
