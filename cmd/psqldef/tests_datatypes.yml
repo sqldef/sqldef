@@ -45,6 +45,60 @@ CreateTableChangeDefaultBoolean:
     ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT false;
   down: |
     ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT true;
+CreateTableChangeDefaultTimestampWithTimeZoneCast:
+  # Regression: a DEFAULT whose cast carries a time zone modifier must keep it
+  # when SET DEFAULT is regenerated. Dropping "with time zone" stores a
+  # different type (without time zone) while dry-run reports no diff.
+  current: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone NOT NULL DEFAULT (clock_timestamp())::timestamp(0) with time zone
+    );
+  desired: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "a" SET DEFAULT now()::timestamp(0) with time zone;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "a" SET DEFAULT clock_timestamp()::timestamp(0) with time zone;
+CreateTableDefaultTimestampWithTimeZoneCastIdempotent:
+  desired: |
+    CREATE TABLE test (
+      a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
+    );
+AddColumnDefaultTimestampWithTimeZoneCast:
+  # ADD COLUMN runs through the same default serialization as SET DEFAULT, so the
+  # timezone modifier must be kept there too.
+  current: |
+    CREATE TABLE test (
+      id integer
+    );
+  desired: |
+    CREATE TABLE test (
+      id integer,
+      a timestamp(0) with time zone NOT NULL DEFAULT (now())::timestamp(0) with time zone
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD COLUMN "a" timestamp(0) WITH TIME ZONE NOT NULL DEFAULT now()::timestamp(0) with time zone;
+  down: |
+    ALTER TABLE "public"."test" DROP COLUMN "a";
+AddColumnDefaultTimestampWithTimeZoneArrayCast:
+  # An array cast carries the [] suffix in the type name, so the timezone
+  # modifier has to be emitted before it: timestamp with time zone[], not
+  # timestamp[] with time zone, which does not parse.
+  current: |
+    CREATE TABLE test (
+      id integer
+    );
+  desired: |
+    CREATE TABLE test (
+      id integer,
+      a timestamptz[] DEFAULT '{}'::timestamptz[]
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD COLUMN "a" timestamp WITH TIME ZONE[] DEFAULT '{}'::timestamp with time zone[];
+  down: |
+    ALTER TABLE "public"."test" DROP COLUMN "a";
 NullCast:
   desired: |
     CREATE TABLE public.test (
