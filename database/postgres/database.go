@@ -359,25 +359,33 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 		return nil, nil
 	}
 
+	// The ACL holds one entry per grantor; see getPrivilegeDefsForTables.
 	const query = `
-		SELECT
-			n.nspname || '.' || c.relname AS seq_name,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
-		WHERE c.relkind = 'S'
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-		AND acl.grantee <> c.relowner
-		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
-		AND NOT EXISTS (
-			SELECT 1 FROM pg_depend dep
-			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		WITH sequence_privileges AS (
+			SELECT
+				n.nspname || '.' || c.relname AS seq_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relkind = 'S'
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND acl.grantee <> c.relowner
+			AND NOT EXISTS (
+				SELECT 1 FROM pg_depend dep
+				WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+			)
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
 		)
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
-		ORDER BY seq_name, grantee, acl.is_grantable
+		SELECT
+			seq_name, grantee, is_grantable,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+		FROM sequence_privileges
+		WHERE $1::text[] IS NULL OR grantee = ANY($1::text[])
+		GROUP BY seq_name, grantee, is_grantable
+		ORDER BY seq_name, grantee, is_grantable
 	`
 
 	rows, err := d.db.Query(query, d.managedGranteeArgs())

@@ -2001,15 +2001,21 @@ func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
 		CREATE ROLE test_multi_grantor;
 		CREATE ROLE test_multi_grantee;
 		CREATE TABLE multi_items (id bigint PRIMARY KEY, name text);
-		GRANT SELECT, UPDATE (name) ON TABLE multi_items TO test_multi_grantor WITH GRANT OPTION;
-		GRANT SELECT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee;
+		CREATE SEQUENCE multi_seq;
+		GRANT SELECT, INSERT, UPDATE (name) ON TABLE multi_items TO test_multi_grantor WITH GRANT OPTION;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantor WITH GRANT OPTION;
+		GRANT SELECT, INSERT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantee;
 		SET ROLE test_multi_grantor;
 		GRANT SELECT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee WITH GRANT OPTION;
+		GRANT INSERT ON TABLE multi_items TO test_multi_grantee;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantee WITH GRANT OPTION;
 		RESET ROLE;
 	`)
 	t.Cleanup(func() {
 		mustPgExec(testDatabaseName, `
 			DROP TABLE IF EXISTS multi_items;
+			DROP SEQUENCE IF EXISTS multi_seq;
 			DROP ROLE IF EXISTS test_multi_grantee;
 			DROP ROLE IF EXISTS test_multi_grantor;
 		`)
@@ -2021,8 +2027,10 @@ func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
 	t.Run("export collapses the grants from both grantors", func(t *testing.T) {
 		assert.Contains(t, exported, `GRANT SELECT ON TABLE "public"."multi_items" TO "test_multi_grantee" WITH GRANT OPTION;`)
 		assert.Contains(t, exported, `GRANT UPDATE ("name") ON TABLE "public"."multi_items" TO "test_multi_grantee" WITH GRANT OPTION;`)
-		assert.NotContains(t, exported, "SELECT, SELECT")
+		assert.Contains(t, exported, `GRANT INSERT ON TABLE "public"."multi_items" TO "test_multi_grantee";`)
+		assert.Contains(t, exported, `GRANT USAGE ON SEQUENCE public.multi_seq TO "test_multi_grantee" WITH GRANT OPTION;`)
 		assert.NotContains(t, exported, `GRANT SELECT ON TABLE "public"."multi_items" TO "test_multi_grantee";`)
+		assert.NotContains(t, exported, `GRANT USAGE ON SEQUENCE public.multi_seq TO "test_multi_grantee";`)
 	})
 
 	t.Run("the exported schema converges", func(t *testing.T) {
