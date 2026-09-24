@@ -82,6 +82,23 @@ AddColumnDefaultTimestampWithTimeZoneCast:
     ALTER TABLE "public"."test" ADD COLUMN "a" timestamp(0) WITH TIME ZONE NOT NULL DEFAULT now()::timestamp(0) with time zone;
   down: |
     ALTER TABLE "public"."test" DROP COLUMN "a";
+AddColumnDefaultTimestampWithTimeZoneArrayCast:
+  # An array cast carries the [] suffix in the type name, so the timezone
+  # modifier has to be emitted before it: timestamp with time zone[], not
+  # timestamp[] with time zone, which does not parse.
+  current: |
+    CREATE TABLE test (
+      id integer
+    );
+  desired: |
+    CREATE TABLE test (
+      id integer,
+      a timestamptz[] DEFAULT '{}'::timestamptz[]
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD COLUMN "a" timestamp WITH TIME ZONE[] DEFAULT '{}'::timestamp with time zone[];
+  down: |
+    ALTER TABLE "public"."test" DROP COLUMN "a";
 NullCast:
   desired: |
     CREATE TABLE public.test (

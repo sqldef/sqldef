@@ -2734,7 +2734,11 @@ const (
 
 // Format formats the node.
 func (node *ConvertType) Format(buf *nodeBuffer) {
-	buf.Printf("%s", node.Type)
+	// A PostgreSQL array cast keeps the [] suffix in Type, but the length and the
+	// timezone modifier belong to the element type, so they have to be emitted
+	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
+	typeName, isArray := strings.CutSuffix(node.Type, "[]")
+	buf.Printf("%s", typeName)
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)
 		if node.Scale != nil {
@@ -2744,6 +2748,9 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	}
 	if node.TimeZone != "" {
 		buf.Printf("%s", node.TimeZone)
+	}
+	if isArray {
+		buf.Printf("[]")
 	}
 	if node.Charset != "" {
 		buf.Printf("%s %s", node.Operator, node.Charset)

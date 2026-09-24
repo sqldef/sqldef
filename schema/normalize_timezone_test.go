@@ -28,6 +28,10 @@ func TestNormalizeExprRecoversTimezoneFromCastTypeAlias(t *testing.T) {
 		{"timetz", nil, "now()::time with time zone"},
 		{"timestamp with time zone", nil, "now()::timestamp with time zone"},
 		{"time with time zone", nil, "now()::time with time zone"},
+		// An array cast keeps [] in the type name; the modifier belongs to the
+		// element type, so it has to land before the suffix to stay parseable.
+		{"timestamptz[]", nil, "now()::timestamp with time zone[]"},
+		{"timestamptz[]", parser.NewIntVal("0"), "now()::timestamp(0) with time zone[]"},
 	}
 	for _, tc := range cases {
 		expr := &parser.CastExpr{
