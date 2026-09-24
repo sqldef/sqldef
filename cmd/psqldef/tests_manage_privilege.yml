@@ -296,3 +296,55 @@ ManagePrivilegeDropTableWithoutEnableDrop:
     REVOKE SELECT ON TABLE "public"."audit_logs" FROM "readonly_user";
   down: |
     GRANT SELECT ON TABLE "public"."audit_logs" TO "readonly_user";
+
+ManagePrivilegeDropViewWithGrant:
+  # A dropped view takes its privileges with it, so no REVOKE must be emitted
+  # for it; the REVOKE would run after the DROP VIEW and fail with
+  # "relation does not exist".
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE v_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+  up: |
+    DROP VIEW public.v_users;
+  down: |
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE public.v_users TO "app_user";
+
+ManagePrivilegeDropMaterializedViewWithGrant:
+  # Same for a materialized view.
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE mv_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+  up: |
+    DROP MATERIALIZED VIEW public.mv_users;
+  down: |
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE public.mv_users TO "app_user";
