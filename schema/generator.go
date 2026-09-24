@@ -6083,14 +6083,14 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 
-	// Strip type casts remaining after normalizeExpr (e.g., custom types like ENUMs/domains).
-	// PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
+	// Strip type casts remaining after normalizeExpr on literals (e.g., custom types like
+	// ENUMs/domains). PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
 	// but users write DEFAULT 'pending' without the cast. Both are semantically identical.
-	// Also strip any parentheses a user wrote around a literal default (e.g. DEFAULT ('foo'));
+	// Also strip any parentheses a user wrote around a default (e.g. DEFAULT ('foo'));
 	// normalizeExpr only unwraps those for some modes (see its ParenExpr case), but parentheses
 	// are pure syntax noise for equality regardless of dialect.
-	normalizedCurrent := unwrapCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
-	normalizedDesired := unwrapCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
+	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
@@ -6140,17 +6140,23 @@ func unwrapCast(expr parser.Expr) parser.Expr {
 	return castExpr.Expr
 }
 
-// unwrapCastAndParens repeatedly strips type casts and parentheses (in either
+// unwrapLiteralCastAndParens repeatedly strips type casts and parentheses (in either
 // order/nesting, e.g. `('pending'::order_status)` or `('foo')::text`) down to
-// the innermost expression, for equality comparison purposes.
-func unwrapCastAndParens(expr parser.Expr) parser.Expr {
+// a literal, for equality comparison purposes. Casts on anything else are kept:
+// they change the value (e.g. now()::timestamp vs now()::timestamptz).
+func unwrapLiteralCastAndParens(expr parser.Expr) parser.Expr {
+	inner := expr
 	for {
-		unwrapped := unwrapParenExpr(unwrapCast(expr))
-		if unwrapped == expr {
-			return unwrapped
+		next := unwrapParenExpr(unwrapCast(inner))
+		if next == inner {
+			break
 		}
-		expr = unwrapped
+		inner = next
 	}
+	if _, ok := inner.(*parser.SQLVal); ok {
+		return inner
+	}
+	return unwrapParenExpr(expr)
 }
 
 // isNumericColumnType determines if a column type should be compared numerically.
