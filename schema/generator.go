@@ -5951,7 +5951,7 @@ func (g *Generator) buildForeignKeyDDL(tableName QualifiedName, fk *ForeignKey) 
 }
 
 // normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
-// For PostgreSQL, this converts IN (a,b,c) to = ANY (ARRAY[a,b,c])
+// for DDL generation.
 func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
 		normalized := normalizeCheckExprForOutput(expr, g.mode)
@@ -5987,6 +5987,9 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 	case *parser.ArrayConstructor:
 		elements := util.TransformSlice(e.Elements, g.formatExprQuoteAware)
 		return "ARRAY[" + strings.Join(elements, ", ") + "]"
+	case parser.ValTuple:
+		elements := util.TransformSlice(e, g.formatExprQuoteAware)
+		return "(" + strings.Join(elements, ", ") + ")"
 	case *parser.ComparisonExpr:
 		result := g.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
 		if e.All {
