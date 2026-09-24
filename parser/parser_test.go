@@ -600,11 +600,11 @@ func TestTypecastTimestampWithTimeZonePreserved(t *testing.T) {
 	}{
 		{
 			sql:  "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
-			want: "a timestamp(0) with time zone default(now()::timestamp(0) with time zone)",
+			want: "a timestamp(0) with time zone default((now())::timestamp(0) with time zone)",
 		},
 		{
 			sql:  "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
-			want: "a time(0) with time zone default(now()::time(0) with time zone)",
+			want: "a time(0) with time zone default((now())::time(0) with time zone)",
 		},
 	}
 	for _, tc := range cases {
