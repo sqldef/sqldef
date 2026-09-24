@@ -431,6 +431,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
 		case *GrantPrivilege:
+			// Desired GRANTs for the same object, grantees, and grant option are
+			// merged into one entry of g.desiredPrivileges, which keeps the first
+			// statement of the group and carries every privilege they declare.
+			// Diffing only those entries emits the REVOKE/GRANT once instead of
+			// once per source statement.
+			if !slices.Contains(g.desiredPrivileges, desired) {
+				break
+			}
 			privilegeDDLs, err := g.generateDDLsForGrantPrivilege(desired)
 			if err != nil {
 				return nil, err
@@ -4526,31 +4534,22 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) &&
 					existing.withGrantOption == stmt.withGrantOption &&
 					existing.objectType == stmt.objectType &&
-					len(existing.grantees) == len(stmt.grantees) {
-					allMatch := true
-					for j, grantee := range existing.grantees {
-						if grantee != stmt.grantees[j] {
-							allMatch = false
-							break
-						}
+					sameGranteeSet(existing.grantees, stmt.grantees) {
+					privMap := make(map[string]bool)
+					for _, priv := range existing.privileges {
+						privMap[priv] = true
 					}
-					if allMatch {
-						privMap := make(map[string]bool)
-						for _, priv := range existing.privileges {
-							privMap[priv] = true
-						}
-						for _, priv := range stmt.privileges {
-							privMap[priv] = true
-						}
-						mergedPrivs := []string{}
-						for priv := range privMap {
-							mergedPrivs = append(mergedPrivs, priv)
-						}
-						slices.Sort(mergedPrivs)
-						aggregated.Privileges[i].privileges = mergedPrivs
-						merged = true
-						break
+					for _, priv := range stmt.privileges {
+						privMap[priv] = true
 					}
+					mergedPrivs := []string{}
+					for priv := range privMap {
+						mergedPrivs = append(mergedPrivs, priv)
+					}
+					slices.Sort(mergedPrivs)
+					aggregated.Privileges[i].privileges = mergedPrivs
+					merged = true
+					break
 				}
 			}
 			if !merged {
@@ -4597,6 +4596,20 @@ func formatPrivilegesForGrant(privileges []string) string {
 		}
 	}
 	return strings.Join(privileges, ", ")
+}
+
+// sameGranteeSet reports whether two grantee lists contain the same grantees
+// regardless of the order they were written in. GRANT ... TO a, b and
+// GRANT ... TO b, a target the same grantees, so they must aggregate together.
+func sameGranteeSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	as := slices.Clone(a)
+	bs := slices.Clone(b)
+	slices.Sort(as)
+	slices.Sort(bs)
+	return slices.Equal(as, bs)
 }
 
 func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
