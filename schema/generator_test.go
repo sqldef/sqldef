@@ -1556,6 +1556,21 @@ func TestFilterObjectsOwnerIdentity(t *testing.T) {
 	}
 }
 
+func TestFilterPrivilegesMergesGranteesOnce(t *testing.T) {
+	sql := `
+		GRANT SELECT ON TABLE users TO app_user, readonly_user WITH GRANT OPTION;
+		GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+	rules := []database.ManageObjectRule{{Target: "app_user|readonly_user"}}
+
+	filtered := FilterPrivileges(ddls, database.GeneratorConfig{ManagePrivileges: &rules})
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, []string{"app_user", "readonly_user"}, filtered[0].(*GrantPrivilege).grantees)
+}
+
 func TestRecreatedViewOwnerEscaping(t *testing.T) {
 	rules := []database.ManageObjectRule{}
 	current := `
