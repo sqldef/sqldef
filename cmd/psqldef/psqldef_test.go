@@ -1945,11 +1945,6 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 	})
 }
 
-// TestPsqldefOwnerWithTargetSchema tests that object-owner export (objectOwners)
-// honors TargetSchema. Without the filter, owners of objects in schemas outside
-// TargetSchema leak into the export and the generator aborts with
-// "ALTER TABLE ... OWNER TO performed before CREATE TABLE" because there is no
-// matching CREATE in the desired DDL (regression from the OWNER management PR).
 // A grantee that holds the table owner role is reported as grantable by
 // information_schema.table_privileges (is_grantable is
 // pg_has_role(grantee, relowner, 'USAGE') OR the ACL grant option), even when
@@ -2035,6 +2030,63 @@ func TestPsqldefPrivilegeGrantOptionWithInheritedOwner(t *testing.T) {
 	})
 }
 
+// The ACL keeps one entry per grantor, so a grantee that received the same
+// privilege from the owner and from another role holding the grant option has
+// two entries for it. The export collapses them into one grant, which carries
+// WITH GRANT OPTION when any grantor gave it.
+func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_multi_grantee;
+		DROP ROLE IF EXISTS test_multi_grantor;
+		CREATE ROLE test_multi_grantor;
+		CREATE ROLE test_multi_grantee;
+		CREATE TABLE multi_items (id bigint PRIMARY KEY, name text);
+		CREATE SEQUENCE multi_seq;
+		GRANT SELECT, INSERT, UPDATE (name) ON TABLE multi_items TO test_multi_grantor WITH GRANT OPTION;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantor WITH GRANT OPTION;
+		GRANT SELECT, INSERT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantee;
+		SET ROLE test_multi_grantor;
+		GRANT SELECT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee WITH GRANT OPTION;
+		GRANT INSERT ON TABLE multi_items TO test_multi_grantee;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantee WITH GRANT OPTION;
+		RESET ROLE;
+	`)
+	t.Cleanup(func() {
+		mustPgExec(testDatabaseName, `
+			DROP TABLE IF EXISTS multi_items;
+			DROP SEQUENCE IF EXISTS multi_seq;
+			DROP ROLE IF EXISTS test_multi_grantee;
+			DROP ROLE IF EXISTS test_multi_grantor;
+		`)
+	})
+
+	managePrivilege := "manage: {privilege: [{target: test_multi_grantee, drop: true}]}"
+	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managePrivilege)...)
+
+	t.Run("export collapses the grants from both grantors", func(t *testing.T) {
+		assert.Contains(t, exported, `GRANT SELECT ON TABLE "public"."multi_items" TO "test_multi_grantee" WITH GRANT OPTION;`)
+		assert.Contains(t, exported, `GRANT UPDATE ("name") ON TABLE "public"."multi_items" TO "test_multi_grantee" WITH GRANT OPTION;`)
+		assert.Contains(t, exported, `GRANT INSERT ON TABLE "public"."multi_items" TO "test_multi_grantee";`)
+		assert.Contains(t, exported, `GRANT USAGE ON SEQUENCE public.multi_seq TO "test_multi_grantee" WITH GRANT OPTION;`)
+		assert.NotContains(t, exported, `GRANT SELECT ON TABLE "public"."multi_items" TO "test_multi_grantee";`)
+		assert.NotContains(t, exported, `GRANT USAGE ON SEQUENCE public.multi_seq TO "test_multi_grantee";`)
+	})
+
+	t.Run("the exported schema converges", func(t *testing.T) {
+		tu.WriteFile("schema.sql", exported)
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managePrivilege, "--file", "schema.sql", "--dry-run")...)
+		assert.Equal(t, nothingModified, dryRun)
+	})
+}
+
+// TestPsqldefOwnerWithTargetSchema tests that object-owner export (objectOwners)
+// honors TargetSchema. Without the filter, owners of objects in schemas outside
+// TargetSchema leak into the export and the generator aborts with
+// "ALTER TABLE ... OWNER TO performed before CREATE TABLE" because there is no
+// matching CREATE in the desired DDL (regression from the OWNER management PR).
 func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 	resetTestDatabase()
 

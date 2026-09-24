@@ -359,25 +359,33 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 		return nil, nil
 	}
 
+	// The ACL holds one entry per grantor; see getPrivilegeDefsForTables.
 	const query = `
-		SELECT
-			n.nspname || '.' || c.relname AS seq_name,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
-		WHERE c.relkind = 'S'
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-		AND acl.grantee <> c.relowner
-		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
-		AND NOT EXISTS (
-			SELECT 1 FROM pg_depend dep
-			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		WITH sequence_privileges AS (
+			SELECT
+				n.nspname || '.' || c.relname AS seq_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relkind = 'S'
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND acl.grantee <> c.relowner
+			AND NOT EXISTS (
+				SELECT 1 FROM pg_depend dep
+				WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+			)
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
 		)
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
-		ORDER BY seq_name, grantee, acl.is_grantable
+		SELECT
+			seq_name, grantee, is_grantable,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+		FROM sequence_privileges
+		WHERE $1::text[] IS NULL OR grantee = ANY($1::text[])
+		GROUP BY seq_name, grantee, is_grantable
+		ORDER BY seq_name, grantee, is_grantable
 	`
 
 	rows, err := d.db.Query(query, d.managedGranteeArgs())
@@ -2204,13 +2212,17 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 	// 'p' and the seven SQL-standard privileges) plus the materialized views
 	// added in #1376, so MAINTAIN (PostgreSQL 17+) is not read as an extra
 	// privilege to revoke.
+	//
+	// The ACL holds one entry per grantor, so a privilege granted to the same
+	// grantee by several roles is collapsed into one row that is grantable when
+	// any grantor gave the grant option.
 	const query = `
 		WITH relation_privileges AS (
 			SELECT
 				n.nspname AS table_schema,
 				c.relname AS table_name,
 				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-				CASE WHEN acl.is_grantable THEN 'YES' ELSE 'NO' END AS is_grantable,
+				CASE WHEN bool_or(acl.is_grantable) THEN 'YES' ELSE 'NO' END AS is_grantable,
 				acl.privilege_type
 			FROM pg_class c
 			JOIN pg_namespace n ON n.oid = c.relnamespace,
@@ -2218,6 +2230,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			WHERE c.relkind IN ('r', 'v', 'f', 'p', 'm')
 			AND acl.grantee <> c.relowner
 			AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
 		)
 		SELECT
 			table_schema, table_name,
@@ -2267,23 +2280,31 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	// Column-level privileges (pg_attribute.attacl). Unlike
 	// information_schema.column_privileges, attacl contains only explicit
-	// column grants, not ones implied by table-level grants.
+	// column grants, not ones implied by table-level grants. As with table
+	// privileges, entries from several grantors are collapsed per column.
 	const columnQuery = `
+		WITH column_privileges AS (
+			SELECT
+				n.nspname, c.relname,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type,
+				at.attname
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
+			LATERAL aclexplode(at.attacl) AS acl
+			WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+			AND acl.grantee <> c.relowner
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type, at.attname
+		)
 		SELECT
-			n.nspname, c.relname,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			acl.privilege_type,
-			string_agg(at.attname, ', ' ORDER BY at.attname) AS columns
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
-		LATERAL aclexplode(at.attacl) AS acl
-		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
-		AND acl.grantee <> c.relowner
-		AND ($2::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[]))
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
-		ORDER BY n.nspname, c.relname, grantee, acl.privilege_type, acl.is_grantable
+			nspname, relname, grantee, is_grantable, privilege_type,
+			string_agg(attname, ', ' ORDER BY attname) AS columns
+		FROM column_privileges
+		WHERE $2::text[] IS NULL OR grantee = ANY($2::text[])
+		GROUP BY nspname, relname, grantee, is_grantable, privilege_type
+		ORDER BY nspname, relname, grantee, privilege_type, is_grantable
 	`
 
 	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), d.managedGranteeArgs())
