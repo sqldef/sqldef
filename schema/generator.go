@@ -251,12 +251,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// bulkAlter fuses per-table ALTER TABLE actions when --bulk-alter is set (MySQL only).
 	bulkAlter := newAlterBundler(g, g.config.BulkAlter && g.mode == GeneratorModeMysql)
 
-	// Desired GRANTs for the same (object, grantees, grant option) can be split
-	// across several statements; they are merged into one entry in
-	// g.desiredPrivileges. Track which aggregated entry has already produced its
-	// diff so the REVOKE/GRANT is emitted once, not once per source statement.
-	generatedGrantPrivileges := map[*GrantPrivilege]bool{}
-
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
 		switch desired := ddl.(type) {
@@ -437,19 +431,15 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
 		case *GrantPrivilege:
-			// Diff the merged desired privileges for this (object, grantees,
-			// grant option) once. Using the aggregated entry keeps split GRANT
-			// statements from each re-emitting the same REVOKE/GRANT, while still
-			// covering every privilege they collectively declare.
-			aggregated := g.aggregatedDesiredPrivilege(desired)
-			if aggregated == nil {
-				aggregated = desired
-			}
-			if generatedGrantPrivileges[aggregated] {
+			// Desired GRANTs for the same object, grantees, and grant option are
+			// merged into one entry of g.desiredPrivileges, which keeps the first
+			// statement of the group and carries every privilege they declare.
+			// Diffing only those entries emits the REVOKE/GRANT once instead of
+			// once per source statement.
+			if !slices.Contains(g.desiredPrivileges, desired) {
 				break
 			}
-			generatedGrantPrivileges[aggregated] = true
-			privilegeDDLs, err := g.generateDDLsForGrantPrivilege(aggregated)
+			privilegeDDLs, err := g.generateDDLsForGrantPrivilege(desired)
 			if err != nil {
 				return nil, err
 			}
@@ -4611,23 +4601,6 @@ func sameGranteeSet(a, b []string) bool {
 	slices.Sort(as)
 	slices.Sort(bs)
 	return slices.Equal(as, bs)
-}
-
-// aggregatedDesiredPrivilege returns the merged desired GrantPrivilege that a
-// raw desired GRANT statement contributes to. Desired GRANTs for the same
-// object, grantees, grant option, and object type are combined into a single
-// entry in g.desiredPrivileges (see convertDDLsToTablesAndViews), so the diff is
-// generated once against the full privilege set rather than once per statement.
-func (g *Generator) aggregatedDesiredPrivilege(raw *GrantPrivilege) *GrantPrivilege {
-	for _, agg := range g.desiredPrivileges {
-		if g.qualifiedNamesEqual(agg.tableName, raw.tableName) &&
-			agg.withGrantOption == raw.withGrantOption &&
-			agg.objectType == raw.objectType &&
-			sameGranteeSet(agg.grantees, raw.grantees) {
-			return agg
-		}
-	}
-	return nil
 }
 
 func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
