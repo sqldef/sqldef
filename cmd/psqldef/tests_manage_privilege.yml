@@ -273,6 +273,100 @@ ManagePrivilegeSplitGrantStatementsReorderedGrantees:
   down: |
     GRANT UPDATE, DELETE ON TABLE "public"."users" TO "app_user", "readonly_user";
 
+ManagePrivilegeOverlappingGranteeListsRevokeOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE public.users FROM "app_user";
+    REVOKE DELETE, INSERT, UPDATE ON TABLE public.users FROM "readonly_user";
+  down: |
+    GRANT INSERT, UPDATE, DELETE ON TABLE public.users TO "readonly_user";
+    GRANT UPDATE, DELETE ON TABLE public.users TO "app_user";
+
+ManagePrivilegeOverlappingGranteeListsGrantOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE users TO app_user, readonly_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    GRANT INSERT ON TABLE public.users TO "app_user", "readonly_user";
+  down: |
+    REVOKE INSERT ON TABLE public.users FROM "app_user";
+    REVOKE INSERT ON TABLE public.users FROM "readonly_user";
+
+ManagePrivilegeOverlappingGranteeListsGrantOptionOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user WITH GRANT OPTION;
+    GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+  up: |
+    GRANT SELECT ON TABLE public.users TO "app_user", "readonly_user" WITH GRANT OPTION;
+  down: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE public.users FROM "app_user";
+    REVOKE GRANT OPTION FOR SELECT ON TABLE public.users FROM "readonly_user";
+
+ManagePrivilegeMixedGrantOptionRevokeOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE public.users FROM "app_user";
+    GRANT SELECT ON TABLE public.users TO "app_user" WITH GRANT OPTION;
+  down: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE public.users FROM "app_user";
+    GRANT UPDATE, DELETE ON TABLE public.users TO "app_user";
+
 ManagePrivilegeOwnerConverge:
   # 宣言された owner が current と違えば ALTER OWNER が出る
   manage:
