@@ -119,6 +119,11 @@ type Generator struct {
 
 	postgresCheckPlans map[string]*postgresCheckMatchPlan
 
+	// Privilege changes already emitted, so that a grantee listed in several
+	// desired GRANTs on the same object gets each change once.
+	// Key is "action|object type|object|grantee|privilege"
+	emittedPrivileges map[string]bool
+
 	desiredComments []*Comment
 	currentComments []*Comment
 	recreatedViews  map[string]*View
@@ -214,6 +219,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		heldBackIndexes:     make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
 		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
+		emittedPrivileges:   make(map[string]bool),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -4612,6 +4618,24 @@ func sameGranteeSet(a, b []string) bool {
 	return slices.Equal(as, bs)
 }
 
+// claimPrivilegeChanges returns the privileges whose change has not been
+// emitted yet for the grantee on the desired object, and marks them emitted.
+// Desired GRANTs are aggregated only when their grantee lists and grant options
+// match, so a grantee can still appear in several of them (e.g. TO a, b and
+// TO a). The changes for a grantee are derived from every desired GRANT on the
+// object, so each of those statements would otherwise emit the same change.
+func (g *Generator) claimPrivilegeChanges(action string, desired *GrantPrivilege, grantee string, privileges []string) []string {
+	var claimed []string
+	for _, priv := range privileges {
+		key := strings.Join([]string{action, desired.objectType, g.escapeQualifiedName(desired.tableName), grantee, priv}, "|")
+		if !g.emittedPrivileges[key] {
+			g.emittedPrivileges[key] = true
+			claimed = append(claimed, priv)
+		}
+	}
+	return claimed
+}
+
 func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
 	// Grantees should already be filtered by FilterPrivileges
 	// If multiple grantees made it here, they all have the same privileges to grant
@@ -4699,6 +4723,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 					}
 				}
 			}
+			privilegesToRevoke = g.claimPrivilegeChanges("REVOKE", desired, grantee, privilegesToRevoke)
 			if len(privilegesToRevoke) > 0 {
 				sortPrivilegesByCanonicalOrder(privilegesToRevoke)
 				revokesByGrantee[grantee] = privilegesToRevoke
@@ -4729,6 +4754,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 						toRevokeOption = append(toRevokeOption, priv)
 					}
 				}
+				toRevokeOption = g.claimPrivilegeChanges("REVOKE GRANT OPTION", desired, grantee, toRevokeOption)
 				if len(toRevokeOption) > 0 {
 					sortPrivilegesByCanonicalOrder(toRevokeOption)
 					revokeGrantOptionByGrantee[grantee] = toRevokeOption
@@ -4738,6 +4764,11 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			privilegesToGrant = desiredNormalized
 		}
 
+		grantAction := "GRANT"
+		if desired.withGrantOption {
+			grantAction = "GRANT WITH GRANT OPTION"
+		}
+		privilegesToGrant = g.claimPrivilegeChanges(grantAction, desired, grantee, privilegesToGrant)
 		if len(privilegesToGrant) > 0 {
 			privilegesCopy := make([]string, len(privilegesToGrant))
 			copy(privilegesCopy, privilegesToGrant)
@@ -7261,7 +7292,11 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
-					existing.grantees = append(existing.grantees, includedGrantees...)
+					for _, grantee := range includedGrantees {
+						if !slices.Contains(existing.grantees, grantee) {
+							existing.grantees = append(existing.grantees, grantee)
+						}
+					}
 				} else {
 					// Create new grant with filtered grantees
 					grantsByTableAndPrivs[key] = &GrantPrivilege{
