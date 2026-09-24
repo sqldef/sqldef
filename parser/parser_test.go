@@ -824,6 +824,32 @@ func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
 	}
 }
 
+// No supported database reserves stream, and pg_get_indexdef writes it unquoted.
+func TestStreamAsUnquotedIdentifier(t *testing.T) {
+	sqls := []string{
+		`CREATE TABLE stream (id bigint NOT NULL, stream text)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (start_at)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE (start_at IS NOT NULL)`,
+		`CREATE INDEX idx_t_stream ON t (stream)`,
+		`ALTER TABLE t ADD CONSTRAINT t_stream_id_fkey FOREIGN KEY (stream_id) REFERENCES stream (id)`,
+	}
+	for _, m := range []struct {
+		name string
+		mode ParserMode
+	}{
+		{"MySQL", ParserModeMysql},
+		{"PostgreSQL", ParserModePostgres},
+		{"SQLite3", ParserModeSQLite3},
+		{"SQL Server", ParserModeMssql},
+	} {
+		for _, sql := range sqls {
+			if _, err := ParseDDL(sql, m.mode); err != nil {
+				t.Errorf("unquoted stream should parse in %s mode: %q: %v", m.name, sql, err)
+			}
+		}
+	}
+}
+
 func TestAutoRandom(t *testing.T) {
 	testCases := []struct {
 		name      string
