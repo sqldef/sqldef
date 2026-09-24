@@ -5619,21 +5619,25 @@ func (g *Generator) renameCurrentPrivilegeColumn(tableName QualifiedName, oldCol
 		if !g.qualifiedNamesEqual(priv.tableName, tableName) {
 			continue
 		}
-		for i := range priv.privileges {
-			g.renamePrivilegeColumn(&priv.privileges[i], oldColumn, newColumn)
-		}
+		// A GRANT on several tables shares its privileges between them, so the
+		// renamed ones are built anew rather than modified in place.
+		priv.privileges = util.TransformSlice(priv.privileges, func(privilege Privilege) Privilege {
+			return g.renamePrivilegeColumn(privilege, oldColumn, newColumn)
+		})
 	}
 }
 
 // renamePrivilegeColumn renames a column in the column list of a column-level
 // privilege ("SELECT (id, secret)"). A privilege without a column list, or one
-// that does not mention the column, is left alone.
-func (g *Generator) renamePrivilegeColumn(privilege *Privilege, oldColumn, newColumn Ident) {
-	for i, column := range privilege.Columns {
+// that does not mention the column, is returned unchanged.
+func (g *Generator) renamePrivilegeColumn(privilege Privilege, oldColumn, newColumn Ident) Privilege {
+	privilege.Columns = util.TransformSlice(privilege.Columns, func(column Ident) Ident {
 		if g.identsEqual(column, oldColumn) {
-			privilege.Columns[i] = newColumn
+			return newColumn
 		}
-	}
+		return column
+	})
+	return privilege
 }
 
 // isCommentOnDroppedTable checks if a comment belongs to a table that has been dropped.

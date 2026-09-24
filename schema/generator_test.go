@@ -1663,8 +1663,35 @@ func TestRenamePrivilegeColumn(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		privilege := test.privilege
-		g.renamePrivilegeColumn(&privilege, test.oldColumn, test.newColumn)
-		assert.Equal(t, test.expected, privilege.String())
+		assert.Equal(t, test.expected, g.renamePrivilegeColumn(test.privilege, test.oldColumn, test.newColumn).String())
 	}
+}
+
+func TestRenameColumnOfGrantOnMultipleTables(t *testing.T) {
+	current := `
+		CREATE TABLE t1 (id integer, a integer);
+		CREATE TABLE t2 (id integer, a integer);
+		GRANT SELECT (a) ON t1, t2 TO app_user;
+	`
+	desired := `
+		CREATE TABLE t1 (
+		  id integer,
+		  b integer -- @renamed from=a
+		);
+		CREATE TABLE t2 (id integer, a integer);
+		GRANT SELECT (b) ON t1 TO app_user;
+		GRANT SELECT (a) ON t2 TO app_user;
+	`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModePostgres,
+		database.NewParser(parser.ParserModePostgres),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false, ManagedRoles: []string{"app_user"}},
+		"public",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ALTER TABLE public.t1 RENAME COLUMN a TO b"}, ddls)
 }
