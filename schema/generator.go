@@ -979,11 +979,12 @@ func newAlterBundler(g *Generator, enabled bool) *alterBundler {
 }
 
 // emit records stmt as an action of table's bundle and returns what to append
-// in its place. When bundling is off, or stmt is not an ALTER TABLE for table,
-// stmt is returned unchanged. The first action for a table returns a
-// placeholder (the table's prefix, which no complete statement equals) holding
-// the bundle's position; later actions fold in and return "" (append nothing).
-// finalize later rewrites the placeholder into the fused statement.
+// in its place. When bundling is off, stmt is not an ALTER TABLE for table, or
+// enable_drop would gate stmt, stmt is returned unchanged. The first action for
+// a table returns a placeholder (the table's prefix, which no complete
+// statement equals) holding the bundle's position; later actions fold in and
+// return "" (append nothing). finalize later rewrites the placeholder into the
+// fused statement.
 func (b *alterBundler) emit(table *Table, stmt string) string {
 	if !b.enabled {
 		return stmt
@@ -992,6 +993,14 @@ func (b *alterBundler) emit(table *Table, stmt string) string {
 	action, ok := strings.CutPrefix(stmt, prefix)
 	if !ok {
 		return stmt // not a plain ALTER TABLE for this table
+	}
+	// A statement enable_drop gates cannot be fused, because the gate then
+	// applies to the safe actions bundled with it. Test the whole statement,
+	// not the action: the action starts with "DROP " for every destructive
+	// clause, which would also catch the ones isDropStatement deliberately
+	// allows (DROP FOREIGN KEY and friends).
+	if !b.g.config.EnableDrop && isDropStatement(stmt) {
+		return stmt
 	}
 	if bundle := b.byTable[prefix]; bundle != nil {
 		bundle.actions = append(bundle.actions, action)
