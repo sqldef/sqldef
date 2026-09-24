@@ -297,6 +297,18 @@ func TestIntervalColumnType(t *testing.T) {
 			description: "Should support ::time(p) casting",
 		},
 		{
+			name:        "TYPECAST to TIMESTAMP with precision and time zone",
+			sql:         "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
+			shouldParse: true,
+			description: "Should support ::timestamp(p) with time zone casting",
+		},
+		{
+			name:        "TYPECAST to TIME with precision and time zone",
+			sql:         "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
+			shouldParse: true,
+			description: "Should support ::time(p) with time zone casting",
+		},
+		{
 			name:        "TYPECAST in VIEW with numeric parameters",
 			sql:         "CREATE VIEW test_view AS SELECT amount::numeric(10,2) AS amount_num FROM orders",
 			shouldParse: true,
@@ -578,6 +590,35 @@ func TestNowFunctionInDefaultExpression(t *testing.T) {
 	}
 }
 
+func TestTypecastTimestampWithTimeZonePreserved(t *testing.T) {
+	// Regression: a cast to timestamp(p)/time(p) with time zone must keep the
+	// time zone modifier when re-serialized. Dropping it turns the cast into a
+	// different type (without time zone), silently diverging the stored DEFAULT.
+	cases := []struct {
+		sql  string
+		want string
+	}{
+		{
+			sql:  "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
+			want: "a timestamp(0) with time zone default((now())::timestamp(0) with time zone)",
+		},
+		{
+			sql:  "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
+			want: "a time(0) with time zone default((now())::time(0) with time zone)",
+		},
+	}
+	for _, tc := range cases {
+		statement, err := ParseDDL(tc.sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("failed to parse %q: %v", tc.sql, err)
+		}
+		got := String(statement)
+		if !strings.Contains(got, tc.want) {
+			t.Fatalf("time zone modifier not preserved.\nSQL:  %s\nwant substring: %s\ngot:  %s", tc.sql, tc.want, got)
+		}
+	}
+}
+
 func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
 	sql := "CREATE TABLE test (a integer, b integer, CONSTRAINT x UNIQUE NULLS NOT DISTINCT (a, b))"
 
@@ -779,6 +820,32 @@ func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
 					}
 				}
 			})
+		}
+	}
+}
+
+// No supported database reserves stream, and pg_get_indexdef writes it unquoted.
+func TestStreamAsUnquotedIdentifier(t *testing.T) {
+	sqls := []string{
+		`CREATE TABLE stream (id bigint NOT NULL, stream text)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (start_at)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE (start_at IS NOT NULL)`,
+		`CREATE INDEX idx_t_stream ON t (stream)`,
+		`ALTER TABLE t ADD CONSTRAINT t_stream_id_fkey FOREIGN KEY (stream_id) REFERENCES stream (id)`,
+	}
+	for _, m := range []struct {
+		name string
+		mode ParserMode
+	}{
+		{"MySQL", ParserModeMysql},
+		{"PostgreSQL", ParserModePostgres},
+		{"SQLite3", ParserModeSQLite3},
+		{"SQL Server", ParserModeMssql},
+	} {
+		for _, sql := range sqls {
+			if _, err := ParseDDL(sql, m.mode); err != nil {
+				t.Errorf("unquoted stream should parse in %s mode: %q: %v", m.name, sql, err)
+			}
 		}
 	}
 }

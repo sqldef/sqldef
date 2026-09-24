@@ -1271,3 +1271,75 @@ ChangeCollationOfIndex:
   down: |
     DROP INDEX public.t_a_idx;
     CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "C");
+
+CreateIndexOnTableNamedStream:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE stream (
+      id bigint NOT NULL PRIMARY KEY,
+      start_at timestamp
+    );
+    CREATE TABLE stream_comment (
+      id bigint NOT NULL,
+      stream_id bigint NOT NULL REFERENCES stream (id)
+    );
+  desired: |
+    CREATE TABLE stream (
+      id bigint NOT NULL PRIMARY KEY,
+      start_at timestamp
+    );
+    CREATE TABLE stream_comment (
+      id bigint NOT NULL,
+      stream_id bigint NOT NULL REFERENCES stream (id)
+    );
+    CREATE INDEX idx_stream_start_at ON stream USING btree (id, start_at) WHERE (start_at IS NOT NULL);
+  up: |
+    CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE start_at is not null;
+  down: |
+    DROP INDEX public.idx_stream_start_at;
+
+IndexWithExplicitDefaultCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "default");
+
+IndexRestatingTheCollationOfItsColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "C");
+
+IndexInheritingTheCollationOfItsColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name);
+  desired: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "POSIX");
+  up: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name COLLATE "POSIX");
+  down: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name);
+
+# FIXME: Changing the collation of a column emits no DDL, and the index collation is resolved against
+# the desired column for both sides, so the index change is missed as well.
+#IndexCollationChangedTogetherWithItsColumn:
+#  legacy_ignore_quotes: false
+#  current: |
+#    CREATE TABLE products (name TEXT COLLATE "C");
+#    CREATE INDEX idx_name ON products USING btree (name);
+#  desired: |
+#    CREATE TABLE products (name TEXT COLLATE "POSIX");
+#    CREATE INDEX idx_name ON products USING btree (name COLLATE "POSIX");
+#  up: |
+#    ALTER TABLE public.products ALTER COLUMN name TYPE text COLLATE "POSIX";
+#    DROP INDEX public.idx_name;
+#    CREATE INDEX idx_name ON public.products USING btree (name COLLATE "POSIX");
+#  down: |
+#    ALTER TABLE public.products ALTER COLUMN name TYPE text COLLATE "C";
+#    DROP INDEX public.idx_name;
+#    CREATE INDEX idx_name ON public.products USING btree (name);

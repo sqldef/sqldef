@@ -981,16 +981,57 @@ func TestPsqldefSkipView(t *testing.T) {
 }
 
 func TestPsqldefSkipExtension(t *testing.T) {
-	resetTestDatabase()
+	const createExtension = "CREATE EXTENSION pgcrypto;\n"
 
-	createExtension := "CREATE EXTENSION pgcrypto;\n"
+	t.Run("live current", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, createExtension)
+		tu.WriteFile("schema.sql", "")
 
-	mustPgExec(testDatabaseName, createExtension)
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
+		assert.Equal(t, nothingModified, output)
+	})
 
-	tu.WriteFile("schema.sql", "")
+	t.Run("desired", func(t *testing.T) {
+		resetTestDatabase()
+		tu.WriteFile("schema.sql", createExtension)
 
-	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
-	assert.Equal(t, nothingModified, output)
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
+		assert.Equal(t, nothingModified, output)
+
+		extensions, err := pgQuery(testDatabaseName, "SELECT extname FROM pg_extension WHERE extname = 'pgcrypto'")
+		assert.NoError(t, err)
+		assert.Empty(t, extensions)
+	})
+
+	t.Run("offline current", func(t *testing.T) {
+		tu.WriteFile("current.sql", createExtension)
+		tu.WriteFile("schema.sql", "")
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs("current.sql", "--skip-extension", "-f", "schema.sql")...)
+		assert.Equal(t, nothingModified, output)
+	})
+
+	t.Run("export", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, createExtension)
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "--export")...)
+		assert.Equal(t, "-- No table exists --\n", output)
+	})
+
+	t.Run("takes precedence over manage.extension", func(t *testing.T) {
+		tu.WriteFile("current.sql", createExtension)
+		tu.WriteFile("schema.sql", "CREATE EXTENSION btree_gist;\n")
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(
+			"current.sql",
+			"--skip-extension",
+			"--config-inline", "manage: {extension: [{target: '.*', drop: true}]}",
+			"-f", "schema.sql",
+		)...)
+		assert.Equal(t, nothingModified, output)
+	})
 }
 
 func TestPsqldefSkipPartition(t *testing.T) {
@@ -1634,6 +1675,7 @@ func TestMain(m *testing.M) {
 	cleanupTestRoles()
 	_ = os.Remove("psqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("current.sql")
 	_ = os.Remove("config.yml")
 	os.Exit(status)
 }
@@ -1900,6 +1942,143 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		assert.Contains(t, exported, "CHECK (VALUE < 0)")
 		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_a"."email"`)
 		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."status"`)
+	})
+}
+
+// A grantee that holds the table owner role is reported as grantable by
+// information_schema.table_privileges (is_grantable is
+// pg_has_role(grantee, relowner, 'USAGE') OR the ACL grant option), even when
+// the ACL carries no grant option. Exporting that as WITH GRANT OPTION makes
+// the diff emit a REVOKE GRANT OPTION FOR that cannot change the ACL, so the
+// same statement is generated on every run. Reading the ACL keeps the export
+// to what was actually granted.
+func TestPsqldefPrivilegeGrantOptionWithInheritedOwner(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_acl_app;
+		DROP ROLE IF EXISTS test_acl_owner;
+		CREATE ROLE test_acl_owner;
+		CREATE ROLE test_acl_app;
+		GRANT test_acl_owner TO test_acl_app;
+		CREATE TABLE acl_items (id bigint PRIMARY KEY);
+		ALTER TABLE acl_items OWNER TO test_acl_owner;
+		GRANT SELECT ON TABLE acl_items TO test_acl_app;
+	`)
+	t.Cleanup(func() {
+		mustPgExec(testDatabaseName, `
+			DROP TABLE IF EXISTS acl_items;
+			DROP ROLE IF EXISTS test_acl_app;
+			DROP ROLE IF EXISTS test_acl_owner;
+		`)
+	})
+
+	managePrivilege := "manage: {privilege: [{target: test_acl_app, drop: true}]}"
+
+	t.Run("the grant was made without WITH GRANT OPTION", func(t *testing.T) {
+		// Guards the premise: the ACL holds no grant option, while
+		// information_schema still reports one because of the inherited owner role.
+		aclGrantable, err := pgQuery(testDatabaseName, `
+			SELECT acl.is_grantable
+			FROM pg_class c, LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relname = 'acl_items'
+			AND acl.grantee = 'test_acl_app'::regrole
+			AND acl.privilege_type = 'SELECT'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, "false\n", aclGrantable)
+
+		viewGrantable, err := pgQuery(testDatabaseName, `
+			SELECT is_grantable FROM information_schema.table_privileges
+			WHERE table_name = 'acl_items'
+			AND grantee = 'test_acl_app'
+			AND privilege_type = 'SELECT'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, "YES\n", viewGrantable)
+	})
+
+	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managePrivilege)...)
+
+	t.Run("export keeps the grant free of WITH GRANT OPTION", func(t *testing.T) {
+		assert.Contains(t, exported, `GRANT SELECT ON TABLE "public"."acl_items" TO "test_acl_app";`)
+		assert.NotContains(t, exported, "WITH GRANT OPTION")
+	})
+
+	t.Run("a grant declared without the option converges", func(t *testing.T) {
+		// This is the state the user declared: SELECT, no grant option. Reading
+		// is_grantable from information_schema turns it into a REVOKE GRANT
+		// OPTION FOR that the ACL cannot satisfy, so the same statement comes
+		// back on every run.
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE "public"."acl_items" (
+			    "id" bigint NOT NULL,
+			    CONSTRAINT acl_items_pkey PRIMARY KEY ("id")
+			);
+			ALTER TABLE "public"."acl_items" OWNER TO "test_acl_owner";
+			GRANT SELECT ON TABLE "public"."acl_items" TO "test_acl_app";
+			`))
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managePrivilege, "--file", "schema.sql", "--dry-run")...)
+		assert.Equal(t, nothingModified, dryRun)
+
+		// And it stays converged after an apply.
+		tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managePrivilege, "--file", "schema.sql")...)
+		again := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managePrivilege, "--file", "schema.sql", "--dry-run")...)
+		assert.Equal(t, nothingModified, again)
+	})
+}
+
+// The ACL keeps one entry per grantor, so a grantee that received the same
+// privilege from the owner and from another role holding the grant option has
+// two entries for it. The export collapses them into one grant, which carries
+// WITH GRANT OPTION when any grantor gave it.
+func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_multi_grantee;
+		DROP ROLE IF EXISTS test_multi_grantor;
+		CREATE ROLE test_multi_grantor;
+		CREATE ROLE test_multi_grantee;
+		CREATE TABLE multi_items (id bigint PRIMARY KEY, name text);
+		CREATE SEQUENCE multi_seq;
+		GRANT SELECT, INSERT, UPDATE (name) ON TABLE multi_items TO test_multi_grantor WITH GRANT OPTION;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantor WITH GRANT OPTION;
+		GRANT SELECT, INSERT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantee;
+		SET ROLE test_multi_grantor;
+		GRANT SELECT, UPDATE (name) ON TABLE multi_items TO test_multi_grantee WITH GRANT OPTION;
+		GRANT INSERT ON TABLE multi_items TO test_multi_grantee;
+		GRANT USAGE ON SEQUENCE multi_seq TO test_multi_grantee WITH GRANT OPTION;
+		RESET ROLE;
+	`)
+	t.Cleanup(func() {
+		mustPgExec(testDatabaseName, `
+			DROP TABLE IF EXISTS multi_items;
+			DROP SEQUENCE IF EXISTS multi_seq;
+			DROP ROLE IF EXISTS test_multi_grantee;
+			DROP ROLE IF EXISTS test_multi_grantor;
+		`)
+	})
+
+	managePrivilege := "manage: {privilege: [{target: test_multi_grantee, drop: true}]}"
+	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managePrivilege)...)
+
+	t.Run("export collapses the grants from both grantors", func(t *testing.T) {
+		assert.Contains(t, exported, `GRANT SELECT ON TABLE "public"."multi_items" TO "test_multi_grantee" WITH GRANT OPTION;`)
+		assert.Contains(t, exported, `GRANT UPDATE ("name") ON TABLE "public"."multi_items" TO "test_multi_grantee" WITH GRANT OPTION;`)
+		assert.Contains(t, exported, `GRANT INSERT ON TABLE "public"."multi_items" TO "test_multi_grantee";`)
+		assert.Contains(t, exported, `GRANT USAGE ON SEQUENCE public.multi_seq TO "test_multi_grantee" WITH GRANT OPTION;`)
+		assert.NotContains(t, exported, `GRANT SELECT ON TABLE "public"."multi_items" TO "test_multi_grantee";`)
+		assert.NotContains(t, exported, `GRANT USAGE ON SEQUENCE public.multi_seq TO "test_multi_grantee";`)
+	})
+
+	t.Run("the exported schema converges", func(t *testing.T) {
+		tu.WriteFile("schema.sql", exported)
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managePrivilege, "--file", "schema.sql", "--dry-run")...)
+		assert.Equal(t, nothingModified, dryRun)
 	})
 }
 

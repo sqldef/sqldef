@@ -195,6 +195,178 @@ ManagePrivilegeIdempotent:
   up: ""
   down: ""
 
+ManagePrivilegeSplitGrantStatementsRevokeOnce:
+  # Privileges for the same (table, grantee) split across several desired GRANT
+  # statements must be diffed as one unit: the REVOKE is emitted once, not once
+  # per source statement.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "app_user";
+  down: |
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "app_user";
+
+ManagePrivilegeSplitGrantStatementsGrantOnce:
+  # The GRANT side must also be diffed as one unit: a privilege missing from the
+  # current schema is granted once even when the desired GRANTs are split.
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+  down: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+
+ManagePrivilegeSplitGrantStatementsReorderedGrantees:
+  # Grantee lists written in a different order (TO a, b vs TO b, a) target the
+  # same grantees and must aggregate together, so the diff is emitted once per
+  # grantee rather than once per source statement.
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+    GRANT INSERT ON TABLE users TO readonly_user, app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "app_user";
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "readonly_user";
+  down: |
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "app_user", "readonly_user";
+
+ManagePrivilegeOverlappingGranteeListsRevokeOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE public.users FROM "app_user";
+    REVOKE DELETE, INSERT, UPDATE ON TABLE public.users FROM "readonly_user";
+  down: |
+    GRANT INSERT, UPDATE, DELETE ON TABLE public.users TO "readonly_user";
+    GRANT UPDATE, DELETE ON TABLE public.users TO "app_user";
+
+ManagePrivilegeOverlappingGranteeListsGrantOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE users TO app_user, readonly_user;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    GRANT INSERT ON TABLE public.users TO "app_user", "readonly_user";
+  down: |
+    REVOKE INSERT ON TABLE public.users FROM "app_user";
+    REVOKE INSERT ON TABLE public.users FROM "readonly_user";
+
+ManagePrivilegeOverlappingGranteeListsGrantOptionOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: 'app_user|readonly_user'
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user, readonly_user WITH GRANT OPTION;
+    GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+  up: |
+    GRANT SELECT ON TABLE public.users TO "app_user", "readonly_user" WITH GRANT OPTION;
+  down: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE public.users FROM "app_user";
+    REVOKE GRANT OPTION FOR SELECT ON TABLE public.users FROM "readonly_user";
+
+ManagePrivilegeMixedGrantOptionRevokeOnce:
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+    GRANT INSERT ON TABLE users TO app_user;
+  up: |
+    REVOKE DELETE, UPDATE ON TABLE public.users FROM "app_user";
+    GRANT SELECT ON TABLE public.users TO "app_user" WITH GRANT OPTION;
+  down: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE public.users FROM "app_user";
+    GRANT UPDATE, DELETE ON TABLE public.users TO "app_user";
+
 ManagePrivilegeOwnerConverge:
   # 宣言された owner が current と違えば ALTER OWNER が出る
   manage:
@@ -296,3 +468,55 @@ ManagePrivilegeDropTableWithoutEnableDrop:
     REVOKE SELECT ON TABLE "public"."audit_logs" FROM "readonly_user";
   down: |
     GRANT SELECT ON TABLE "public"."audit_logs" TO "readonly_user";
+
+ManagePrivilegeDropViewWithGrant:
+  # A dropped view takes its privileges with it, so no REVOKE must be emitted
+  # for it; the REVOKE would run after the DROP VIEW and fail with
+  # "relation does not exist".
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE v_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+  up: |
+    DROP VIEW public.v_users;
+  down: |
+    CREATE VIEW v_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE public.v_users TO "app_user";
+
+ManagePrivilegeDropMaterializedViewWithGrant:
+  # Same for a materialized view.
+  legacy_ignore_quotes: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE mv_users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(100)
+    );
+  up: |
+    DROP MATERIALIZED VIEW public.mv_users;
+  down: |
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    GRANT SELECT ON TABLE public.mv_users TO "app_user";

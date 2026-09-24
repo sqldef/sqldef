@@ -119,6 +119,11 @@ type Generator struct {
 
 	postgresCheckPlans map[string]*postgresCheckMatchPlan
 
+	// Privilege changes already emitted, so that a grantee listed in several
+	// desired GRANTs on the same object gets each change once.
+	// Key is "action|object type|object|grantee|privilege"
+	emittedPrivileges map[string]bool
+
 	desiredComments []*Comment
 	currentComments []*Comment
 	recreatedViews  map[string]*View
@@ -214,6 +219,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		heldBackIndexes:     make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
 		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
+		emittedPrivileges:   make(map[string]bool),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -431,6 +437,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
 		case *GrantPrivilege:
+			// Desired GRANTs for the same object, grantees, and grant option are
+			// merged into one entry of g.desiredPrivileges, which keeps the first
+			// statement of the group and carries every privilege they declare.
+			// Diffing only those entries emits the REVOKE/GRANT once instead of
+			// once per source statement.
+			if !slices.Contains(g.desiredPrivileges, desired) {
+				break
+			}
 			privilegeDDLs, err := g.generateDDLsForGrantPrivilege(desired)
 			if err != nil {
 				return nil, err
@@ -490,6 +504,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		viewName := g.escapeViewName(currentView)
+		g.forgetViewMetadata(currentView)
 		if currentView.viewType == "MATERIALIZED VIEW" {
 			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
 			continue
@@ -975,11 +990,12 @@ func newAlterBundler(g *Generator, enabled bool) *alterBundler {
 }
 
 // emit records stmt as an action of table's bundle and returns what to append
-// in its place. When bundling is off, or stmt is not an ALTER TABLE for table,
-// stmt is returned unchanged. The first action for a table returns a
-// placeholder (the table's prefix, which no complete statement equals) holding
-// the bundle's position; later actions fold in and return "" (append nothing).
-// finalize later rewrites the placeholder into the fused statement.
+// in its place. When bundling is off, stmt is not an ALTER TABLE for table, or
+// enable_drop would gate stmt, stmt is returned unchanged. The first action for
+// a table returns a placeholder (the table's prefix, which no complete
+// statement equals) holding the bundle's position; later actions fold in and
+// return "" (append nothing). finalize later rewrites the placeholder into the
+// fused statement.
 func (b *alterBundler) emit(table *Table, stmt string) string {
 	if !b.enabled {
 		return stmt
@@ -988,6 +1004,14 @@ func (b *alterBundler) emit(table *Table, stmt string) string {
 	action, ok := strings.CutPrefix(stmt, prefix)
 	if !ok {
 		return stmt // not a plain ALTER TABLE for this table
+	}
+	// A statement enable_drop gates cannot be fused, because the gate then
+	// applies to the safe actions bundled with it. Test the whole statement,
+	// not the action: the action starts with "DROP " for every destructive
+	// clause, which would also catch the ones isDropStatement deliberately
+	// allows (DROP FOREIGN KEY and friends).
+	if !b.g.config.EnableDrop && isDropStatement(stmt) {
+		return stmt
 	}
 	if bundle := b.byTable[prefix]; bundle != nil {
 		bundle.actions = append(bundle.actions, action)
@@ -1507,7 +1531,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	currentPrimaryKey := currentTable.PrimaryKey()
 	desiredPrimaryKey := desired.table.PrimaryKey()
 
-	primaryKeysChanged := !g.areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
+	primaryKeysChanged := !g.areSamePrimaryKeys(currentTable.columns, currentPrimaryKey, desiredPrimaryKey)
 
 	// Remove old AUTO_INCREMENT/AUTO_RANDOM from deleted column before deleting key (primary or not)
 	// and if primary key changed
@@ -1704,7 +1728,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
-			if !g.areSameIndexes(*currentIndex, desiredIndex) {
+			if !g.areSameIndexes(currentTable.columns, *currentIndex, desiredIndex) {
 				ddls, _ = g.appendRecreate(ddls,
 					g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint),
 					g.generateAddIndex(desired.table.name, desiredIndex),
@@ -1718,7 +1742,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 
 			if renameFromIndex != nil {
-				if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+				if g.areSameIndexes(currentTable.columns, *renameFromIndex, desiredIndex) {
 					renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 					ddls = append(ddls, renameDDLs...)
 				} else {
@@ -2080,7 +2104,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				// Index not found, add index.
 				ddls = append(ddls, statement)
 				currentView.indexes = append(currentView.indexes, desiredIndex)
-			} else if !g.areSameIndexes(*currentIndex, desiredIndex) {
+			} else if !g.areSameIndexes(nil, *currentIndex, desiredIndex) {
 				// An index on a materialized view is changed the same way as one on a table.
 				var recreated bool
 				ddls, recreated = g.appendRecreate(ddls,
@@ -2126,7 +2150,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 
 		if renameFromIndex != nil {
 			renamed := true
-			if g.areSameIndexes(*renameFromIndex, desiredIndex) {
+			if g.areSameIndexes(currentTable.columns, *renameFromIndex, desiredIndex) {
 				renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 				ddls = append(ddls, renameDDLs...)
 			} else {
@@ -2152,7 +2176,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 		}
 	} else {
 		// Index found. If it's different, drop and add index.
-		if !g.areSameIndexes(*currentIndex, desiredIndex) {
+		if !g.areSameIndexes(currentTable.columns, *currentIndex, desiredIndex) {
 			var recreated bool
 			ddls, recreated = g.appendRecreate(ddls,
 				g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint),
@@ -4133,7 +4157,8 @@ func (g *Generator) escapeColumnName(column *Column) string {
 	return g.escapeSQLIdent(column.name)
 }
 
-// A DROP removes this metadata; comparing against it would suppress the DDLs that restore it.
+// A DROP removes this metadata. Comparing against it would suppress the DDLs that restore a
+// recreated view's metadata, and would emit REVOKE or COMMENT for a view that no longer exists.
 func (g *Generator) forgetViewMetadata(view *View) {
 	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
 		return
@@ -4513,31 +4538,22 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) &&
 					existing.withGrantOption == stmt.withGrantOption &&
 					existing.objectType == stmt.objectType &&
-					len(existing.grantees) == len(stmt.grantees) {
-					allMatch := true
-					for j, grantee := range existing.grantees {
-						if grantee != stmt.grantees[j] {
-							allMatch = false
-							break
-						}
+					sameGranteeSet(existing.grantees, stmt.grantees) {
+					privMap := make(map[string]bool)
+					for _, priv := range existing.privileges {
+						privMap[priv] = true
 					}
-					if allMatch {
-						privMap := make(map[string]bool)
-						for _, priv := range existing.privileges {
-							privMap[priv] = true
-						}
-						for _, priv := range stmt.privileges {
-							privMap[priv] = true
-						}
-						mergedPrivs := []string{}
-						for priv := range privMap {
-							mergedPrivs = append(mergedPrivs, priv)
-						}
-						slices.Sort(mergedPrivs)
-						aggregated.Privileges[i].privileges = mergedPrivs
-						merged = true
-						break
+					for _, priv := range stmt.privileges {
+						privMap[priv] = true
 					}
+					mergedPrivs := []string{}
+					for priv := range privMap {
+						mergedPrivs = append(mergedPrivs, priv)
+					}
+					slices.Sort(mergedPrivs)
+					aggregated.Privileges[i].privileges = mergedPrivs
+					merged = true
+					break
 				}
 			}
 			if !merged {
@@ -4584,6 +4600,38 @@ func formatPrivilegesForGrant(privileges []string) string {
 		}
 	}
 	return strings.Join(privileges, ", ")
+}
+
+// sameGranteeSet reports whether two grantee lists contain the same grantees
+// regardless of the order they were written in. GRANT ... TO a, b and
+// GRANT ... TO b, a target the same grantees, so they must aggregate together.
+func sameGranteeSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	as := slices.Clone(a)
+	bs := slices.Clone(b)
+	slices.Sort(as)
+	slices.Sort(bs)
+	return slices.Equal(as, bs)
+}
+
+// claimPrivilegeChanges returns the privileges whose change has not been
+// emitted yet for the grantee on the desired object, and marks them emitted.
+// Desired GRANTs are aggregated only when their grantee lists and grant options
+// match, so a grantee can still appear in several of them (e.g. TO a, b and
+// TO a). The changes for a grantee are derived from every desired GRANT on the
+// object, so each of those statements would otherwise emit the same change.
+func (g *Generator) claimPrivilegeChanges(action string, desired *GrantPrivilege, grantee string, privileges []string) []string {
+	var claimed []string
+	for _, priv := range privileges {
+		key := strings.Join([]string{action, desired.objectType, g.escapeQualifiedName(desired.tableName), grantee, priv}, "|")
+		if !g.emittedPrivileges[key] {
+			g.emittedPrivileges[key] = true
+			claimed = append(claimed, priv)
+		}
+	}
+	return claimed
 }
 
 func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
@@ -4673,6 +4721,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 					}
 				}
 			}
+			privilegesToRevoke = g.claimPrivilegeChanges("REVOKE", desired, grantee, privilegesToRevoke)
 			if len(privilegesToRevoke) > 0 {
 				sortPrivilegesByCanonicalOrder(privilegesToRevoke)
 				revokesByGrantee[grantee] = privilegesToRevoke
@@ -4703,6 +4752,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 						toRevokeOption = append(toRevokeOption, priv)
 					}
 				}
+				toRevokeOption = g.claimPrivilegeChanges("REVOKE GRANT OPTION", desired, grantee, toRevokeOption)
 				if len(toRevokeOption) > 0 {
 					sortPrivilegesByCanonicalOrder(toRevokeOption)
 					revokeGrantOptionByGrantee[grantee] = toRevokeOption
@@ -4712,6 +4762,11 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			privilegesToGrant = desiredNormalized
 		}
 
+		grantAction := "GRANT"
+		if desired.withGrantOption {
+			grantAction = "GRANT WITH GRANT OPTION"
+		}
+		privilegesToGrant = g.claimPrivilegeChanges(grantAction, desired, grantee, privilegesToGrant)
 		if len(privilegesToGrant) > 0 {
 			privilegesCopy := make([]string, len(privilegesToGrant))
 			copy(privilegesCopy, privilegesToGrant)
@@ -5945,7 +6000,7 @@ func (g *Generator) buildForeignKeyDDL(tableName QualifiedName, fk *ForeignKey) 
 }
 
 // normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
-// For PostgreSQL, this converts IN (a,b,c) to = ANY (ARRAY[a,b,c])
+// for DDL generation.
 func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
 		normalized := normalizeCheckExprForOutput(expr, g.mode)
@@ -5981,6 +6036,9 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 	case *parser.ArrayConstructor:
 		elements := util.TransformSlice(e.Elements, g.formatExprQuoteAware)
 		return "ARRAY[" + strings.Join(elements, ", ") + "]"
+	case parser.ValTuple:
+		elements := util.TransformSlice(e, g.formatExprQuoteAware)
+		return "(" + strings.Join(elements, ", ") + ")"
 	case *parser.ComparisonExpr:
 		result := g.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
 		if e.All {
@@ -6086,14 +6144,15 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 
-	// Strip type casts remaining after normalizeExpr (e.g., custom types like ENUMs/domains).
-	// PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
+	// Strip type casts remaining after normalizeExpr on literals (e.g., custom types like
+	// ENUMs/domains). PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
 	// but users write DEFAULT 'pending' without the cast. Both are semantically identical.
-	// Also strip any parentheses a user wrote around a literal default (e.g. DEFAULT ('foo'));
+	// Also strip any parentheses a user wrote around a default (e.g. DEFAULT ('foo'));
 	// normalizeExpr only unwraps those for some modes (see its ParenExpr case), but parentheses
 	// are pure syntax noise for equality regardless of dialect.
-	normalizedCurrent := unwrapCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
-	normalizedDesired := unwrapCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
+	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	normalizedCurrent, normalizedDesired = stripElidableCasts(normalizedCurrent, normalizedDesired)
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
@@ -6143,16 +6202,46 @@ func unwrapCast(expr parser.Expr) parser.Expr {
 	return castExpr.Expr
 }
 
-// unwrapCastAndParens repeatedly strips type casts and parentheses (in either
+// unwrapLiteralCastAndParens repeatedly strips type casts and parentheses (in either
 // order/nesting, e.g. `('pending'::order_status)` or `('foo')::text`) down to
-// the innermost expression, for equality comparison purposes.
-func unwrapCastAndParens(expr parser.Expr) parser.Expr {
+// a literal, for equality comparison purposes. Casts on anything else are kept:
+// they change the value (e.g. now()::timestamp vs now()::timestamptz).
+func unwrapLiteralCastAndParens(expr parser.Expr) parser.Expr {
+	inner := expr
 	for {
-		unwrapped := unwrapParenExpr(unwrapCast(expr))
-		if unwrapped == expr {
-			return unwrapped
+		next := unwrapParenExpr(unwrapCast(inner))
+		if next == inner {
+			break
 		}
-		expr = unwrapped
+		inner = next
+	}
+	if _, ok := inner.(*parser.SQLVal); ok {
+		return inner
+	}
+	return unwrapParenExpr(expr)
+}
+
+// stripElidableCasts peels matching casts off both sides, and a cast present on only one side.
+// PostgreSQL elides a cast to the type the expression already has, at any depth (e.g.
+// gen_random_uuid()::uuid::text is stored as (gen_random_uuid())::text), so such a cast is not a
+// difference. It stops at casts to different types, which remain in the comparison.
+func stripElidableCasts(current, desired parser.Expr) (parser.Expr, parser.Expr) {
+	for {
+		currentCast, currentIsCast := current.(*parser.CastExpr)
+		desiredCast, desiredIsCast := desired.(*parser.CastExpr)
+		switch {
+		case currentIsCast && desiredIsCast:
+			if !strings.EqualFold(parser.String(currentCast.Type), parser.String(desiredCast.Type)) {
+				return current, desired
+			}
+			current, desired = unwrapParenExpr(currentCast.Expr), unwrapParenExpr(desiredCast.Expr)
+		case currentIsCast:
+			current = unwrapParenExpr(currentCast.Expr)
+		case desiredIsCast:
+			desired = unwrapParenExpr(desiredCast.Expr)
+		default:
+			return current, desired
+		}
 	}
 }
 
@@ -6479,7 +6568,7 @@ func isNullDefault(def *DefaultDefinition) bool {
 	return false
 }
 
-func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
+func (g *Generator) areSamePrimaryKeys(columns map[string]*Column, primaryKeyA *Index, primaryKeyB *Index) bool {
 	if primaryKeyA != nil && primaryKeyB != nil {
 		// For MSSQL, when comparing PRIMARY KEY constraints,
 		// ignore the name if one is auto-generated (PK__*) and the other is unnamed/synthetic ("PRIMARY")
@@ -6491,7 +6580,7 @@ func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) b
 				return g.areSamePrimaryKeyColumns(*primaryKeyA, *primaryKeyB)
 			}
 		}
-		return g.areSameIndexes(*primaryKeyA, *primaryKeyB)
+		return g.areSameIndexes(columns, *primaryKeyA, *primaryKeyB)
 	} else {
 		return primaryKeyA == nil && primaryKeyB == nil
 	}
@@ -6529,6 +6618,26 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 	return g.identsSliceEqual(indexA.included, indexB.included)
 }
 
+// indexColumnCollation returns the collation the index column sorts with. PostgreSQL omits the
+// COLLATE clause from the DDL it exports whenever it names the collation the column already has, so
+// an omitted clause has to compare equal to one that restates it. "default" names the database
+// default, which the export never writes out either. An index on a materialized view has no column
+// definitions to resolve against, so its collation is compared as written.
+func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
+	collation := indexColumn.collation
+	if collation == "" {
+		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+			if column := g.findColumnByName(columns, colName.Name); column != nil {
+				collation = column.collate
+			}
+		}
+	}
+	if strings.EqualFold(collation, "default") {
+		return ""
+	}
+	return collation
+}
+
 // areSameCollations compares two index-column collation names. PostgreSQL collation names are
 // case-sensitive identifiers ("C" and "c" name different collations); the other engines fold case.
 func (g *Generator) areSameCollations(a, b string) bool {
@@ -6560,7 +6669,7 @@ func (g *Generator) areSameOperatorClasses(indexA Index, indexB Index, columnInd
 	return g.config.PostgresDefaultOperatorClasses[index.AccessMethod()+"."+strings.ToLower(specified)]
 }
 
-func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
+func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, indexB Index) bool {
 	if indexA.unique != indexB.unique {
 		return false
 	}
@@ -6594,7 +6703,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		if indexA.columns[i].NullsOrdering() != indexB.columns[i].NullsOrdering() {
 			return false
 		}
-		if !g.areSameCollations(indexA.columns[i].collation, indexB.columns[i].collation) {
+		if !g.areSameCollations(g.indexColumnCollation(columns, indexA.columns[i]), g.indexColumnCollation(columns, indexB.columns[i])) {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
@@ -7239,7 +7348,11 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
-					existing.grantees = append(existing.grantees, includedGrantees...)
+					for _, grantee := range includedGrantees {
+						if !slices.Contains(existing.grantees, grantee) {
+							existing.grantees = append(existing.grantees, grantee)
+						}
+					}
 				} else {
 					// Create new grant with filtered grantees
 					grantsByTableAndPrivs[key] = &GrantPrivilege{
@@ -7324,13 +7437,17 @@ func containsRegexpString(strs []string, str string) bool {
 }
 
 func FilterExtensions(ddls []DDL, config database.GeneratorConfig) []DDL {
-	if config.ManageExtensions == nil {
+	if !config.SkipExtension && config.ManageExtensions == nil {
 		return ddls
 	}
 
 	filtered := []DDL{}
 	for _, ddl := range ddls {
 		if stmt, ok := ddl.(*Extension); ok {
+			if config.SkipExtension {
+				slog.Debug("--skip-extension is enabled; excluding extension from management", "extension", stmt.extension.Name.Name)
+				continue
+			}
 			name := stmt.extension.Name.Name
 			if _, matched := matchManageObjectRule(*config.ManageExtensions, name); !matched {
 				slog.Debug("extension matches no manage.extension rule; excluding it from management", "extension", name)

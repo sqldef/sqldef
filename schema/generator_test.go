@@ -23,6 +23,63 @@ func TestStringConstantContainingSingleQuote(t *testing.T) {
 	assert.Equal(t, StringConstant("'example'"), "'''example'''")
 }
 
+func TestSkipExtension(t *testing.T) {
+	manageAllExtensions := &[]database.ManageObjectRule{{Target: ".*", Drop: true}}
+	tests := []struct {
+		name     string
+		desired  string
+		current  string
+		config   database.GeneratorConfig
+		expected []string
+	}{
+		{
+			name:     "desired extension",
+			desired:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true},
+			expected: []string{},
+		},
+		{
+			name:     "current extension",
+			current:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true, EnableDrop: true},
+			expected: []string{},
+		},
+		{
+			name:    "manage.extension match",
+			desired: "CREATE EXTENSION pgcrypto;",
+			config: database.GeneratorConfig{
+				SkipExtension:    true,
+				ManageExtensions: manageAllExtensions,
+			},
+			expected: []string{},
+		},
+		{
+			name:    "non-extension DDL remains",
+			desired: "CREATE EXTENSION pgcrypto; CREATE TABLE users (id bigint);",
+			config:  database.GeneratorConfig{SkipExtension: true},
+			expected: []string{
+				"CREATE TABLE users (id bigint)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.config.LegacyIgnoreQuotes = false
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				tt.config,
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
 func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
 	g := &Generator{mode: GeneratorModeMysql}
@@ -930,7 +987,7 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 }
 
 func TestAlterBundler(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
 	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
 	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
 
@@ -953,6 +1010,27 @@ func TestAlterBundler(t *testing.T) {
 		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
 		"ALTER TABLE b ADD COLUMN z int",
 		"DROP INDEX idx ON a",
+	}, ddls)
+}
+
+func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: false}}
+	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+
+	bundler := newAlterBundler(g, true)
+
+	slot := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
+
+	dropped := bundler.emit(table, "ALTER TABLE a DROP COLUMN y")
+	assert.Equal(t, "ALTER TABLE a DROP COLUMN y", dropped, "destructive action should be left for the enable_drop pass instead of bundled")
+
+	folded := bundler.emit(table, "ALTER TABLE a DROP FOREIGN KEY fk")
+	assert.Equal(t, "", folded, "DROP FOREIGN KEY is not gated by enable_drop, so it should still fold")
+
+	ddls := bundler.finalize([]string{slot, dropped})
+	assert.Equal(t, []string{
+		"ALTER TABLE a ADD COLUMN x int, DROP FOREIGN KEY fk",
+		"ALTER TABLE a DROP COLUMN y",
 	}, ddls)
 }
 
@@ -1325,7 +1403,7 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 			assert.Equal(t, index.indexType, regenerated.indexType)
 			assert.Equal(t, index.options, regenerated.options)
 			assert.Equal(t, index.included, regenerated.included)
-			assert.True(t, g.areSameIndexes(index, regenerated),
+			assert.True(t, g.areSameIndexes(nil, index, regenerated),
 				"regenerated statement describes a different index:\n%s\n%s", statement, generated)
 		})
 	}
@@ -1476,6 +1554,21 @@ func TestFilterObjectsOwnerIdentity(t *testing.T) {
 			assert.Empty(t, FilterObjects(ddls, test.config))
 		})
 	}
+}
+
+func TestFilterPrivilegesMergesGranteesOnce(t *testing.T) {
+	sql := `
+		GRANT SELECT ON TABLE users TO app_user, readonly_user WITH GRANT OPTION;
+		GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+	rules := []database.ManageObjectRule{{Target: "app_user|readonly_user"}}
+
+	filtered := FilterPrivileges(ddls, database.GeneratorConfig{ManagePrivileges: &rules})
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, []string{"app_user", "readonly_user"}, filtered[0].(*GrantPrivilege).grantees)
 }
 
 func TestRecreatedViewOwnerEscaping(t *testing.T) {
