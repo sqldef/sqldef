@@ -2187,19 +2187,37 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		return map[string][]string{}, nil
 	}
 
+	// Privileges are read from pg_class.relacl rather than
+	// information_schema.table_privileges, which reports
+	//
+	//     is_grantable = pg_has_role(grantee, relowner, 'USAGE') OR <ACL grant option>
+	//
+	// so every grantee that holds the table owner role (directly or through
+	// another role) is reported as grantable even when the ACL carries no grant
+	// option. The diff then emits REVOKE GRANT OPTION FOR ... on every run, and
+	// the REVOKE cannot take a grant option away from an ACL that never had one,
+	// so the schema never converges. The same view also hides rows from anyone
+	// who is neither the grantor nor a member of the grantee, which leaves a
+	// non-superuser connection seeing no privileges at all.
+	//
+	// relkind and privilege_type keep the coverage the view had ('r', 'v', 'f',
+	// 'p' and the seven SQL-standard privileges) plus the materialized views
+	// added in #1376, so MAINTAIN (PostgreSQL 17+) is not read as an extra
+	// privilege to revoke.
 	const query = `
 		WITH relation_privileges AS (
-			SELECT table_schema, table_name, grantee, is_grantable, privilege_type
-			FROM information_schema.table_privileges
-			UNION ALL
-			SELECT n.nspname, c.relname,
-				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END,
-				CASE WHEN acl.is_grantable THEN 'YES' ELSE 'NO' END,
+			SELECT
+				n.nspname AS table_schema,
+				c.relname AS table_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				CASE WHEN acl.is_grantable THEN 'YES' ELSE 'NO' END AS is_grantable,
 				acl.privilege_type
 			FROM pg_class c
 			JOIN pg_namespace n ON n.oid = c.relnamespace,
 			LATERAL aclexplode(c.relacl) AS acl
-			WHERE c.relkind = 'm'
+			WHERE c.relkind IN ('r', 'v', 'f', 'p', 'm')
+			AND acl.grantee <> c.relowner
+			AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
 		)
 		SELECT
 			table_schema, table_name,
@@ -2209,11 +2227,6 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		FROM relation_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
 		AND ($2::text[] IS NULL OR grantee = ANY($2::text[]))
-		AND grantee != (
-			SELECT pg_get_userbyid(c.relowner)
-			FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-			WHERE n.nspname = table_schema AND c.relname = table_name
-		)
 		GROUP BY table_schema, table_name, grantee, is_grantable
 		ORDER BY table_schema, table_name, grantee, is_grantable
 	`
