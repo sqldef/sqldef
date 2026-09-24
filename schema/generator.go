@@ -4634,6 +4634,23 @@ func (g *Generator) claimPrivilegeChanges(action string, desired *GrantPrivilege
 	return claimed
 }
 
+// desiredWithGrantOption reports whether any desired GRANT gives the grantee
+// the privilege on the object WITH GRANT OPTION. PostgreSQL keeps the grant
+// option when the same privilege is also granted without it, so such a GRANT
+// decides the desired state even if another desired GRANT omits the option.
+func (g *Generator) desiredWithGrantOption(desired *GrantPrivilege, grantee string, priv string) bool {
+	for _, other := range g.desiredPrivileges {
+		if other.withGrantOption &&
+			g.qualifiedNamesEqual(other.tableName, desired.tableName) &&
+			other.objectType == desired.objectType &&
+			slices.Contains(other.grantees, grantee) &&
+			slices.Contains(normalizePrivilegesForComparison(other.privileges, other.objectType), priv) {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
 	// Grantees should already be filtered by FilterPrivileges
 	// If multiple grantees made it here, they all have the same privileges to grant
@@ -4684,7 +4701,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		// the desired grant option state in the current schema.
 		grantOptionMatches := true
 		for _, priv := range desiredNormalized {
-			if existingGrantableMap[priv] != desired.withGrantOption {
+			if existingGrantableMap[priv] != g.desiredWithGrantOption(desired, grantee, priv) {
 				grantOptionMatches = false
 				break
 			}
@@ -4748,7 +4765,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			if !desired.withGrantOption {
 				var toRevokeOption []string
 				for _, priv := range desiredNormalized {
-					if existingGrantableMap[priv] {
+					if existingGrantableMap[priv] && !g.desiredWithGrantOption(desired, grantee, priv) {
 						toRevokeOption = append(toRevokeOption, priv)
 					}
 				}
@@ -4759,12 +4776,15 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 				}
 			}
 		} else {
-			privilegesToGrant = desiredNormalized
+			privilegesToGrant = slices.Clone(desiredNormalized)
 		}
-
-		grantAction := "GRANT"
-		if desired.withGrantOption {
-			grantAction = "GRANT WITH GRANT OPTION"
+		grantAction := "GRANT WITH GRANT OPTION"
+		if !desired.withGrantOption {
+			grantAction = "GRANT"
+			// The desired GRANT ... WITH GRANT OPTION for the same privilege grants it.
+			privilegesToGrant = slices.DeleteFunc(privilegesToGrant, func(priv string) bool {
+				return g.desiredWithGrantOption(desired, grantee, priv)
+			})
 		}
 		privilegesToGrant = g.claimPrivilegeChanges(grantAction, desired, grantee, privilegesToGrant)
 		if len(privilegesToGrant) > 0 {
