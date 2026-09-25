@@ -5209,6 +5209,14 @@ charset_opt:
   {
     $$ = $3
   }
+| CHARSET ID
+  {
+    $$ = $2.Name
+  }
+| CHARSET BINARY
+  {
+    $$ = $2
+  }
 
 collate_opt:
   /* empty */ %prec LOWER_THAN_COLLATE

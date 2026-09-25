@@ -706,3 +706,12 @@ ViewWithJoinIdempotency:
       FROM purchase_orders po
       LEFT JOIN projects sp ON sp.id = po.project_id
       WHERE po.status IN ('ordered', 'received');
+ViewWithCastAsChar:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int
+    );
+    CREATE VIEW user_num_texts AS SELECT CAST(num AS CHAR) AS num_text FROM users;
