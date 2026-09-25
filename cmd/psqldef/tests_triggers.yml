@@ -946,3 +946,118 @@ CreateConstraintTriggerExecuteProcedure:
     DROP TRIGGER ensure_processed ON public.events;
     DROP TABLE public.events;
     DROP FUNCTION public.assert_processed;
+
+CreateConstraintTriggerWithWhen:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER UPDATE ON events
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW WHEN (NEW.processed IS DISTINCT FROM OLD.processed)
+      EXECUTE FUNCTION assert_processed();
+  up: |
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE CONSTRAINT TRIGGER ensure_processed after update ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.processed is distinct from OLD.processed) EXECUTE FUNCTION assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.assert_processed;
+
+CreateConstraintTriggerWithWhenExecuteProcedure:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER UPDATE ON events
+      FOR EACH ROW WHEN (NEW.processed IS DISTINCT FROM OLD.processed)
+      EXECUTE PROCEDURE assert_processed();
+  up: |
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE CONSTRAINT TRIGGER ensure_processed after update ON public.events NOT DEFERRABLE FOR EACH ROW WHEN (NEW.processed is distinct from OLD.processed) EXECUTE PROCEDURE assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.assert_processed;
+
+ModifyConstraintTriggerWhenCondition:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER UPDATE ON events
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW EXECUTE FUNCTION assert_processed();
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      processed boolean
+    );
+    CREATE FUNCTION assert_processed()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE CONSTRAINT TRIGGER ensure_processed
+      AFTER UPDATE ON events
+      DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW WHEN (NEW.processed IS DISTINCT FROM OLD.processed)
+      EXECUTE FUNCTION assert_processed();
+  up: |
+    DROP TRIGGER ensure_processed ON public.events;
+    CREATE CONSTRAINT TRIGGER ensure_processed after update ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.processed is distinct from OLD.processed) EXECUTE FUNCTION assert_processed();
+  down: |
+    DROP TRIGGER ensure_processed ON public.events;
+    CREATE CONSTRAINT TRIGGER ensure_processed after update ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION assert_processed();

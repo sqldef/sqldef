@@ -1331,13 +1331,13 @@ create_statement:
     }
   }
 /*
- * For PostgreSQL: CREATE CONSTRAINT TRIGGER ... FOR EACH ROW EXECUTE FUNCTION/PROCEDURE
- * Constraint triggers are always AFTER + FOR EACH ROW and never take a WHEN clause or the
- * MySQL-style forms above, so this only extends the FOR EACH ROW EXECUTE FUNCTION/PROCEDURE
- * productions. The optional "FROM referenced_table_name" clause isn't supported yet.
+ * For PostgreSQL: CREATE CONSTRAINT TRIGGER ... FOR EACH ROW [WHEN (...)] EXECUTE FUNCTION/PROCEDURE
+ * PostgreSQL requires FOR EACH ROW for constraint triggers.
+ * The optional "FROM referenced_table_name" clause isn't supported yet.
  */
-| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW when_expression_opt EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
   {
+    constraintOpts := $9
     $$ = &DDL{
       Action: CreateTrigger,
       Trigger: &Trigger{
@@ -1346,20 +1346,22 @@ create_statement:
         Time: $5,
         Event: $6,
         ForEach: "ROW",
+        When: $13,
         Constraint: true,
-        ConstraintOptions: &$9,
+        ConstraintOptions: &constraintOpts,
         Body: []Statement{
           &TriggerFuncExec{
             Keyword: "FUNCTION",
-            FuncName: $15,
-            Args: SelectExprsToExprs($17),
+            FuncName: $16,
+            Args: SelectExprsToExprs($18),
           },
         },
       },
     }
   }
-| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW when_expression_opt EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
   {
+    constraintOpts := $9
     $$ = &DDL{
       Action: CreateTrigger,
       Trigger: &Trigger{
@@ -1368,13 +1370,14 @@ create_statement:
         Time: $5,
         Event: $6,
         ForEach: "ROW",
+        When: $13,
         Constraint: true,
-        ConstraintOptions: &$9,
+        ConstraintOptions: &constraintOpts,
         Body: []Statement{
           &TriggerFuncExec{
             Keyword: "PROCEDURE",
-            FuncName: $15,
-            Args: SelectExprsToExprs($17),
+            FuncName: $16,
+            Args: SelectExprsToExprs($18),
           },
         },
       },
