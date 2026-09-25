@@ -1491,13 +1491,15 @@ type TriggerEvent struct {
 }
 
 type Trigger struct {
-	Name      *ColName
-	TableName TableName
-	Time      string
-	Event     []TriggerEvent
-	ForEach   string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
-	When      Expr
-	Body      []Statement
+	Name              *ColName
+	TableName         TableName
+	Time              string
+	Event             []TriggerEvent
+	ForEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
+	When              Expr
+	Body              []Statement
+	Constraint        bool               // true for PostgreSQL's CREATE CONSTRAINT TRIGGER
+	ConstraintOptions *ConstraintOptions // Deferrable/InitiallyDeferred; nil unless Constraint is true
 }
 
 // Event represents a MySQL CREATE EVENT statement.
