@@ -1084,35 +1084,57 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 }
 
 func TestIsDropStatement(t *testing.T) {
+	const (
+		mysql    = GeneratorModeMysql
+		postgres = GeneratorModePostgres
+		mssql    = GeneratorModeMssql
+		sqlite3  = GeneratorModeSQLite3
+	)
+
 	// Destructive statements are detected by their leading keyword.
-	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`))
-	assert.True(t, isDropStatement("DROP FUNCTION public.add_one"))
-	assert.True(t, isDropStatement("DROP EVENT `cleanup`"))
-	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`))
+	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`, postgres))
+	assert.True(t, isDropStatement("DROP FUNCTION public.add_one", postgres))
+	assert.True(t, isDropStatement("DROP EVENT `cleanup`", mysql))
+	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`, postgres))
 
 	// Destructive clauses embedded in ALTER TABLE are detected.
-	assert.True(t, isDropStatement(`ALTER TABLE "public"."users" DROP COLUMN "name"`))
-	assert.True(t, isDropStatement("ALTER TABLE `users` DROP INDEX `idx_name`"))
-	assert.True(t, isDropStatement("ALTER TABLE `logs` DROP PARTITION p2024"))
-	assert.True(t, isDropStatement(`ALTER TABLE public.users DISABLE ROW LEVEL SECURITY`))
-	assert.True(t, isDropStatement(`ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY`))
+	assert.True(t, isDropStatement(`ALTER TABLE "public"."users" DROP COLUMN "name"`, postgres))
+	assert.True(t, isDropStatement("ALTER TABLE `users` DROP INDEX `idx_name`", mysql))
+	assert.True(t, isDropStatement("ALTER TABLE `logs` DROP PARTITION p2024", mysql))
+	assert.True(t, isDropStatement(`ALTER TABLE public.users DISABLE ROW LEVEL SECURITY`, postgres))
+	assert.True(t, isDropStatement(`ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY`, postgres))
+	assert.True(t, isDropStatement(`ALTER TABLE [dbo].[users] DROP COLUMN [name]`, mssql))
+	assert.True(t, isDropStatement(`ALTER TABLE "users" DROP COLUMN "name"`, sqlite3))
+	assert.True(t, isDropStatement("ALTER TABLE `users` DROP COLUMN `name`, ALGORITHM=INPLACE, LOCK=NONE", mysql))
+	assert.True(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `a` int COMMENT 'DROP COLUMN', DROP COLUMN `name`", mysql))
 
 	// Non-destructive ALTER clauses stay allowed (needed for non-destructive
 	// schema changes).
-	assert.False(t, isDropStatement(`ALTER TABLE users DROP CONSTRAINT users_check`))
-	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c DROP DEFAULT`))
-	assert.False(t, isDropStatement("ALTER TABLE `users` DROP FOREIGN KEY `fk_users`"))
+	assert.False(t, isDropStatement(`ALTER TABLE users DROP CONSTRAINT users_check`, postgres))
+	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c DROP DEFAULT`, postgres))
+	assert.False(t, isDropStatement("ALTER TABLE `users` DROP FOREIGN KEY `fk_users`", mysql))
 
 	// Additive statements are never destructive, even when their payload
 	// mentions destructive keywords (function bodies, comment text, literals).
-	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"))
-	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"))
-	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`))
-	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`))
-	assert.False(t, isDropStatement(`ALTER TABLE audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')`))
-	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c SET DEFAULT 'DROP TABLE'`))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'"))
-	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
+	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;", postgres))
+	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;", postgres))
+	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`, postgres))
+	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`, postgres))
+	assert.False(t, isDropStatement(`ALTER TABLE audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')`, postgres))
+	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c SET DEFAULT 'DROP TABLE'`, postgres))
+	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'", mysql))
+	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nALTER TABLE logs DROP PARTITION p2024", mysql))
+	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;", postgres))
+
+	// ALTER TABLE clauses are matched on tokens, so a string literal or a
+	// quoted identifier that spells a destructive clause is not one.
+	assert.False(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `a` int COMMENT 'x DROP COLUMN y' AFTER `id`", mysql))
+	assert.False(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `a` varchar(20) DEFAULT 'it\\'s DROP INDEX i' AFTER `id`", mysql))
+	assert.False(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `x DROP COLUMN y` int AFTER `id`", mysql))
+	assert.False(t, isDropStatement(`ALTER TABLE "public"."users" ADD COLUMN "a" text DEFAULT 'x DROP COLUMN y'`, postgres))
+	assert.False(t, isDropStatement(`ALTER TABLE "public"."users" ADD CONSTRAINT "c" CHECK (a <> 'DISABLE ROW LEVEL SECURITY')`, postgres))
+	assert.False(t, isDropStatement(`ALTER TABLE [dbo].[users] ADD [a] varchar(20) DEFAULT 'x DROP COLUMN y'`, mssql))
+	assert.False(t, isDropStatement(`ALTER TABLE "users" ADD COLUMN "a" text DEFAULT 'x DROP PARTITION y'`, sqlite3))
 }
 
 func TestCommentOutDropStatements(t *testing.T) {
@@ -1123,35 +1145,35 @@ func TestCommentOutDropStatements(t *testing.T) {
 	// Single-line drops keep the existing format.
 	assert.Equal(t,
 		[]string{`-- Skipped: DROP TABLE "public"."users"`},
-		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none),
+		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none, GeneratorModePostgres),
 	)
 	// Non-drop statements pass through unchanged.
 	assert.Equal(t,
 		[]string{"CREATE TABLE users (id bigint)"},
-		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none),
+		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none, GeneratorModePostgres),
 	)
 	// manage.privilege keeps REVOKE statements executable (revoke gating is
 	// already decided per grantee at emission time).
 	assert.Equal(t,
 		[]string{`REVOKE SELECT ON TABLE users FROM app_user`},
-		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges),
+		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges, GeneratorModePostgres),
 	)
 	// manage.function keeps DROP FUNCTION executable (drop gating is already
 	// decided per function; a forbidden one already carries "-- Skipped: ").
 	assert.Equal(t,
 		[]string{`DROP FUNCTION "public"."managed_fn"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions),
+		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions, GeneratorModePostgres),
 	)
 	// Without manage.function, DROP FUNCTION is still gated by enable_drop.
 	assert.Equal(t,
 		[]string{`-- Skipped: DROP FUNCTION "public"."f"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none),
+		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none, GeneratorModePostgres),
 	)
 	// Every line of a multi-line statement is commented out so no executable
 	// SQL can leak after the first line.
 	assert.Equal(t,
 		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
-		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none),
+		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none, GeneratorModePostgres),
 	)
 }
 

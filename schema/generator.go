@@ -887,7 +887,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// manage.privilege / manage.function, per-object gating is already decided
 	// at emission time, so those statements are left alone here.
 	if !g.config.EnableDrop {
-		ddls = commentOutDropStatements(ddls, g.config)
+		ddls = commentOutDropStatements(ddls, g.config, g.mode)
 	}
 
 	return ddls, nil
@@ -902,7 +902,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 // object whether the destructive statement is allowed at emission time —
 // forbidden ones already carry the "-- Skipped: " prefix — so those statement
 // kinds are preserved here rather than being re-gated by the global enable_drop.
-func commentOutDropStatements(ddls []string, config database.GeneratorConfig) []string {
+func commentOutDropStatements(ddls []string, config database.GeneratorConfig, mode GeneratorMode) []string {
 	preserveRevokes := config.ManagePrivileges != nil
 	preserveFunctionDrops := config.ManageFunctions != nil
 	result := make([]string, len(ddls))
@@ -915,7 +915,7 @@ func commentOutDropStatements(ddls []string, config database.GeneratorConfig) []
 			result[i] = ddl
 			continue
 		}
-		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
+		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl, mode) {
 			result[i] = skippedStatement(ddl)
 		} else {
 			result[i] = ddl
@@ -937,22 +937,40 @@ func skippedStatement(ddl string) string {
 // text would misfire on additive statements whose payload merely mentions a
 // destructive word: a function body inspecting tg_tag (e.g. AWS DMS's
 // awsdms_intercept_ddl event trigger function), a comment text, or a string
-// literal in a CHECK/DEFAULT clause.
+// literal in a CHECK/DEFAULT/COMMENT clause. So the ALTER TABLE clauses are
+// matched on the tokens of the statement, where a string literal or a quoted
+// identifier is a single token that never equals a keyword.
 // Note: ALTER TABLE ... DROP CONSTRAINT/CHECK/DEFAULT/FOREIGN KEY/PRIMARY KEY
 // are NOT treated as destructive because they are required for non-destructive
 // schema changes (e.g., changing defaults or recreating constraints).
-func isDropStatement(ddl string) bool {
+func isDropStatement(ddl string, mode GeneratorMode) bool {
 	if strings.HasPrefix(ddl, "DROP ") || strings.HasPrefix(ddl, "REVOKE ") {
 		return true
 	}
-	if strings.HasPrefix(ddl, "ALTER ") {
-		return strings.Contains(ddl, " DROP COLUMN ") ||
-			strings.Contains(ddl, " DROP INDEX ") ||
-			strings.Contains(ddl, " DROP PARTITION ") ||
-			strings.Contains(ddl, " DISABLE ROW LEVEL SECURITY") ||
-			strings.Contains(ddl, " NO FORCE ROW LEVEL SECURITY")
+	if !strings.HasPrefix(ddl, "ALTER TABLE ") {
+		return false
+	}
+	var tokens []int
+	tokenizer := parser.NewTokenizer(ddl, generatorModeToParserMode(mode))
+	for tok, _ := tokenizer.Scan(); tok != 0; tok, _ = tokenizer.Scan() {
+		tokens = append(tokens, tok)
+	}
+	for _, clause := range destructiveAlterTableClauses {
+		for i := range tokens {
+			if slices.Equal(tokens[i:min(i+len(clause), len(tokens))], clause) {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+var destructiveAlterTableClauses = [][]int{
+	{parser.DROP, parser.COLUMN},
+	{parser.DROP, parser.INDEX},
+	{parser.DROP, parser.PARTITION},
+	{parser.DISABLE, parser.ROW, parser.LEVEL, parser.SECURITY},
+	{parser.NO, parser.FORCE, parser.ROW, parser.LEVEL, parser.SECURITY},
 }
 
 // alterTablePrefix returns "ALTER TABLE <escaped-table-name> ", the prefix the
@@ -1011,7 +1029,7 @@ func (b *alterBundler) emit(table *Table, stmt string) string {
 	// not the action: the action starts with "DROP " for every destructive
 	// clause, which would also catch the ones isDropStatement deliberately
 	// allows (DROP FOREIGN KEY and friends).
-	if !b.g.config.EnableDrop && isDropStatement(stmt) {
+	if !b.g.config.EnableDrop && isDropStatement(stmt, b.g.mode) {
 		return stmt
 	}
 	if bundle := b.byTable[prefix]; bundle != nil {
@@ -4110,7 +4128,8 @@ func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index)
 // object that was never recreated. A drop that enable_drop does not gate, such as ALTER TABLE
 // DROP CONSTRAINT, is unaffected.
 func (g *Generator) appendRecreate(ddls []string, statements ...string) ([]string, bool) {
-	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDropStatement) {
+	isDrop := func(statement string) bool { return isDropStatement(statement, g.mode) }
+	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDrop) {
 		return append(ddls, statements...), true
 	}
 	for _, statement := range statements {
