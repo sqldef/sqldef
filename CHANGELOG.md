@@ -1,3 +1,29 @@
+## [v3.11.24](https://github.com/sqldef/sqldef/compare/v3.11.23...v3.11.24) - 2026-09-25
+
+- psqldef: cover the NOT expression normalization paths #1342 left untested by @moznion in https://github.com/sqldef/sqldef/pull/1363
+- psqldef: fix ownership diffs and view recreation by @gfx in https://github.com/sqldef/sqldef/pull/1376
+- parser: accept 15 SQL Server keywords as identifiers by @178inaba in https://github.com/sqldef/sqldef/pull/1373
+- mysqldef: preserve parentheses around literal DEFAULT values by @zaneli in https://github.com/sqldef/sqldef/pull/1361
+- psqldef: stop revoking privileges on a view that is being dropped by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1379
+- psqldef: read table privileges from the ACL, not information_schema by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1380
+- psqldef: preserve time zone modifier in timestamp/time cast targets by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1339
+- psqldef: apply `--skip-extension` to all schema inputs by @asfrgrtgd in https://github.com/sqldef/sqldef/pull/1338
+- mysqldef: stop bulk_alter from skipping non-destructive actions by @178inaba in https://github.com/sqldef/sqldef/pull/1377
+- psqldef: keep IN in generated CHECK DDL and converge OR chains on ENUM columns by @178inaba in https://github.com/sqldef/sqldef/pull/1369
+- psqldef: accept stream as an identifier by removing the dead STREAM token by @dim0627 in https://github.com/sqldef/sqldef/pull/1371
+- psqldef: diff split desired GRANTs for the same object/grantee once by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1341
+- psqldef: resolve an index collation before comparing it by @moznion in https://github.com/sqldef/sqldef/pull/1382
+- psqldef: stop emitting COMMENT ... IS NULL for a view that is being dropped by @moznion in https://github.com/sqldef/sqldef/pull/1383
+- psqldef: collapse privileges granted by multiple grantors by @moznion in https://github.com/sqldef/sqldef/pull/1384
+- psqldef: detect cast type changes on non-literal DEFAULT expressions by @moznion in https://github.com/sqldef/sqldef/pull/1385
+- psqldef: emit each privilege change once per grantee by @moznion in https://github.com/sqldef/sqldef/pull/1386
+- psqldef: keep the grant option granted by any desired GRANT by @moznion in https://github.com/sqldef/sqldef/pull/1387
+- psqldef: diff a renamed table's privileges under its new name by @moznion in https://github.com/sqldef/sqldef/pull/1362
+- psqldef: support CREATE CONSTRAINT TRIGGER (deferrable triggers) by @ceftx in https://github.com/sqldef/sqldef/pull/1333
+- mysqldef: parse CHARSET in CAST AS CHAR and ignore its implicit charset in DEFAULT comparison by @zaneli in https://github.com/sqldef/sqldef/pull/1381
+- psqldef: keep privileges structured instead of re-parsing their SQL by @moznion in https://github.com/sqldef/sqldef/pull/1365
+- psqldef: accept WHEN on CREATE CONSTRAINT TRIGGER by @moznion in https://github.com/sqldef/sqldef/pull/1388
+
 ## [v3.11.23](https://github.com/sqldef/sqldef/compare/v3.11.22...v3.11.23) - 2026-09-17
 
 - parser: drop the never-reduced duplicate rule in function_call_generic by @178inaba in https://github.com/sqldef/sqldef/pull/1356
