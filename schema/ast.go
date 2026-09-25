@@ -422,14 +422,16 @@ type TriggerEvent struct {
 }
 
 type Trigger struct {
-	statement     string
-	name          QualifiedName
-	tableName     QualifiedName
-	time          string
-	event         []TriggerEvent
-	forEach       string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
-	whenCondition string
-	body          []string
+	statement         string
+	name              QualifiedName
+	tableName         QualifiedName
+	time              string
+	event             []TriggerEvent
+	forEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
+	whenCondition     string
+	body              []string
+	constraint        bool // true for PostgreSQL's CREATE CONSTRAINT TRIGGER
+	constraintOptions *ConstraintOptions
 }
 
 // Event represents a MySQL scheduled event for schema comparison and DDL generation.

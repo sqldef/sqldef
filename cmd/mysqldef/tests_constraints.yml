@@ -365,3 +365,12 @@ TableWithCommentAndDefaults:
       `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       `deleted_at` datetime DEFAULT null
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
+CheckConstraintWithCastAsChar:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name varchar(20),
+      CONSTRAINT users_name_check CHECK (CAST(name AS CHAR) <> 'x')
+    );
+  min_version: '8.0.16'

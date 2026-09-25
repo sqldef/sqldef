@@ -517,6 +517,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <boolVal> variadic_opt
 %type <str> with_data_opt
 %type <constraintOpts> deferrable_option
+%type <constraintOpts> trigger_deferrable_opt
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
@@ -1324,6 +1325,56 @@ create_statement:
             Keyword: "PROCEDURE",
             FuncName: $13,
             Args: SelectExprsToExprs($15),
+          },
+        },
+      },
+    }
+  }
+/*
+ * For PostgreSQL: CREATE CONSTRAINT TRIGGER ... FOR EACH ROW EXECUTE FUNCTION/PROCEDURE
+ * Constraint triggers are always AFTER + FOR EACH ROW and never take a WHEN clause or the
+ * MySQL-style forms above, so this only extends the FOR EACH ROW EXECUTE FUNCTION/PROCEDURE
+ * productions. The optional "FROM referenced_table_name" clause isn't supported yet.
+ */
+| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $4},
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        ForEach: "ROW",
+        Constraint: true,
+        ConstraintOptions: &$9,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $15,
+            Args: SelectExprsToExprs($17),
+          },
+        },
+      },
+    }
+  }
+| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $4},
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        ForEach: "ROW",
+        Constraint: true,
+        ConstraintOptions: &$9,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $15,
+            Args: SelectExprsToExprs($17),
           },
         },
       },
@@ -5123,6 +5174,14 @@ charset_opt:
   {
     $$ = $3
   }
+| CHARSET ID
+  {
+    $$ = $2.Name
+  }
+| CHARSET BINARY
+  {
+    $$ = $2
+  }
 
 collate_opt:
   /* empty */ %prec LOWER_THAN_COLLATE
@@ -5789,6 +5848,18 @@ deferrable_option:
   {
     // Per PostgreSQL, INITIALLY DEFERRED implies DEFERRABLE, INITIALLY IMMEDIATE implies NOT DEFERRABLE
     $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: bool(*$1)}
+  }
+
+// CREATE CONSTRAINT TRIGGER's deferrable clause, unlike a table constraint's, is optional
+// (defaults to NOT DEFERRABLE when omitted).
+trigger_deferrable_opt:
+  /* empty */
+  {
+    $$ = ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+  }
+| deferrable_option
+  {
+    $$ = $1
   }
 
 fk_defer_opts:

@@ -2663,7 +2663,22 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		if desiredTrigger.whenCondition != "" {
 			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
 		}
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH %s %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
+		triggerKeyword := "TRIGGER"
+		deferrableClause := ""
+		if desiredTrigger.constraint {
+			// CONSTRAINT TRIGGER never takes a WHEN clause; whenClause stays empty for it.
+			// Always emit an explicit DEFERRABLE/NOT DEFERRABLE rather than omitting it: an
+			// omitted clause defaults to NOT DEFERRABLE, but being explicit here keeps this
+			// idempotent against a schema.sql that always states it out (e.g. pg_get_triggerdef()'s
+			// own output, which --export produces).
+			triggerKeyword = "CONSTRAINT TRIGGER"
+			if desiredTrigger.constraintOptions != nil && desiredTrigger.constraintOptions.deferrable {
+				deferrableClause = strings.TrimPrefix(g.generateConstraintOptions(desiredTrigger.constraintOptions), " ") + " "
+			} else {
+				deferrableClause = "NOT DEFERRABLE "
+			}
+		}
+		triggerDefinition += fmt.Sprintf("%s %s %s %s ON %s %sFOR EACH %s %s%s", triggerKeyword, g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), deferrableClause, normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -5914,9 +5929,16 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 	if generatedA == nil || generatedB == nil {
 		return false
 	}
+	if generatedA.generatedType != generatedB.generatedType {
+		return false
+	}
+	// MySQL rewrites generated expressions (e.g. adds the implicit charset to CAST AS CHAR), so compare
+	// the normalized ASTs. Like CHECK, compare case-sensitively to detect case changes in string literals.
+	if g.mode == GeneratorModeMysql && g.areSameCheckExprs(generatedA.exprAST, generatedB.exprAST) {
+		return true
+	}
 	// TODO: Difference between bracketed and unbracketed, as Expr values are not fully comparable.
-	return (generatedA.expr == generatedB.expr || generatedA.expr == "("+generatedB.expr+")") &&
-		generatedA.generatedType == generatedB.generatedType
+	return generatedA.expr == generatedB.expr || generatedA.expr == "("+generatedB.expr+")"
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
@@ -6030,16 +6052,21 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		return false
 	}
 
-	normalizedA := normalizeCheckExpr(checkA.definition, g.mode)
-	normalizedB := normalizeCheckExpr(checkB.definition, g.mode)
+	return g.areSameCheckExprs(checkA.definition, checkB.definition) &&
+		checkA.notForReplication == checkB.notForReplication &&
+		checkA.noInherit == checkB.noInherit
+}
+
+// areSameCheckExprs compares two expressions with the CHECK constraint normalization, case-sensitively.
+func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
+	normalizedA := normalizeCheckExpr(exprA, g.mode)
+	normalizedB := normalizeCheckExpr(exprB, g.mode)
 
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
-	return parser.String(normalizedA) == parser.String(normalizedB) &&
-		checkA.notForReplication == checkB.notForReplication &&
-		checkA.noInherit == checkB.noInherit
+	return parser.String(normalizedA) == parser.String(normalizedB)
 }
 
 // unwrapOutermostParenExpr removes the outermost ParenExpr if the expression is wrapped in one.
@@ -6430,6 +6457,24 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	// Compare table names using quote-aware comparison
 	if !g.qualifiedNamesEqual(triggerA.tableName, triggerB.tableName) {
 		return false
+	}
+	if triggerA.constraint != triggerB.constraint {
+		return false
+	}
+	if triggerA.constraint {
+		// Treat nil as equivalent to &ConstraintOptions{false, false} (NOT DEFERRABLE),
+		// same convention as areSameForeignKeys for table constraints.
+		da, ia := false, false
+		if triggerA.constraintOptions != nil {
+			da, ia = triggerA.constraintOptions.deferrable, triggerA.constraintOptions.initiallyDeferred
+		}
+		db, ib := false, false
+		if triggerB.constraintOptions != nil {
+			db, ib = triggerB.constraintOptions.deferrable, triggerB.constraintOptions.initiallyDeferred
+		}
+		if da != db || ia != ib {
+			return false
+		}
 	}
 	// Compare WHEN conditions
 	// Normalize: lowercase, remove spaces, strip matching outer parentheses
