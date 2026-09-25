@@ -1308,8 +1308,8 @@ type Schema struct {
 }
 
 type Grant struct {
-	IsGrant         bool     // true for GRANT, false for REVOKE
-	Privileges      []string // e.g., ["SELECT", "INSERT", "UPDATE"]
+	IsGrant         bool        // true for GRANT, false for REVOKE
+	Privileges      []Privilege // e.g., ["SELECT", "INSERT", "UPDATE"]
 	TableName       TableName
 	Grantees        []string
 	ObjectType      string // "" or "TABLE" for tables, "SEQUENCE" for sequences
@@ -3249,13 +3249,33 @@ func NewIdent(name string, quoted bool) Ident {
 	return Ident{Name: name, Quoted: quoted}
 }
 
-// FormatColumnPrivilege builds the canonical string form of a column-level
-// privilege, e.g. `SELECT (col_a, "Col-B")`. The privilege keyword is
-// uppercased and column names are sorted so that the same privilege always
-// compares equal regardless of declaration order.
-func FormatColumnPrivilege(priv string, cols []Ident) string {
-	names := make([]string, len(cols))
-	for i, col := range cols {
+// Privilege is a single privilege of a GRANT or REVOKE statement. Columns is
+// empty for a table-level privilege such as `SELECT`, and holds the column list
+// of a column-level one such as `SELECT (col_a, "Col-B")`.
+//
+// The structured form is what schema comparison works on: a privilege is never
+// parsed back out of its SQL spelling, so String is the only place that knows
+// how the spelling is built.
+type Privilege struct {
+	Name    string // privilege keyword, uppercased by NewPrivilege
+	Columns []Ident
+}
+
+// NewPrivilege creates a Privilege, uppercasing the keyword so that privileges
+// parsed from differently-cased SQL compare equal.
+func NewPrivilege(name string, cols []Ident) Privilege {
+	return Privilege{Name: strings.ToUpper(name), Columns: cols}
+}
+
+// String builds the canonical SQL form of the privilege. Column names are
+// sorted so that the same privilege always compares equal regardless of
+// declaration order.
+func (p Privilege) String() string {
+	if len(p.Columns) == 0 {
+		return p.Name
+	}
+	names := make([]string, len(p.Columns))
+	for i, col := range p.Columns {
 		name := col.Name
 		// Quote only when necessary: a quoted simple lowercase identifier is
 		// semantically identical to its unquoted form in PostgreSQL, so both
@@ -3266,7 +3286,7 @@ func FormatColumnPrivilege(priv string, cols []Ident) string {
 		names[i] = name
 	}
 	sort.Strings(names)
-	return strings.ToUpper(priv) + " (" + strings.Join(names, ", ") + ")"
+	return p.Name + " (" + strings.Join(names, ", ") + ")"
 }
 
 // isSimpleLowerIdent reports whether name can appear unquoted in DDL output.

@@ -1614,26 +1614,84 @@ func TestRenamePrivilegeColumn(t *testing.T) {
 	g := &Generator{mode: GeneratorModePostgres}
 
 	tests := []struct {
-		privilege string
+		privilege Privilege
 		oldColumn Ident
 		newColumn Ident
 		expected  string
 	}{
-		{"SELECT (id, secret)", Ident{Name: "secret"}, Ident{Name: "secret_v2"}, "SELECT (id, secret_v2)"},
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: "id"}, {Name: "secret"}}),
+			Ident{Name: "secret"}, Ident{Name: "secret_v2"},
+			"SELECT (id, secret_v2)",
+		},
 		// The column list is re-sorted, and a name is quoted only where it has to be
-		{"SELECT (id, secret)", Ident{Name: "id"}, Ident{Name: "Key"}, `SELECT ("Key", secret)`},
-		// A quoted name may contain the separator and a doubled quote
-		{`UPDATE ("Odd, ""Name")`, Ident{Name: `Odd, "Name`, Quoted: true}, Ident{Name: "plain"}, "UPDATE (plain)"},
-		// A quoted name may begin or end with the space used as the separator padding
-		{`SELECT (" secret ", id)`, Ident{Name: " secret ", Quoted: true}, Ident{Name: "secret_v2"}, "SELECT (id, secret_v2)"},
-		// ... and it survives the rename of another column in the same list
-		{`SELECT (" secret ", id)`, Ident{Name: "id"}, Ident{Name: "id_v2"}, `SELECT (" secret ", id_v2)`},
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: "id"}, {Name: "secret"}}),
+			Ident{Name: "id"}, Ident{Name: "Key"},
+			`SELECT ("Key", secret)`,
+		},
+		// A quoted name is matched case-sensitively
+		{
+			parser.NewPrivilege("UPDATE", []Ident{{Name: "Odd, \"Name", Quoted: true}}),
+			Ident{Name: `Odd, "Name`, Quoted: true}, Ident{Name: "plain"},
+			"UPDATE (plain)",
+		},
+		// A column the rename does not touch keeps its exact name, whitespace
+		// and all, because the column list is never re-parsed out of the SQL
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: " secret ", Quoted: true}, {Name: "id"}}),
+			Ident{Name: "id"}, Ident{Name: "id_v2"},
+			`SELECT (" secret ", id_v2)`,
+		},
+		// A quoted name may begin or end with a space
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: " secret ", Quoted: true}, {Name: "id"}}),
+			Ident{Name: " secret ", Quoted: true}, Ident{Name: "secret_v2"},
+			"SELECT (id, secret_v2)",
+		},
 		// Privileges that are not column-level, or do not mention the column
-		{"SELECT", Ident{Name: "secret"}, Ident{Name: "secret_v2"}, "SELECT"},
-		{"SELECT (id)", Ident{Name: "secret"}, Ident{Name: "secret_v2"}, "SELECT (id)"},
+		{
+			parser.NewPrivilege("SELECT", nil),
+			Ident{Name: "secret"}, Ident{Name: "secret_v2"},
+			"SELECT",
+		},
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: "id"}}),
+			Ident{Name: "secret"}, Ident{Name: "secret_v2"},
+			"SELECT (id)",
+		},
 	}
 
 	for _, test := range tests {
-		assert.Equal(t, test.expected, g.renamePrivilegeColumn(test.privilege, test.oldColumn, test.newColumn))
+		assert.Equal(t, test.expected, g.renamePrivilegeColumn(test.privilege, test.oldColumn, test.newColumn).String())
 	}
+}
+
+func TestRenameColumnOfGrantOnMultipleTables(t *testing.T) {
+	current := `
+		CREATE TABLE t1 (id integer, a integer);
+		CREATE TABLE t2 (id integer, a integer);
+		GRANT SELECT (a) ON t1, t2 TO app_user;
+	`
+	desired := `
+		CREATE TABLE t1 (
+		  id integer,
+		  b integer -- @renamed from=a
+		);
+		CREATE TABLE t2 (id integer, a integer);
+		GRANT SELECT (b) ON t1 TO app_user;
+		GRANT SELECT (a) ON t2 TO app_user;
+	`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModePostgres,
+		database.NewParser(parser.ParserModePostgres),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false, ManagedRoles: []string{"app_user"}},
+		"public",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ALTER TABLE public.t1 RENAME COLUMN a TO b"}, ddls)
 }

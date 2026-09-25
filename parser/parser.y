@@ -48,6 +48,8 @@ func setDDL(yylex any, ddl *DDL) {
   str                      string
   ident                    Ident
   idents                   []Ident
+  privilege                Privilege
+  privileges               []Privilege
   strs                     []string
   selectExprs              SelectExprs
   selectExpr               SelectExpr
@@ -462,8 +464,10 @@ func setDDL(yylex any, ddl *DDL) {
 %type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <ident> reference_option match_type_opt
-%type <ident> sql_id_opt privilege grantee
-%type <idents> sql_id_list privilege_list grantee_list
+%type <ident> sql_id_opt grantee
+%type <idents> sql_id_list grantee_list
+%type <privilege> privilege
+%type <privileges> privilege_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -1605,10 +1609,7 @@ create_statement:
   }
 | GRANT privilege_list ON TABLE table_name_list TO grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1642,10 +1643,7 @@ create_statement:
   }
 | GRANT privilege_list ON TABLE table_name_list TO grantee_list WITH GRANT OPTION
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1681,10 +1679,7 @@ create_statement:
   }
 | GRANT privilege_list ON table_name_list TO grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -1718,10 +1713,7 @@ create_statement:
   }
 | GRANT privilege_list ON table_name_list TO grantee_list WITH GRANT OPTION
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -1757,10 +1749,7 @@ create_statement:
   }
 | GRANT privilege_list ON SEQUENCE table_name_list TO grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1796,10 +1785,7 @@ create_statement:
   }
 | GRANT privilege_list ON SEQUENCE table_name_list TO grantee_list WITH GRANT OPTION
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1837,10 +1823,7 @@ create_statement:
   }
 | REVOKE privilege_list ON SEQUENCE table_name_list FROM grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1876,10 +1859,7 @@ create_statement:
   }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1913,10 +1893,7 @@ create_statement:
   }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list CASCADE
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1952,10 +1929,7 @@ create_statement:
   }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list RESTRICT
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1991,10 +1965,7 @@ create_statement:
   }
 | REVOKE privilege_list ON table_name_list FROM grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -2028,10 +1999,7 @@ create_statement:
   }
 | REVOKE privilege_list ON table_name_list FROM grantee_list CASCADE
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -2067,10 +2035,7 @@ create_statement:
   }
 | REVOKE privilege_list ON table_name_list FROM grantee_list RESTRICT
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -5947,43 +5912,43 @@ sql_id_list:
 privilege:
   reserved_sql_id
   {
-    $$ = $1
+    $$ = NewPrivilege($1.Name, nil)
   }
 /* USAGE etc. map to UNUSED; accept them as privilege names (GRANT USAGE ON SEQUENCE) */
 | UNUSED
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 /* Column-level privilege: GRANT SELECT (col1, col2) ON TABLE ... */
 | reserved_sql_id '(' sql_id_list ')'
   {
-    $$ = NewIdent(FormatColumnPrivilege($1.Name, $3), false)
+    $$ = NewPrivilege($1.Name, $3)
   }
 | ALL
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 | ALL PRIVILEGES
   {
-    $$ = NewIdent("ALL", false)
+    $$ = NewPrivilege("ALL", nil)
   }
 | REFERENCES
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 | TRIGGER
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 | TRUNCATE
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 
 privilege_list:
   privilege
   {
-    $$ = []Ident{$1}
+    $$ = []Privilege{$1}
   }
 | privilege_list ',' privilege
   {
