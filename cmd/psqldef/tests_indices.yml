@@ -1585,3 +1585,35 @@ CreateIndexWithoutNameConcurrently:
     CREATE INDEX CONCURRENTLY ON public.t (a);
   down: |
     DROP INDEX public.t_a_idx;
+
+UnnamedIndexWhoseDefaultNameIsTaken:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int, b int);
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE INDEX t_a_idx ON t (b);
+    CREATE INDEX ON t (a);
+  up: |
+    CREATE INDEX t_a_idx ON public.t (b);
+    CREATE INDEX ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx;
+    DROP INDEX public.t_a_idx1;
+
+RenameTableKeepsUnnamedIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE INDEX ON t (a);
+  desired: |
+    CREATE TABLE u ( -- @renamed from=t
+      a int
+    );
+    CREATE INDEX ON u (a);
+  up: |
+    ALTER TABLE public.t RENAME TO u;
+  down: |
+    CREATE TABLE t (a int);
+    CREATE INDEX ON public.t (a);
+    DROP TABLE public.u;
