@@ -270,16 +270,16 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// These variables are used to control the output order of the DDL.
 	// `CREATE SCHEMA` should execute first, and DDLs that add indexes and foreign keys should execute last.
 	// Other DDLs are stored in interDDLs.
-	createExtensionDDLs := []string{}
-	createSchemaDDLs := []string{}
-	interDDLs := []string{}
-	indexDDLs := []string{}
-	indexCommentDDLs := []string{} // Comments on indexes must come after CREATE INDEX
-	foreignKeyDDLs := []string{}
-	exclusionDDLs := []string{}
-	viewDDLs := []string{}
-	ownerDDLs := []string{} // Owners must come after CREATE VIEW, which resets them
-	metadataDDLs := []string{}
+	createExtensionDDLs := []statement{}
+	createSchemaDDLs := []statement{}
+	interDDLs := []statement{}
+	indexDDLs := []statement{}
+	indexCommentDDLs := []statement{} // Comments on indexes must come after CREATE INDEX
+	foreignKeyDDLs := []statement{}
+	exclusionDDLs := []statement{}
+	viewDDLs := []statement{}
+	ownerDDLs := []statement{} // Owners must come after CREATE VIEW, which resets them
+	metadataDDLs := []statement{}
 
 	// bulkAlter fuses per-table ALTER TABLE actions when --bulk-alter is set (MySQL only).
 	bulkAlter := newAlterBundler(g, g.config.BulkAlter && g.mode == GeneratorModeMysql)
@@ -296,9 +296,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				}
 				for _, tableDDL := range tableDDLs {
 					if isAddConstraintForeignKey(tableDDL) {
-						foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
+						foreignKeyDDLs = append(foreignKeyDDLs, rawStatement(tableDDL))
 					} else if out := bulkAlter.emit(&desired.table, tableDDL); out != "" {
-						interDDLs = append(interDDLs, out)
+						interDDLs = append(interDDLs, rawStatement(out))
 					}
 				}
 				mergeTable(currentTable, desired.table, mergedIndexes)
@@ -310,7 +310,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 					if oldTable != nil {
 						// Found the old table, generate rename DDL
 						renameDDL := g.generateRenameTableDDL(oldTableName, desired.table.name)
-						interDDLs = append(interDDLs, renameDDL)
+						interDDLs = append(interDDLs, rawStatement(renameDDL))
 						// PostgreSQL automatically transfers comments when renaming tables
 						g.droppedTables[oldTableName.RawString()] = true
 						// Privileges are carried over to the new name as well, so from
@@ -327,22 +327,22 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						}
 						for _, tableDDL := range tableDDLs {
 							if isAddConstraintForeignKey(tableDDL) {
-								foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
+								foreignKeyDDLs = append(foreignKeyDDLs, rawStatement(tableDDL))
 							} else if out := bulkAlter.emit(&desired.table, tableDDL); out != "" {
-								interDDLs = append(interDDLs, out)
+								interDDLs = append(interDDLs, rawStatement(out))
 							}
 						}
 						mergeTable(oldTable, desired.table, mergedIndexes)
 					} else {
 						// Old table not found, create as new table
-						interDDLs = append(interDDLs, desired.statement)
+						interDDLs = append(interDDLs, rawStatement(desired.statement))
 						table := desired.table // copy table
 						g.currentTables = append(g.currentTables, &table)
 						g.claimCreatedTablePostgresIndexes(table)
 					}
 				} else {
 					// Table not found and no rename, create table.
-					interDDLs = append(interDDLs, desired.statement)
+					interDDLs = append(interDDLs, rawStatement(desired.statement))
 					table := desired.table // copy table
 					g.currentTables = append(g.currentTables, &table)
 					g.claimCreatedTablePostgresIndexes(table)
@@ -358,7 +358,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			currentPartition := g.findPartitionOfByName(g.currentPartitionOfs, desired.tableName)
 			if currentPartition == nil {
 				// Partition child table doesn't exist, create it
-				interDDLs = append(interDDLs, desired.statement)
+				interDDLs = append(interDDLs, rawStatement(desired.statement))
 				partitionOf := *desired // copy
 				g.currentPartitionOfs = append(g.currentPartitionOfs, &partitionOf)
 			}
@@ -368,13 +368,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			indexDDLs = append(indexDDLs, idxDDLs...)
+			indexDDLs = append(indexDDLs, rawStatements(idxDDLs)...)
 		case *AddIndex:
 			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
 			if err != nil {
 				return nil, err
 			}
-			indexDDLs = append(indexDDLs, idxDDLs...)
+			indexDDLs = append(indexDDLs, rawStatements(idxDDLs)...)
 		case *AddPrimaryKey:
 			// aggregateDDLsToSchema has already folded this into the desired table, and the
 			// primary key of a table is diffed there.
@@ -383,67 +383,67 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			foreignKeyDDLs = append(foreignKeyDDLs, fkeyDDLs...)
+			foreignKeyDDLs = append(foreignKeyDDLs, rawStatements(fkeyDDLs)...)
 		case *AddExclusion:
 			exDDLs, err := g.generateDDLsForAddExclusion(desired.tableName, desired.exclusion, "ALTER TABLE", ddl.Statement())
 			if err != nil {
 				return nil, err
 			}
-			exclusionDDLs = append(exclusionDDLs, exDDLs...)
+			exclusionDDLs = append(exclusionDDLs, rawStatements(exDDLs)...)
 		case *AddPolicy:
 			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "CREATE POLICY", ddl.Statement())
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, policyDDLs...)
+			interDDLs = append(interDDLs, rawStatements(policyDDLs)...)
 		case *SetTableOwner:
 			ddls, err := g.generateDDLsForSetTableOwner(desired)
 			if err != nil {
 				return nil, err
 			}
-			ownerDDLs = append(ownerDDLs, ddls...)
+			ownerDDLs = append(ownerDDLs, rawStatements(ddls)...)
 		case *SetRowLevelSecurity:
 			rlsDDLs, err := g.generateDDLsForSetRowLevelSecurity(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rlsDDLs...)
+			interDDLs = append(interDDLs, rawStatements(rlsDDLs)...)
 		case *View:
 			ddls, err := g.generateDDLsForCreateView(desired)
 			if err != nil {
 				return nil, err
 			}
-			viewDDLs = append(viewDDLs, ddls...)
+			viewDDLs = append(viewDDLs, rawStatements(ddls)...)
 		case *Trigger:
 			triggerDDLs, err := g.generateDDLsForCreateTrigger(desired.name, desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, triggerDDLs...)
+			interDDLs = append(interDDLs, rawStatements(triggerDDLs)...)
 		case *Event:
 			eventDDLs, err := g.generateDDLsForCreateEvent(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, eventDDLs...)
+			interDDLs = append(interDDLs, rawStatements(eventDDLs)...)
 		case *Function:
 			functionDDLs, err := g.generateDDLsForCreateFunction(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, functionDDLs...)
+			interDDLs = append(interDDLs, rawStatements(functionDDLs)...)
 		case *Type:
 			typeDDLs, err := g.generateDDLsForCreateType(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, typeDDLs...)
+			interDDLs = append(interDDLs, rawStatements(typeDDLs)...)
 		case *Domain:
 			domainDDLs, err := g.generateDDLsForCreateDomain(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, domainDDLs...)
+			interDDLs = append(interDDLs, rawStatements(domainDDLs)...)
 		case *Comment:
 			commentDDLs, err := g.generateDDLsForComment(desired)
 			if err != nil {
@@ -451,22 +451,22 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			// Index comments must come after CREATE INDEX statements
 			if desired.comment.ObjectType == "OBJECT_INDEX" {
-				indexCommentDDLs = append(indexCommentDDLs, commentDDLs...)
+				indexCommentDDLs = append(indexCommentDDLs, rawStatements(commentDDLs)...)
 			} else {
-				metadataDDLs = append(metadataDDLs, commentDDLs...)
+				metadataDDLs = append(metadataDDLs, rawStatements(commentDDLs)...)
 			}
 		case *Extension:
 			extensionDDLs, err := g.generateDDLsForExtension(desired)
 			if err != nil {
 				return nil, err
 			}
-			createExtensionDDLs = append(createExtensionDDLs, extensionDDLs...)
+			createExtensionDDLs = append(createExtensionDDLs, rawStatements(extensionDDLs)...)
 		case *Schema:
 			schemaDDLs, err := g.generateDDLsForSchema(desired)
 			if err != nil {
 				return nil, err
 			}
-			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
+			createSchemaDDLs = append(createSchemaDDLs, rawStatements(schemaDDLs)...)
 		case *GrantPrivilege:
 			// Desired GRANTs for the same object, grantees, and grant option are
 			// merged into one entry of g.desiredPrivileges, which keeps the first
@@ -480,19 +480,19 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			metadataDDLs = append(metadataDDLs, privilegeDDLs...)
+			metadataDDLs = append(metadataDDLs, rawStatements(privilegeDDLs)...)
 		case *RevokePrivilege:
 			revokeDDLs, err := g.generateDDLsForRevokePrivilege(desired)
 			if err != nil {
 				return nil, err
 			}
-			metadataDDLs = append(metadataDDLs, revokeDDLs...)
+			metadataDDLs = append(metadataDDLs, rawStatements(revokeDDLs)...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
 	}
 
-	ddls := []string{}
+	ddls := []statement{}
 	ddls = append(ddls, createExtensionDDLs...)
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
@@ -512,11 +512,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if desiredTrigger == nil {
 			switch g.mode {
 			case GeneratorModePostgres:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
+				ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName))))
 			case GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+				ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name))))
 			case GeneratorModeMssql:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+				ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name))))
 			}
 		}
 	}
@@ -524,7 +524,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// Clean up obsoleted events
 	for _, currentEvent := range g.currentEvents {
 		if g.findEventByName(g.desiredEvents, currentEvent.name) == nil {
-			ddls = append(ddls, fmt.Sprintf("DROP EVENT %s", g.escapeQualifiedName(currentEvent.name)))
+			ddls = append(ddls, rawStatement(fmt.Sprintf("DROP EVENT %s", g.escapeQualifiedName(currentEvent.name))))
 		}
 	}
 
@@ -537,10 +537,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		viewName := g.escapeViewName(currentView)
 		g.forgetViewMetadata(currentView)
 		if currentView.viewType == "MATERIALIZED VIEW" {
-			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
+			ddls = append(ddls, rawStatement(fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName)))
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
+		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP VIEW %s", viewName)))
 	}
 
 	var tablesToDrop []*Table
@@ -554,7 +554,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// Sort tables to be dropped by dependencies (dependent tables first)
 	if len(tablesToDrop) > 0 {
 		dropTableDDLs := g.generateDropTableDDLsWithDependencies(tablesToDrop)
-		ddls = append(ddls, dropTableDDLs...)
+		ddls = append(ddls, rawStatements(dropTableDDLs)...)
 
 		// Remove dropped tables from currentTables and track them for later
 		// (to skip generating COMMENT cleanup DDLs for dropped tables)
@@ -569,7 +569,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	for _, currentPartition := range g.currentPartitionOfs {
 		desiredPartition := g.findPartitionOfByName(g.desiredPartitionOfs, currentPartition.tableName)
 		if desiredPartition == nil {
-			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeQualifiedName(currentPartition.tableName)))
+			ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TABLE %s", g.escapeQualifiedName(currentPartition.tableName))))
 		}
 	}
 
@@ -585,7 +585,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		appendDDL := func(in ...string) {
 			for _, ddl := range in {
 				if out := bulkAlter.emit(desiredTable, ddl); out != "" {
-					ddls = append(ddls, out)
+					ddls = append(ddls, rawStatement(out))
 				}
 			}
 		}
@@ -680,7 +680,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// The index seems obsoleted. Check and drop it as needed.
 			indexDDLs, err := g.generateDDLsForAbsentIndex(index, *currentTable, *desiredTable)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
 			if len(indexDDLs) > 0 && index.name.IsEmpty() {
 				return nil, g.unnamedPostgresIndexDropError(currentTable.name, index)
@@ -765,10 +765,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check row level security.
 		if currentTable.rlsForced && !desiredTable.rlsForced {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s NO FORCE ROW LEVEL SECURITY", g.escapeTableName(currentTable)))
+			ddls = append(ddls, rawStatement(fmt.Sprintf("ALTER TABLE %s NO FORCE ROW LEVEL SECURITY", g.escapeTableName(currentTable))))
 		}
 		if currentTable.rlsEnabled && !desiredTable.rlsEnabled {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DISABLE ROW LEVEL SECURITY", g.escapeTableName(currentTable)))
+			ddls = append(ddls, rawStatement(fmt.Sprintf("ALTER TABLE %s DISABLE ROW LEVEL SECURITY", g.escapeTableName(currentTable))))
 		}
 	}
 
@@ -790,22 +790,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				if index.name.IsEmpty() {
 					return nil, g.unnamedPostgresIndexDropError(currentView.name, index)
 				}
-				ddls = append(ddls, g.generateDropIndex(currentView.name, index.name, index.constraint))
+				ddls = append(ddls, rawStatement(g.generateDropIndex(currentView.name, index.name, index.constraint)))
 				g.trackDroppedIndex(currentView.name, index)
 			}
 		}
 	}
-
-	// Must run before the ALGORITHM/LOCK suffixing and drop-commenting below so
-	// those passes see each table's fused statement, not the placeholder.
-	ddls = bulkAlter.finalize(ddls)
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
 		if g.findDomainByName(g.desiredDomains, currentDomain.name) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", g.escapeDomainName(currentDomain)))
+		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP DOMAIN %s", g.escapeDomainName(currentDomain))))
 	}
 
 	// Clean up obsoleted extensions
@@ -817,11 +813,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.config.ManageExtensions != nil {
 			rule, _ := matchManageObjectRule(*g.config.ManageExtensions, currentExtension.extension.Name.Name)
 			if !rule.Drop {
-				ddls = append(ddls, "-- Skipped: "+dropDDL)
+				ddls = append(ddls, rawStatement("-- Skipped: "+dropDDL))
 				continue
 			}
 		}
-		ddls = append(ddls, dropDDL)
+		ddls = append(ddls, rawStatement(dropDDL))
 	}
 
 	// Clean up obsoleted functions
@@ -830,7 +826,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		dropDDL := fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name))
-		ddls = append(ddls, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL))
+		ddls = append(ddls, rawStatement(gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL)))
 	}
 
 	// Clean up obsoleted types
@@ -838,7 +834,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findType(g.desiredTypes, currentType) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP TYPE %s", g.escapeTypeName(currentType)))
+		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TYPE %s", g.escapeTypeName(currentType))))
 	}
 
 	// Clean up obsoleted comments
@@ -885,7 +881,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				"statement", currentComment.statement)
 			nullStmt := g.generateCommentNullStatement(currentComment)
 			slog.Debug("Generated NULL statement", "stmt", nullStmt)
-			ddls = append(ddls, nullStmt)
+			ddls = append(ddls, rawStatement(nullStmt))
 		}
 	}
 
@@ -925,24 +921,28 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						grantObjectKeyword(currentPriv.objectType),
 						g.escapeQualifiedName(currentPriv.tableName),
 						escapedGrantee)
-					ddls = append(ddls, gateRevokeDDL(g.config, grantee, revoke))
+					ddls = append(ddls, rawStatement(gateRevokeDDL(g.config, grantee, revoke)))
 				}
 			}
 		}
 	}
 
+	// Must run before the ALGORITHM/LOCK suffixing and drop-commenting below so
+	// those passes see each table's fused statement, not the placeholder.
+	rendered := bulkAlter.finalize(renderStatements(ddls))
+
 	if isValidAlgorithm(g.algorithm) {
-		for i := range ddls {
-			if strings.HasPrefix(ddls[i], "ALTER TABLE") {
-				ddls[i] += ", ALGORITHM=" + strings.ToUpper(g.algorithm)
+		for i := range rendered {
+			if strings.HasPrefix(rendered[i], "ALTER TABLE") {
+				rendered[i] += ", ALGORITHM=" + strings.ToUpper(g.algorithm)
 			}
 		}
 	}
 
 	if isValidLock(g.lock) {
-		for i := range ddls {
-			if strings.HasPrefix(ddls[i], "ALTER TABLE") {
-				ddls[i] += ", LOCK=" + strings.ToUpper(g.lock)
+		for i := range rendered {
+			if strings.HasPrefix(rendered[i], "ALTER TABLE") {
+				rendered[i] += ", LOCK=" + strings.ToUpper(g.lock)
 			}
 		}
 	}
@@ -951,10 +951,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// manage.privilege / manage.function, per-object gating is already decided
 	// at emission time, so those statements are left alone here.
 	if !g.config.EnableDrop {
-		ddls = commentOutDropStatements(ddls, g.config, g.mode)
+		rendered = commentOutDropStatements(rendered, g.config, g.mode)
 	}
 
-	return ddls, nil
+	return rendered, nil
 }
 
 // commentOutDropStatements converts DROP/REVOKE statements to SQL comments.
