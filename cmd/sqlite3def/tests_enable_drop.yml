@@ -66,3 +66,15 @@ DropIndexSkipped:
   up: |
     -- Skipped: DROP INDEX "idx_email";
   down: ""
+
+AddColumnWithDefaultSpellingDropColumnNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL);
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, note text DEFAULT 'set before DROP COLUMN runs');
+  up: |
+    ALTER TABLE users ADD COLUMN note text DEFAULT 'set before DROP COLUMN runs';
+  down: |
+    -- Skipped: ALTER TABLE users DROP COLUMN note;

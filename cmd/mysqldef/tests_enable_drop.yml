@@ -53,3 +53,23 @@ DropIndexSkipped:
   up: |
     -- Skipped: ALTER TABLE `users` DROP INDEX `idx_email`;
   down: ""
+
+AddColumnWithCommentSpellingDropColumnNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      a int COMMENT 'set before DROP COLUMN runs',
+      b int
+    );
+  up: |
+    ALTER TABLE users ADD COLUMN a int COMMENT 'set before DROP COLUMN runs' AFTER id;
+    ALTER TABLE users ADD COLUMN b int AFTER a;
+  down: |
+    -- Skipped: ALTER TABLE users DROP COLUMN `b`;
+    -- Skipped: ALTER TABLE users DROP COLUMN `a`;
