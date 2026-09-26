@@ -225,6 +225,7 @@ BulkAlterAddColumnDropIndex:
 
 BulkAlterAddColumnDropCheck:
   legacy_ignore_quotes: false
+  min_version: '8.0.16'
   flavor: "!tidb"
   config:
     bulk_alter: true
@@ -247,6 +248,7 @@ BulkAlterAddColumnDropCheck:
 
 BulkAlterAddColumnAddCheckMentioningForeignKey:
   legacy_ignore_quotes: false
+  min_version: '8.0.16'
   flavor: "!tidb"
   config:
     bulk_alter: true
@@ -269,6 +271,7 @@ BulkAlterAddColumnAddCheckMentioningForeignKey:
 
 BulkAlterAddColumnAddAutoIncrement:
   legacy_ignore_quotes: false
+  min_version: '8.0'
   flavor: mysql
   config:
     bulk_alter: true
