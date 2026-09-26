@@ -340,12 +340,13 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
-			Name:     parser.NewIdent(stmt.Idxname, false),
-			Type:     parser.NewIdent(stmt.AccessMethod, false),
-			Unique:   stmt.Unique,
-			Async:    false, // go_pgquery doesn't support ASYNC, will be set by generic parser
-			Where:    where,
-			Included: included,
+			Name:         parser.NewIdent(stmt.Idxname, false),
+			Type:         parser.NewIdent(stmt.AccessMethod, false),
+			Unique:       stmt.Unique,
+			Concurrently: stmt.Concurrent,
+			Async:        false, // pg_query doesn't parse ASYNC
+			Where:        where,
+			Included:     included,
 		},
 		IndexCols: indexCols,
 	}, nil

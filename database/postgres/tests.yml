@@ -194,6 +194,10 @@ CreateIndexWithFuncCall:
 CreateIndexConcurrently:
   sql: |
     CREATE INDEX CONCURRENTLY username on users (name);
+CreateIndexConcurrentlyWithUsing:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE INDEX CONCURRENTLY username on users using btree (name asc);
 CreateIndexWithUnusedToken:
   compare_with_generic_parser: true
   sql: |
