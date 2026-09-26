@@ -3822,8 +3822,8 @@ func (d dialect) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 
 	definition += fmt.Sprintf(
 		"(%s) REFERENCES %s (%s) ",
-		strings.Join(indexColumns, ","), d.escapeQualifiedName(foreignKey.referenceTableName),
-		strings.Join(referenceColumns, ","),
+		strings.Join(indexColumns, ", "), d.escapeQualifiedName(foreignKey.referenceTableName),
+		strings.Join(referenceColumns, ", "),
 	)
 
 	if len(foreignKey.onDelete) > 0 {

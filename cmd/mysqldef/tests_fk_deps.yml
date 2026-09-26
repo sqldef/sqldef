@@ -103,7 +103,7 @@ ForeignKeyDependenciesPrimaryKeyChange:
     ALTER TABLE `items` DROP PRIMARY KEY;
     ALTER TABLE `items` ADD PRIMARY KEY (`supplier_id`, `item_id`);
     ALTER TABLE `item_prices` ADD COLUMN `supplier_id` int AFTER `item_id`;
-    ALTER TABLE `item_prices` ADD CONSTRAINT `prices_item_fk` FOREIGN KEY (`supplier_id`,`item_id`) REFERENCES `items` (`supplier_id`,`item_id`);
+    ALTER TABLE `item_prices` ADD CONSTRAINT `prices_item_fk` FOREIGN KEY (`supplier_id`, `item_id`) REFERENCES `items` (`supplier_id`, `item_id`);
   down: |
     ALTER TABLE `items` CHANGE COLUMN `supplier_id` `supplier_id` int;
     ALTER TABLE `item_prices` DROP FOREIGN KEY `prices_item_fk`;
@@ -224,8 +224,8 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE `users` ADD PRIMARY KEY (`tenant_id`, `user_id`);
     ALTER TABLE `posts` ADD COLUMN `author_tenant_id` int AFTER `author_id`;
     ALTER TABLE `posts` ADD COLUMN `reviewer_tenant_id` int AFTER `reviewer_id`;
-    ALTER TABLE `posts` ADD CONSTRAINT `posts_author_fk` FOREIGN KEY (`author_tenant_id`,`author_id`) REFERENCES `users` (`tenant_id`,`user_id`);
-    ALTER TABLE `posts` ADD CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_tenant_id`,`reviewer_id`) REFERENCES `users` (`tenant_id`,`user_id`);
+    ALTER TABLE `posts` ADD CONSTRAINT `posts_author_fk` FOREIGN KEY (`author_tenant_id`, `author_id`) REFERENCES `users` (`tenant_id`, `user_id`);
+    ALTER TABLE `posts` ADD CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_tenant_id`, `reviewer_id`) REFERENCES `users` (`tenant_id`, `user_id`);
   down: |
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_author_fk`;
     ALTER TABLE `posts` DROP INDEX `posts_author_fk`;
