@@ -1052,8 +1052,8 @@ func newAlterBundler(g *Generator, enabled bool) *alterBundler {
 
 // emit records s as actions of table's bundle and returns what to append in its place. When
 // bundling is off, s is not an ALTER TABLE of table, s holds a standalone action, or
-// enable_drop holds s back, s is returned unchanged. The first statement of a table is returned as the bundle itself, which
-// the later ones fold into; for those emit returns nil.
+// enable_drop holds s back, s is returned unchanged. The first statement of a table is
+// returned as the bundle itself, which the later ones fold into; for those emit returns nil.
 func (b *alterBundler) emit(table *Table, s statement) statement {
 	if !b.enabled {
 		return s
