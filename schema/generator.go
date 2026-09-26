@@ -1012,14 +1012,14 @@ func (g *Generator) appendRecreateStatements(ddls []statement, r recreate) ([]st
 	return ddls, false
 }
 
-func (g *Generator) tableName(name QualifiedName) tableName {
-	return tableName{name: name, key: normalizeNameKey(name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)}
+func (g *Generator) alterTarget(name QualifiedName) alterTarget {
+	return alterTarget{name: name, key: normalizeNameKey(name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)}
 }
 
 func (g *Generator) alterTable(table QualifiedName, actions ...alterTableAction) *alterTableStatement {
 	return &alterTableStatement{
 		d:             g.dialect,
-		table:         g.tableName(table),
+		table:         g.alterTarget(table),
 		actions:       actions,
 		algorithmLock: algorithmLock{algorithm: g.algorithm, lock: g.lock},
 	}
@@ -1039,7 +1039,7 @@ func addsForeignKey(s statement) bool {
 type alterBundler struct {
 	g       *Generator
 	enabled bool
-	byTable map[string]*alterTableStatement // keyed by tableName.key
+	byTable map[string]*alterTableStatement // keyed by alterTarget.key
 }
 
 func newAlterBundler(g *Generator, enabled bool) *alterBundler {
@@ -1051,8 +1051,8 @@ func newAlterBundler(g *Generator, enabled bool) *alterBundler {
 }
 
 // emit records s as actions of table's bundle and returns what to append in its place. When
-// bundling is off, s is not an ALTER TABLE of table, or enable_drop holds s back, s is
-// returned unchanged. The first statement of a table is returned as the bundle itself, which
+// bundling is off, s is not an ALTER TABLE of table, s holds a standalone action, or
+// enable_drop holds s back, s is returned unchanged. The first statement of a table is returned as the bundle itself, which
 // the later ones fold into; for those emit returns nil.
 func (b *alterBundler) emit(table *Table, s statement) statement {
 	if !b.enabled {
@@ -1064,7 +1064,7 @@ func (b *alterBundler) emit(table *Table, s statement) statement {
 		// apply to the safe actions bundled with it.
 		return s
 	}
-	name := b.g.tableName(table.name)
+	name := b.g.alterTarget(table.name)
 	if alter.table.key != name.key {
 		return s
 	}

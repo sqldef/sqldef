@@ -10,6 +10,10 @@
 # processes the subcommands sequentially and accepts this). Tests that emit
 # such a bundle are marked `flavor: !tidb`.
 # Ref. https://docs.pingcap.com/tidb/stable/sql-statement-alter-table/
+#
+# The CHECK cases are marked `flavor: !tidb` too: TiDB rejects adding or
+# dropping a CHECK constraint in an ALTER TABLE with other actions ("Error 8200:
+# Unsupported multi schema change").
 
 BulkAlterAddDropColumns:
   legacy_ignore_quotes: false

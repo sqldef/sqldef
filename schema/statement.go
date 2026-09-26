@@ -61,9 +61,9 @@ type recreate struct {
 	statements []statement
 }
 
-// tableName is the table a statement changes. The key identifies the table however its
+// alterTarget is the table an ALTER TABLE changes. The key identifies the table however its
 // name is quoted, so that the statements of one table can be bundled; the name renders it.
-type tableName struct {
+type alterTarget struct {
 	name QualifiedName
 	key  string
 }
@@ -90,7 +90,7 @@ func (a algorithmLock) render() string {
 type alterTableStatement struct {
 	statementDefaults
 	d       dialect
-	table   tableName
+	table   alterTarget
 	actions []alterTableAction
 	algorithmLock
 }
