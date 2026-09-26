@@ -438,7 +438,7 @@ CompositeForeignKeyConstraint:
       CONSTRAINT fk FOREIGN KEY (id1, id2) REFERENCES t1 (id1, id2)
     );
   up: |
-    ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1","id2") REFERENCES "public"."t1" ("id1","id2");
+    ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1", "id2") REFERENCES "public"."t1" ("id1", "id2");
   down: |
     ALTER TABLE "public"."t2" DROP CONSTRAINT "fk";
 SeparateTablesWithSameForeignKeyName:
@@ -559,6 +559,29 @@ CreateTableAddAbsentForeignKey:
     ALTER TABLE "public"."posts" ADD FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
   down: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_user_id_fkey";
+CreateTableAddAbsentForeignKeyWithConstraintOptions:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT
+    );
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT,
+      CONSTRAINT posts_user_fk FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
+    );
+  up: |
+    ALTER TABLE public.posts ADD CONSTRAINT posts_user_fk FOREIGN KEY (user_id) REFERENCES public.users (id) DEFERRABLE INITIALLY DEFERRED;
+  down: |
+    ALTER TABLE public.posts DROP CONSTRAINT posts_user_fk;
 CreateTableWithConstraintOptions:
   current: |
     CREATE TABLE images (
@@ -600,14 +623,14 @@ CreateTableWithConstraintOptions:
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
-    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type", "image_owner_id") REFERENCES "public"."image_owners" ("type", "id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
   down: |
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order");
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE;
-    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE;
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type", "image_owner_id") REFERENCES "public"."image_owners" ("type", "id") ON DELETE CASCADE;
 CreateTableWithForeignKeyAndGeneratedColumn:
   min_version: '12'
   desired: |
@@ -2453,7 +2476,7 @@ AddForeignKeyWithPeriod:
       CONSTRAINT children_fk FOREIGN KEY (parent_id, PERIOD valid_range) REFERENCES parents (id, PERIOD valid_range)
     );
   up: |
-    ALTER TABLE public.children ADD CONSTRAINT children_fk FOREIGN KEY (parent_id,PERIOD valid_range) REFERENCES public.parents (id,PERIOD valid_range);
+    ALTER TABLE public.children ADD CONSTRAINT children_fk FOREIGN KEY (parent_id, PERIOD valid_range) REFERENCES public.parents (id, PERIOD valid_range);
   down: |
     ALTER TABLE public.children DROP CONSTRAINT children_fk;
 
@@ -2509,7 +2532,7 @@ DropForeignKeyWithPeriod:
   up: |
     ALTER TABLE public.children DROP CONSTRAINT children_fk;
   down: |
-    ALTER TABLE public.children ADD CONSTRAINT children_fk FOREIGN KEY (parent_id,PERIOD valid_range) REFERENCES public.parents (id,PERIOD valid_range);
+    ALTER TABLE public.children ADD CONSTRAINT children_fk FOREIGN KEY (parent_id, PERIOD valid_range) REFERENCES public.parents (id, PERIOD valid_range);
 
 ChangePrimaryKeyToWithoutOverlaps:
   legacy_ignore_quotes: false

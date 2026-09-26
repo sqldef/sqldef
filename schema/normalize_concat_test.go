@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 )
 
@@ -88,10 +87,7 @@ func TestNormalizeExprPreservingQualifiersConcatRecurses(t *testing.T) {
 func TestFormatExprQuoteAwarePreservesQuotedColumnInsideConcat(t *testing.T) {
 	expr := extractCheckExpr(t, `CREATE TABLE t ("MyCol" text NOT NULL, CHECK (length("MyCol" || '_x') > 2))`)
 
-	g := &Generator{
-		mode:   GeneratorModePostgres,
-		config: database.GeneratorConfig{LegacyIgnoreQuotes: false},
-	}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	got := g.formatExprQuoteAware(expr)
 
 	if !strings.Contains(got, `"MyCol"`) {

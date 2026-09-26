@@ -564,6 +564,93 @@ func TestMysqldefConfigIncludesAlgorithmAndLockOnBulkAlterSkipped(t *testing.T) 
 	`)), apply)
 }
 
+func TestMysqldefConfigIncludesAlgorithmAndLockOnIndexRecreationSkipped(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		t.Skip("TiDB has collation handling differences")
+	}
+	resetTestDatabase()
+
+	createTable := tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+		  KEY index_name (name)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+		  UNIQUE KEY index_name (name)
+		);
+		`,
+	)
+
+	tu.WriteFile("schema.sql", createTable)
+	tu.WriteFile("config.yml", "algorithm: inplace\nlock: none")
+
+	apply := mustExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assert.Equal(t, applyPrefix+tu.StripHeredoc(`
+	-- Skipped: ALTER TABLE `+"`users`"+` DROP INDEX `+"`index_name`"+`, ALGORITHM=INPLACE, LOCK=NONE;
+	-- Skipped: ALTER TABLE `+"`users`"+` ADD UNIQUE KEY `+"`index_name` (`name`)"+`, ALGORITHM=INPLACE, LOCK=NONE;
+	`), apply)
+}
+
+func TestMysqldefConfigIncludesAlgorithmAndLockOnPartitions(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  PRIMARY KEY (id)
+		)
+		PARTITION BY RANGE (id)
+		(PARTITION p0 VALUES LESS THAN (10));
+		`,
+	)
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(createTable))
+
+	createTable = tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  PRIMARY KEY (id)
+		)
+		PARTITION BY RANGE (id)
+		(PARTITION p0 VALUES LESS THAN (10),
+		 PARTITION p1 VALUES LESS THAN (20));
+		`,
+	)
+
+	tu.WriteFile("schema.sql", createTable)
+	tu.WriteFile("config.yml", "algorithm: inplace\nlock: none")
+
+	apply := mustExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assert.Equal(t, wrapWithTransaction(tu.StripHeredoc(`
+	ALTER TABLE `+"`users`"+` ADD PARTITION (PARTITION p1 VALUES LESS THAN (20));
+	`)), apply)
+
+	createTable = tu.StripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  PRIMARY KEY (id)
+		)
+		PARTITION BY RANGE (id)
+		(PARTITION p0 VALUES LESS THAN (10));
+		`,
+	)
+
+	tu.WriteFile("schema.sql", createTable)
+
+	apply = mustExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--enable-drop", "--file", "schema.sql")
+	assert.Equal(t, wrapWithTransaction(tu.StripHeredoc(`
+	ALTER TABLE `+"`users`"+` DROP PARTITION p1;
+	`)), apply)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := tu.Execute("./mysqldef", "--help")
 	if err != nil {

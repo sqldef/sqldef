@@ -82,7 +82,7 @@ func TestSkipExtension(t *testing.T) {
 
 func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 
 	// Create two indexes with empty directions
 	indexA := Index{
@@ -119,7 +119,7 @@ func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 
 func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	// Test comparing primary keys with different explicit directions
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 
 	indexA := Index{
 		primary: true,
@@ -428,7 +428,7 @@ func TestPostgresIndexMatching(t *testing.T) {
 }
 
 func TestPostgresIndexMatchInvariantPanics(t *testing.T) {
-	generator := &Generator{mode: GeneratorModePostgres}
+	generator := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	assert.PanicsWithValue(t, "PostgreSQL desired index not found", func() {
 		generator.claimPostgresIndex(&postgresIndexMatchPlan{}, Index{})
 	})
@@ -552,11 +552,10 @@ func TestPostgresUnnamedCurrentCheckDoesNotBlockTableDrop(t *testing.T) {
 
 func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
 	return &Generator{
-		mode:               GeneratorModePostgres,
+		dialect:            dialect{mode: GeneratorModePostgres, defaultSchema: "public"},
 		currentTables:      []*Table{currentTable},
 		desiredTables:      []*Table{desiredTable},
-		defaultSchema:      "public",
-		config:             database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		config:             database.GeneratorConfig{EnableDrop: true},
 		postgresCheckPlans: make(map[string]*postgresCheckMatchPlan),
 		postgresIndexPlans: make(map[string]*postgresIndexMatchPlan),
 	}
@@ -595,7 +594,7 @@ func TestPostgresCheckConstraintCleanup(t *testing.T) {
 
 func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
 	t.Run("missing desired check", func(t *testing.T) {
-		generator := &Generator{mode: GeneratorModePostgres}
+		generator := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 		assert.PanicsWithValue(t, "PostgreSQL desired column CHECK constraint not found", func() {
 			generator.postgresColumnCheckCanBeAddedInline(&postgresCheckMatchPlan{}, parser.NewIdent("amount", false))
 		})
@@ -736,7 +735,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := &Generator{mode: tt.mode}
+			g := &Generator{dialect: dialect{mode: tt.mode}}
 
 			// Parse the input SQL into a view definition
 			viewSQL := fmt.Sprintf("CREATE VIEW test_view AS %s", tt.input)
@@ -1184,7 +1183,7 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 }
 
 func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	fkNil := ForeignKey{
 		constraintName:     Ident{Name: "fk_test"},
@@ -1210,66 +1209,6 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 		"FK with nil ConstraintOptions and FK with default ConstraintOptions{false, false} should be considered the same")
 	assert.True(t, g.areSameForeignKeys(fkDefault, fkNil),
 		"FK with default ConstraintOptions{false, false} and FK with nil ConstraintOptions should be considered the same")
-}
-
-func TestAlterBundler(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
-	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
-	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
-
-	bundler := newAlterBundler(g, true)
-
-	slotA := bundler.emit(tableA, "ALTER TABLE a ADD COLUMN x int")
-	assert.NotEqual(t, "ALTER TABLE a ADD COLUMN x int", slotA, "first action should be replaced by a placeholder")
-
-	slotB := bundler.emit(tableB, "ALTER TABLE b ADD COLUMN z int")
-	assert.NotEqual(t, slotA, slotB, "each table gets its own placeholder")
-
-	folded := bundler.emit(tableA, "ALTER TABLE a DROP COLUMN y")
-	assert.Equal(t, "", folded, "subsequent same-table action should fold, not emit")
-
-	other := bundler.emit(tableA, "DROP INDEX idx ON a")
-	assert.Equal(t, "DROP INDEX idx ON a", other, "non-ALTER statement should pass through")
-
-	ddls := bundler.finalize([]string{slotA, slotB, "DROP INDEX idx ON a"})
-	assert.Equal(t, []string{
-		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
-		"ALTER TABLE b ADD COLUMN z int",
-		"DROP INDEX idx ON a",
-	}, ddls)
-}
-
-func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: false}}
-	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
-
-	bundler := newAlterBundler(g, true)
-
-	slot := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
-
-	dropped := bundler.emit(table, "ALTER TABLE a DROP COLUMN y")
-	assert.Equal(t, "ALTER TABLE a DROP COLUMN y", dropped, "destructive action should be left for the enable_drop pass instead of bundled")
-
-	folded := bundler.emit(table, "ALTER TABLE a DROP FOREIGN KEY fk")
-	assert.Equal(t, "", folded, "DROP FOREIGN KEY is not gated by enable_drop, so it should still fold")
-
-	ddls := bundler.finalize([]string{slot, dropped})
-	assert.Equal(t, []string{
-		"ALTER TABLE a ADD COLUMN x int, DROP FOREIGN KEY fk",
-		"ALTER TABLE a DROP COLUMN y",
-	}, ddls)
-}
-
-func TestAlterBundlerDisabledPassesThrough(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
-	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
-	bundler := newAlterBundler(g, false)
-
-	stmt := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
-	assert.Equal(t, "ALTER TABLE a ADD COLUMN x int", stmt)
-
-	ddls := bundler.finalize([]string{stmt})
-	assert.Equal(t, []string{"ALTER TABLE a ADD COLUMN x int"}, ddls)
 }
 
 func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
@@ -1310,57 +1249,50 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 }
 
 func TestIsDropStatement(t *testing.T) {
-	const (
-		mysql    = GeneratorModeMysql
-		postgres = GeneratorModePostgres
-		mssql    = GeneratorModeMssql
-		sqlite3  = GeneratorModeSQLite3
-	)
-
 	// Destructive statements are detected by their leading keyword.
-	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`, postgres))
-	assert.True(t, isDropStatement("DROP FUNCTION public.add_one", postgres))
-	assert.True(t, isDropStatement("DROP EVENT `cleanup`", mysql))
-	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`, postgres))
-
-	// Destructive clauses embedded in ALTER TABLE are detected.
-	assert.True(t, isDropStatement(`ALTER TABLE "public"."users" DROP COLUMN "name"`, postgres))
-	assert.True(t, isDropStatement("ALTER TABLE `users` DROP INDEX `idx_name`", mysql))
-	assert.True(t, isDropStatement("ALTER TABLE `logs` DROP PARTITION p2024", mysql))
-	assert.True(t, isDropStatement(`ALTER TABLE public.users DISABLE ROW LEVEL SECURITY`, postgres))
-	assert.True(t, isDropStatement(`ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY`, postgres))
-	assert.True(t, isDropStatement(`ALTER TABLE [dbo].[users] DROP COLUMN [name]`, mssql))
-	assert.True(t, isDropStatement(`ALTER TABLE "users" DROP COLUMN "name"`, sqlite3))
-	assert.True(t, isDropStatement("ALTER TABLE `users` DROP COLUMN `name`, ALGORITHM=INPLACE, LOCK=NONE", mysql))
-	assert.True(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `a` int COMMENT 'DROP COLUMN', DROP COLUMN `name`", mysql))
-
-	// Non-destructive ALTER clauses stay allowed (needed for non-destructive
-	// schema changes).
-	assert.False(t, isDropStatement(`ALTER TABLE users DROP CONSTRAINT users_check`, postgres))
-	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c DROP DEFAULT`, postgres))
-	assert.False(t, isDropStatement("ALTER TABLE `users` DROP FOREIGN KEY `fk_users`", mysql))
+	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`))
+	assert.True(t, isDropStatement("DROP FUNCTION public.add_one"))
+	assert.True(t, isDropStatement("DROP EVENT `cleanup`"))
+	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`))
 
 	// Additive statements are never destructive, even when their payload
 	// mentions destructive keywords (function bodies, comment text, literals).
-	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;", postgres))
-	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;", postgres))
-	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`, postgres))
-	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`, postgres))
-	assert.False(t, isDropStatement(`ALTER TABLE audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')`, postgres))
-	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c SET DEFAULT 'DROP TABLE'`, postgres))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'", mysql))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nALTER TABLE logs DROP PARTITION p2024", mysql))
-	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;", postgres))
+	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"))
+	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"))
+	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`))
+	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`))
+	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'"))
+	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nALTER TABLE logs DROP PARTITION p2024"))
+	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
+}
 
-	// ALTER TABLE clauses are matched on tokens, so a string literal or a
-	// quoted identifier that spells a destructive clause is not one.
-	assert.False(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `a` int COMMENT 'x DROP COLUMN y' AFTER `id`", mysql))
-	assert.False(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `a` varchar(20) DEFAULT 'it\\'s DROP INDEX i' AFTER `id`", mysql))
-	assert.False(t, isDropStatement("ALTER TABLE `users` ADD COLUMN `x DROP COLUMN y` int AFTER `id`", mysql))
-	assert.False(t, isDropStatement(`ALTER TABLE "public"."users" ADD COLUMN "a" text DEFAULT 'x DROP COLUMN y'`, postgres))
-	assert.False(t, isDropStatement(`ALTER TABLE "public"."users" ADD CONSTRAINT "c" CHECK (a <> 'DISABLE ROW LEVEL SECURITY')`, postgres))
-	assert.False(t, isDropStatement(`ALTER TABLE [dbo].[users] ADD [a] varchar(20) DEFAULT 'x DROP COLUMN y'`, mssql))
-	assert.False(t, isDropStatement(`ALTER TABLE "users" ADD COLUMN "a" text DEFAULT 'x DROP PARTITION y'`, sqlite3))
+func TestDestructiveStatements(t *testing.T) {
+	users := QualifiedName{Name: Ident{Name: "users"}}
+	mysql := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
+	postgres := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
+
+	// Dropping data, an index or a partition, or turning row level security off, is destructive.
+	assert.True(t, mysql.alterTable(users, dropColumnAction{column: Ident{Name: "name"}}).Destructive())
+	assert.True(t, mysql.alterTable(users, dropIndexAction{name: Ident{Name: "idx_name"}}).Destructive())
+	assert.True(t, mysql.alterTable(users, dropPartitionAction{name: "p2024"}).Destructive())
+	assert.True(t, postgres.alterTable(users, disableRowLevelSecurityAction{}).Destructive())
+	assert.True(t, postgres.alterTable(users, disableRowLevelSecurityAction{force: true}).Destructive())
+	assert.True(t, postgres.generateDropIndex(users, Ident{Name: "idx_name"}, false).Destructive())
+	assert.True(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: false}).Destructive())
+
+	// One destructive action makes the whole statement destructive.
+	assert.True(t, mysql.alterTable(users,
+		addColumnAction{column: Column{name: Ident{Name: "a"}, typeName: "int"}},
+		dropColumnAction{column: Ident{Name: "name"}},
+	).Destructive())
+
+	// Drops that non-destructive changes need are not destructive.
+	assert.False(t, postgres.alterTable(users, dropConstraintAction{name: Ident{Name: "users_check"}}).Destructive())
+	assert.False(t, postgres.generateDropIndex(users, Ident{Name: "users_key"}, true).Destructive())
+	assert.False(t, postgres.alterTable(users, alterColumnDefaultAction{column: Ident{Name: "c"}}).Destructive())
+	assert.False(t, mysql.alterTable(users, dropForeignKeyAction{name: Ident{Name: "fk_users"}}).Destructive())
+	assert.False(t, mysql.alterTable(users, dropPrimaryKeyAction{}).Destructive())
+	assert.False(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: true}).Destructive())
 }
 
 func TestCommentOutDropStatements(t *testing.T) {
@@ -1371,35 +1303,35 @@ func TestCommentOutDropStatements(t *testing.T) {
 	// Single-line drops keep the existing format.
 	assert.Equal(t,
 		[]string{`-- Skipped: DROP TABLE "public"."users"`},
-		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none, GeneratorModePostgres),
+		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none),
 	)
 	// Non-drop statements pass through unchanged.
 	assert.Equal(t,
 		[]string{"CREATE TABLE users (id bigint)"},
-		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none, GeneratorModePostgres),
+		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none),
 	)
 	// manage.privilege keeps REVOKE statements executable (revoke gating is
 	// already decided per grantee at emission time).
 	assert.Equal(t,
 		[]string{`REVOKE SELECT ON TABLE users FROM app_user`},
-		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges, GeneratorModePostgres),
+		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges),
 	)
 	// manage.function keeps DROP FUNCTION executable (drop gating is already
 	// decided per function; a forbidden one already carries "-- Skipped: ").
 	assert.Equal(t,
 		[]string{`DROP FUNCTION "public"."managed_fn"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions, GeneratorModePostgres),
+		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions),
 	)
 	// Without manage.function, DROP FUNCTION is still gated by enable_drop.
 	assert.Equal(t,
 		[]string{`-- Skipped: DROP FUNCTION "public"."f"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none, GeneratorModePostgres),
+		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none),
 	)
 	// Every line of a multi-line statement is commented out so no executable
 	// SQL can leak after the first line.
 	assert.Equal(t,
 		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
-		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none, GeneratorModePostgres),
+		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none),
 	)
 }
 
@@ -1462,7 +1394,7 @@ func TestInsertOrReplaceIntoCreateFunction(t *testing.T) {
 }
 
 func TestAreSameFunctionSignature(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	fn := func(returnType string, args ...FunctionArg) *Function {
 		return &Function{returnType: returnType, args: args}
 	}
@@ -1510,7 +1442,7 @@ func TestAreSameFunctionSignature(t *testing.T) {
 }
 
 func TestDropFunctionDDL(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres, defaultSchema: "public"}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
 	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
 
 	// Identity argument types are appended so overloads stay unambiguous.
@@ -1531,7 +1463,7 @@ func TestDropFunctionDDL(t *testing.T) {
 func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
 	// PostgreSQL parses an index key part as `expr [opclass] [ASC|DESC]`, so the operator class
 	// has to be emitted before the direction.
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		name        string
@@ -1588,7 +1520,7 @@ func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.
 // generateAddIndex has no PostgreSQL-reachable path carrying an operator class today, so the
 // key-part ordering of both index generators is asserted here instead of in cmd/psqldef.
 func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	table := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "products"}}
 	index := Index{
 		name:      Ident{Name: "idx_name"},
@@ -1601,7 +1533,7 @@ func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
 	}
 
 	assert.Contains(t, g.generateCreateIndexStatement(table, index), "(name text_pattern_ops desc)")
-	assert.Contains(t, g.generateAddIndex(table, index), "(name text_pattern_ops desc)")
+	assert.Contains(t, g.generateAddIndex(table, index).Render(), "(name text_pattern_ops desc)")
 }
 
 // TestCreateIndexStatementRoundTrip guards the clause loss that quote-aware mode is prone to:
@@ -1628,7 +1560,7 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 	}
 
 	sqlParser := database.NewParser(parser.ParserModePostgres)
-	g := &Generator{mode: GeneratorModePostgres, config: database.GeneratorConfig{LegacyIgnoreQuotes: false}}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	parseIndexOf := func(t *testing.T, statement string) (QualifiedName, Index) {
 		t.Helper()
@@ -1828,7 +1760,7 @@ func TestHeldBackViewRecreationKeepsIndexState(t *testing.T) {
 }
 
 func TestRenamePrivilegeColumn(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		privilege Privilege
