@@ -125,10 +125,6 @@ BulkAlterDropColumnSkipped:
   down: |
     -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
 
-# The identifiers are quoted here because the cleanup DROP INDEX carries the
-# current table's name, which always comes quoted from the database: an unquoted
-# desired name would not match the bundle's ALTER TABLE prefix, and the
-# statement would never be fused in the first place.
 BulkAlterDropIndexSkipped:
   legacy_ignore_quotes: false
   enable_drop: false
@@ -205,3 +201,123 @@ BulkAlterAddIndexDropColumnSkipped:
   down: |
     -- Skipped: ALTER TABLE `patients` DROP INDEX `a_idx`;
     -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
+
+BulkAlterAddColumnDropIndex:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      b int,
+      INDEX i (b)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER id, DROP INDEX `i`;
+  down: |
+    ALTER TABLE t ADD INDEX i (b), DROP COLUMN `a`;
+
+BulkAlterAddColumnDropCheck:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      b int,
+      CONSTRAINT c CHECK (b > 0)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER id, DROP CONSTRAINT `c`;
+  down: |
+    ALTER TABLE t ADD CONSTRAINT c CHECK (b > 0), DROP COLUMN `a`;
+
+BulkAlterAddColumnAddCheckMentioningForeignKey:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      label varchar(20)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      label varchar(20),
+      a int,
+      CONSTRAINT c CHECK (label <> 'FOREIGN KEY')
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER label, ADD CONSTRAINT c CHECK (label != 'FOREIGN KEY');
+  down: |
+    ALTER TABLE t DROP CONSTRAINT `c`, DROP COLUMN `a`;
+
+BulkAlterAddColumnAddAutoIncrement:
+  legacy_ignore_quotes: false
+  flavor: mysql
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      b int,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL AUTO_INCREMENT,
+      b int,
+      a int,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER b, CHANGE COLUMN id id int NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE t CHANGE COLUMN `id` `id` int NOT NULL, DROP COLUMN `a`;
+
+BulkAlterAddColumnDropForeignKeyDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      c int,
+      CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id)
+    );
+  desired: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      a int,
+      KEY pets_owner_fk (owner_id)
+    );
+  up: |
+    ALTER TABLE pets ADD COLUMN a int AFTER owner_id, DROP FOREIGN KEY `pets_owner_fk`;
+    -- Skipped: ALTER TABLE pets DROP COLUMN `c`;
+  down: |
+    ALTER TABLE pets ADD CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);
+    -- Skipped: ALTER TABLE pets DROP COLUMN `a`;
