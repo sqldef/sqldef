@@ -3,7 +3,6 @@ package schema
 import (
 	"testing"
 
-	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 )
 
@@ -181,10 +180,7 @@ func TestNormalizeCheckExprStringQuoteAwareKeepsSpelling(t *testing.T) {
 		},
 	}
 
-	g := &Generator{
-		mode:   GeneratorModePostgres,
-		config: database.GeneratorConfig{LegacyIgnoreQuotes: false},
-	}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
