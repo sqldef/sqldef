@@ -640,16 +640,11 @@ func (a addColumnUniqueKeyAction) render(d dialect) string {
 
 type addForeignKeyAction struct {
 	additive
-	foreignKey            ForeignKey
-	withConstraintOptions bool
+	foreignKey ForeignKey
 }
 
 func (a addForeignKeyAction) render(d dialect) string {
-	ddl := "ADD " + d.generateForeignKeyDefinition(a.foreignKey)
-	if a.withConstraintOptions {
-		ddl += d.generateConstraintOptions(a.foreignKey.constraintOptions)
-	}
-	return ddl
+	return "ADD " + d.generateForeignKeyDefinition(a.foreignKey) + d.generateConstraintOptions(a.foreignKey.constraintOptions)
 }
 
 // restoreForeignKeyAction adds back a foreign key that was dropped so that the primary key
