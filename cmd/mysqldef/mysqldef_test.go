@@ -601,9 +601,6 @@ func TestMysqldefConfigIncludesAlgorithmAndLockOnIndexRecreationSkipped(t *testi
 }
 
 func TestMysqldefConfigIncludesAlgorithmAndLockOnPartitions(t *testing.T) {
-	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
-		t.Skip("TiDB has collation handling differences")
-	}
 	resetTestDatabase()
 
 	createTable := tu.StripHeredoc(`
