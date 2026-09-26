@@ -1,0 +1,79 @@
+name: parser
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - parser/parser.y
+      - Makefile
+      - .github/workflows/parser.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# parser.go has a single writer. Serialize regenerations so two master pushes
+# never race to produce it.
+concurrency:
+  group: parser-regenerate
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Regenerate parser.go and push
+        run: |
+          set -euo pipefail
+
+          git config user.name 'sqldef-bot[bot]'
+          git config user.email 'sqldef-bot[bot]@users.noreply.github.com'
+
+          # `set -e` does not apply inside a function used as an `if` condition,
+          # so every failure has to be propagated by hand.
+          regenerate_and_push() {
+            git fetch origin master || return 1
+            git reset --hard origin/master || return 1
+
+            make parser || return 1
+
+            if git diff --quiet -- "$PARSER_GO"; then
+              echo "parser.go is already in sync with parser.y"
+              return 0
+            fi
+
+            git add "$PARSER_GO" || return 1
+            git commit -m "parser: regenerate parser.go from parser.y" || return 1
+            git push origin HEAD:master || return 1
+          }
+
+          # master may advance while we generate; retry on a rejected push.
+          for attempt in 1 2 3; do
+            if regenerate_and_push; then
+              exit 0
+            fi
+            echo "::warning::attempt ${attempt} failed, retrying against the new master"
+            sleep 5
+          done
+
+          echo "::error::failed to push the regenerated parser.go to master"
+          exit 1
+        env:
+          PARSER_GO: parser/parser.go
