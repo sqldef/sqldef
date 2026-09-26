@@ -386,3 +386,52 @@ GeneratedColumnWithUppercaseFunctionName:
       last_name varchar(20),
       full_name varchar(41) AS (CONCAT(first_name, ' ', last_name))
     );
+GeneratedColumnWithCastAsCharOfMixedCaseColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      userAge int,
+      age_text varchar(20) AS (CAST(userAge AS CHAR))
+    );
+GeneratedColumnWithCastAsCharOfMixedCaseColumnLegacyIgnoreQuotes:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      userAge int,
+      age_text varchar(20) AS (CAST(userAge AS CHAR))
+    );
+GeneratedColumnWithCaseExpr:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      num_text varchar(20) AS (CASE WHEN num > 0 THEN CAST(num AS CHAR) ELSE 'none' END)
+    );
+ChangeGeneratedColumnCaseExprStringLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      num_text varchar(20) AS (CASE WHEN num > 0 THEN 'Positive' ELSE 'none' END)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      num_text varchar(20) AS (CASE WHEN num > 0 THEN 'positive' ELSE 'none' END)
+    );
+  up: |
+    ALTER TABLE users CHANGE COLUMN `num_text` num_text varchar(20) GENERATED ALWAYS AS (case when num > 0 then 'positive' else 'none' end) VIRTUAL;
+  down: |
+    ALTER TABLE users CHANGE COLUMN `num_text` num_text varchar(20) GENERATED ALWAYS AS (case when num > 0 then 'Positive' else 'none' end) VIRTUAL;
+GeneratedColumnWithSubstringOfCastAsChar:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      num_prefix varchar(20) AS (SUBSTRING(CAST(num AS CHAR), 1, 2))
+    );

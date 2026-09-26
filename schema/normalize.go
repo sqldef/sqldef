@@ -419,9 +419,10 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		}
 		// Unwrap parentheses around simple expressions (literals, column names, etc.)
 		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name.
-		// AtTimeZoneExpr self-parenthesizes, so a wrapper around it is redundant too.
+		// AtTimeZoneExpr self-parenthesizes and CASE ... END is self-delimiting, so a wrapper
+		// around them is redundant too. MySQL wraps CASE in parentheses.
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr:
+		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr, *parser.CaseExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
@@ -520,6 +521,29 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			Exprs:     normalizedExprs,
 			Over:      e.Over,
 		}
+	case *parser.CaseExpr:
+		// Each operand is delimited by keywords, so parentheses around it (MySQL wraps each
+		// WHEN condition) are redundant.
+		recurUnwrapped := func(expr parser.Expr) parser.Expr {
+			return unwrapParenExpr(recur(expr, mode))
+		}
+		return &parser.CaseExpr{
+			Expr: recurUnwrapped(e.Expr),
+			Whens: util.TransformSlice(e.Whens, func(when *parser.When) *parser.When {
+				return &parser.When{Cond: recurUnwrapped(when.Cond), Val: recurUnwrapped(when.Val)}
+			}),
+			Else: recurUnwrapped(e.Else),
+		}
+	case *parser.SubstrExpr:
+		name := e.Name
+		if aliased, ok := name.(*parser.AliasedExpr); ok {
+			name = &parser.AliasedExpr{Expr: recur(aliased.Expr, mode), As: aliased.As}
+		}
+		return &parser.SubstrExpr{
+			Name: name,
+			From: recur(e.From, mode),
+			To:   recur(e.To, mode),
+		}
 	case *parser.ArrayConstructor:
 		normalizedElements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
 			return recur(elem, mode)
@@ -564,6 +588,14 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
+		// MySQL column names are case-insensitive even when quoted, and MySQL stores column
+		// references quoted in the column's own case, so compare them in lowercase.
+		if mode == GeneratorModeMysql && forComparison {
+			return &parser.ColName{
+				Name:      parser.NewIdent(strings.ToLower(e.Name.Name), false),
+				Qualifier: e.Qualifier,
+			}
+		}
 		// Normalize column names while preserving quoting information:
 		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted
 		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)

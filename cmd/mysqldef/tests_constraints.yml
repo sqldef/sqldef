@@ -374,3 +374,73 @@ CheckConstraintWithCastAsChar:
       CONSTRAINT users_name_check CHECK (CAST(name AS CHAR) <> 'x')
     );
   min_version: '8.0.16'
+CheckConstraintWithMixedCaseColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      userAge int,
+      CONSTRAINT users_age_check CHECK (userAge > 0)
+    );
+  min_version: '8.0.16'
+CheckConstraintWithMixedCaseColumnLegacyIgnoreQuotes:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      userAge int,
+      CONSTRAINT users_age_check CHECK (userAge > 0)
+    );
+  min_version: '8.0.16'
+ChangeCheckConstraintMixedCaseColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      userAge int,
+      userRank int,
+      CONSTRAINT users_check CHECK (userAge > 0)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      userAge int,
+      userRank int,
+      CONSTRAINT users_check CHECK (userRank > 0)
+    );
+  up: |
+    ALTER TABLE users DROP CONSTRAINT `users_check`;
+    ALTER TABLE users ADD CONSTRAINT users_check CHECK (userRank > 0);
+  down: |
+    ALTER TABLE users DROP CONSTRAINT `users_check`;
+    ALTER TABLE users ADD CONSTRAINT users_check CHECK (userAge > 0);
+  min_version: '8.0.16'
+CheckConstraintWithCaseExpr:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      CONSTRAINT users_num_check CHECK (CASE WHEN num > 0 THEN 1 ELSE 0 END = 1)
+    );
+  min_version: '8.0.16'
+ChangeCheckConstraintCaseExprResult:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      CONSTRAINT users_num_check CHECK (CASE WHEN num > 0 THEN 1 ELSE 0 END = 1)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      CONSTRAINT users_num_check CHECK (CASE WHEN num > 0 THEN 1 ELSE 2 END = 1)
+    );
+  up: |
+    ALTER TABLE users DROP CONSTRAINT `users_num_check`;
+    ALTER TABLE users ADD CONSTRAINT users_num_check CHECK (case when num > 0 then 1 else 2 end = 1);
+  down: |
+    ALTER TABLE users DROP CONSTRAINT `users_num_check`;
+    ALTER TABLE users ADD CONSTRAINT users_num_check CHECK (case when num > 0 then 1 else 0 end = 1);
+  min_version: '8.0.16'
