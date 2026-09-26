@@ -96,7 +96,7 @@ ForeignKeyDependenciesPrimaryKeyChange:
     ALTER TABLE [dbo].[items] DROP CONSTRAINT [items_pkey];
     ALTER TABLE [dbo].[items] ADD CONSTRAINT [items_pkey] PRIMARY KEY NONCLUSTERED ([supplier_id], [item_id]);
     ALTER TABLE [dbo].[item_prices] ADD [supplier_id] int;
-    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[items] ([supplier_id], [item_id]);
+    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id],[item_id]) REFERENCES [dbo].[items] ([supplier_id],[item_id]);
   down: |
     ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
     ALTER TABLE [dbo].[items] DROP CONSTRAINT [items_pkey];
@@ -206,8 +206,8 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [users_pkey] PRIMARY KEY NONCLUSTERED ([tenant_id], [user_id]);
     ALTER TABLE [dbo].[posts] ADD [author_tenant_id] int;
     ALTER TABLE [dbo].[posts] ADD [reviewer_tenant_id] int;
-    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_tenant_id], [author_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
-    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
+    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_tenant_id],[author_id]) REFERENCES [dbo].[users] ([tenant_id],[user_id]);
+    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id],[reviewer_id]) REFERENCES [dbo].[users] ([tenant_id],[user_id]);
   down: |
     ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_author_fk];
     ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_reviewer_fk];
@@ -255,7 +255,7 @@ ForeignKeyDependenciesCascadeOptionsPreservation:
     ALTER TABLE [dbo].[categories] DROP CONSTRAINT [categories_pkey];
     ALTER TABLE [dbo].[categories] ADD CONSTRAINT [categories_pkey] PRIMARY KEY NONCLUSTERED ([tenant_id], [category_id]);
     ALTER TABLE [dbo].[products] ADD [tenant_id] int;
-    ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id]) REFERENCES [dbo].[categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE;
+    ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id],[category_id]) REFERENCES [dbo].[categories] ([tenant_id],[category_id]) ON DELETE CASCADE ON UPDATE CASCADE;
   down: |
     ALTER TABLE [dbo].[products] DROP CONSTRAINT [products_category_fk];
     ALTER TABLE [dbo].[categories] DROP CONSTRAINT [categories_pkey];
@@ -460,7 +460,7 @@ ForeignKeyDependenciesPrimaryKeyChangeMixedCase:
     ALTER TABLE [dbo].[items] DROP CONSTRAINT [Items_PKey];
     ALTER TABLE [dbo].[items] ADD CONSTRAINT [items_pkey] PRIMARY KEY NONCLUSTERED ([supplier_id], [item_id]);
     ALTER TABLE [dbo].[ITEM_PRICES] ADD [supplier_id] int;
-    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[Items] ([supplier_id], [item_id]);
+    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id],[item_id]) REFERENCES [dbo].[Items] ([supplier_id],[item_id]);
   down: |
     ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
     ALTER TABLE [dbo].[Items] DROP CONSTRAINT [items_pkey];

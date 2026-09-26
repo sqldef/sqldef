@@ -321,3 +321,30 @@ BulkAlterAddColumnDropForeignKeyDropColumnSkipped:
   down: |
     ALTER TABLE pets ADD CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);
     -- Skipped: ALTER TABLE pets DROP COLUMN `a`;
+
+BulkAlterAddColumnAddPartition:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    )
+    PARTITION BY RANGE (id)
+    (PARTITION p0 VALUES LESS THAN (10));
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      a int,
+      PRIMARY KEY (id)
+    )
+    PARTITION BY RANGE (id)
+    (PARTITION p0 VALUES LESS THAN (10),
+     PARTITION p1 VALUES LESS THAN (20));
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER id;
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (20));
+  down: |
+    ALTER TABLE t DROP PARTITION p1;
+    ALTER TABLE t DROP COLUMN `a`;
