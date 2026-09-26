@@ -4571,7 +4571,7 @@ function_return_type:
   {
     $$ = "TRIGGER"
   }
-| column_type
+| column_type array_opt
   {
     // Handle timestamp/time with time zone types
     if $1.Timezone {
@@ -4579,18 +4579,24 @@ function_return_type:
     } else {
       $$ = $1.Type
     }
+    if bool($2) {
+      $$ += "[]"
+    }
   }
 | TABLE '(' function_table_columns ')'
   {
     $$ = "TABLE"
   }
-| SETOF column_type
+| SETOF column_type array_opt
   {
     // Handle timestamp/time with time zone types in SETOF
     if $2.Timezone {
       $$ = "SETOF " + $2.Type + " with time zone"
     } else {
       $$ = "SETOF " + $2.Type
+    }
+    if bool($3) {
+      $$ += "[]"
     }
   }
 

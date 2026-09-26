@@ -604,3 +604,28 @@ FunctionWithTimezoneQualifiedOutParameterAndOmittedReturnsIsIdempotent:
       b := now();
     END
     $$ LANGUAGE plpgsql;
+
+FunctionWithArrayOutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_array(OUT b int[]) AS $$
+    BEGIN
+      b := ARRAY[1];
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionWithTimezoneQualifiedArrayOutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_tz_array(OUT b timestamptz[]) AS $$
+    BEGIN
+      b := ARRAY[now()];
+    END
+    $$ LANGUAGE plpgsql;
+
+FunctionReturningSetofArrayIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_setof_array() RETURNS SETOF int[] AS $$
+    SELECT ARRAY[1]
+    $$ LANGUAGE sql;

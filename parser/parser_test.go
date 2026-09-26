@@ -1569,6 +1569,21 @@ func TestCreateFunctionReturnType(t *testing.T) {
 			want: "SETOF int",
 		},
 		{
+			name: "array",
+			sql:  "CREATE FUNCTION f() RETURNS int[] AS $$ SELECT ARRAY[1] $$ LANGUAGE sql",
+			want: "int[]",
+		},
+		{
+			name: "SETOF array",
+			sql:  "CREATE FUNCTION f() RETURNS SETOF int[] AS $$ SELECT ARRAY[1] $$ LANGUAGE sql",
+			want: "SETOF int[]",
+		},
+		{
+			name: "timezone-qualified array",
+			sql:  "CREATE FUNCTION f() RETURNS timestamp with time zone[] AS $$ SELECT ARRAY[now()] $$ LANGUAGE sql",
+			want: "timestamp with time zone[]",
+		},
+		{
 			name: "present in the AS-before-LANGUAGE format",
 			sql:  "CREATE FUNCTION f(a int) RETURNS int AS $$ SELECT a $$ LANGUAGE sql",
 			want: "int",
