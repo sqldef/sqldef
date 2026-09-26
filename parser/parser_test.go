@@ -1443,6 +1443,14 @@ func TestCreateFunctionArgDefaultsAndModes(t *testing.T) {
 			},
 		},
 		{
+			name: "timezone-qualified argument types",
+			sql:  "CREATE FUNCTION f(IN a timestamp with time zone, OUT b time with time zone) AS $$ BEGIN b := a::time with time zone; END $$ LANGUAGE plpgsql",
+			want: []expectedArg{
+				{Mode: "IN", Name: "a", Type: "timestamp with time zone"},
+				{Mode: "OUT", Name: "b", Type: "time with time zone"},
+			},
+		},
+		{
 			name: "VARIADIC argument mode",
 			sql:  "CREATE FUNCTION f(VARIADIC a int[]) RETURNS int AS $$ SELECT 0 $$ LANGUAGE sql",
 			want: []expectedArg{
@@ -1514,6 +1522,99 @@ $$ LANGUAGE plpgsql VOLATILE`,
 				} else if got.Default != nil {
 					t.Errorf("arg[%d] Default: got %q, want nil", i, String(got.Default))
 				}
+			}
+		})
+	}
+}
+
+func TestCreateFunctionReturnType(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "omitted with a single OUT parameter",
+			sql:  "CREATE FUNCTION f(IN a int, OUT b int) AS $$ BEGIN b := a; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted with multiple OUT parameters",
+			sql:  "CREATE FUNCTION f(OUT b int, OUT c int) AS $$ BEGIN b := 1; c := 2; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted with an INOUT parameter",
+			sql:  "CREATE FUNCTION f(INOUT a int) AS $$ BEGIN a := a + 1; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted in the LANGUAGE-before-AS format",
+			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "omitted in the options-before-AS format",
+			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "omitted with a timezone-qualified OUT parameter",
+			sql:  "CREATE FUNCTION f(OUT b timestamp with time zone) AS $$ BEGIN b := now(); END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "SETOF alongside an OUT parameter",
+			sql:  "CREATE FUNCTION f(OUT b int) RETURNS SETOF int AS $$ SELECT 1 $$ LANGUAGE sql",
+			want: "SETOF int",
+		},
+		{
+			name: "array",
+			sql:  "CREATE FUNCTION f() RETURNS int[] AS $$ SELECT ARRAY[1] $$ LANGUAGE sql",
+			want: "int[]",
+		},
+		{
+			name: "SETOF array",
+			sql:  "CREATE FUNCTION f() RETURNS SETOF int[] AS $$ SELECT ARRAY[1] $$ LANGUAGE sql",
+			want: "SETOF int[]",
+		},
+		{
+			name: "timezone-qualified array",
+			sql:  "CREATE FUNCTION f() RETURNS timestamp with time zone[] AS $$ SELECT ARRAY[now()] $$ LANGUAGE sql",
+			want: "timestamp with time zone[]",
+		},
+		{
+			name: "present in the AS-before-LANGUAGE format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int AS $$ SELECT a $$ LANGUAGE sql",
+			want: "int",
+		},
+		{
+			name: "present in the LANGUAGE-before-AS format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int LANGUAGE sql AS $$ SELECT a $$",
+			want: "int",
+		},
+		{
+			name: "present in the options-before-AS format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int LANGUAGE sql IMMUTABLE AS $$ SELECT a $$",
+			want: "int",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("ParseDDL failed: %v", err)
+			}
+			ddl, ok := stmt.(*DDL)
+			if !ok {
+				t.Fatalf("expected *DDL, got %T", stmt)
+			}
+			if ddl.Function == nil {
+				t.Fatalf("expected non-nil Function")
+			}
+			if got := ddl.Function.ReturnType; got != tc.want {
+				t.Errorf("ReturnType: got %q, want %q", got, tc.want)
 			}
 		})
 	}

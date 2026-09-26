@@ -1485,6 +1485,79 @@ func TestAreSameFunctionSignature(t *testing.T) {
 	// RETURNS TABLE(...) loses its column list in parsing, so it is never
 	// considered replaceable.
 	assert.False(t, g.areSameFunctionSignature(fn("TABLE"), fn("TABLE")))
+
+	// An omitted RETURNS is derived from the output parameters, so a function
+	// written in the PostgreSQL-native form still matches the exported one.
+	// Without this the signature check falls back to DROP + CREATE, which the
+	// default flags gate away and leave the CREATE failing with 42723.
+	outInt := FunctionArg{mode: "OUT", name: parser.NewIdent("b", false), typ: "int"}
+	assert.True(t, g.areSameFunctionSignature(
+		fn("integer", FunctionArg{mode: "OUT", name: parser.NewIdent("b", false), typ: "integer"}),
+		fn("", outInt)))
+}
+
+func TestAreSameFunctionDefinition(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres}
+	mssql := &Generator{mode: GeneratorModeMssql}
+	fn := func(returnType string, args ...FunctionArg) *Function {
+		return &Function{returnType: returnType, body: " SELECT 1 ", language: "sql", args: args}
+	}
+	out := func(name, typ string) FunctionArg {
+		return FunctionArg{mode: "OUT", name: parser.NewIdent(name, false), typ: typ}
+	}
+
+	// Type aliases equal their canonical spelling: the current side comes from
+	// pg_get_functiondef, which always prints the canonical name.
+	assert.True(t, g.areSameFunctionDefinition(fn("integer"), fn("int")))
+	assert.True(t, g.areSameFunctionDefinition(fn("boolean"), fn("bool")))
+	assert.True(t, g.areSameFunctionDefinition(fn("character varying"), fn("varchar")))
+	assert.True(t, g.areSameFunctionDefinition(fn("setof integer"), fn("SETOF int")))
+	assert.True(t, g.areSameFunctionDefinition(fn("double precision"), fn("float")))
+	assert.False(t, g.areSameFunctionDefinition(fn("integer"), fn("bigint")))
+
+	// The aliases are PostgreSQL-specific; other dialects keep the raw compare.
+	assert.False(t, mssql.areSameFunctionDefinition(fn("integer"), fn("int")))
+	assert.True(t, mssql.areSameFunctionDefinition(fn("int"), fn("int")))
+
+	// An omitted RETURNS is derived from the output parameters.
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("integer", out("b", "integer")),
+		fn("", out("b", "int"))))
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("integer", FunctionArg{mode: "INOUT", name: parser.NewIdent("a", false), typ: "integer"}),
+		fn("", FunctionArg{mode: "INOUT", name: parser.NewIdent("a", false), typ: "int"})))
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("record", out("b", "integer"), out("c", "integer")),
+		fn("", out("b", "int"), out("c", "int"))))
+
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("timestamp with time zone", out("b", "timestamp with time zone")),
+		fn("", out("b", "timestamptz"))))
+
+	// VARIADIC and IN are not output parameters, so nothing is derived and the
+	// mismatch against the exported RETURNS stays visible.
+	assert.False(t, g.areSameFunctionDefinition(
+		fn("integer", FunctionArg{mode: "VARIADIC", name: parser.NewIdent("a", false), typ: "integer[]"}),
+		fn("", FunctionArg{mode: "VARIADIC", name: parser.NewIdent("a", false), typ: "int[]"})))
+
+	// Body and language still participate in the comparison.
+	changedBody := fn("integer")
+	changedBody.body = " SELECT 2 "
+	assert.False(t, g.areSameFunctionDefinition(fn("int"), changedBody))
+}
+
+func TestNormalizePGFunctionType(t *testing.T) {
+	assert.Equal(t, "integer", normalizePGFunctionType("INT"))
+	assert.Equal(t, "integer[]", normalizePGFunctionType("int4[]"))
+	assert.Equal(t, "timestamp with time zone", normalizePGFunctionType("timestamptz"))
+
+	// SETOF is a modifier on the return type, not part of the type name, so it
+	// has to be stripped before the alias lookup.
+	assert.Equal(t, "setof integer", normalizePGFunctionType("SETOF int"))
+	assert.Equal(t, "setof integer", normalizePGFunctionType("setof  integer"))
+	assert.Equal(t, "setof integer[]", normalizePGFunctionType("SETOF int[]"))
+	assert.Equal(t, "double precision", normalizePGFunctionType("float"))
+	assert.Equal(t, "setof", normalizePGFunctionType("setof"))
 }
 
 func TestDropFunctionDDL(t *testing.T) {
