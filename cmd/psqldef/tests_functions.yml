@@ -629,3 +629,12 @@ FunctionReturningSetofArrayIsIdempotent:
     CREATE FUNCTION f_setof_array() RETURNS SETOF int[] AS $$
     SELECT ARRAY[1]
     $$ LANGUAGE sql;
+
+FunctionWithFloatOutParameterAndOmittedReturnsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f_float(OUT b float) AS $$
+    BEGIN
+      b := 1;
+    END
+    $$ LANGUAGE plpgsql;

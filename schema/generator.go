@@ -2967,6 +2967,7 @@ var pgFunctionTypeAliases = map[string]string{
 	"bpchar":      "character",
 	"float4":      "real",
 	"float8":      "double precision",
+	"float":       "double precision",
 	"decimal":     "numeric",
 	"timestamptz": "timestamp with time zone",
 	"timetz":      "time with time zone",

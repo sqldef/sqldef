@@ -1512,6 +1512,7 @@ func TestAreSameFunctionDefinition(t *testing.T) {
 	assert.True(t, g.areSameFunctionDefinition(fn("boolean"), fn("bool")))
 	assert.True(t, g.areSameFunctionDefinition(fn("character varying"), fn("varchar")))
 	assert.True(t, g.areSameFunctionDefinition(fn("setof integer"), fn("SETOF int")))
+	assert.True(t, g.areSameFunctionDefinition(fn("double precision"), fn("float")))
 	assert.False(t, g.areSameFunctionDefinition(fn("integer"), fn("bigint")))
 
 	// The aliases are PostgreSQL-specific; other dialects keep the raw compare.
@@ -1555,6 +1556,7 @@ func TestNormalizePGFunctionType(t *testing.T) {
 	assert.Equal(t, "setof integer", normalizePGFunctionType("SETOF int"))
 	assert.Equal(t, "setof integer", normalizePGFunctionType("setof  integer"))
 	assert.Equal(t, "setof integer[]", normalizePGFunctionType("SETOF int[]"))
+	assert.Equal(t, "double precision", normalizePGFunctionType("float"))
 	assert.Equal(t, "setof", normalizePGFunctionType("setof"))
 }
 
