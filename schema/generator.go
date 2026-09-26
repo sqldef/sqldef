@@ -1790,7 +1790,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if drop != nil {
 					ddls = append(ddls,
 						g.alterTable(desired.table.name, drop),
-						g.alterTable(desired.table.name, addForeignKeyAction{foreignKey: fkWithName, withConstraintOptions: true}),
+						g.alterTable(desired.table.name, addForeignKeyAction{foreignKey: fkWithName}),
 					)
 				}
 			}

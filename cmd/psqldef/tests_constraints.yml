@@ -559,6 +559,29 @@ CreateTableAddAbsentForeignKey:
     ALTER TABLE "public"."posts" ADD FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
   down: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_user_id_fkey";
+CreateTableAddAbsentForeignKeyWithConstraintOptions:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT
+    );
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT,
+      CONSTRAINT posts_user_fk FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
+    );
+  up: |
+    ALTER TABLE public.posts ADD CONSTRAINT posts_user_fk FOREIGN KEY (user_id) REFERENCES public.users (id) DEFERRABLE INITIALLY DEFERRED;
+  down: |
+    ALTER TABLE public.posts DROP CONSTRAINT posts_user_fk;
 CreateTableWithConstraintOptions:
   current: |
     CREATE TABLE images (
