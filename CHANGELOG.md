@@ -1,3 +1,9 @@
+## [v3.11.25](https://github.com/sqldef/sqldef/compare/v3.11.24...v3.11.25) - 2026-09-26
+
+- psqldef: match unnamed indexes and constraints by definition by @178inaba in https://github.com/sqldef/sqldef/pull/1378
+- schema: stop enable_drop from skipping ALTER TABLE whose literal spells a drop by @moznion in https://github.com/sqldef/sqldef/pull/1389
+- mysqldef: compare CHECK and generated column expressions with mixed-case columns and CASE by @moznion in https://github.com/sqldef/sqldef/pull/1390
+
 ## [v3.11.24](https://github.com/sqldef/sqldef/compare/v3.11.23...v3.11.24) - 2026-09-25
 
 - psqldef: cover the NOT expression normalization paths #1342 left untested by @moznion in https://github.com/sqldef/sqldef/pull/1363
