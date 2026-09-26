@@ -70,9 +70,22 @@ type postgresIndexMatchPlan struct {
 	claimed          []bool
 }
 
+// dialect renders SQL for one database. It holds only what rendering depends on, so a
+// generated statement can carry it and be rendered after the generator has moved on.
+type dialect struct {
+	mode               GeneratorMode
+	defaultSchema      string
+	legacyIgnoreQuotes bool
+}
+
+func newDialect(mode GeneratorMode, config database.GeneratorConfig, defaultSchema string) dialect {
+	return dialect{mode: mode, defaultSchema: defaultSchema, legacyIgnoreQuotes: config.LegacyIgnoreQuotes}
+}
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
-	mode          GeneratorMode
+	dialect
+
 	desiredTables []*Table
 	currentTables []*Table
 
@@ -147,8 +160,6 @@ type Generator struct {
 	desiredPrivileges []*GrantPrivilege
 	currentPrivileges []*GrantPrivilege
 
-	defaultSchema string
-
 	algorithm string
 	lock      string
 
@@ -182,7 +193,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
 	if mode == GeneratorModePostgres {
-		folder := &Generator{mode: mode, config: config, defaultSchema: defaultSchema}
+		folder := &Generator{dialect: newDialect(mode, config, defaultSchema), config: config}
 		folder.foldPostgresCreateTableIndexes(desiredDDLs)
 		folder.foldPostgresCreateTableIndexes(currentDDLs)
 	}
@@ -198,7 +209,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		mode:                mode,
+		dialect:             newDialect(mode, config, defaultSchema),
 		desiredTables:       desiredAggregated.Tables,
 		currentTables:       aggregated.Tables,
 		desiredViews:        desiredAggregated.Views,
@@ -224,7 +235,6 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentSchemas:      aggregated.Schemas,
 		desiredPrivileges:   desiredAggregated.Privileges,
 		currentPrivileges:   aggregated.Privileges,
-		defaultSchema:       defaultSchema,
 		algorithm:           config.Algorithm,
 		lock:                config.Lock,
 		config:              config,
@@ -1655,8 +1665,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			droppedFKs := make(map[string]bool)
 			for _, refFK := range referencingFKs {
 				// Create a unique key for this FK using normalized names
-				normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-				normalizedConstraintName := normalizeIdentKey(refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+				normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+				normalizedConstraintName := normalizeIdentKey(refFK.foreignKey.constraintName, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 				fkKey := normalizedTableName + ":" + normalizedConstraintName
 				if droppedFKs[fkKey] {
 					continue // Already processed this FK
@@ -1723,8 +1733,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
 					// Use normalized names for case-insensitive deduplication
-					normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-					normalizedConstraintName := normalizeIdentKey(desiredFK.constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					normalizedConstraintName := normalizeIdentKey(desiredFK.constraintName, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 					g.handledForeignKeys[normalizedTableName+":"+normalizedConstraintName] = true
 				}
 				// If the table doesn't exist in desired schema or the FK doesn't exist,
@@ -1934,8 +1944,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			normalizedTableName := normalizeNameKey(desired.table.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-			normalizedConstraintName := normalizeIdentKey(constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			normalizedTableName := normalizeNameKey(desired.table.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			normalizedConstraintName := normalizeIdentKey(constraintName, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 			fkKey := normalizedTableName + ":" + normalizedConstraintName
 			if !g.handledForeignKeys[fkKey] {
 				definition := g.generateForeignKeyDefinition(fkWithName)
@@ -2138,15 +2148,15 @@ func (g *Generator) generateDropPartitionDDL(table Table, part PartitionDefiniti
 
 // escapePartitionName quotes a partition name only if it needs quoting.
 // MySQL/MariaDB partition names need quoting if they contain spaces or special characters.
-func (g *Generator) escapePartitionName(name string) string {
+func (d dialect) escapePartitionName(name string) string {
 	if database.NeedsQuoting(name) {
-		return g.forceEscapeSQLName(name)
+		return d.forceEscapeSQLName(name)
 	}
 	return name
 }
 
 // formatExprs formats parser.Exprs for use in DDL statements
-func (g *Generator) formatExprs(exprs parser.Exprs) string {
+func (d dialect) formatExprs(exprs parser.Exprs) string {
 	parts := make([]string, len(exprs))
 	for i, expr := range exprs {
 		parts[i] = parser.String(expr)
@@ -2159,7 +2169,7 @@ func (g *Generator) formatExprs(exprs parser.Exprs) string {
 func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredIndex Index, action string, statement string) ([]string, error) {
 	// For CREATE INDEX, handle statement regeneration based on mode
 	if action == "CREATE INDEX" {
-		if g.mode == GeneratorModePostgres && !g.config.LegacyIgnoreQuotes {
+		if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
 			// Quote-aware mode: always regenerate to ensure proper schema qualification and quoting
 			if g.config.CreateIndexConcurrently {
 				desiredIndex.concurrently = true
@@ -2455,7 +2465,7 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stri
 		}
 		return ddls, nil
 	}
-	if currentView := findViewQuoteAware(g.currentViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); currentView != nil {
+	if currentView := findViewQuoteAware(g.currentViews, desired.tableName, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); currentView != nil {
 		if currentView.owner != desired.owner {
 			ddls = append(ddls, desired.statement)
 			currentView.owner = desired.owner
@@ -2519,7 +2529,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 	currentView := g.findViewByName(g.currentViews, desiredView.name)
 	if currentView == nil {
 		view := *desiredView
-		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 		if previous := g.recreatedViews[key]; previous != nil {
 			view.owner = previous.owner
 			recreateDDLs := []string{g.createViewDDL(&view)}
@@ -2583,7 +2593,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 					// dependency order, which may differ from the current graph.
 					for _, depView := range slices.Backward(g.findDependentViews(desiredView.name)) {
 						recreateDDLs = append(recreateDDLs, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
-						key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+						key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 						g.recreatedViews[key] = depView
 						g.forgetViewMetadata(depView)
 						g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == depView })
@@ -2640,19 +2650,19 @@ func (g *Generator) createViewDDL(view *View) string {
 // Uses the proper dependency extraction from ddl_ordering.go.
 func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 	// Normalize the target view name for comparison
-	targetName := normalizeNameKey(viewName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	targetName := normalizeNameKey(viewName, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 
 	// Build dependency graph for all views
 	viewDeps := make(map[string][]string)
 	viewMap := make(map[string]*View)
 
 	for _, view := range g.currentViews {
-		normalizedName := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		normalizedName := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 		viewMap[normalizedName] = view
 
 		// Extract dependencies using the proper AST-based extraction
 		if view.definition != nil {
-			deps := extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			deps := extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 			viewDeps[normalizedName] = deps
 		}
 	}
@@ -2674,7 +2684,7 @@ func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 	// Sort dependents in topological order using the dependency graph
 	if len(dependents) > 1 {
 		sorted := topologicalSort(dependents, viewDeps, func(v *View) string {
-			return normalizeNameKey(v.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			return normalizeNameKey(v.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 		})
 		if len(sorted) > 0 {
 			dependents = sorted
@@ -2874,7 +2884,7 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, 
 
 func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName) *Function {
 	for _, f := range functions {
-		if qualifiedNamesEqual(f.name, name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+		if qualifiedNamesEqual(f.name, name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
 			return f
 		}
 	}
@@ -2889,7 +2899,7 @@ func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName
 func (g *Generator) findReplaceTargetFunction(desired *Function) (current *Function, unmatchedOverloads bool) {
 	var sameNamed []*Function
 	for _, f := range g.currentFunctions {
-		if qualifiedNamesEqual(f.name, desired.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+		if qualifiedNamesEqual(f.name, desired.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
 			sameNamed = append(sameNamed, f)
 		}
 	}
@@ -3508,7 +3518,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 	return ddls, nil
 }
 
-func (g *Generator) generateDataType(column Column) string {
+func (d dialect) generateDataType(column Column) string {
 	suffix := ""
 	if column.timezone {
 		suffix += " WITH TIME ZONE"
@@ -3523,7 +3533,7 @@ func (g *Generator) generateDataType(column Column) string {
 	// Normalize PostgreSQL shortcuts to their canonical forms for output
 	// Note: We DON'T normalize general aliases like varchar->character varying or numeric->decimal
 	// Those are preserved as-is in the output. We only normalize PostgreSQL-specific shortcuts.
-	if g.mode == GeneratorModePostgres {
+	if d.mode == GeneratorModePostgres {
 		switch typeName {
 		case "int":
 			typeName = "integer"
@@ -3536,13 +3546,13 @@ func (g *Generator) generateDataType(column Column) string {
 	// 1. references is not empty (including "public." for enum types)
 	// 2. the type name doesn't already contain a dot
 	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
-	if g.mode == GeneratorModePostgres && !column.references.IsEmpty() && !strings.Contains(typeName, ".") {
+	if d.mode == GeneratorModePostgres && !column.references.IsEmpty() && !strings.Contains(typeName, ".") {
 		typeName = column.references.Name + typeName
 	}
 
 	// Preserve quoting for case-sensitive types like domains.
 	if column.typeIdent.Quoted {
-		typeName = g.escapeSQLIdent(column.typeIdent)
+		typeName = d.escapeSQLIdent(column.typeIdent)
 	}
 
 	if column.displayWidth != nil {
@@ -3567,10 +3577,10 @@ func (g *Generator) generateDataType(column Column) string {
 	}
 }
 
-func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (string, error) {
+func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (string, error) {
 	// TODO: make string concatenation faster?
 
-	definition := fmt.Sprintf("%s %s ", g.escapeColumnName(&column), g.generateDataType(column))
+	definition := fmt.Sprintf("%s %s ", d.escapeColumnName(&column), d.generateDataType(column))
 
 	if column.unsigned {
 		definition += "UNSIGNED "
@@ -3601,7 +3611,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	if column.defaultDef != nil {
-		def, err := g.generateDefaultDefinition(*column.defaultDef)
+		def, err := d.generateDefaultDefinition(*column.defaultDef)
 		if err != nil {
 			return "", fmt.Errorf("%s in column: %#v", err.Error(), column)
 		}
@@ -3667,8 +3677,8 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 			definition += "NOT FOR REPLICATION "
 		}
 		// Normalize CHECK expression to match PostgreSQL's output
-		// This ensures typed literals are properly converted (e.g., time '...' -> '...'::time)
-		definition += fmt.Sprintf("(%s) ", g.normalizeCheckExprString(column.check.definition))
+		// This ensures typed literals are properly converted (e.d., time '...' -> '...'::time)
+		definition += fmt.Sprintf("(%s) ", d.normalizeCheckExprString(column.check.definition))
 		if column.check.noInherit {
 			definition += "NO INHERIT "
 		}
@@ -3696,7 +3706,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		if column.sequence != nil {
 			definition += "(" + generateSequenceClause(column.sequence) + ") "
 		}
-	} else if g.mode == GeneratorModeMssql && column.sequence != nil {
+	} else if d.mode == GeneratorModeMssql && column.sequence != nil {
 		definition += fmt.Sprintf("IDENTITY(%d,%d)", *column.sequence.StartWith, *column.sequence.IncrementBy)
 		if column.identity.notForReplication {
 			definition += " NOT FOR REPLICATION"
@@ -3741,8 +3751,8 @@ func indexExprNeedsParens(expr parser.Expr) bool {
 // wrapped, otherwise MySQL rejects the DDL with error 1064
 // (https://dev.mysql.com/doc/refman/8.0/en/create-index.html). For the other
 // modes, fall back to the PostgreSQL-flavored helper.
-func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
-	if g.mode == GeneratorModeMysql {
+func (d dialect) indexKeyPartNeedsParens(expr parser.Expr) bool {
+	if d.mode == GeneratorModeMysql {
 		if _, alreadyWrapped := expr.(*parser.ParenExpr); alreadyWrapped {
 			return false
 		}
@@ -3755,20 +3765,20 @@ func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
 // generateIndexColumnDefinition generates one key part of an index column list, with proper quoting.
 // The clauses have to keep this order: PostgreSQL accepts a collation only before the operator
 // class, an operator class only before ASC/DESC, and NULLS FIRST/LAST only after them.
-func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) string {
+func (d dialect) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 	var column string
 	// For simple column references (ColName), use escapeSQLIdent to preserve quoting
 	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-		column = g.escapeSQLIdent(colName.Name)
+		column = d.escapeSQLIdent(colName.Name)
 	} else {
 		// For expressions (functional indexes), format with quote awareness
-		if !g.config.LegacyIgnoreQuotes {
-			column = g.formatExprQuoteAware(indexColumn.columnExpr)
+		if !d.legacyIgnoreQuotes {
+			column = d.formatExprQuoteAware(indexColumn.columnExpr)
 		} else {
 			// Legacy mode: use parser.String for backward compatibility
 			column = parser.String(indexColumn.columnExpr)
 		}
-		if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
+		if d.indexKeyPartNeedsParens(indexColumn.columnExpr) {
 			column = "(" + column + ")"
 		}
 	}
@@ -3778,8 +3788,8 @@ func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) strin
 	if indexColumn.collation != "" {
 		// PostgreSQL collation names are case-sensitive identifiers ("C", "en_US"), and the
 		// database always prints them quoted.
-		if g.mode == GeneratorModePostgres {
-			column += fmt.Sprintf(" COLLATE %s", g.forceEscapeSQLName(indexColumn.collation))
+		if d.mode == GeneratorModePostgres {
+			column += fmt.Sprintf(" COLLATE %s", d.forceEscapeSQLName(indexColumn.collation))
 		} else {
 			column += fmt.Sprintf(" COLLATE %s", indexColumn.collation)
 		}
@@ -3801,8 +3811,8 @@ func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) strin
 
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
 // This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
-func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Index) string {
-	columns := util.TransformSlice(index.columns, g.generateIndexColumnDefinition)
+func (d dialect) generateCreateIndexStatement(table QualifiedName, index Index) string {
+	columns := util.TransformSlice(index.columns, d.generateIndexColumnDefinition)
 
 	// Start building the statement
 	// PostgreSQL syntax: CREATE [UNIQUE] INDEX [CONCURRENTLY] name ON table
@@ -3818,11 +3828,11 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 		ddl += " ASYNC"
 	}
 	if !index.name.IsEmpty() {
-		ddl += " " + g.escapeSQLIdent(index.name)
+		ddl += " " + d.escapeSQLIdent(index.name)
 	}
-	ddl += " ON " + g.escapeQualifiedName(table)
+	ddl += " ON " + d.escapeQualifiedName(table)
 
-	// Add index method if specified (e.g., USING btree)
+	// Add index method if specified (e.d., USING btree)
 	if index.indexType != "" && !strings.EqualFold(index.indexType, "INDEX") &&
 		!strings.EqualFold(index.indexType, "KEY") &&
 		!strings.EqualFold(index.indexType, "PRIMARY KEY") &&
@@ -3833,7 +3843,7 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
 
 	if len(index.included) > 0 {
-		ddl += fmt.Sprintf(" INCLUDE (%s)", g.escapeAndJoinNames(index.included))
+		ddl += fmt.Sprintf(" INCLUDE (%s)", d.escapeAndJoinNames(index.included))
 	}
 
 	if index.nullsNotDistinct {
@@ -3841,17 +3851,17 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	}
 
 	// Add index options (WITH clause must come before WHERE in PostgreSQL)
-	optionDef := g.generateIndexOptionDefinition(index.options)
+	optionDef := d.generateIndexOptionDefinition(index.options)
 	if optionDef != "" {
 		ddl += optionDef
 	}
 
 	// Add WHERE clause for partial indexes
 	if index.where != nil {
-		if g.config.LegacyIgnoreQuotes {
+		if d.legacyIgnoreQuotes {
 			ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
 		} else {
-			ddl += fmt.Sprintf(" WHERE %s", g.formatExprQuoteAware(index.where))
+			ddl += fmt.Sprintf(" WHERE %s", d.formatExprQuoteAware(index.where))
 		}
 	}
 
@@ -3975,10 +3985,10 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 	}
 }
 
-func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) string {
+func (d dialect) generateIndexOptionDefinition(indexOptions []IndexOption) string {
 	var optionDefinition string
 	if len(indexOptions) > 0 {
-		switch g.mode {
+		switch d.mode {
 		case GeneratorModeMysql:
 			// Handle multiple vector index options (M and DISTANCE)
 			if len(indexOptions) > 1 {
@@ -4039,7 +4049,7 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 	return optionDefinition
 }
 
-func (g *Generator) generateConstraintOptions(ConstraintOptions *ConstraintOptions) string {
+func (d dialect) generateConstraintOptions(ConstraintOptions *ConstraintOptions) string {
 	if ConstraintOptions != nil && ConstraintOptions.deferrable {
 		if ConstraintOptions.initiallyDeferred {
 			return " DEFERRABLE INITIALLY DEFERRED"
@@ -4050,29 +4060,29 @@ func (g *Generator) generateConstraintOptions(ConstraintOptions *ConstraintOptio
 	return ""
 }
 
-func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
+func (d dialect) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	// TODO: make string concatenation faster?
 
 	definition := ""
 	if !foreignKey.constraintName.IsEmpty() {
-		definition = fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(foreignKey.constraintName))
+		definition = fmt.Sprintf("CONSTRAINT %s ", d.escapeSQLIdent(foreignKey.constraintName))
 	}
 	definition += "FOREIGN KEY "
 
 	if !foreignKey.indexName.IsEmpty() {
-		definition += fmt.Sprintf("%s ", g.escapeSQLIdent(foreignKey.indexName))
+		definition += fmt.Sprintf("%s ", d.escapeSQLIdent(foreignKey.indexName))
 	}
 
 	var indexColumns, referenceColumns []string
 	for i, column := range foreignKey.indexColumns {
-		escaped := g.escapeSQLIdent(column)
+		escaped := d.escapeSQLIdent(column)
 		if foreignKey.period && i == len(foreignKey.indexColumns)-1 {
 			escaped = "PERIOD " + escaped
 		}
 		indexColumns = append(indexColumns, escaped)
 	}
 	for i, column := range foreignKey.referenceColumns {
-		escaped := g.escapeSQLIdent(column)
+		escaped := d.escapeSQLIdent(column)
 		if foreignKey.period && i == len(foreignKey.referenceColumns)-1 {
 			escaped = "PERIOD " + escaped
 		}
@@ -4081,7 +4091,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 
 	definition += fmt.Sprintf(
 		"(%s) REFERENCES %s (%s) ",
-		strings.Join(indexColumns, ","), g.escapeQualifiedName(foreignKey.referenceTableName),
+		strings.Join(indexColumns, ","), d.escapeQualifiedName(foreignKey.referenceTableName),
 		strings.Join(referenceColumns, ","),
 	)
 
@@ -4099,7 +4109,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	return strings.TrimSuffix(definition, " ")
 }
 
-func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
+func (d dialect) generateExclusionDefinition(exclusion Exclusion) string {
 	var ex []string
 	for _, exclusionPair := range exclusion.exclusions {
 		ex = append(ex, fmt.Sprintf("%s WITH %s", parser.String(exclusionPair.expression), exclusionPair.operator))
@@ -4109,7 +4119,7 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	if exclusion.constraintName.IsEmpty() {
 		definition = fmt.Sprintf("EXCLUDE USING %s (%s)", exclusion.indexType, strings.Join(ex, ", "))
 	} else {
-		definition = fmt.Sprintf("CONSTRAINT %s EXCLUDE USING %s (%s)", g.escapeSQLIdent(exclusion.constraintName), exclusion.indexType, strings.Join(ex, ", "))
+		definition = fmt.Sprintf("CONSTRAINT %s EXCLUDE USING %s (%s)", d.escapeSQLIdent(exclusion.constraintName), exclusion.indexType, strings.Join(ex, ", "))
 	}
 	if exclusion.where != nil {
 		definition += fmt.Sprintf(" WHERE (%s)", parser.String(exclusion.where))
@@ -4241,29 +4251,29 @@ func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, 
 
 // escapeQualifiedName escapes a QualifiedName using quote-aware logic.
 // Both schema and table names use quote-aware logic when legacy_ignore_quotes is false.
-func (g *Generator) escapeQualifiedName(name QualifiedName) string {
-	switch g.mode {
+func (d dialect) escapeQualifiedName(name QualifiedName) string {
+	switch d.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
 		// If schema is empty, don't add schema prefix
 		if name.Schema.IsEmpty() {
-			return g.escapeSQLIdent(name.Name)
+			return d.escapeSQLIdent(name.Name)
 		}
-		schema := g.normalizeDefaultSchema(name.Schema)
-		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(name.Name)
+		schema := d.normalizeDefaultSchema(name.Schema)
+		return d.escapeSQLIdent(schema) + "." + d.escapeSQLIdent(name.Name)
 	default:
-		return g.escapeSQLIdent(name.Name)
+		return d.escapeSQLIdent(name.Name)
 	}
 }
 
 // escapeTableName escapes a table name using quote-aware logic.
 // Both schema and table names use quote-aware logic when legacy_ignore_quotes is false.
-func (g *Generator) escapeTableName(table *Table) string {
-	return g.escapeQualifiedName(table.name)
+func (d dialect) escapeTableName(table *Table) string {
+	return d.escapeQualifiedName(table.name)
 }
 
 // escapeColumnName escapes a column name using quote-aware logic.
-func (g *Generator) escapeColumnName(column *Column) string {
-	return g.escapeSQLIdent(column.name)
+func (d dialect) escapeColumnName(column *Column) string {
+	return d.escapeSQLIdent(column.name)
 }
 
 // A DROP removes this metadata. Comparing against it would suppress the DDLs that restore a
@@ -4312,8 +4322,8 @@ func (g *Generator) escapeDomainName(d *Domain) string {
 	return g.escapeQualifiedName(d.name)
 }
 
-func (g *Generator) forceEscapeSQLName(name string) string {
-	switch g.mode {
+func (d dialect) forceEscapeSQLName(name string) string {
+	switch d.mode {
 	case GeneratorModeMssql:
 		escaped := strings.ReplaceAll(name, "]", "]]")
 		return fmt.Sprintf("[%s]", escaped)
@@ -4330,24 +4340,24 @@ func (g *Generator) forceEscapeSQLName(name string) string {
 // When legacy_ignore_quotes is false:
 //   - Quoted identifiers preserve their case and are always quoted in output
 //   - Unquoted identifiers are normalized to lowercase and are NOT quoted in output
-func (g *Generator) escapeSQLIdent(ident Ident) string {
-	return g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
+func (d dialect) escapeSQLIdent(ident Ident) string {
+	return d.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
 }
 
 // escapeSQLNameQuoteAware escapes an identifier name for SQL output,
 // taking into account whether it was originally quoted and the legacy_ignore_quotes setting.
-func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
+func (d dialect) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 	// Legacy mode: always quote everything (backward compatible behavior)
-	if g.config.LegacyIgnoreQuotes {
-		return g.forceEscapeSQLName(name)
+	if d.legacyIgnoreQuotes {
+		return d.forceEscapeSQLName(name)
 	}
 
 	// Quote-aware mode
-	switch g.mode {
+	switch d.mode {
 	case GeneratorModePostgres:
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
-			return g.forceEscapeSQLName(name)
+			return d.forceEscapeSQLName(name)
 		} else {
 			// Originally unquoted: normalize to lowercase and don't quote
 			return strings.ToLower(name)
@@ -4355,7 +4365,7 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 	default:
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
-			return g.forceEscapeSQLName(name)
+			return d.forceEscapeSQLName(name)
 		} else {
 			// Originally unquoted: do nothing since the RDBMS here is case-insensitive
 			return name
@@ -4375,7 +4385,7 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 // When legacy_ignore_quotes is true or nil (legacy mode):
 //   - Compare case-insensitively (backward compatible behavior)
 func (g *Generator) identsEqual(a, b Ident) bool {
-	return identsEqual(a, b, g.mode, g.config.LegacyIgnoreQuotes)
+	return identsEqual(a, b, g.mode, g.legacyIgnoreQuotes)
 }
 
 // qualifiedNamesEqual compares two QualifiedName values for equality.
@@ -4384,27 +4394,27 @@ func (g *Generator) identsEqual(a, b Ident) bool {
 // When legacy_ignore_quotes is false, schema names use quote-aware comparison
 // (quoted "MySchema" is different from unquoted myschema).
 func (g *Generator) qualifiedNamesEqual(a, b QualifiedName) bool {
-	return qualifiedNamesEqual(a, b, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	return qualifiedNamesEqual(a, b, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 }
 
 // normalizeDefaultSchema returns an Ident for a schema, treating the default schema
 // (e.g., "public") as unquoted when it's lowercase. This ensures consistent output where
 // the default schema appears without quotes. For non-default schemas, the original
 // quote status is preserved.
-func (g *Generator) normalizeDefaultSchema(schema Ident) Ident {
+func (d dialect) normalizeDefaultSchema(schema Ident) Ident {
 	if schema.IsEmpty() {
-		return Ident{Name: g.defaultSchema, Quoted: false}
+		return Ident{Name: d.defaultSchema, Quoted: false}
 	}
-	if strings.EqualFold(schema.Name, g.defaultSchema) && strings.ToLower(schema.Name) == schema.Name {
-		return Ident{Name: g.defaultSchema, Quoted: false}
+	if strings.EqualFold(schema.Name, d.defaultSchema) && strings.ToLower(schema.Name) == schema.Name {
+		return Ident{Name: d.defaultSchema, Quoted: false}
 	}
 	return schema
 }
 
 // escapeAndJoinNames escapes a list of names with comma separation
-func (g *Generator) escapeAndJoinNames(names []Ident) string {
+func (d dialect) escapeAndJoinNames(names []Ident) string {
 	escapedNames := util.TransformSlice(names, func(ident Ident) string {
-		return g.escapeSQLIdent(ident)
+		return d.escapeSQLIdent(ident)
 	})
 	return strings.Join(escapedNames, ", ")
 }
@@ -5233,7 +5243,7 @@ func matchByNameThenDefinition[T any](current, desired []T, ident func(T) (Ident
 }
 
 func (g *Generator) postgresCheckMatchPlan(currentTable, desiredTable *Table) *postgresCheckMatchPlan {
-	key := normalizeNameKey(desiredTable.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	key := normalizeNameKey(desiredTable.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 	if plan := g.postgresCheckPlans[key]; plan != nil {
 		return plan
 	}
@@ -5372,7 +5382,7 @@ func (g *Generator) buildPostgresIndexMatchPlan(columns map[string]*Column, curr
 // postgresIndexMatchPlan returns the plan of the table or materialized view, building it on
 // first use. The first use must come before this run adds any index to currentIndexes.
 func (g *Generator) postgresIndexMatchPlan(name QualifiedName, columns map[string]*Column, currentIndexes, desiredIndexes []Index) *postgresIndexMatchPlan {
-	key := normalizeNameKey(name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	key := normalizeNameKey(name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 	if plan := g.postgresIndexPlans[key]; plan != nil {
 		return plan
 	}
@@ -5961,9 +5971,9 @@ func (g *Generator) trackDroppedColumn(table *Table, column *Column) {
 // droppedColumnKey returns a normalized key for tracking dropped columns.
 // Uses normalizeIdentKey to handle case-insensitive matching for unquoted identifiers.
 func (g *Generator) droppedColumnKey(schema, table, column Ident) string {
-	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	tableKey := normalizeIdentKey(table, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	columnKey := normalizeIdentKey(column, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	schemaKey := normalizeIdentKey(schema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	tableKey := normalizeIdentKey(table, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	columnKey := normalizeIdentKey(column, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 	return fmt.Sprintf("%s.%s.%s", schemaKey, tableKey, columnKey)
 }
 
@@ -6006,8 +6016,8 @@ func (g *Generator) trackDroppedIndex(tableName QualifiedName, index Index) {
 
 // droppedIndexKey returns a normalized key for tracking dropped indexes.
 func (g *Generator) droppedIndexKey(schema, indexName Ident) string {
-	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	indexKey := normalizeIdentKey(indexName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	schemaKey := normalizeIdentKey(schema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	indexKey := normalizeIdentKey(indexName, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 	return fmt.Sprintf("%s.%s", schemaKey, indexKey)
 }
 
@@ -6093,8 +6103,8 @@ func (g *Generator) findTableForIndex(object []Ident) QualifiedName {
 
 // indexMapKey generates a map key for index lookup using quote-aware normalization.
 func (g *Generator) indexMapKey(schema, name Ident) string {
-	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	nameKey := normalizeIdentKey(name, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	schemaKey := normalizeIdentKey(schema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	nameKey := normalizeIdentKey(name, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 	return schemaKey + "." + nameKey
 }
 
@@ -6174,7 +6184,7 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if !g.config.LegacyIgnoreQuotes && g.mode == GeneratorModePostgres && (!current.typeIdent.IsEmpty() || !desired.typeIdent.IsEmpty()) {
+	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (!current.typeIdent.IsEmpty() || !desired.typeIdent.IsEmpty()) {
 		// Quote-aware comparison for custom types (domains, etc.)
 		//
 		// PostgreSQL's format_type returns the internal type name without quotes.
@@ -6337,15 +6347,15 @@ func (g *Generator) buildForeignKeyDDL(tableName QualifiedName, fk *ForeignKey) 
 
 // normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
 // for DDL generation.
-func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
-	if g.mode == GeneratorModePostgres {
-		normalized := normalizeCheckExprForOutput(expr, g.mode)
+func (d dialect) normalizeCheckExprString(expr parser.Expr) string {
+	if d.mode == GeneratorModePostgres {
+		normalized := normalizeCheckExprForOutput(expr, d.mode)
 		// Unwrap outermost parentheses for consistent output (comparison does this too)
 		normalized = unwrapOutermostParenExpr(normalized)
 		// In quote-aware mode, use formatExprQuoteAware to preserve quoting in column names
 		// In legacy mode, use parser.String for backward compatibility (no quoting in expressions)
-		if !g.config.LegacyIgnoreQuotes {
-			return g.formatExprQuoteAware(normalized)
+		if !d.legacyIgnoreQuotes {
+			return d.formatExprQuoteAware(normalized)
 		}
 		return parser.String(normalized)
 	}
@@ -6354,7 +6364,7 @@ func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
 
 // formatExprQuoteAware formats an expression with quote-aware column name handling.
 // This walks the AST and uses escapeSQLIdent for column names to preserve quoting.
-func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
+func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 	if expr == nil {
 		return ""
 	}
@@ -6365,68 +6375,68 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 		if !e.Qualifier.IsEmpty() {
 			result = parser.String(e.Qualifier) + "."
 		}
-		result += g.escapeSQLIdent(e.Name)
+		result += d.escapeSQLIdent(e.Name)
 		return result
 	case *parser.ParenExpr:
-		return "(" + g.formatExprQuoteAware(e.Expr) + ")"
+		return "(" + d.formatExprQuoteAware(e.Expr) + ")"
 	case *parser.ArrayConstructor:
-		elements := util.TransformSlice(e.Elements, g.formatExprQuoteAware)
+		elements := util.TransformSlice(e.Elements, d.formatExprQuoteAware)
 		return "ARRAY[" + strings.Join(elements, ", ") + "]"
 	case parser.ValTuple:
-		elements := util.TransformSlice(e, g.formatExprQuoteAware)
+		elements := util.TransformSlice(e, d.formatExprQuoteAware)
 		return "(" + strings.Join(elements, ", ") + ")"
 	case *parser.ComparisonExpr:
-		result := g.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
+		result := d.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
 		if e.All {
 			result += "ALL "
 		} else if e.Any {
 			result += "ANY "
 		}
 		if (e.All || e.Any) && parser.NeedsAnyAllParens(e.Right) {
-			return result + "(" + g.formatExprQuoteAware(e.Right) + ")"
+			return result + "(" + d.formatExprQuoteAware(e.Right) + ")"
 		}
-		return result + g.formatExprQuoteAware(e.Right)
+		return result + d.formatExprQuoteAware(e.Right)
 	case *parser.AndExpr:
-		return g.formatExprQuoteAware(e.Left) + " AND " + g.formatExprQuoteAware(e.Right)
+		return d.formatExprQuoteAware(e.Left) + " AND " + d.formatExprQuoteAware(e.Right)
 	case *parser.OrExpr:
-		return g.formatExprQuoteAware(e.Left) + " OR " + g.formatExprQuoteAware(e.Right)
+		return d.formatExprQuoteAware(e.Left) + " OR " + d.formatExprQuoteAware(e.Right)
 	case *parser.ConcatExpr:
-		return g.formatExprQuoteAware(e.Left) + " || " + g.formatExprQuoteAware(e.Right)
+		return d.formatExprQuoteAware(e.Left) + " || " + d.formatExprQuoteAware(e.Right)
 	case *parser.NotExpr:
-		return "NOT " + g.formatExprQuoteAware(e.Expr)
+		return "NOT " + d.formatExprQuoteAware(e.Expr)
 	case *parser.BinaryExpr:
-		return g.formatExprQuoteAware(e.Left) + " " + e.Operator + " " + g.formatExprQuoteAware(e.Right)
+		return d.formatExprQuoteAware(e.Left) + " " + e.Operator + " " + d.formatExprQuoteAware(e.Right)
 	case *parser.UnaryExpr:
-		return e.Operator + g.formatExprQuoteAware(e.Expr)
+		return e.Operator + d.formatExprQuoteAware(e.Expr)
 	case *parser.IsExpr:
-		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
-		return g.formatExprQuoteAware(e.Expr) + " " + e.Operator
+		// IsExpr has Operator (e.d., "is null", "is not null") and Expr
+		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
-		return g.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
+		return d.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
 	case *parser.AtTimeZoneExpr:
-		return "(" + g.formatExprQuoteAware(e.Expr) + " at time zone " + g.formatExprQuoteAware(e.Zone) + ")"
+		return "(" + d.formatExprQuoteAware(e.Expr) + " at time zone " + d.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
 		// For function expressions, format arguments with quote awareness
 		// Normalize function name to lowercase (PostgreSQL convention)
 		args := make([]string, len(e.Exprs))
 		for i, arg := range e.Exprs {
-			args[i] = g.formatSelectExprQuoteAware(arg)
+			args[i] = d.formatSelectExprQuoteAware(arg)
 		}
 		funcName := strings.ToLower(e.Name.Name)
 		return funcName + "(" + strings.Join(args, ", ") + ")"
 	case *parser.RangeCond:
-		return g.formatExprQuoteAware(e.Left) + " BETWEEN " + g.formatExprQuoteAware(e.From) + " AND " + g.formatExprQuoteAware(e.To)
+		return d.formatExprQuoteAware(e.Left) + " BETWEEN " + d.formatExprQuoteAware(e.From) + " AND " + d.formatExprQuoteAware(e.To)
 	case *parser.CaseExpr:
 		var result string
 		result = "CASE"
 		if e.Expr != nil {
-			result += " " + g.formatExprQuoteAware(e.Expr)
+			result += " " + d.formatExprQuoteAware(e.Expr)
 		}
 		for _, when := range e.Whens {
-			result += " WHEN " + g.formatExprQuoteAware(when.Cond) + " THEN " + g.formatExprQuoteAware(when.Val)
+			result += " WHEN " + d.formatExprQuoteAware(when.Cond) + " THEN " + d.formatExprQuoteAware(when.Val)
 		}
 		if e.Else != nil {
-			result += " ELSE " + g.formatExprQuoteAware(e.Else)
+			result += " ELSE " + d.formatExprQuoteAware(e.Else)
 		}
 		result += " END"
 		return result
@@ -6437,10 +6447,10 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 }
 
 // formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
-func (g *Generator) formatSelectExprQuoteAware(expr parser.SelectExpr) string {
+func (d dialect) formatSelectExprQuoteAware(expr parser.SelectExpr) string {
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
-		return g.formatExprQuoteAware(e.Expr)
+		return d.formatExprQuoteAware(e.Expr)
 	case *parser.StarExpr:
 		return parser.String(e)
 	default:
@@ -7120,7 +7130,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 	normalized := normalizeExpr(expr, g.mode)
 
-	if !g.config.LegacyIgnoreQuotes {
+	if !g.legacyIgnoreQuotes {
 		if g.mode == GeneratorModePostgres {
 			return g.formatExprQuoteAware(normalized)
 		}
@@ -7153,7 +7163,7 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 	normalizedA := normalizeExpr(a, g.mode)
 	normalizedB := normalizeExpr(b, g.mode)
 
-	if !g.config.LegacyIgnoreQuotes {
+	if !g.legacyIgnoreQuotes {
 		return g.formatExprQuoteAware(normalizedA) == g.formatExprQuoteAware(normalizedB)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
@@ -7459,10 +7469,10 @@ func needsMySQLDefaultParens(valueType ValueType) bool {
 	}
 }
 
-func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
+func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
 	expr := defaultDefinition.expression
 
-	if g.mode == GeneratorModeMysql {
+	if d.mode == GeneratorModeMysql {
 		if paren, ok := expr.(*parser.ParenExpr); ok {
 			if sqlVal, ok := unwrapParenExpr(paren.Expr).(*parser.SQLVal); ok {
 				if needsMySQLDefaultParens(parseValue(sqlVal).valueType) {
@@ -7492,9 +7502,9 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
-	normalizedExpr := normalizeExpr(expr, g.mode)
+	normalizedExpr := normalizeExpr(expr, d.mode)
 	exprStr := parser.String(normalizedExpr)
-	if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
+	if d.mode == GeneratorModeMysql || d.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error
 		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
 		// https://www.sqlite.org/syntax/column-constraint.html

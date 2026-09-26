@@ -82,7 +82,7 @@ func TestSkipExtension(t *testing.T) {
 
 func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 
 	// Create two indexes with empty directions
 	indexA := Index{
@@ -119,7 +119,7 @@ func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 
 func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	// Test comparing primary keys with different explicit directions
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 
 	indexA := Index{
 		primary: true,
@@ -428,7 +428,7 @@ func TestPostgresIndexMatching(t *testing.T) {
 }
 
 func TestPostgresIndexMatchInvariantPanics(t *testing.T) {
-	generator := &Generator{mode: GeneratorModePostgres}
+	generator := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	assert.PanicsWithValue(t, "PostgreSQL desired index not found", func() {
 		generator.claimPostgresIndex(&postgresIndexMatchPlan{}, Index{})
 	})
@@ -552,11 +552,10 @@ func TestPostgresUnnamedCurrentCheckDoesNotBlockTableDrop(t *testing.T) {
 
 func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
 	return &Generator{
-		mode:               GeneratorModePostgres,
+		dialect:            dialect{mode: GeneratorModePostgres, defaultSchema: "public"},
 		currentTables:      []*Table{currentTable},
 		desiredTables:      []*Table{desiredTable},
-		defaultSchema:      "public",
-		config:             database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		config:             database.GeneratorConfig{EnableDrop: true},
 		postgresCheckPlans: make(map[string]*postgresCheckMatchPlan),
 		postgresIndexPlans: make(map[string]*postgresIndexMatchPlan),
 	}
@@ -595,7 +594,7 @@ func TestPostgresCheckConstraintCleanup(t *testing.T) {
 
 func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
 	t.Run("missing desired check", func(t *testing.T) {
-		generator := &Generator{mode: GeneratorModePostgres}
+		generator := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 		assert.PanicsWithValue(t, "PostgreSQL desired column CHECK constraint not found", func() {
 			generator.postgresColumnCheckCanBeAddedInline(&postgresCheckMatchPlan{}, parser.NewIdent("amount", false))
 		})
@@ -736,7 +735,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := &Generator{mode: tt.mode}
+			g := &Generator{dialect: dialect{mode: tt.mode}}
 
 			// Parse the input SQL into a view definition
 			viewSQL := fmt.Sprintf("CREATE VIEW test_view AS %s", tt.input)
@@ -1184,7 +1183,7 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 }
 
 func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	fkNil := ForeignKey{
 		constraintName:     Ident{Name: "fk_test"},
@@ -1213,7 +1212,7 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 }
 
 func TestAlterBundler(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}, config: database.GeneratorConfig{EnableDrop: true}}
 	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
 	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
 
@@ -1240,7 +1239,7 @@ func TestAlterBundler(t *testing.T) {
 }
 
 func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: false}}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}, config: database.GeneratorConfig{EnableDrop: false}}
 	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
 
 	bundler := newAlterBundler(g, true)
@@ -1261,7 +1260,7 @@ func TestAlterBundlerSkipsDropsWhenDropDisabled(t *testing.T) {
 }
 
 func TestAlterBundlerDisabledPassesThrough(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
 	bundler := newAlterBundler(g, false)
 
@@ -1462,7 +1461,7 @@ func TestInsertOrReplaceIntoCreateFunction(t *testing.T) {
 }
 
 func TestAreSameFunctionSignature(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	fn := func(returnType string, args ...FunctionArg) *Function {
 		return &Function{returnType: returnType, args: args}
 	}
@@ -1510,7 +1509,7 @@ func TestAreSameFunctionSignature(t *testing.T) {
 }
 
 func TestDropFunctionDDL(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres, defaultSchema: "public"}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
 	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
 
 	// Identity argument types are appended so overloads stay unambiguous.
@@ -1531,7 +1530,7 @@ func TestDropFunctionDDL(t *testing.T) {
 func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
 	// PostgreSQL parses an index key part as `expr [opclass] [ASC|DESC]`, so the operator class
 	// has to be emitted before the direction.
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		name        string
@@ -1588,7 +1587,7 @@ func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.
 // generateAddIndex has no PostgreSQL-reachable path carrying an operator class today, so the
 // key-part ordering of both index generators is asserted here instead of in cmd/psqldef.
 func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	table := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "products"}}
 	index := Index{
 		name:      Ident{Name: "idx_name"},
@@ -1628,7 +1627,7 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 	}
 
 	sqlParser := database.NewParser(parser.ParserModePostgres)
-	g := &Generator{mode: GeneratorModePostgres, config: database.GeneratorConfig{LegacyIgnoreQuotes: false}}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	parseIndexOf := func(t *testing.T, statement string) (QualifiedName, Index) {
 		t.Helper()
@@ -1828,7 +1827,7 @@ func TestHeldBackViewRecreationKeepsIndexState(t *testing.T) {
 }
 
 func TestRenamePrivilegeColumn(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		privilege Privilege
