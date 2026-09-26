@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/parser"
@@ -21,6 +22,14 @@ type statement interface {
 	Skipped() bool
 }
 
+// statementDefaults is what a statement is unless it says otherwise: not destructive,
+// transactional and not skipped.
+type statementDefaults struct{}
+
+func (statementDefaults) Destructive() bool   { return false }
+func (statementDefaults) Transactional() bool { return true }
+func (statementDefaults) Skipped() bool       { return false }
+
 // rawStatement is SQL the generator has not typed yet. The text-based enable_drop gate
 // still runs on it after rendering.
 type rawStatement string
@@ -31,19 +40,11 @@ func (s rawStatement) Transactional() bool { return true }
 func (s rawStatement) Skipped() bool       { return false }
 
 func rawStatements(ddls []string) []statement {
-	statements := make([]statement, len(ddls))
-	for i, ddl := range ddls {
-		statements[i] = rawStatement(ddl)
-	}
-	return statements
+	return util.TransformSlice(ddls, func(ddl string) statement { return rawStatement(ddl) })
 }
 
 func renderStatements(statements []statement) []string {
-	ddls := make([]string, len(statements))
-	for i, s := range statements {
-		ddls[i] = s.Render()
-	}
-	return ddls
+	return util.TransformSlice(statements, statement.Render)
 }
 
 // skipped is a statement enable_drop holds back. It is still emitted, as a comment, so that
@@ -55,8 +56,7 @@ type skipped struct {
 func (s skipped) Render() string { return skippedStatement(s.statement.Render()) }
 func (s skipped) Skipped() bool  { return true }
 
-// recreate drops an object and brings it back. Its statements run together or not at all:
-// the ones after a held-back drop would run against the object that is still there.
+// recreate drops an object and brings it back. appendRecreateStatements emits it.
 type recreate struct {
 	statements []statement
 }
@@ -88,6 +88,7 @@ func (a algorithmLock) render() string {
 // alterTableStatement is an ALTER TABLE the generator builds. --bulk-alter fuses the
 // actions of one table into a single statement.
 type alterTableStatement struct {
+	statementDefaults
 	d       dialect
 	table   tableName
 	actions []alterTableAction
@@ -95,17 +96,18 @@ type alterTableStatement struct {
 }
 
 func (s *alterTableStatement) Render() string {
-	actions := make([]string, len(s.actions))
-	acceptsAlgorithmLock := true
-	for i, action := range s.actions {
-		actions[i] = action.render(s.d)
-		acceptsAlgorithmLock = acceptsAlgorithmLock && action.acceptsAlgorithmLock()
-	}
+	actions := util.TransformSlice(s.actions, func(action alterTableAction) string { return action.render(s.d) })
 	ddl := "ALTER TABLE " + s.d.escapeQualifiedName(s.table.name) + " " + strings.Join(actions, ", ")
-	if acceptsAlgorithmLock {
+	if !s.standalone() {
 		ddl += s.algorithmLock.render()
 	}
 	return ddl
+}
+
+// standalone reports whether the statement holds an action that must be the only one of its
+// ALTER TABLE.
+func (s *alterTableStatement) standalone() bool {
+	return slices.ContainsFunc(s.actions, alterTableAction.standalone)
 }
 
 func (s *alterTableStatement) Destructive() bool {
@@ -117,15 +119,11 @@ func (s *alterTableStatement) Destructive() bool {
 	return false
 }
 
-func (s *alterTableStatement) Transactional() bool { return true }
-func (s *alterTableStatement) Skipped() bool       { return false }
-
 // addsForeignKey reports whether the statement adds a foreign key. Those run after the
 // indexes they may need and are never bundled.
 func (s *alterTableStatement) addsForeignKey() bool {
 	for _, action := range s.actions {
-		switch action.(type) {
-		case addForeignKeyAction, restoreForeignKeyAction:
+		if _, ok := action.(addForeignKeyAction); ok {
 			return true
 		}
 	}
@@ -134,6 +132,7 @@ func (s *alterTableStatement) addsForeignKey() bool {
 
 // inputAlterTableStatement is an ALTER TABLE from the desired schema, emitted as written.
 type inputAlterTableStatement struct {
+	statementDefaults
 	input DDL
 	algorithmLock
 }
@@ -155,11 +154,9 @@ func (s inputAlterTableStatement) Destructive() bool {
 	return false
 }
 
-func (s inputAlterTableStatement) Transactional() bool { return true }
-func (s inputAlterTableStatement) Skipped() bool       { return false }
-
 // createIndexStatement is a CREATE INDEX the generator builds from the index.
 type createIndexStatement struct {
+	statementDefaults
 	d     dialect
 	table QualifiedName
 	index Index
@@ -174,13 +171,9 @@ func (s createIndexStatement) Render() string {
 		if s.index.unique {
 			ddl += " UNIQUE"
 		}
-		if s.index.clustered {
-			ddl += " CLUSTERED"
-		} else {
-			ddl += " NONCLUSTERED"
-		}
+		ddl += mssqlClusteredOption(s.index)
 		ddl += fmt.Sprintf(" INDEX %s ON %s", s.d.escapeSQLIdent(s.index.name), s.d.escapeQualifiedName(s.table))
-		ddl += fmt.Sprintf(" (%s)%s", strings.Join(util.TransformSlice(s.index.columns, s.d.generateIndexColumnDefinition), ", "), s.d.generateIndexOptionDefinition(s.index.options))
+		ddl += fmt.Sprintf(" (%s)%s", s.d.indexColumnList(s.index), s.d.generateIndexOptionDefinition(s.index.options))
 		// definition of partition is valid only in the syntax `CREATE INDEX ...`
 		if s.index.partition.partitionName != "" {
 			ddl += fmt.Sprintf(" ON %s", s.d.forceEscapeSQLName(s.index.partition.partitionName))
@@ -208,25 +201,39 @@ func (s createIndexStatement) Render() string {
 	}
 }
 
-func (s createIndexStatement) Destructive() bool   { return false }
-func (s createIndexStatement) Transactional() bool { return !s.index.concurrently && !s.index.async }
-func (s createIndexStatement) Skipped() bool       { return false }
+func (s createIndexStatement) Transactional() bool { return createsIndexInTransaction(s.index) }
 
 // inputCreateIndexStatement is a CREATE INDEX from the desired schema, emitted as written.
 type inputCreateIndexStatement struct {
+	statementDefaults
 	statement string
 	index     Index
 }
 
-func (s inputCreateIndexStatement) Render() string    { return s.statement }
-func (s inputCreateIndexStatement) Destructive() bool { return false }
-func (s inputCreateIndexStatement) Transactional() bool {
-	return !s.index.concurrently && !s.index.async
+func (s inputCreateIndexStatement) Render() string      { return s.statement }
+func (s inputCreateIndexStatement) Transactional() bool { return createsIndexInTransaction(s.index) }
+
+// createsIndexInTransaction reports whether PostgreSQL and Aurora DSQL build the index inside a
+// transaction; they refuse to build it CONCURRENTLY or ASYNC there.
+func createsIndexInTransaction(index Index) bool {
+	return !index.concurrently && !index.async
 }
-func (s inputCreateIndexStatement) Skipped() bool { return false }
+
+// mssqlClusteredOption renders whether a SQL Server index is clustered.
+func mssqlClusteredOption(index Index) string {
+	if index.clustered {
+		return " CLUSTERED"
+	}
+	return " NONCLUSTERED"
+}
+
+func (d dialect) indexColumnList(index Index) string {
+	return strings.Join(util.TransformSlice(index.columns, d.generateIndexColumnDefinition), ", ")
+}
 
 // dropIndexStatement is a standalone DROP INDEX.
 type dropIndexStatement struct {
+	statementDefaults
 	d     dialect
 	table QualifiedName
 	name  Ident
@@ -245,12 +252,11 @@ func (s dropIndexStatement) Render() string {
 	}
 }
 
-func (s dropIndexStatement) Destructive() bool   { return true }
-func (s dropIndexStatement) Transactional() bool { return true }
-func (s dropIndexStatement) Skipped() bool       { return false }
+func (s dropIndexStatement) Destructive() bool { return true }
 
 // renameIndexStatement is PostgreSQL's ALTER INDEX ... RENAME TO.
 type renameIndexStatement struct {
+	statementDefaults
 	d     dialect
 	table QualifiedName
 	from  Ident
@@ -262,31 +268,32 @@ func (s renameIndexStatement) Render() string {
 	return fmt.Sprintf("ALTER INDEX %s.%s RENAME TO %s", s.d.escapeSQLIdent(schema), s.d.escapeSQLIdent(s.from), s.d.escapeSQLIdent(s.to))
 }
 
-func (s renameIndexStatement) Destructive() bool   { return false }
-func (s renameIndexStatement) Transactional() bool { return true }
-func (s renameIndexStatement) Skipped() bool       { return false }
-
-// spRenameStatement renames a SQL Server object. sp_rename takes the names unquoted.
+// spRenameStatement renames a SQL Server table, or a column or an index of it. sp_rename
+// takes the names unquoted.
 type spRenameStatement struct {
-	object  string
+	statementDefaults
+	d       dialect
+	table   QualifiedName
+	object  string // the column or index; empty to rename the table
 	newName string
 	kind    string // "COLUMN" or "INDEX"; empty for a table
 }
 
 func (s spRenameStatement) Render() string {
-	ddl := fmt.Sprintf("EXEC sp_rename '%s', '%s'", s.object, s.newName)
-	if s.kind != "" {
-		ddl += fmt.Sprintf(", '%s'", s.kind)
+	if s.object == "" {
+		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", s.table.Name.Name, s.newName)
 	}
-	return ddl
+	// The table is qualified only outside the default schema.
+	table := s.table.Name.Name
+	if schema := s.table.Schema.Name; schema != "" && schema != s.d.defaultSchema {
+		table = schema + "." + table
+	}
+	return fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', '%s'", table, s.object, s.newName, s.kind)
 }
-
-func (s spRenameStatement) Destructive() bool   { return false }
-func (s spRenameStatement) Transactional() bool { return true }
-func (s spRenameStatement) Skipped() bool       { return false }
 
 // alterSequenceStatement changes the type of the sequence behind a PostgreSQL serial column.
 type alterSequenceStatement struct {
+	statementDefaults
 	d              dialect
 	table          QualifiedName
 	column         Ident
@@ -299,26 +306,29 @@ func (s alterSequenceStatement) Render() string {
 	return fmt.Sprintf("ALTER SEQUENCE %s.%s AS %s", s.d.escapeSQLIdent(schema), s.d.escapeSQLIdent(sequence), s.underlyingType)
 }
 
-func (s alterSequenceStatement) Destructive() bool   { return false }
-func (s alterSequenceStatement) Transactional() bool { return true }
-func (s alterSequenceStatement) Skipped() bool       { return false }
-
 // alterTableAction is one action of an ALTER TABLE.
 type alterTableAction interface {
 	render(d dialect) string
 	destructive() bool
-	// acceptsAlgorithmLock reports whether MySQL accepts ALGORITHM and LOCK in the statement.
-	acceptsAlgorithmLock() bool
+	// standalone reports whether the action has to be the only one of its ALTER TABLE, which
+	// then takes no ALGORITHM or LOCK clause.
+	standalone() bool
 }
 
 // additive is the default for an action enable_drop does not gate.
 type additive struct{}
 
-func (additive) destructive() bool          { return false }
-func (additive) acceptsAlgorithmLock() bool { return true }
+func (additive) destructive() bool { return false }
+func (additive) standalone() bool  { return false }
 
-// mustRender renders a definition that was already rendered once without error when its
-// action was created.
+// removal is the default for an action enable_drop gates.
+type removal struct{}
+
+func (removal) destructive() bool { return true }
+func (removal) standalone() bool  { return false }
+
+// mustRender renders a definition that its action's constructor already rendered without
+// error.
 func mustRender(ddl string, err error) string {
 	if err != nil {
 		panic(err)
@@ -357,6 +367,11 @@ type addColumnAction struct {
 	position     columnPosition
 }
 
+func (g *Generator) addColumn(column Column, enableUnique bool, position columnPosition) (addColumnAction, error) {
+	_, err := g.generateColumnDefinition(column, enableUnique)
+	return addColumnAction{column: column, enableUnique: enableUnique, position: position}, err
+}
+
 func (a addColumnAction) render(d dialect) string {
 	keyword := "ADD COLUMN "
 	if d.mode == GeneratorModeMssql {
@@ -366,14 +381,13 @@ func (a addColumnAction) render(d dialect) string {
 }
 
 type dropColumnAction struct {
+	removal
 	column Ident
 }
 
 func (a dropColumnAction) render(d dialect) string {
 	return "DROP COLUMN " + d.escapeSQLIdent(a.column)
 }
-func (dropColumnAction) destructive() bool          { return true }
-func (dropColumnAction) acceptsAlgorithmLock() bool { return true }
 
 type renameColumnAction struct {
 	additive
@@ -392,6 +406,11 @@ type changeColumnAction struct {
 	column       Column
 	enableUnique bool
 	position     columnPosition
+}
+
+func (g *Generator) changeColumn(from Ident, column Column, enableUnique bool, position columnPosition) (changeColumnAction, error) {
+	_, err := g.generateColumnDefinition(column, enableUnique)
+	return changeColumnAction{from: from, column: column, enableUnique: enableUnique, position: position}, err
 }
 
 func (a changeColumnAction) render(d dialect) string {
@@ -439,6 +458,14 @@ type alterColumnDefaultAction struct {
 	defaultDef *DefaultDefinition
 }
 
+func (g *Generator) alterColumnDefault(column Ident, defaultDef *DefaultDefinition) (alterColumnDefaultAction, error) {
+	var err error
+	if defaultDef != nil {
+		_, err = g.generateDefaultDefinition(*defaultDef)
+	}
+	return alterColumnDefaultAction{column: column, defaultDef: defaultDef}, err
+}
+
 func (a alterColumnDefaultAction) render(d dialect) string {
 	if a.defaultDef == nil {
 		return fmt.Sprintf("ALTER COLUMN %s DROP DEFAULT", d.escapeSQLIdent(a.column))
@@ -484,6 +511,11 @@ func (a setIdentityAction) render(d dialect) string {
 type alterColumnDefinitionAction struct {
 	additive
 	column Column
+}
+
+func (g *Generator) alterColumnDefinition(column Column) (alterColumnDefinitionAction, error) {
+	_, err := g.generateColumnDefinition(column, false)
+	return alterColumnDefinitionAction{column: column}, err
 }
 
 func (a alterColumnDefinitionAction) render(d dialect) string {
@@ -534,6 +566,11 @@ type addDefaultConstraintAction struct {
 	column     Ident
 }
 
+func (g *Generator) addDefaultConstraint(name Ident, defaultDef DefaultDefinition, column Ident) (addDefaultConstraintAction, error) {
+	_, err := g.generateDefaultDefinition(defaultDef)
+	return addDefaultConstraintAction{name: name, defaultDef: defaultDef, column: column}, err
+}
+
 func (a addDefaultConstraintAction) render(d dialect) string {
 	definition := mustRender(d.generateDefaultDefinition(a.defaultDef))
 	if a.name.IsEmpty() {
@@ -553,12 +590,11 @@ func (a dropForeignKeyAction) render(d dialect) string {
 
 // dropIndexAction is MySQL's DROP INDEX clause.
 type dropIndexAction struct {
+	removal
 	name Ident
 }
 
-func (a dropIndexAction) render(d dialect) string  { return "DROP INDEX " + d.escapeSQLIdent(a.name) }
-func (dropIndexAction) destructive() bool          { return true }
-func (dropIndexAction) acceptsAlgorithmLock() bool { return true }
+func (a dropIndexAction) render(d dialect) string { return "DROP INDEX " + d.escapeSQLIdent(a.name) }
 
 type dropPrimaryKeyAction struct {
 	additive
@@ -574,7 +610,7 @@ type addIndexAction struct {
 
 func (a addIndexAction) render(d dialect) string {
 	index := a.index
-	columns := strings.Join(util.TransformSlice(index.columns, d.generateIndexColumnDefinition), ", ")
+	columns := d.indexColumnList(index)
 	optionDefinition := d.generateIndexOptionDefinition(index.options)
 
 	switch d.mode {
@@ -583,11 +619,7 @@ func (a addIndexAction) render(d dialect) string {
 		if index.name.Name != "PRIMARY" {
 			ddl += fmt.Sprintf(" CONSTRAINT %s", d.escapeSQLIdent(index.name))
 		}
-		clusteredOption := " NONCLUSTERED"
-		if index.clustered {
-			clusteredOption = " CLUSTERED"
-		}
-		ddl += fmt.Sprintf(" %s%s", strings.ToUpper(index.indexType), clusteredOption)
+		ddl += " " + strings.ToUpper(index.indexType) + mssqlClusteredOption(index)
 		return ddl + fmt.Sprintf(" (%s)%s", columns, optionDefinition)
 	case GeneratorModePostgres:
 		ddl := "ADD "
@@ -647,29 +679,6 @@ func (a addForeignKeyAction) render(d dialect) string {
 	return "ADD " + d.generateForeignKeyDefinition(a.foreignKey) + d.generateConstraintOptions(a.foreignKey.constraintOptions)
 }
 
-// restoreForeignKeyAction adds back a foreign key that was dropped so that the primary key
-// it references could change.
-type restoreForeignKeyAction struct {
-	additive
-	foreignKey ForeignKey
-}
-
-func (a restoreForeignKeyAction) render(d dialect) string {
-	fk := a.foreignKey
-	ddl := fmt.Sprintf("ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-		d.escapeSQLIdent(fk.constraintName),
-		d.escapeAndJoinNames(fk.indexColumns),
-		d.escapeQualifiedName(fk.referenceTableName),
-		d.escapeAndJoinNames(fk.referenceColumns))
-	if fk.onDelete != "" {
-		ddl += " ON DELETE " + fk.onDelete
-	}
-	if fk.onUpdate != "" {
-		ddl += " ON UPDATE " + fk.onUpdate
-	}
-	return ddl
-}
-
 type addExclusionAction struct {
 	additive
 	exclusion Exclusion
@@ -724,8 +733,8 @@ func (a addPartitionAction) render(d dialect) string {
 
 func (addPartitionAction) destructive() bool { return false }
 
-// MySQL rejects ALGORITHM and LOCK next to a partition operation as a syntax error.
-func (addPartitionAction) acceptsAlgorithmLock() bool { return false }
+// MySQL takes a partition operation only on its own, without ALGORITHM or LOCK.
+func (addPartitionAction) standalone() bool { return true }
 
 type dropPartitionAction struct {
 	name string
@@ -737,8 +746,8 @@ func (a dropPartitionAction) render(d dialect) string {
 
 func (dropPartitionAction) destructive() bool { return true }
 
-// MySQL rejects ALGORITHM and LOCK next to a partition operation as a syntax error.
-func (dropPartitionAction) acceptsAlgorithmLock() bool { return false }
+// MySQL takes a partition operation only on its own, without ALGORITHM or LOCK.
+func (dropPartitionAction) standalone() bool { return true }
 
 type renameTableAction struct {
 	additive
@@ -763,6 +772,7 @@ func (a renameIndexAction) render(d dialect) string {
 // disableRowLevelSecurityAction turns row level security off, or stops forcing it on the
 // table owner.
 type disableRowLevelSecurityAction struct {
+	removal
 	force bool
 }
 
@@ -772,6 +782,3 @@ func (a disableRowLevelSecurityAction) render(dialect) string {
 	}
 	return "DISABLE ROW LEVEL SECURITY"
 }
-
-func (disableRowLevelSecurityAction) destructive() bool          { return true }
-func (disableRowLevelSecurityAction) acceptsAlgorithmLock() bool { return true }

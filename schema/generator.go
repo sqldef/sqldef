@@ -1059,7 +1059,7 @@ func (b *alterBundler) emit(table *Table, s statement) statement {
 		return s
 	}
 	alter, ok := s.(*alterTableStatement)
-	if !ok || b.g.heldBack(alter) {
+	if !ok || alter.standalone() || b.g.heldBack(alter) {
 		// A held-back statement cannot be fused, because the gate would then
 		// apply to the safe actions bundled with it.
 		return s
@@ -1167,26 +1167,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				case GeneratorModeMysql:
 					// MySQL uses CHANGE COLUMN for rename
-					if _, err := g.generateColumnDefinition(desiredColumn, true); err != nil {
+					action, err := g.changeColumn(renameFromColumn.name, desiredColumn, true, columnPosition{})
+					if err != nil {
 						return ddls, nil, err
 					}
-					ddls = append(ddls, g.alterTable(desired.table.name, changeColumnAction{from: renameFromColumn.name, column: desiredColumn, enableUnique: true}))
+					ddls = append(ddls, g.alterTable(desired.table.name, action))
 				case GeneratorModeMssql:
 					// SQL Server uses sp_rename
-					// For sp_rename, we need to handle schema prefixes properly
+					ddls = append(ddls, spRenameStatement{d: g.dialect, table: desired.table.name, object: renameFromColumn.name.Name, newName: desiredColumn.name.Name, kind: "COLUMN"})
 					schema := desired.table.name.Schema.Name
 					if schema == "" {
 						schema = g.defaultSchema
 					}
 					tableName := desired.table.name.Name
-					var tableRef string
-					if schema != "" && schema != g.defaultSchema {
-						// Only include schema if it's not the default
-						tableRef = fmt.Sprintf("%s.%s", schema, tableName.Name)
-					} else {
-						tableRef = tableName.Name
-					}
-					ddls = append(ddls, spRenameStatement{object: tableRef + "." + renameFromColumn.name.Name, newName: desiredColumn.name.Name, kind: "COLUMN"})
 
 					// After renaming, check if type/constraints need to be changed
 					// Skip if the column is part of the current primary key - the primary key handling logic
@@ -1194,7 +1187,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if !g.isPrimaryKey(*renameFromColumn, currentTable) && (!g.haveSameDataType(*renameFromColumn, desiredColumn) ||
 						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) ||
 						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn))) {
-						if _, err := g.generateColumnDefinition(desiredColumn, false); err != nil {
+						action, err := g.alterColumnDefinition(desiredColumn)
+						if err != nil {
 							return ddls, nil, err
 						}
 						// Use consistent table name format (without default schema prefix)
@@ -1202,7 +1196,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						if schema != "" && schema != g.defaultSchema {
 							alterName.Schema = Ident{Name: schema, Quoted: true}
 						}
-						ddls = append(ddls, g.alterTable(alterName, alterColumnDefinitionAction{column: desiredColumn}))
+						ddls = append(ddls, g.alterTable(alterName, action))
 					}
 				case GeneratorModeSQLite3:
 					// For SQLite, when type needs to change:
@@ -1213,12 +1207,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) ||
 						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
 
-						if _, err := g.generateColumnDefinition(desiredColumn, true); err != nil {
+						action, err := g.addColumn(desiredColumn, true, columnPosition{})
+						if err != nil {
 							return ddls, nil, err
 						}
 
 						// 1. Add new column with desired name and definition
-						ddls = append(ddls, g.alterTable(desired.table.name, addColumnAction{column: desiredColumn, enableUnique: true}))
+						ddls = append(ddls, g.alterTable(desired.table.name, action))
 
 						// 2. Copy data from old column to new column
 						ddls = append(ddls, rawStatement(fmt.Sprintf("UPDATE %s SET %s = %s",
@@ -1234,10 +1229,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				default:
 					// Fallback to regular ADD for unsupported databases
-					if _, err := g.generateColumnDefinition(desiredColumn, true); err != nil {
+					action, err := g.addColumn(desiredColumn, true, columnPosition{})
+					if err != nil {
 						return ddls, nil, err
 					}
-					ddls = append(ddls, g.alterTable(desired.table.name, addColumnAction{column: desiredColumn, enableUnique: true}))
+					ddls = append(ddls, g.alterTable(desired.table.name, action))
 				}
 			} else {
 				// Regular column addition (not a rename)
@@ -1247,14 +1243,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						desiredColumn.check = nil
 					}
 				}
-				if _, err := g.generateColumnDefinition(desiredColumn, true); err != nil {
-					return ddls, nil, err
-				}
-
 				// Column not found, add column.
-				action := addColumnAction{column: desiredColumn, enableUnique: true}
+				var position columnPosition
 				if g.mode == GeneratorModeMysql {
-					action.position = mysqlColumnPosition(desiredColumns, desiredColumn.position)
+					position = mysqlColumnPosition(desiredColumns, desiredColumn.position)
+				}
+				action, err := g.addColumn(desiredColumn, true, position)
+				if err != nil {
+					return ddls, nil, err
 				}
 				ddls = append(ddls, g.alterTable(desired.table.name, action))
 			}
@@ -1268,10 +1264,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
 				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) || !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) || changeOrder {
-					if _, err := g.generateColumnDefinition(desiredColumn, false); err != nil {
-						return ddls, nil, err
-					}
-
 					// MySQL has limitations (Error 3106) with generated columns that require using
 					// DROP COLUMN + ADD COLUMN instead of CHANGE COLUMN in these cases:
 					// 1. Changing storage type (VIRTUAL <-> STORED)
@@ -1291,14 +1283,22 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 
 					if useDropAdd {
+						action, err := g.addColumn(desiredColumn, false, mysqlColumnPosition(desiredColumns, desiredColumn.position))
+						if err != nil {
+							return ddls, nil, err
+						}
 						ddls = append(ddls,
 							g.alterTable(desired.table.name, dropColumnAction{column: currentColumn.name}),
-							g.alterTable(desired.table.name, addColumnAction{column: desiredColumn, position: mysqlColumnPosition(desiredColumns, desiredColumn.position)}),
+							g.alterTable(desired.table.name, action),
 						)
 					} else {
-						action := changeColumnAction{from: currentColumn.name, column: desiredColumn}
+						var position columnPosition
 						if changeOrder {
-							action.position = mysqlColumnPosition(desiredColumns, desiredColumn.position)
+							position = mysqlColumnPosition(desiredColumns, desiredColumn.position)
+						}
+						action, err := g.changeColumn(currentColumn.name, desiredColumn, false, position)
+						if err != nil {
+							return ddls, nil, err
 						}
 						ddls = append(ddls, g.alterTable(desired.table.name, action))
 					}
@@ -1383,19 +1383,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// The default was already dropped (if present) before the ALTER
 					// COLUMN TYPE above; re-apply the desired default in the new type.
 					if desiredColumn.defaultDef != nil {
-						if _, err := g.generateDefaultDefinition(*desiredColumn.defaultDef); err != nil {
+						action, err := g.alterColumnDefault(desiredColumn.name, desiredColumn.defaultDef)
+						if err != nil {
 							return ddls, nil, err
 						}
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name, defaultDef: desiredColumn.defaultDef}))
+						ddls = append(ddls, g.alterTable(desired.table.name, action))
 					}
 				} else if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
-					// use desiredColumn for escaping to match user's quote style
-					if desiredColumn.defaultDef != nil {
-						if _, err := g.generateDefaultDefinition(*desiredColumn.defaultDef); err != nil {
-							return ddls, nil, err
-						}
+					// A nil default drops it.
+					action, err := g.alterColumnDefault(desiredColumn.name, desiredColumn.defaultDef)
+					if err != nil {
+						return ddls, nil, err
 					}
-					ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name, defaultDef: desiredColumn.defaultDef}))
+					ddls = append(ddls, g.alterTable(desired.table.name, action))
 				}
 
 				// TODO: support adding a column's `references`
@@ -1404,10 +1404,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// will properly handle foreign key dependencies when the PK changes
 				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) && !g.isPrimaryKey(*currentColumn, currentTable) {
 					// Change column definition
-					if _, err := g.generateColumnDefinition(desiredColumn, false); err != nil {
+					action, err := g.alterColumnDefinition(desiredColumn)
+					if err != nil {
 						return ddls, nil, err
 					}
-					ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefinitionAction{column: desiredColumn}))
+					ddls = append(ddls, g.alterTable(desired.table.name, action))
 				}
 
 				if !g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
@@ -1457,10 +1458,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, g.alterTable(currentTable.name, dropColumnAction{column: currentColumn.name}))
 					}
 					if desiredColumn.identity != nil {
-						if _, err := g.generateColumnDefinition(desiredColumn, true); err != nil {
+						action, err := g.addColumn(desiredColumn, true, columnPosition{})
+						if err != nil {
 							return ddls, nil, err
 						}
-						ddls = append(ddls, g.alterTable(desired.table.name, addColumnAction{column: desiredColumn, enableUnique: true}))
+						ddls = append(ddls, g.alterTable(desired.table.name, action))
 					}
 				}
 
@@ -1472,14 +1474,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 					if desiredColumn.defaultDef != nil {
 						// set
-						if _, err := g.generateDefaultDefinition(*desiredColumn.defaultDef); err != nil {
+						action, err := g.addDefaultConstraint(desiredColumn.defaultDef.constraintName, *desiredColumn.defaultDef, currentColumn.name)
+						if err != nil {
 							return ddls, nil, err
 						}
-						ddls = append(ddls, g.alterTable(currentTable.name, addDefaultConstraintAction{
-							name:       desiredColumn.defaultDef.constraintName,
-							defaultDef: *desiredColumn.defaultDef,
-							column:     currentColumn.name,
-						}))
+						ddls = append(ddls, g.alterTable(currentTable.name, action))
 					}
 				}
 			default:
@@ -1516,10 +1515,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				needsChange = true
 			}
 			if needsChange {
-				if _, err := g.generateColumnDefinition(*currentColumn, false); err != nil {
+				action, err := g.changeColumn(currentColumn.name, *currentColumn, false, columnPosition{})
+				if err != nil {
 					return ddls, nil, err
 				}
-				ddls = append(ddls, g.alterTable(currentTable.name, changeColumnAction{from: currentColumn.name, column: *currentColumn}))
+				ddls = append(ddls, g.alterTable(currentTable.name, action))
 			}
 		}
 	}
@@ -1592,7 +1592,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// 1. The referencing table exists in the desired schema, AND
 				// 2. The foreign key exists in the desired schema
 				if desiredTableExists && desiredFK != nil {
-					recreateFKDDLs = append(recreateFKDDLs, g.alterTable(refFK.tableName, restoreForeignKeyAction{foreignKey: *desiredFK}))
+					recreateFKDDLs = append(recreateFKDDLs, g.alterTable(refFK.tableName, addForeignKeyAction{foreignKey: *desiredFK}))
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
 					// Use normalized names for case-insensitive deduplication
 					normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
@@ -1629,17 +1629,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						case GeneratorModeMysql:
 							// MySQL doesn't support ALTER COLUMN ... DROP NOT NULL
 							// Instead, we use CHANGE COLUMN with the full column definition
-							if _, err := g.generateColumnDefinition(*desiredColumn, true); err != nil {
+							action, err := g.changeColumn(desiredColumn.name, *desiredColumn, true, columnPosition{})
+							if err != nil {
 								return ddls, nil, err
 							}
-							ddls = append(ddls, g.alterTable(desired.table.name, changeColumnAction{from: desiredColumn.name, column: *desiredColumn, enableUnique: true}))
+							ddls = append(ddls, g.alterTable(desired.table.name, action))
 						case GeneratorModeMssql:
 							// MSSQL doesn't support ALTER COLUMN ... DROP NOT NULL either
 							// Instead, we use ALTER COLUMN with the full column definition
-							if _, err := g.generateColumnDefinition(*desiredColumn, false); err != nil {
+							action, err := g.alterColumnDefinition(*desiredColumn)
+							if err != nil {
 								return ddls, nil, err
 							}
-							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefinitionAction{column: *desiredColumn}))
+							ddls = append(ddls, g.alterTable(desired.table.name, action))
 						case GeneratorModePostgres:
 							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnNotNullAction{column: desiredColumn.name, notNull: false}))
 						}
@@ -1714,10 +1716,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				needsChange = true
 			}
 			if needsChange {
-				if _, err := g.generateColumnDefinition(*desiredColumn, false); err != nil {
+				action, err := g.changeColumn(desiredColumn.name, *desiredColumn, false, columnPosition{})
+				if err != nil {
 					return ddls, nil, err
 				}
-				ddls = append(ddls, g.alterTable(currentTable.name, changeColumnAction{from: desiredColumn.name, column: *desiredColumn}))
+				ddls = append(ddls, g.alterTable(currentTable.name, action))
 			}
 		}
 	}
@@ -3498,7 +3501,7 @@ func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (str
 			definition += "NOT FOR REPLICATION "
 		}
 		// Normalize CHECK expression to match PostgreSQL's output
-		// This ensures typed literals are properly converted (e.d., time '...' -> '...'::time)
+		// This ensures typed literals are properly converted (e.g., time '...' -> '...'::time)
 		definition += fmt.Sprintf("(%s) ", d.normalizeCheckExprString(column.check.definition))
 		if column.check.noInherit {
 			definition += "NO INHERIT "
@@ -3653,7 +3656,7 @@ func (d dialect) generateCreateIndexStatement(table QualifiedName, index Index) 
 	}
 	ddl += " ON " + d.escapeQualifiedName(table)
 
-	// Add index method if specified (e.d., USING btree)
+	// Add index method if specified (e.g., USING btree)
 	if index.indexType != "" && !strings.EqualFold(index.indexType, "INDEX") &&
 		!strings.EqualFold(index.indexType, "KEY") &&
 		!strings.EqualFold(index.indexType, "PRIMARY KEY") &&
@@ -3866,18 +3869,7 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 		// Qualify the old index name with schema
 		ddls = append(ddls, renameIndexStatement{d: g.dialect, table: tableName, from: oldIndexName, to: newIndexName})
 	case GeneratorModeMssql:
-		// SQL Server uses sp_rename - use raw names without escaping
-		schemaName := tableName.Schema.Name
-		if schemaName == "" {
-			schemaName = g.defaultSchema
-		}
-		var tableRef string
-		if schemaName != "" && schemaName != g.defaultSchema {
-			tableRef = fmt.Sprintf("%s.%s", schemaName, tableName.Name.Name)
-		} else {
-			tableRef = tableName.Name.Name
-		}
-		ddls = append(ddls, spRenameStatement{object: tableRef + "." + oldIndexName.Name, newName: newIndexName.Name, kind: "INDEX"})
+		ddls = append(ddls, spRenameStatement{d: g.dialect, table: tableName, object: oldIndexName.Name, newName: newIndexName.Name, kind: "INDEX"})
 	case GeneratorModeSQLite3:
 		// SQLite doesn't support renaming indexes directly - drop and recreate
 		if desiredIndex != nil {
@@ -3915,8 +3907,7 @@ func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index)
 // object that was never recreated. A drop that enable_drop does not gate, such as ALTER TABLE
 // DROP CONSTRAINT, is unaffected.
 func (g *Generator) appendRecreate(ddls []string, statements ...string) ([]string, bool) {
-	isDrop := func(statement string) bool { return isDropStatement(statement) }
-	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDrop) {
+	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDropStatement) {
 		return append(ddls, statements...), true
 	}
 	for _, statement := range statements {
@@ -4140,7 +4131,7 @@ func (g *Generator) normalizeOldObjectName(oldName Ident, newObject QualifiedNam
 // Uses quote-aware escaping for both old and new table names.
 func (g *Generator) generateRenameTableDDL(oldTable QualifiedName, newTable QualifiedName) statement {
 	if g.mode == GeneratorModeMssql {
-		return spRenameStatement{object: oldTable.Name.Name, newName: newTable.Name.Name}
+		return spRenameStatement{d: g.dialect, table: oldTable, newName: newTable.Name.Name}
 	}
 	// The old name must be qualified and the new one must not be.
 	return g.alterTable(oldTable, renameTableAction{to: newTable.Name})
@@ -6051,7 +6042,7 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 	case *parser.UnaryExpr:
 		return e.Operator + d.formatExprQuoteAware(e.Expr)
 	case *parser.IsExpr:
-		// IsExpr has Operator (e.d., "is null", "is not null") and Expr
+		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
 		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
 		return d.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
