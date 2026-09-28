@@ -14,6 +14,15 @@ ViewWithSelectStar:
     CREATE TABLE users (id integer, name text);
     CREATE VIEW users_view AS SELECT * FROM users;
 
+ViewWithUuidColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      uuid uuid NOT NULL
+    );
+    CREATE VIEW user_uuids AS SELECT id, uuid FROM users WHERE uuid IS NOT NULL;
+
 MaterializedView:
   desired: |
     CREATE TABLE points (id bigint);
