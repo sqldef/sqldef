@@ -8601,6 +8601,7 @@ non_reserved_keyword:
 | ALLOW_ROW_LOCKS
 | ALLOW_PAGE_LOCKS
 | LANGUAGE
+| UUID
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
 // like PRIMARY KEY / FOREIGN KEY / VECTOR KEY work in both dialects while
@@ -8675,7 +8676,6 @@ type_func_name_keyword:
 | TINYINT
 | TSRANGE
 | TSTZRANGE
-| UUID
 | VARBINARY
 | VARCHAR
 | VARYING
