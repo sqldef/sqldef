@@ -427,6 +427,21 @@ CreateIndexWithoutConcurrentlyConfig:
     CREATE INDEX idx_users_name ON users (name);
   down: |
     DROP INDEX "public"."idx_users_name";
+CreateIndexConcurrentlyWithoutConcurrentlyConfig:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX CONCURRENTLY t_a_idx ON t USING btree (a);
+  up: |
+    CREATE INDEX CONCURRENTLY t_a_idx ON public.t USING btree (a);
+  down: |
+    DROP INDEX public.t_a_idx;
 CreateIndexWithStorageParameterString:
   desired: |
     CREATE TABLE test_table (
