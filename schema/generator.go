@@ -4671,47 +4671,38 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 // grantObjectKeyword returns the SQL object keyword used in GRANT/REVOKE
 // statements for the given privilege object type ("TABLE" by default).
 
-// grantStatementParts splits a GRANT statement into the text up to and including
-// its " TO ", the grantee list, and a trailing " WITH GRANT OPTION" if present.
-// It reports false when the statement does not have that shape, so callers can
-// leave the text untouched rather than rewrite it incorrectly.
-func grantStatementParts(statement string) (head, grantees, tail string, ok bool) {
-	body := statement
-	upper := strings.ToUpper(body)
+// grantStatementWithoutGrantOption splits a trailing " WITH GRANT OPTION" off a
+// GRANT statement, so the grantee list is the end of what remains.
+func grantStatementWithoutGrantOption(statement string) (body, tail string) {
 	const withGrantOption = " WITH GRANT OPTION"
-	if strings.HasSuffix(upper, withGrantOption) {
-		cut := len(body) - len(withGrantOption)
-		tail = body[cut:]
-		body = body[:cut]
-		upper = upper[:cut]
+	if strings.HasSuffix(strings.ToUpper(statement), withGrantOption) {
+		cut := len(statement) - len(withGrantOption)
+		return statement[:cut], statement[cut:]
 	}
-	const to = " TO "
-	idx := strings.LastIndex(upper, to)
-	if idx < 0 {
-		return "", "", "", false
-	}
-	return body[:idx+len(to)], body[idx+len(to):], tail, true
+	return statement, ""
 }
 
-// mergeGrantStatementGrantees appends the grantee list of addend to base. It is
-// used when two GRANT statements are consolidated into one entry, so that the
-// statement text keeps naming every grantee the entry covers. addedGrantees is
-// how many grantees of addend were actually taken; when addend names more
-// grantees than that (some were filtered out as unmanaged), the text cannot be
-// reused as is and the merge is refused.
-func mergeGrantStatementGrantees(base, addend string, addedGrantees int) (string, bool) {
-	head, grantees, tail, ok := grantStatementParts(base)
-	if !ok {
-		return "", false
+// granteeTextInGrantStatement returns how statement spells grantee in its
+// grantee list. The list is matched as a suffix rather than by looking for
+// " TO ", because a quoted grantee name may contain " TO " itself. It reports
+// false when the spelling cannot be recognized, so callers can leave the
+// statement alone instead of rewriting it into something invalid.
+func granteeTextInGrantStatement(statement, grantee string) (string, bool) {
+	body, _ := grantStatementWithoutGrantOption(statement)
+	quoted := `"` + strings.ReplaceAll(grantee, `"`, `""`) + `"`
+	for _, candidate := range []string{quoted, grantee} {
+		if strings.HasSuffix(body, " TO "+candidate) {
+			return candidate, true
+		}
 	}
-	_, addGrantees, _, ok := grantStatementParts(addend)
-	if !ok {
-		return "", false
-	}
-	if len(strings.Split(addGrantees, ",")) != addedGrantees {
-		return "", false
-	}
-	return head + grantees + ", " + strings.TrimSpace(addGrantees) + tail, true
+	return "", false
+}
+
+// appendGranteeToGrantStatement adds granteeText to the end of the grantee list
+// of statement, keeping any trailing WITH GRANT OPTION last.
+func appendGranteeToGrantStatement(statement, granteeText string) string {
+	body, tail := grantStatementWithoutGrantOption(statement)
+	return body + ", " + granteeText + tail
 }
 
 func grantObjectKeyword(objectType string) string {
@@ -7746,9 +7737,16 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 					// grantee that is only recorded in the field would be dropped
 					// from the exported schema, and re-applying that export would
 					// revoke its privileges.
-					if added == len(includedGrantees) {
-						if merged, ok := mergeGrantStatementGrantees(existing.statement, stmt.statement, added); ok {
-							existing.statement = merged
+					//
+					// Only a statement that contributes exactly one grantee is
+					// merged into the text: that is the shape the exporter emits,
+					// and it lets the grantee be spelled the way its own statement
+					// spells it. Anything else keeps the previous behavior rather
+					// than risking a rewritten statement that names a grantee the
+					// configuration excluded.
+					if added == 1 && len(includedGrantees) == 1 {
+						if granteeText, ok := granteeTextInGrantStatement(stmt.statement, includedGrantees[0]); ok {
+							existing.statement = appendGranteeToGrantStatement(existing.statement, granteeText)
 						}
 					}
 				} else {

@@ -2138,6 +2138,42 @@ func TestPsqldefExportKeepsEveryGrantee(t *testing.T) {
 	})
 }
 
+// A quoted grantee name may contain " TO ", so the grantee list of a statement
+// cannot be found by looking for that keyword. Both orders are covered because
+// the grantee spelling is taken from the statement that is merged in, whichever
+// of the two that turns out to be.
+func TestPsqldefExportGranteeNameContainingTo(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS "a TO b";
+		DROP ROLE IF EXISTS "z TO y";
+		DROP ROLE IF EXISTS test_plain_grantee;
+		CREATE ROLE "a TO b";
+		CREATE ROLE "z TO y";
+		CREATE ROLE test_plain_grantee;
+		CREATE TABLE grantee_to_items (id bigint PRIMARY KEY);
+		GRANT SELECT ON TABLE grantee_to_items TO "a TO b", "z TO y", test_plain_grantee;
+	`)
+	t.Cleanup(func() {
+		mustPgExec(testDatabaseName, `
+			DROP TABLE IF EXISTS grantee_to_items;
+			DROP ROLE IF EXISTS "a TO b";
+			DROP ROLE IF EXISTS "z TO y";
+			DROP ROLE IF EXISTS test_plain_grantee;
+		`)
+	})
+
+	managed := `managed_roles: ["a TO b", "z TO y", test_plain_grantee]`
+	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managed)...)
+
+	assert.Contains(t, exported, `TO "a TO b", "test_plain_grantee", "z TO y";`)
+
+	tu.WriteFile("schema.sql", exported)
+	dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managed, "--file", "schema.sql", "--dry-run")...)
+	assert.Equal(t, nothingModified, dryRun)
+}
+
 func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 	resetTestDatabase()
 
