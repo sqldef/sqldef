@@ -2087,6 +2087,57 @@ func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
 // TargetSchema leak into the export and the generator aborts with
 // "ALTER TABLE ... OWNER TO performed before CREATE TABLE" because there is no
 // matching CREATE in the desired DDL (regression from the OWNER management PR).
+// Grants that carry the same privileges on the same object are consolidated into
+// one entry, and --export prints that entry's statement. The statement used to
+// keep only the grantee it was parsed from, so every other grantee of the group
+// disappeared from the exported schema -- and re-applying that export revoked
+// their privileges.
+func TestPsqldefExportKeepsEveryGrantee(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_grantee_a;
+		DROP ROLE IF EXISTS test_grantee_b;
+		DROP ROLE IF EXISTS test_grantee_unmanaged;
+		CREATE ROLE test_grantee_a;
+		CREATE ROLE test_grantee_b;
+		CREATE ROLE test_grantee_unmanaged;
+		CREATE TABLE grantee_items (id bigint PRIMARY KEY, name varchar(100));
+		GRANT SELECT, INSERT ON TABLE grantee_items TO test_grantee_a, test_grantee_b;
+		GRANT SELECT ON TABLE grantee_items TO test_grantee_unmanaged;
+		GRANT SELECT (id, name) ON TABLE grantee_items TO test_grantee_a, test_grantee_b;
+	`)
+	t.Cleanup(func() {
+		mustPgExec(testDatabaseName, `
+			DROP TABLE IF EXISTS grantee_items;
+			DROP ROLE IF EXISTS test_grantee_a;
+			DROP ROLE IF EXISTS test_grantee_b;
+			DROP ROLE IF EXISTS test_grantee_unmanaged;
+		`)
+	})
+
+	managed := "managed_roles: [test_grantee_a, test_grantee_b]"
+	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managed)...)
+
+	t.Run("both grantees of a shared grant are exported", func(t *testing.T) {
+		assert.Contains(t, exported, `GRANT INSERT, SELECT ON TABLE "public"."grantee_items" TO "test_grantee_a", "test_grantee_b";`)
+	})
+
+	t.Run("column grants keep every grantee too", func(t *testing.T) {
+		assert.Contains(t, exported, `GRANT SELECT ("id", "name") ON TABLE "public"."grantee_items" TO "test_grantee_a", "test_grantee_b";`)
+	})
+
+	t.Run("an unmanaged grantee is not exported", func(t *testing.T) {
+		assert.NotContains(t, exported, "test_grantee_unmanaged")
+	})
+
+	t.Run("the export converges", func(t *testing.T) {
+		tu.WriteFile("schema.sql", exported)
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", managed, "--file", "schema.sql", "--dry-run")...)
+		assert.Equal(t, nothingModified, dryRun)
+	})
+}
+
 func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 	resetTestDatabase()
 

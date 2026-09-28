@@ -4670,6 +4670,50 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 
 // grantObjectKeyword returns the SQL object keyword used in GRANT/REVOKE
 // statements for the given privilege object type ("TABLE" by default).
+
+// grantStatementParts splits a GRANT statement into the text up to and including
+// its " TO ", the grantee list, and a trailing " WITH GRANT OPTION" if present.
+// It reports false when the statement does not have that shape, so callers can
+// leave the text untouched rather than rewrite it incorrectly.
+func grantStatementParts(statement string) (head, grantees, tail string, ok bool) {
+	body := statement
+	upper := strings.ToUpper(body)
+	const withGrantOption = " WITH GRANT OPTION"
+	if strings.HasSuffix(upper, withGrantOption) {
+		cut := len(body) - len(withGrantOption)
+		tail = body[cut:]
+		body = body[:cut]
+		upper = upper[:cut]
+	}
+	const to = " TO "
+	idx := strings.LastIndex(upper, to)
+	if idx < 0 {
+		return "", "", "", false
+	}
+	return body[:idx+len(to)], body[idx+len(to):], tail, true
+}
+
+// mergeGrantStatementGrantees appends the grantee list of addend to base. It is
+// used when two GRANT statements are consolidated into one entry, so that the
+// statement text keeps naming every grantee the entry covers. addedGrantees is
+// how many grantees of addend were actually taken; when addend names more
+// grantees than that (some were filtered out as unmanaged), the text cannot be
+// reused as is and the merge is refused.
+func mergeGrantStatementGrantees(base, addend string, addedGrantees int) (string, bool) {
+	head, grantees, tail, ok := grantStatementParts(base)
+	if !ok {
+		return "", false
+	}
+	_, addGrantees, _, ok := grantStatementParts(addend)
+	if !ok {
+		return "", false
+	}
+	if len(strings.Split(addGrantees, ",")) != addedGrantees {
+		return "", false
+	}
+	return head + grantees + ", " + strings.TrimSpace(addGrantees) + tail, true
+}
+
 func grantObjectKeyword(objectType string) string {
 	if objectType == "SEQUENCE" {
 		return "SEQUENCE"
@@ -7690,9 +7734,21 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
+					added := 0
 					for _, grantee := range includedGrantees {
 						if !slices.Contains(existing.grantees, grantee) {
 							existing.grantees = append(existing.grantees, grantee)
+							added++
+						}
+					}
+					// Keep the statement text in step with the grantee list. The
+					// consolidated entry is emitted verbatim by --export, so a
+					// grantee that is only recorded in the field would be dropped
+					// from the exported schema, and re-applying that export would
+					// revoke its privileges.
+					if added == len(includedGrantees) {
+						if merged, ok := mergeGrantStatementGrantees(existing.statement, stmt.statement, added); ok {
+							existing.statement = merged
 						}
 					}
 				} else {
