@@ -854,6 +854,10 @@ type ColumnType struct {
 	// TypeIdent stores the original identifier with quote information for custom types (e.g., domains).
 	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted to determine quoting.
 	TypeIdent Ident
+	// TypeModifier holds a type modifier that is not a list of numbers and so
+	// cannot be carried by Length and Scale, such as the PostGIS
+	// geometry(Point,4326). It is the text between the parentheses.
+	TypeModifier string
 
 	// Generic field options.
 	NotNull             *BoolVal
@@ -975,7 +979,9 @@ func (ed *ExclusionDefinition) Format(buf *nodeBuffer) {
 func (ct *ColumnType) Format(buf *nodeBuffer) {
 	buf.Printf("%s", ct.Type)
 
-	if ct.Length != nil && ct.Scale != nil {
+	if ct.TypeModifier != "" {
+		buf.Printf("(%s)", ct.TypeModifier)
+	} else if ct.Length != nil && ct.Scale != nil {
 		buf.Printf("(%v,%v)", ct.Length, ct.Scale)
 
 	} else if ct.Length != nil {

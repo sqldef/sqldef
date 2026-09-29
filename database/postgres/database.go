@@ -1407,6 +1407,24 @@ func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 		typeName = strings.TrimSuffix(typeName, "[]")
 	}
 
+	// Split off a type modifier before the case detection below. format_type()
+	// returns the modifier as part of the name for non-built-in types, and a
+	// modifier may contain identifiers rather than numbers -- PostGIS spells one
+	// as geometry(Point,4326). Its uppercase letter would otherwise quote the
+	// whole string, yielding a type that does not exist:
+	//
+	//     "geometry(Point,4326)"  ->  pq: type "geometry(Point,4326)" does not exist
+	//
+	// The modifier is reattached unchanged: it is not an identifier, so it needs
+	// no quoting of its own. A name that is itself quoted is left alone, since
+	// the parenthesis would then belong to the quoted spelling.
+	typeModifier := ""
+	if idx := strings.Index(typeName, "("); idx > 0 && !strings.Contains(typeName[:idx], `"`) {
+		typeModifier = typeName[idx:]
+		typeName = typeName[:idx]
+	}
+	arraySuffix = typeModifier + arraySuffix
+
 	// If already quoted (from format_type()), return as-is
 	if strings.HasPrefix(typeName, "\"") && strings.HasSuffix(typeName, "\"") {
 		return typeName + arraySuffix
