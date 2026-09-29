@@ -237,10 +237,13 @@ type PartitionDefinition struct {
 }
 
 type Column struct {
-	name                       Ident
-	position                   int
-	typeName                   string
-	typeIdent                  Ident // Type name with quote information (for custom types like domains)
+	name      Ident
+	position  int
+	typeName  string
+	typeIdent Ident // Type name with quote information (for custom types like domains)
+	// typeModifier is a type modifier that is not a length, such as the PostGIS
+	// geometry(Point,4326). length and scale cannot represent it.
+	typeModifier               string
 	unsigned                   bool
 	notNull                    *bool
 	autoIncrement              bool

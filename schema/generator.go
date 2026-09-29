@@ -3590,6 +3590,13 @@ func (g *Generator) generateDataType(column Column) string {
 		typeName = g.escapeSQLIdent(column.typeIdent)
 	}
 
+	// A modifier that is not a length, such as the PostGIS geometry(Point,4326).
+	// Without it an added column would be created unconstrained, which is not what
+	// the schema declared.
+	if column.typeModifier != "" {
+		return fmt.Sprintf("%s(%s)%s", typeName, column.typeModifier, suffix)
+	}
+
 	if column.displayWidth != nil {
 		return fmt.Sprintf("%s(%s)%s", typeName, column.displayWidth.raw, suffix)
 	} else if column.length != nil {
@@ -6288,6 +6295,13 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		}
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
+		return false
+	}
+
+	// A modifier that is not a length distinguishes two columns of the same type
+	// name: geometry(Point,4326) and geometry(MultiPolygon,3857) are both
+	// "geometry". Without this an SRID or shape change is silently ignored.
+	if current.typeModifier != desired.typeModifier {
 		return false
 	}
 
