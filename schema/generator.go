@@ -4713,6 +4713,40 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 	return aggregated, nil
 }
 
+// grantStatementWithoutGrantOption splits a trailing " WITH GRANT OPTION" off a
+// GRANT statement, so the grantee list is the end of what remains.
+func grantStatementWithoutGrantOption(statement string) (body, tail string) {
+	const withGrantOption = " WITH GRANT OPTION"
+	if strings.HasSuffix(strings.ToUpper(statement), withGrantOption) {
+		cut := len(statement) - len(withGrantOption)
+		return statement[:cut], statement[cut:]
+	}
+	return statement, ""
+}
+
+// granteeTextInGrantStatement returns how statement spells grantee in its
+// grantee list. The list is matched as a suffix rather than by looking for
+// " TO ", because a quoted grantee name may contain " TO " itself. It reports
+// false when the spelling cannot be recognized, so callers can leave the
+// statement alone instead of rewriting it into something invalid.
+func granteeTextInGrantStatement(statement, grantee string) (string, bool) {
+	body, _ := grantStatementWithoutGrantOption(statement)
+	quoted := `"` + strings.ReplaceAll(grantee, `"`, `""`) + `"`
+	for _, candidate := range []string{quoted, grantee} {
+		if strings.HasSuffix(body, " TO "+candidate) {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+// appendGranteeToGrantStatement adds granteeText to the end of the grantee list
+// of statement, keeping any trailing WITH GRANT OPTION last.
+func appendGranteeToGrantStatement(statement, granteeText string) string {
+	body, tail := grantStatementWithoutGrantOption(statement)
+	return body + ", " + granteeText + tail
+}
+
 // grantObjectKeyword returns the SQL object keyword used in GRANT/REVOKE
 // statements for the given privilege object type ("TABLE" by default).
 func grantObjectKeyword(objectType string) string {
@@ -7735,9 +7769,28 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
+					added := 0
 					for _, grantee := range includedGrantees {
 						if !slices.Contains(existing.grantees, grantee) {
 							existing.grantees = append(existing.grantees, grantee)
+							added++
+						}
+					}
+					// Keep the statement text in step with the grantee list. The
+					// consolidated entry is emitted verbatim by --export, so a
+					// grantee that is only recorded in the field would be dropped
+					// from the exported schema, and re-applying that export would
+					// revoke its privileges.
+					//
+					// Only a statement that contributes exactly one grantee is
+					// merged into the text: that is the shape the exporter emits,
+					// and it lets the grantee be spelled the way its own statement
+					// spells it. Anything else keeps the previous behavior rather
+					// than risking a rewritten statement that names a grantee the
+					// configuration excluded.
+					if added == 1 && len(includedGrantees) == 1 {
+						if granteeText, ok := granteeTextInGrantStatement(stmt.statement, includedGrantees[0]); ok {
+							existing.statement = appendGranteeToGrantStatement(existing.statement, granteeText)
 						}
 					}
 				} else {
