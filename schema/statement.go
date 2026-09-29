@@ -14,7 +14,7 @@ import (
 type statement interface {
 	// Render returns the SQL, commented out when the statement is skipped.
 	Render() string
-	// Destructive reports whether enable_drop has to allow the statement.
+	// Destructive reports whether heldBack gates the statement.
 	Destructive() bool
 	// Skipped reports whether the statement is emitted only as a comment.
 	Skipped() bool
@@ -27,15 +27,14 @@ type statementDefaults struct{}
 func (statementDefaults) Destructive() bool { return false }
 func (statementDefaults) Skipped() bool     { return false }
 
-// destructiveDefaults is what a statement that enable_drop gates is: destructive and not
+// destructiveDefaults is what a statement that heldBack gates is: destructive and not
 // skipped.
 type destructiveDefaults struct{}
 
 func (destructiveDefaults) Destructive() bool { return true }
 func (destructiveDefaults) Skipped() bool     { return false }
 
-// rawStatement is SQL the generator has not typed yet. The text-based enable_drop gate
-// still runs on it after rendering.
+// rawStatement is SQL the generator has not typed yet. It is never destructive.
 type rawStatement string
 
 func (s rawStatement) Render() string    { return string(s) }
@@ -50,14 +49,19 @@ func renderStatements(statements []statement) []string {
 	return util.TransformSlice(statements, statement.Render)
 }
 
-// skipped is a statement enable_drop holds back. It is still emitted, as a comment, so that
+// skipped is a statement heldBack holds back. It is still emitted, as a comment, so that
 // --dry-run shows what --enable-drop would run.
 type skipped struct {
 	statement
 }
 
-func (s skipped) Render() string { return skippedStatement(s.statement.Render()) }
-func (s skipped) Skipped() bool  { return true }
+// Render comments every line, so that a multi-line statement can never leak executable SQL
+// after the first line.
+func (s skipped) Render() string {
+	return "-- Skipped: " + strings.ReplaceAll(s.statement.Render(), "\n", "\n-- ")
+}
+
+func (s skipped) Skipped() bool { return true }
 
 // recreate drops an object and brings it back. appendRecreateStatements emits it.
 type recreate struct {

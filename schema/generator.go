@@ -912,64 +912,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddls[i] = skipped{ddl}
 		}
 	}
-	rendered := renderStatements(ddls)
-
-	// Comment out the DROP/REVOKE statements not typed yet when enable_drop is false. With
-	// manage.privilege / manage.function, per-object gating is already decided
-	// at emission time, so those statements are left alone here.
-	if !g.config.EnableDrop {
-		rendered = commentOutDropStatements(rendered, g.config)
-	}
-
-	return rendered, nil
-}
-
-// commentOutDropStatements converts DROP/REVOKE statements to SQL comments.
-// This makes the output testable and visible in --dry-run output.
-// Every line is commented out so that a multi-line statement can never leak
-// executable SQL after the first line.
-//
-// manage.privilege (REVOKE) and manage.function (DROP FUNCTION) decide per
-// object whether the destructive statement is allowed at emission time —
-// forbidden ones already carry the "-- Skipped: " prefix — so those statement
-// kinds are preserved here rather than being re-gated by the global enable_drop.
-func commentOutDropStatements(ddls []string, config database.GeneratorConfig) []string {
-	preserveRevokes := config.ManagePrivileges != nil
-	preserveFunctionDrops := config.ManageFunctions != nil
-	result := make([]string, len(ddls))
-	for i, ddl := range ddls {
-		if preserveRevokes && strings.HasPrefix(ddl, "REVOKE ") {
-			result[i] = ddl
-			continue
-		}
-		if preserveFunctionDrops && strings.HasPrefix(ddl, "DROP FUNCTION ") {
-			result[i] = ddl
-			continue
-		}
-		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
-			result[i] = skippedStatement(ddl)
-		} else {
-			result[i] = ddl
-		}
-	}
-	return result
-}
-
-// skippedStatement comments a statement out. Every line is commented so that a multi-line
-// statement can never leak executable SQL after the first line.
-func skippedStatement(ddl string) string {
-	return "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
-}
-
-// isDropStatement checks if a DDL statement not typed yet is a destructive DROP or REVOKE
-// statement. All DDLs passed here are synthesized by the generator itself, so
-// destructive ones can be recognized by their leading keyword. Substring-matching the whole
-// text would misfire on additive statements whose payload merely mentions a
-// destructive word: a function body inspecting tg_tag (e.g. AWS DMS's
-// awsdms_intercept_ddl event trigger function), a comment text, or a string
-// literal.
-func isDropStatement(ddl string) bool {
-	return strings.HasPrefix(ddl, "DROP ") || strings.HasPrefix(ddl, "REVOKE ")
+	return renderStatements(ddls), nil
 }
 
 // heldBack reports whether a statement is kept from running, and is the only place that
@@ -3891,7 +3834,6 @@ func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index)
 	}
 	return result
 }
-
 
 func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) statement {
 	switch g.mode {
