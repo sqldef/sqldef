@@ -1,3 +1,14 @@
+## [v3.11.25](https://github.com/sqldef/sqldef/compare/v3.11.24...v3.11.25) - 2026-09-29
+
+- psqldef: match unnamed indexes and constraints by definition by @178inaba in https://github.com/sqldef/sqldef/pull/1378
+- schema: stop enable_drop from skipping ALTER TABLE whose literal spells a drop by @moznion in https://github.com/sqldef/sqldef/pull/1389
+- mysqldef: compare CHECK and generated column expressions with mixed-case columns and CASE by @moznion in https://github.com/sqldef/sqldef/pull/1390
+- psqldef: make OUT / INOUT / VARIADIC functions idempotent by @178inaba in https://github.com/sqldef/sqldef/pull/1336
+- psqldef: map CONCURRENTLY of CREATE INDEX in the pgquery parser by @178inaba in https://github.com/sqldef/sqldef/pull/1393
+- parser: accept uuid as an unquoted identifier by @halkt in https://github.com/sqldef/sqldef/pull/1398
+- psqldef: export multiple single-column CHECKs on the same column as table constraints by @moznion in https://github.com/sqldef/sqldef/pull/1396
+- psqldef: keep every grantee in an exported GRANT by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1395
+
 ## [v3.11.24](https://github.com/sqldef/sqldef/compare/v3.11.23...v3.11.24) - 2026-09-25
 
 - psqldef: cover the NOT expression normalization paths #1342 left untested by @moznion in https://github.com/sqldef/sqldef/pull/1363
