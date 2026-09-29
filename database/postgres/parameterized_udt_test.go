@@ -39,6 +39,15 @@ func TestParseParameterizedUserDefinedType(t *testing.T) {
 			want: "geography(point,4326)",
 		},
 		{
+			// The two parsers spell a schema-qualified type differently: pgquery
+			// keeps the schema in References while the generic parser puts it in
+			// the type name. They converge in the schema layer, which prepends
+			// References to the type name, so the modifier is what matters here.
+			name: "schema-qualified",
+			sql:  `CREATE TABLE t (g public.geometry(Point,4326))`,
+			want: "geometry(point,4326) references `public.`",
+		},
+		{
 			name: "no modifier is unchanged",
 			sql:  `CREATE TABLE t (g geometry)`,
 			want: "geometry",
@@ -127,6 +136,11 @@ func TestParseParameterizedUserDefinedTypeWithGenericParser(t *testing.T) {
 		{"custom type that is not a grammar keyword", `CREATE TABLE t (g geography(Point,4326))`, "geography(point,4326)"},
 		{"no modifier is unchanged", `CREATE TABLE t (g geometry)`, "geometry"},
 		{"numeric modifiers still use length and scale", `CREATE TABLE t (n numeric(10,2))`, "numeric(10,2)"},
+		// PostgreSQL qualifies the type when the extension's schema is not on the
+		// search_path, which is what --export then writes.
+		{"schema-qualified keyword type", `CREATE TABLE t (g public.geometry(Point,4326))`, "public.geometry(point,4326)"},
+		{"schema-qualified keyword type without a modifier", `CREATE TABLE t (g public.geometry)`, "public.geometry"},
+		{"schema-qualified custom type", `CREATE TABLE t (g public.geography(Point,4326))`, "public.geography(point,4326)"},
 	}
 
 	p := database.NewParser(parser.ParserModePostgres)

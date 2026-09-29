@@ -3821,6 +3821,23 @@ column_type:
   {
     $$ = ColumnType{Type: $1.Name + "." + $3.Name}
   }
+| ID '.' ID '(' type_modifier_list ')'
+  {
+    // A schema-qualified type with a modifier, which is how PostgreSQL spells
+    // the type when the extension's schema is not on the search_path:
+    // public.geometry(Point,4326).
+    $$ = ColumnType{Type: $1.Name + "." + $3.Name, TypeModifier: $5}
+  }
+| ID '.' GEOMETRY '(' type_modifier_list ')'
+  {
+    // GEOMETRY is a keyword of this grammar, so the rule above does not cover
+    // public.geometry(Point,4326).
+    $$ = ColumnType{Type: $1.Name + "." + $3, TypeModifier: $5}
+  }
+| ID '.' GEOMETRY
+  {
+    $$ = ColumnType{Type: $1.Name + "." + $3}
+  }
 
 column_definition_type:
   column_type array_opt
