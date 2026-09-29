@@ -1335,24 +1335,49 @@ func TestCommentOutDropStatements(t *testing.T) {
 	)
 }
 
-func TestGateFunctionDropDDL(t *testing.T) {
-	drop := `DROP FUNCTION "public"."f"`
+func TestHeldBack(t *testing.T) {
+	d := dialect{mode: GeneratorModePostgres, defaultSchema: "public"}
+	users := QualifiedName{Name: Ident{Name: "users"}}
+	dropTable := dropObjectStatement{d: d, kind: "TABLE", name: users}
+	dropEvent := dropObjectStatement{d: d, kind: "EVENT", name: QualifiedName{Name: Ident{Name: "cleanup"}}}
+	dropFunction := dropFunctionStatement{d: d, name: QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "f"}}}
+	dropExtension := dropExtensionStatement{d: d, name: Ident{Name: "pgcrypto"}}
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user", escapedGrantee: `"app_user"`}
+	rules := func(rules ...database.ManageObjectRule) *[]database.ManageObjectRule { return &rules }
 
-	// Legacy mode (manage.function unset): unchanged; the global enable_drop
-	// pass handles it.
-	assert.Equal(t, drop, gateFunctionDropDDL(database.GeneratorConfig{}, "f", drop))
+	tests := []struct {
+		name     string
+		config   database.GeneratorConfig
+		s        statement
+		heldBack bool
+	}{
+		{"DropTableWithEnableDrop", database.GeneratorConfig{EnableDrop: true}, dropTable, false},
+		{"DropTableWithoutEnableDrop", database.GeneratorConfig{}, dropTable, true},
+		{"DropEventWithoutEnableDrop", database.GeneratorConfig{}, dropEvent, true},
+		{"CreateWithoutEnableDrop", database.GeneratorConfig{}, inputStatement{statement: "CREATE TABLE users (id bigint)"}, false},
+		{"AlreadySkipped", database.GeneratorConfig{}, skipped{dropTable}, false},
 
-	// Matched rule with drop:true → allowed (bare DDL).
-	allow := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f", Drop: true}}}
-	assert.Equal(t, drop, gateFunctionDropDDL(allow, "f", drop))
+		{"RevokeWithoutEnableDrop", database.GeneratorConfig{}, revoke, true},
+		{"RevokeManagedRolesWithoutEnableDrop", database.GeneratorConfig{ManagedRoles: []string{"app_user"}}, revoke, true},
+		{"RevokeManagedRolesWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManagedRoles: []string{"app_user"}}, revoke, false},
+		{"RevokeManagePrivilegeDropWithoutEnableDrop", database.GeneratorConfig{ManagePrivileges: rules(database.ManageObjectRule{Target: "app_user", Drop: true})}, revoke, false},
+		{"RevokeManagePrivilegeNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManagePrivileges: rules(database.ManageObjectRule{Target: "app_user"})}, revoke, true},
+		{"RevokeManagePrivilegeUnmatched", database.GeneratorConfig{EnableDrop: true, ManagePrivileges: rules(database.ManageObjectRule{Target: "other", Drop: true})}, revoke, true},
 
-	// Matched rule with drop:false → skipped.
-	forbid := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f"}}}
-	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(forbid, "f", drop))
+		{"DropFunctionWithoutEnableDrop", database.GeneratorConfig{}, dropFunction, true},
+		{"DropFunctionManageFunctionDropWithoutEnableDrop", database.GeneratorConfig{ManageFunctions: rules(database.ManageObjectRule{Target: "f", Drop: true})}, dropFunction, false},
+		{"DropFunctionManageFunctionNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageFunctions: rules(database.ManageObjectRule{Target: "f"})}, dropFunction, true},
+		{"DropFunctionManageFunctionUnmatched", database.GeneratorConfig{EnableDrop: true, ManageFunctions: rules(database.ManageObjectRule{Target: "other", Drop: true})}, dropFunction, true},
 
-	// No rule matches → skipped (unmanaged functions are never dropped).
-	other := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "other", Drop: true}}}
-	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(other, "f", drop))
+		{"DropExtensionManageExtensionDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto", Drop: true})}, dropExtension, false},
+		{"DropExtensionManageExtensionDropWithoutEnableDrop", database.GeneratorConfig{ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto", Drop: true})}, dropExtension, true},
+		{"DropExtensionManageExtensionNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto"})}, dropExtension, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.heldBack, heldBack(tt.config, tt.s))
+		})
+	}
 }
 
 func TestIsManagedFunction(t *testing.T) {
@@ -1514,7 +1539,7 @@ func TestNormalizePGFunctionType(t *testing.T) {
 	assert.Equal(t, "setof", normalizePGFunctionType("setof"))
 }
 
-func TestDropFunctionDDL(t *testing.T) {
+func TestDropFunction(t *testing.T) {
 	g := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
 	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
 
@@ -1523,14 +1548,14 @@ func TestDropFunctionDDL(t *testing.T) {
 		{name: parser.NewIdent("x", false), typ: "integer"},
 		{mode: "VARIADIC", name: parser.NewIdent("rest", false), typ: "text[]"},
 	}}
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunctionDDL(fn))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunction(fn).Render())
 
 	// Zero arguments.
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunctionDDL(&Function{name: name}))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunction(&Function{name: name}).Render())
 
 	// OUT parameters are not part of the identity: keep the bare form.
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunction(outFn).Render())
 }
 
 func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {

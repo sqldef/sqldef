@@ -431,7 +431,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rawStatements(functionDDLs)...)
+			interDDLs = append(interDDLs, functionDDLs...)
 		case *Type:
 			typeDDLs, err := g.generateDDLsForCreateType(desired)
 			if err != nil {
@@ -480,13 +480,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			metadataDDLs = append(metadataDDLs, rawStatements(privilegeDDLs)...)
+			metadataDDLs = append(metadataDDLs, privilegeDDLs...)
 		case *RevokePrivilege:
 			revokeDDLs, err := g.generateDDLsForRevokePrivilege(desired)
 			if err != nil {
 				return nil, err
 			}
-			metadataDDLs = append(metadataDDLs, rawStatements(revokeDDLs)...)
+			metadataDDLs = append(metadataDDLs, revokeDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -511,12 +511,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
 		if desiredTrigger == nil {
 			switch g.mode {
-			case GeneratorModePostgres:
-				ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName))))
-			case GeneratorModeSQLite3:
-				ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name))))
-			case GeneratorModeMssql:
-				ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name))))
+			case GeneratorModePostgres, GeneratorModeSQLite3, GeneratorModeMssql:
+				ddls = append(ddls, dropTriggerStatement{d: g.dialect, name: currentTrigger.name, table: currentTrigger.tableName})
 			}
 		}
 	}
@@ -524,7 +520,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// Clean up obsoleted events
 	for _, currentEvent := range g.currentEvents {
 		if g.findEventByName(g.desiredEvents, currentEvent.name) == nil {
-			ddls = append(ddls, rawStatement(fmt.Sprintf("DROP EVENT %s", g.escapeQualifiedName(currentEvent.name))))
+			ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: "EVENT", name: currentEvent.name})
 		}
 	}
 
@@ -534,13 +530,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findViewByName(g.desiredViews, currentView.name) != nil {
 			continue
 		}
-		viewName := g.escapeViewName(currentView)
 		g.forgetViewMetadata(currentView)
+		kind := "VIEW"
 		if currentView.viewType == "MATERIALIZED VIEW" {
-			ddls = append(ddls, rawStatement(fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName)))
-			continue
+			kind = "MATERIALIZED VIEW"
 		}
-		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP VIEW %s", viewName)))
+		ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: kind, name: currentView.name})
 	}
 
 	var tablesToDrop []*Table
@@ -569,7 +564,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	for _, currentPartition := range g.currentPartitionOfs {
 		desiredPartition := g.findPartitionOfByName(g.desiredPartitionOfs, currentPartition.tableName)
 		if desiredPartition == nil {
-			ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TABLE %s", g.escapeQualifiedName(currentPartition.tableName))))
+			ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: "TABLE", name: currentPartition.tableName})
 		}
 	}
 
@@ -760,7 +755,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if g.findPolicyByName(desiredTable.policies, policy.name) != nil {
 				continue
 			}
-			appendDDL(rawStatement(fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable))))
+			appendDDL(dropPolicyStatement{d: g.dialect, name: policy.name, table: currentTable.name})
 		}
 
 		// Check row level security.
@@ -801,7 +796,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findDomainByName(g.desiredDomains, currentDomain.name) != nil {
 			continue
 		}
-		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP DOMAIN %s", g.escapeDomainName(currentDomain))))
+		ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: "DOMAIN", name: currentDomain.name})
 	}
 
 	// Clean up obsoleted extensions
@@ -809,15 +804,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findExtensionByName(g.desiredExtensions, currentExtension.extension.Name) != nil {
 			continue
 		}
-		dropDDL := fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(currentExtension.extension.Name))
-		if g.config.ManageExtensions != nil {
-			rule, _ := matchManageObjectRule(*g.config.ManageExtensions, currentExtension.extension.Name.Name)
-			if !rule.Drop {
-				ddls = append(ddls, rawStatement("-- Skipped: "+dropDDL))
-				continue
-			}
-		}
-		ddls = append(ddls, rawStatement(dropDDL))
+		ddls = append(ddls, dropExtensionStatement{d: g.dialect, name: currentExtension.extension.Name})
 	}
 
 	// Clean up obsoleted functions
@@ -825,8 +812,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findFunctionByName(g.desiredFunctions, currentFunction.name) != nil {
 			continue
 		}
-		dropDDL := fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name))
-		ddls = append(ddls, rawStatement(gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL)))
+		ddls = append(ddls, dropFunctionStatement{d: g.dialect, name: currentFunction.name})
 	}
 
 	// Clean up obsoleted types
@@ -834,7 +820,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findType(g.desiredTypes, currentType) != nil {
 			continue
 		}
-		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TYPE %s", g.escapeTypeName(currentType))))
+		ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: "TYPE", name: currentType.name})
 	}
 
 	// Clean up obsoleted comments
@@ -911,24 +897,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				}
 
 				if !found {
-					escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+					revoke, err := g.revoke(currentPriv.privileges, true, currentPriv.objectType, currentPriv.tableName, grantee)
 					if err != nil {
 						return nil, err
 					}
-
-					revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
-						formatPrivilegesForGrant(currentPriv.privileges),
-						grantObjectKeyword(currentPriv.objectType),
-						g.escapeQualifiedName(currentPriv.tableName),
-						escapedGrantee)
-					ddls = append(ddls, rawStatement(gateRevokeDDL(g.config, grantee, revoke)))
+					ddls = append(ddls, revoke)
 				}
 			}
 		}
 	}
 
 	for i, ddl := range ddls {
-		if g.heldBack(ddl) {
+		if heldBack(g.config, ddl) {
 			ddls[i] = skipped{ddl}
 		}
 	}
@@ -992,9 +972,33 @@ func isDropStatement(ddl string) bool {
 	return strings.HasPrefix(ddl, "DROP ") || strings.HasPrefix(ddl, "REVOKE ")
 }
 
-// heldBack reports whether enable_drop keeps a statement from running.
-func (g *Generator) heldBack(s statement) bool {
-	return !g.config.EnableDrop && !s.Skipped() && s.Destructive()
+// heldBack reports whether a statement is kept from running, and is the only place that
+// decides it. enable_drop gates every destructive statement, except that manage.privilege and
+// manage.function, when set, alone decide the REVOKEs and the function drops. manage.extension
+// can only hold a drop back further.
+func heldBack(config database.GeneratorConfig, s statement) bool {
+	if s.Skipped() || !s.Destructive() {
+		return false
+	}
+	switch s := s.(type) {
+	case revokeStatement:
+		if config.ManagePrivileges != nil {
+			return !granteeRevokeAllowed(config, s.grantee)
+		}
+	case dropFunctionStatement:
+		if config.ManageFunctions != nil {
+			// A rule names the function alone, whatever its schema.
+			rule, matched := matchManageObjectRule(*config.ManageFunctions, s.name.Name.Name)
+			return !matched || !rule.Drop
+		}
+	case dropExtensionStatement:
+		if config.ManageExtensions != nil {
+			if rule, _ := matchManageObjectRule(*config.ManageExtensions, s.name.Name); !rule.Drop {
+				return true
+			}
+		}
+	}
+	return !config.EnableDrop
 }
 
 // appendRecreateStatements appends a recreation and reports whether it will run. When
@@ -1003,7 +1007,7 @@ func (g *Generator) heldBack(s statement) bool {
 // a COMMENT ON the recreated object, would be generated for an object that was never
 // recreated.
 func (g *Generator) appendRecreateStatements(ddls []statement, r recreate) ([]statement, bool) {
-	if !slices.ContainsFunc(r.statements, g.heldBack) {
+	if !slices.ContainsFunc(r.statements, func(s statement) bool { return heldBack(g.config, s) }) {
 		return append(ddls, r.statements...), true
 	}
 	for _, s := range r.statements {
@@ -1059,7 +1063,7 @@ func (b *alterBundler) emit(table *Table, s statement) statement {
 		return s
 	}
 	alter, ok := s.(*alterTableStatement)
-	if !ok || alter.standalone() || b.g.heldBack(alter) {
+	if !ok || alter.standalone() || heldBack(b.g.config, alter) {
 		// A held-back statement cannot be fused, because the gate would then
 		// apply to the safe actions bundled with it.
 		return s
@@ -2673,13 +2677,13 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 }
 
 // generateDDLsForCreateFunction generates DDLs for CREATE FUNCTION statements
-func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, error) {
-	var ddls []string
+func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]statement, error) {
+	var ddls []statement
 
 	currentFunction, unmatchedOverloads := g.findReplaceTargetFunction(desired)
 	if currentFunction == nil {
 		// Function does not exist, create it
-		ddls = append(ddls, desired.statement)
+		ddls = append(ddls, inputStatement{statement: desired.statement})
 	} else if !g.areSameFunctionDefinition(currentFunction, desired) {
 		// PostgreSQL can update a function in place with CREATE OR REPLACE, but
 		// only while the signature (argument modes/names/types and return type)
@@ -2691,21 +2695,17 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, 
 		// dialects, the previous behavior is kept.
 		if g.mode == GeneratorModePostgres && !unmatchedOverloads {
 			if replacement, ok := g.functionReplacementDDL(currentFunction, desired); ok {
-				ddls = append(ddls, replacement)
+				ddls = append(ddls, inputStatement{statement: replacement})
 			} else {
-				// Signature changed: PostgreSQL requires DROP + CREATE. Gate the
-				// DROP through manage.function so a drop:false rule still forbids
-				// it (the global enable_drop pass preserves bare DROP FUNCTION
-				// lines when manage.function is set).
-				ddls = append(ddls, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, g.dropFunctionDDL(currentFunction)))
-				ddls = append(ddls, desired.statement)
+				// Signature changed: PostgreSQL requires DROP + CREATE.
+				ddls = append(ddls, g.dropFunction(currentFunction))
+				ddls = append(ddls, inputStatement{statement: desired.statement})
 			}
 		} else if desired.orReplace {
-			ddls = append(ddls, desired.statement)
+			ddls = append(ddls, inputStatement{statement: desired.statement})
 		} else {
-			dropDDL := "DROP FUNCTION " + g.escapeQualifiedName(currentFunction.name)
-			ddls = append(ddls, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL))
-			ddls = append(ddls, desired.statement)
+			ddls = append(ddls, dropFunctionStatement{d: g.dialect, name: currentFunction.name})
+			ddls = append(ddls, inputStatement{statement: desired.statement})
 		}
 	}
 
@@ -2859,12 +2859,12 @@ func normalizePGFunctionType(typ string) string {
 	return prefix + t + suffix.String()
 }
 
-// dropFunctionDDL renders DROP FUNCTION for current. In PostgreSQL the
-// identity argument types are appended when known so the drop stays
-// unambiguous under overloads; OUT parameters are not part of the identity, so
-// the bare form is kept when any non-input argument is present.
-func (g *Generator) dropFunctionDDL(current *Function) string {
-	base := "DROP FUNCTION " + g.escapeQualifiedName(current.name)
+// dropFunction drops current. In PostgreSQL the identity argument types are
+// appended when known so the drop stays unambiguous under overloads; OUT
+// parameters are not part of the identity, so the bare form is kept when any
+// non-input argument is present.
+func (g *Generator) dropFunction(current *Function) dropFunctionStatement {
+	drop := dropFunctionStatement{d: g.dialect, name: current.name}
 	argTypes := make([]string, 0, len(current.args))
 	for _, arg := range current.args {
 		switch functionArgMode(arg.mode) {
@@ -2873,10 +2873,11 @@ func (g *Generator) dropFunctionDDL(current *Function) string {
 		case "VARIADIC":
 			argTypes = append(argTypes, "VARIADIC "+arg.typ)
 		default: // OUT/INOUT: play safe with the bare form
-			return base
+			return drop
 		}
 	}
-	return base + "(" + strings.Join(argTypes, ", ") + ")"
+	drop.argTypes = argTypes
+	return drop
 }
 
 // insertOrReplaceIntoCreateFunction splices OR REPLACE after the leading
@@ -4520,11 +4521,11 @@ func (g *Generator) desiredWithGrantOption(desired *GrantPrivilege, grantee stri
 	return false
 }
 
-func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
+func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]statement, error) {
 	// Grantees should already be filtered by FilterPrivileges
 	// If multiple grantees made it here, they all have the same privileges to grant
 
-	var ddls []string
+	var ddls []statement
 	desiredNormalized := normalizePrivilegesForComparison(desired.privileges, desired.objectType)
 
 	// Track REVOKE operations per grantee
@@ -4675,29 +4676,20 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	}
 
 	for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
-		escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+		revoke, err := g.revoke(privileges, false, desired.objectType, desired.tableName, grantee)
 		if err != nil {
 			return nil, err
 		}
-		revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
-			formatPrivilegeList(privileges),
-			grantObjectKeyword(desired.objectType),
-			g.escapeQualifiedName(desired.tableName),
-			escapedGrantee)
-		ddls = append(ddls, gateRevokeDDL(g.config, grantee, revoke))
+		ddls = append(ddls, revoke)
 	}
 
 	for grantee, privileges := range util.CanonicalMapIter(revokeGrantOptionByGrantee) {
-		escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+		revoke, err := g.revoke(privileges, false, desired.objectType, desired.tableName, grantee)
 		if err != nil {
 			return nil, err
 		}
-		revoke := fmt.Sprintf("REVOKE GRANT OPTION FOR %s ON %s %s FROM %s",
-			formatPrivilegeList(privileges),
-			grantObjectKeyword(desired.objectType),
-			g.escapeQualifiedName(desired.tableName),
-			escapedGrantee)
-		ddls = append(ddls, gateRevokeDDL(g.config, grantee, revoke))
+		revoke.grantOption = true
+		ddls = append(ddls, revoke)
 	}
 
 	var privilegeKeys []string
@@ -4725,7 +4717,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		if desired.withGrantOption {
 			grant += " WITH GRANT OPTION"
 		}
-		ddls = append(ddls, grant)
+		ddls = append(ddls, rawStatement(grant))
 	}
 
 	// DO NOT update current privileges here - this breaks idempotency
@@ -4734,7 +4726,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]string, error) {
+func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]statement, error) {
 	if g.config.ManagesPrivileges() && len(desired.grantees) > 0 {
 		hasIncludedGrantee := false
 		for _, grantee := range desired.grantees {
@@ -4744,29 +4736,20 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 			}
 		}
 		if !hasIncludedGrantee {
-			return []string{}, nil
+			return nil, nil
 		}
 	}
 
-	escapedGrantee, err := g.validateAndEscapeGrantee(desired.grantees[0])
+	revoke, err := g.revoke(desired.privileges, true, desired.objectType, desired.tableName, desired.grantees[0])
 	if err != nil {
 		return nil, err
 	}
-
-	revoke := gateRevokeDDL(g.config, desired.grantees[0], fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
-		formatPrivilegesForGrant(desired.privileges),
-		grantObjectKeyword(desired.objectType),
-		g.escapeQualifiedName(desired.tableName),
-		escapedGrantee))
-
-	if desired.cascadeOption {
-		revoke += " CASCADE"
-	}
+	revoke.cascade = desired.cascadeOption
 
 	// DO NOT update current privileges here - this breaks idempotency
 	// The state should only be updated after DDLs are successfully applied
 
-	return []string{revoke}, nil
+	return []statement{revoke}, nil
 }
 
 // containsPrivilege reports whether privileges holds priv, comparing the
@@ -7630,32 +7613,6 @@ func granteeRevokeAllowed(config database.GeneratorConfig, grantee string) bool 
 	return matched && rule.Drop
 }
 
-// gateRevokeDDL wraps a REVOKE statement in a skip comment when manage.privilege
-// forbids revokes for grantee; in legacy mode it returns the DDL unchanged (the
-// global enable_drop pass handles it).
-func gateRevokeDDL(config database.GeneratorConfig, grantee, ddl string) string {
-	if config.ManagePrivileges != nil && !granteeRevokeAllowed(config, grantee) {
-		return "-- Skipped: " + ddl
-	}
-	return ddl
-}
-
-// gateFunctionDropDDL wraps a DROP FUNCTION statement in a skip comment when
-// manage.function forbids dropping funcName (the matched rule's drop is false,
-// or no rule matches). When manage.function is set the per-rule decision is
-// authoritative — the global enable_drop pass then preserves the remaining bare
-// DROP FUNCTION lines. In legacy mode the DDL is returned unchanged.
-func gateFunctionDropDDL(config database.GeneratorConfig, funcName, ddl string) string {
-	if config.ManageFunctions == nil {
-		return ddl
-	}
-	rule, matched := matchManageObjectRule(*config.ManageFunctions, funcName)
-	if !matched || !rule.Drop {
-		return "-- Skipped: " + ddl
-	}
-	return ddl
-}
-
 // generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
 // considering foreign key dependencies. Tables that reference other tables are dropped first.
 // It also generates DROP CONSTRAINT statements for foreign keys from tables that will NOT be
@@ -7745,7 +7702,7 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 	}
 
 	for _, table := range sortedTablesToDrop {
-		ddls = append(ddls, rawStatement(fmt.Sprintf("DROP TABLE %s", g.escapeTableName(table))))
+		ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: "TABLE", name: table.name})
 	}
 	return ddls
 }

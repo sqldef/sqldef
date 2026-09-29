@@ -27,6 +27,13 @@ type statementDefaults struct{}
 func (statementDefaults) Destructive() bool { return false }
 func (statementDefaults) Skipped() bool     { return false }
 
+// destructiveDefaults is what a statement that enable_drop gates is: destructive and not
+// skipped.
+type destructiveDefaults struct{}
+
+func (destructiveDefaults) Destructive() bool { return true }
+func (destructiveDefaults) Skipped() bool     { return false }
+
 // rawStatement is SQL the generator has not typed yet. The text-based enable_drop gate
 // still runs on it after rendering.
 type rawStatement string
@@ -205,6 +212,14 @@ type inputCreateIndexStatement struct {
 
 func (s inputCreateIndexStatement) Render() string { return s.statement }
 
+// inputStatement is a statement from the desired schema, emitted as written.
+type inputStatement struct {
+	statementDefaults
+	statement string
+}
+
+func (s inputStatement) Render() string { return s.statement }
+
 // mssqlClusteredOption renders whether a SQL Server index is clustered.
 func mssqlClusteredOption(index Index) string {
 	if index.clustered {
@@ -290,6 +305,119 @@ func (s alterSequenceStatement) Render() string {
 	schema := s.d.normalizeDefaultSchema(s.table.Schema)
 	sequence := Ident{Name: fmt.Sprintf("%s_%s_seq", s.table.Name.Name, s.column.Name), Quoted: false}
 	return fmt.Sprintf("ALTER SEQUENCE %s.%s AS %s", s.d.escapeSQLIdent(schema), s.d.escapeSQLIdent(sequence), s.underlyingType)
+}
+
+// dropObjectStatement drops an object that its qualified name alone identifies.
+type dropObjectStatement struct {
+	destructiveDefaults
+	d    dialect
+	kind string // "TABLE", "VIEW", "MATERIALIZED VIEW", "TYPE", "DOMAIN" or "EVENT"
+	name QualifiedName
+}
+
+func (s dropObjectStatement) Render() string {
+	return fmt.Sprintf("DROP %s %s", s.kind, s.d.escapeQualifiedName(s.name))
+}
+
+type dropTriggerStatement struct {
+	destructiveDefaults
+	d     dialect
+	name  QualifiedName
+	table QualifiedName
+}
+
+func (s dropTriggerStatement) Render() string {
+	if s.d.mode == GeneratorModePostgres {
+		return fmt.Sprintf("DROP TRIGGER %s ON %s", s.d.escapeQualifiedName(s.name), s.d.escapeQualifiedName(s.table))
+	}
+	return "DROP TRIGGER " + s.d.escapeQualifiedName(s.name)
+}
+
+type dropPolicyStatement struct {
+	destructiveDefaults
+	d     dialect
+	name  Ident
+	table QualifiedName
+}
+
+func (s dropPolicyStatement) Render() string {
+	return fmt.Sprintf("DROP POLICY %s ON %s", s.d.escapeSQLIdent(s.name), s.d.escapeQualifiedName(s.table))
+}
+
+// dropFunctionStatement drops a function. manage.function decides it by the function's name.
+type dropFunctionStatement struct {
+	destructiveDefaults
+	d    dialect
+	name QualifiedName
+	// argTypes tell the function apart from its overloads; nil drops it by its name alone.
+	argTypes []string
+}
+
+func (s dropFunctionStatement) Render() string {
+	ddl := "DROP FUNCTION " + s.d.escapeQualifiedName(s.name)
+	if s.argTypes != nil {
+		ddl += "(" + strings.Join(s.argTypes, ", ") + ")"
+	}
+	return ddl
+}
+
+// dropExtensionStatement drops an extension. manage.extension decides it by the extension's
+// name, and enable_drop still has to allow it.
+type dropExtensionStatement struct {
+	destructiveDefaults
+	d    dialect
+	name Ident
+}
+
+func (s dropExtensionStatement) Render() string {
+	return "DROP EXTENSION " + s.d.escapeSQLIdent(s.name)
+}
+
+// revokeStatement revokes privileges, or only their grant option, from a grantee.
+// manage.privilege decides it by the grantee.
+type revokeStatement struct {
+	destructiveDefaults
+	d          dialect
+	privileges []Privilege
+	// spellAll spells the full set of table privileges as ALL PRIVILEGES.
+	spellAll    bool
+	grantOption bool
+	objectType  string
+	object      QualifiedName
+	grantee     string
+	// escapedGrantee is the grantee as validateAndEscapeGrantee renders it, which leaves
+	// PUBLIC unquoted.
+	escapedGrantee string
+	cascade        bool
+}
+
+func (g *Generator) revoke(privileges []Privilege, spellAll bool, objectType string, object QualifiedName, grantee string) (revokeStatement, error) {
+	escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+	return revokeStatement{
+		d:              g.dialect,
+		privileges:     privileges,
+		spellAll:       spellAll,
+		objectType:     objectType,
+		object:         object,
+		grantee:        grantee,
+		escapedGrantee: escapedGrantee,
+	}, err
+}
+
+func (s revokeStatement) Render() string {
+	privileges := formatPrivilegeList(s.privileges)
+	if s.spellAll {
+		privileges = formatPrivilegesForGrant(s.privileges)
+	}
+	ddl := "REVOKE "
+	if s.grantOption {
+		ddl += "GRANT OPTION FOR "
+	}
+	ddl += fmt.Sprintf("%s ON %s %s FROM %s", privileges, grantObjectKeyword(s.objectType), s.d.escapeQualifiedName(s.object), s.escapedGrantee)
+	if s.cascade {
+		ddl += " CASCADE"
+	}
+	return ddl
 }
 
 // alterTableAction is one action of an ALTER TABLE.
