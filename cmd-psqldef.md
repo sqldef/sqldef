@@ -558,6 +558,7 @@ $ psqldef -U postgres dbname --apply \
 | `manage.extension` | array | List of `{target, drop}` rules for which extensions to manage; see [Managing Extensions](#managing-extensions). |
 | `manage.function` | array | List of `{target, drop}` rules for which functions to manage; see [Managing Functions](#managing-functions). |
 | `manage.privilege` | array | List of `{target, drop}` rules for which grantees' privileges to manage; see [Managing Privileges](#managing-privileges). |
+| `manage.owner` | bool or array | `true`, `false`, or a list of role names whose ownership to manage; see [Managing Owners](#managing-owners). |
 
 ### Managing Extensions
 
@@ -578,7 +579,7 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 If `manage.extension` is omitted, all extensions are managed as before. An empty `manage.extension:` section manages all extensions but disables drop for all of them by default.
 
-`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension`, `manage.function` and `manage.privilege`, other `manage:` keys are not implemented yet and are ignored with a warning.
+`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension`, `manage.function`, `manage.owner` and `manage.privilege`, other `manage:` keys are not implemented yet and are ignored with a warning.
 
 ### Managing Functions
 
@@ -616,7 +617,32 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 When `manage.privilege` is set, the deprecated `managed_roles` option is ignored (a warning is logged if both are present). An empty `manage.privilege:` section manages all grantees with REVOKE disabled by default.
 
-Enabling `manage.privilege` or `managed_roles` also enables ownership management for tables, partition parents and children, views, and materialized views. An `ALTER TABLE`, `ALTER VIEW`, or `ALTER MATERIALIZED VIEW ... OWNER TO` declaration in the desired schema sets the owner; omitting it preserves the current owner, including when a view must be recreated. Privilege targets match grantees and do not restrict owner roles.
+Ownership is configured separately with `manage.owner`; see [Managing Owners](#managing-owners). Until psqldef v4, `manage.privilege` or `managed_roles` without `manage.owner` also manages the owners of all roles, and a deprecation warning is logged.
+
+### Managing Owners
+
+`manage.owner` declares which roles' ownership psqldef manages, for tables, partition parents and children, views, and materialized views:
+
+```yaml
+manage:
+  owner: [app_owner, app_migrator]
+```
+
+`manage.owner` takes one of:
+
+- a list of role names: manage the ownership of objects owned by these roles
+- `true`: manage the ownership of objects owned by any role
+- `false`: do not manage ownership
+
+Role names match exactly as written, like `managed_roles`; they are neither regular expressions nor case-folded. An empty value (`owner:` or `owner: []`) is an error, because an empty section means "everything" for the other `manage:` keys.
+
+An `ALTER TABLE`, `ALTER VIEW`, or `ALTER MATERIALIZED VIEW ... OWNER TO` declaration in the desired schema changes the owner only when both the current owner and the declared owner are managed roles. psqldef never takes an object away from an unmanaged role, and never gives one to an unmanaged role; a declaration outside the list is ignored with a warning. For a new object, the declared owner is applied when it is a managed role. Omitting the declaration preserves the current owner, including when a view must be recreated.
+
+`--export` emits `OWNER TO` only for objects owned by a managed role. With `owner: false`, the export has no `OWNER TO` statements, and the desired schema's `OWNER TO` statements are ignored.
+
+`manage.owner` is independent of `manage.privilege`: you can manage GRANTs without managing owners, and the other way round.
+
+If `manage.owner` is omitted, ownership follows privilege management until psqldef v4: with `manage.privilege` or `managed_roles` set, the owners of all roles are managed (as with `owner: true`), and psqldef logs a warning asking you to set `manage.owner` explicitly. From v4, an omitted `manage.owner` means `false`.
 
 ## Identifier Quoting
 

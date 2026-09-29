@@ -794,6 +794,74 @@ func TestPsqldefExportManageExtensions(t *testing.T) {
 	), actual)
 }
 
+func TestPsqldefExportManageOwner(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_owner_listed;
+		DROP ROLE IF EXISTS test_owner_unlisted;
+		CREATE ROLE test_owner_listed;
+		CREATE ROLE test_owner_unlisted;
+		CREATE TABLE users (id bigint);
+		CREATE TABLE posts (id bigint);
+		ALTER TABLE users OWNER TO test_owner_listed;
+		ALTER TABLE posts OWNER TO test_owner_unlisted;
+	`)
+	t.Cleanup(func() {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, `
+			DROP ROLE IF EXISTS test_owner_listed;
+			DROP ROLE IF EXISTS test_owner_unlisted;
+		`)
+	})
+
+	export := func(config string) string {
+		return tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", config)...)
+	}
+
+	t.Run("a list of roles exports the owners of the listed roles only", func(t *testing.T) {
+		exported := export("manage: {owner: [test_owner_listed]}")
+		assert.Contains(t, exported, `ALTER TABLE "public"."users" OWNER TO "test_owner_listed";`)
+		assert.NotContains(t, exported, `OWNER TO "test_owner_unlisted"`)
+	})
+
+	t.Run("false exports no owners even with privileges managed", func(t *testing.T) {
+		exported := export("manage: {owner: false, privilege: [{target: test_owner_grantee}]}")
+		assert.NotContains(t, exported, "OWNER TO")
+	})
+
+	t.Run("an omitted manage.owner follows privilege management with a warning", func(t *testing.T) {
+		exported := export("manage: {privilege: [{target: test_owner_grantee}]}")
+		assert.Contains(t, exported, `OWNER TO "test_owner_listed"`)
+		assert.Contains(t, exported, `OWNER TO "test_owner_unlisted"`)
+		assert.Contains(t, exported, "manage.owner is not set")
+	})
+
+	t.Run("an explicit manage.owner does not warn", func(t *testing.T) {
+		exported := export("manage: {owner: true, privilege: [{target: test_owner_grantee}]}")
+		assert.Contains(t, exported, `OWNER TO "test_owner_unlisted"`)
+		assert.NotContains(t, exported, "manage.owner is not set")
+	})
+}
+
+func TestPsqldefManageOwnerWithCurrentFile(t *testing.T) {
+	tu.WriteFile("current.sql", "CREATE TABLE users (id bigint);\n")
+	tu.WriteFile("schema.sql", "CREATE TABLE users (id bigint);\nALTER TABLE users OWNER TO app_owner;\n")
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs("current.sql", "--config-inline", "manage: {owner: [app_owner]}", "-f", "schema.sql")...)
+	assert.Contains(t, output, "ALTER TABLE users OWNER TO app_owner;")
+}
+
+func TestPsqldefManageOwnerRejectsEmptyValue(t *testing.T) {
+	resetTestDatabase()
+
+	for _, config := range []string{"manage: {owner: []}", "manage: {owner: }", "manage: {owner: [{target: app_user}]}"} {
+		out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", config)...)
+		assert.Error(t, err, config)
+		assert.Contains(t, out, "manage.owner", config)
+	}
+}
+
 func TestPsqldefManageUnknownKeyFails(t *testing.T) {
 	resetTestDatabase()
 
@@ -1275,7 +1343,7 @@ func TestPsqldefSkipTablesAlsoSkipsExportedOwner(t *testing.T) {
         CREATE TABLE users (id bigint PRIMARY KEY);
     `)
 
-	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\nmanage:\n  privilege: []\n")
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\nmanage:\n  owner: true\n  privilege: []\n")
 
 	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
@@ -2018,7 +2086,7 @@ func TestPsqldefPrivilegeGrantOptionWithInheritedOwner(t *testing.T) {
 		`)
 	})
 
-	managePrivilege := "manage: {privilege: [{target: test_acl_app, drop: true}]}"
+	managePrivilege := "manage: {owner: true, privilege: [{target: test_acl_app, drop: true}]}"
 
 	t.Run("the grant was made without WITH GRANT OPTION", func(t *testing.T) {
 		// Guards the premise: the ACL holds no grant option, while
@@ -2108,7 +2176,7 @@ func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
 		`)
 	})
 
-	managePrivilege := "manage: {privilege: [{target: test_multi_grantee, drop: true}]}"
+	managePrivilege := "manage: {owner: true, privilege: [{target: test_multi_grantee, drop: true}]}"
 	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managePrivilege)...)
 
 	t.Run("export collapses the grants from both grantors", func(t *testing.T) {
@@ -2156,7 +2224,7 @@ func TestPsqldefExportKeepsEveryGrantee(t *testing.T) {
 		`)
 	})
 
-	managed := "managed_roles: [test_grantee_a, test_grantee_b]"
+	managed := "{managed_roles: [test_grantee_a, test_grantee_b], manage: {owner: true}}"
 	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managed)...)
 
 	t.Run("both grantees of a shared grant are exported", func(t *testing.T) {
@@ -2204,7 +2272,7 @@ func TestPsqldefExportGranteeNameContainingTo(t *testing.T) {
 		`)
 	})
 
-	managed := `managed_roles: ["a TO b", "z TO y", test_plain_grantee]`
+	managed := `{managed_roles: ["a TO b", "z TO y", test_plain_grantee], manage: {owner: true}}`
 	exported := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", managed)...)
 
 	assert.Contains(t, exported, `TO "a TO b", "test_plain_grantee", "z TO y";`)
@@ -2279,6 +2347,6 @@ func TestPsqldefSkipViewWithOwners(t *testing.T) {
 		CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
 	`)
 	tu.WriteFile("schema.sql", `CREATE TABLE users (id bigint);`)
-	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--skip-view", "--config-inline", "manage: {privilege: []}")...)
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--skip-view", "--config-inline", "manage: {owner: true, privilege: []}")...)
 	assert.Equal(t, nothingModified, output)
 }

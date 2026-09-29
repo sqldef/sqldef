@@ -261,12 +261,16 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 }
 
 // objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
-// and materialized views so that owners declared in the desired schema can be
-// diffed. Emitted only when manage.privilege or managed_roles is configured.
+// and materialized views when owners or privileges are managed. Every owner is exported, even an
+// unmanaged one: the generator needs it to leave an unmanaged role's object alone and to restore
+// the owner of a recreated view. schema.FilterOwners keeps only the managed ones in --export.
 // Extension-owned objects are excluded.
 func (d *PostgresDatabase) objectOwners() ([]string, error) {
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesOwners() && d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
 		return nil, nil
+	}
+	if d.generatorConfig.ManagesOwnersImplicitly() {
+		slog.Warn("manage.owner is not set, so ownership of all roles is managed because manage.privilege or managed_roles is set. From psqldef v4, an unset manage.owner will not manage ownership. Set manage.owner to true, false, or a list of role names.")
 	}
 
 	// The relkind, relpersistence and relispartition filters have to agree with tableNames() and

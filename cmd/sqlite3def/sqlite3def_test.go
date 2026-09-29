@@ -154,6 +154,12 @@ func TestSQLite3defConfigInlineEnableDrop(t *testing.T) {
 	assert.Equal(t, expectedOutput, outConfigInline)
 }
 
+func TestSQLite3defManageOwnerIsIgnoredWithWarning(t *testing.T) {
+	resetTestDatabase()
+	out := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--export", "--config-inline", "manage: {owner: [app_owner]}")
+	assert.Contains(t, out, "manage.owner is supported only by psqldef")
+}
+
 func TestSQLite3defExport(t *testing.T) {
 	resetTestDatabase()
 	out := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--export")
