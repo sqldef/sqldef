@@ -82,6 +82,36 @@ func TestParseGeneratorConfigManagePrivilege(t *testing.T) {
 	}
 }
 
+func TestParseGeneratorConfigManageOwner(t *testing.T) {
+	config := ParseGeneratorConfigString("manage: {owner: [app_owner, CamelOwner]}", GeneratorConfig{})
+	assert.Equal(t, &ManageOwnerConfig{Roles: []string{"app_owner", "CamelOwner"}}, config.ManageOwner)
+	assert.True(t, config.IsManagedOwner("app_owner"))
+	assert.True(t, config.IsManagedOwner("CamelOwner"))
+	assert.False(t, config.IsManagedOwner("camelowner"))
+
+	config = ParseGeneratorConfigString("manage: {owner: false, privilege: []}", GeneratorConfig{})
+	assert.False(t, config.ManagesOwners())
+	assert.False(t, config.ManagesOwnersImplicitly())
+
+	config = ParseGeneratorConfigString("manage: {owner: true}", GeneratorConfig{})
+	assert.True(t, config.IsManagedOwner("anyone"))
+	assert.False(t, config.ManagesOwnersImplicitly())
+
+	// Until v4, an omitted manage.owner follows privilege management.
+	config = ParseGeneratorConfigString("managed_roles: [app_user]", GeneratorConfig{})
+	assert.Nil(t, config.ManageOwner)
+	assert.True(t, config.IsManagedOwner("anyone"))
+	assert.True(t, config.ManagesOwnersImplicitly())
+
+	config = ParseGeneratorConfigString("enable_drop: true", GeneratorConfig{})
+	assert.False(t, config.ManagesOwners())
+
+	for _, value := range []any{nil, []any{}, []any{map[string]any{"target": "app_owner"}}, "app_owner"} {
+		_, err := ParseManageOwner(value)
+		assert.Error(t, err, value)
+	}
+}
+
 func TestMatchManageObjectRule(t *testing.T) {
 	// Empty rules list matches everything with drop disabled.
 	rule, ok := MatchManageObjectRule([]ManageObjectRule{}, "any_role")

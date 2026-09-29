@@ -1,0 +1,258 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+ManageOwnerListConvergesBetweenListedRoles:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user, admin_role]
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO admin_role;
+  up: |
+    ALTER TABLE users OWNER TO admin_role;
+  down: |
+    ALTER TABLE users OWNER TO app_user;
+
+ManageOwnerListKeepsObjectOfUnlistedRole:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user]
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: ""
+  down: ""
+
+ManageOwnerListIgnoresUnlistedDeclaredRole:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user]
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO admin_role;
+  up: ""
+  down: ""
+
+ManageOwnerListSetsOwnerOfNewTable:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user]
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  down: |
+    DROP TABLE public.users;
+
+ManageOwnerListConvergesViewOwner:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user, admin_role]
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO admin_role;
+  up: |
+    ALTER TABLE v_users OWNER TO admin_role;
+  down: |
+    ALTER TABLE v_users OWNER TO app_user;
+
+ManageOwnerFalseManagesPrivilegesOnly:
+  legacy_ignore_quotes: false
+  manage:
+    owner: false
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO admin_role;
+    GRANT SELECT ON TABLE users TO "readonly_user";
+  up: |
+    GRANT SELECT ON TABLE public.users TO "readonly_user";
+  down: |
+    REVOKE SELECT ON TABLE public.users FROM "readonly_user";
+
+ManageOwnerTrueWithoutPrivileges:
+  legacy_ignore_quotes: false
+  manage:
+    owner: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO admin_role;
+  up: |
+    ALTER TABLE users OWNER TO admin_role;
+  down: |
+    ALTER TABLE users OWNER TO app_user;
+
+ManageOwnerListRestoresUnlistedOwnerOnViewRecreate:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user]
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    ALTER TABLE v_users OWNER TO admin_role;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  up: |
+    DROP VIEW public.v_users;
+    CREATE VIEW public.v_users AS select id from users;
+    ALTER VIEW public.v_users OWNER TO "admin_role";
+  down: |
+    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+
+ManageOwnerFalseRestoresOwnerOnViewRecreate:
+  legacy_ignore_quotes: false
+  manage:
+    owner: false
+    privilege:
+      - target: readonly_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id, name FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+  up: |
+    DROP VIEW public.v_users;
+    CREATE VIEW public.v_users AS select id from users;
+    ALTER VIEW public.v_users OWNER TO "app_user";
+  down: |
+    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+
+ManageOwnerListKeepsRenamedTableOfUnlistedRole:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user]
+  current: |
+    CREATE TABLE old_users (
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE old_users OWNER TO admin_role;
+  desired: |
+    CREATE TABLE users ( -- @renamed from=old_users
+      id BIGINT PRIMARY KEY
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: |
+    ALTER TABLE public.old_users RENAME TO users;
+  down: |
+    CREATE TABLE old_users (
+      id BIGINT PRIMARY KEY
+    );
+    DROP TABLE public.users;
+
+ManageOwnerListConvergesPartitionOwnersAndKeepsUnlisted:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user, admin_role]
+  current: |
+    CREATE TABLE logs (
+      id BIGINT NOT NULL,
+      created_at DATE NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024 PARTITION OF logs FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+    CREATE TABLE logs_2025 PARTITION OF logs FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+    ALTER TABLE logs OWNER TO app_user;
+    ALTER TABLE logs_2024 OWNER TO app_user;
+    ALTER TABLE logs_2025 OWNER TO readonly_user;
+  desired: |
+    CREATE TABLE logs (
+      id BIGINT NOT NULL,
+      created_at DATE NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024 PARTITION OF logs FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+    CREATE TABLE logs_2025 PARTITION OF logs FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+    ALTER TABLE logs OWNER TO admin_role;
+    ALTER TABLE logs_2024 OWNER TO admin_role;
+    ALTER TABLE logs_2025 OWNER TO admin_role;
+  up: |
+    ALTER TABLE logs OWNER TO admin_role;
+    ALTER TABLE logs_2024 OWNER TO admin_role;
+  down: |
+    ALTER TABLE logs OWNER TO app_user;
+    ALTER TABLE logs_2024 OWNER TO app_user;
+
+ManageOwnerListConvergesMaterializedViewOwner:
+  legacy_ignore_quotes: false
+  manage:
+    owner: [app_user, admin_role]
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    ALTER MATERIALIZED VIEW mv_users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY
+    );
+    CREATE MATERIALIZED VIEW mv_users AS SELECT id FROM users;
+    ALTER MATERIALIZED VIEW mv_users OWNER TO admin_role;
+  up: |
+    ALTER MATERIALIZED VIEW mv_users OWNER TO admin_role;
+  down: |
+    ALTER MATERIALIZED VIEW mv_users OWNER TO app_user;

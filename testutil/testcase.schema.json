@@ -65,7 +65,7 @@
         },
         "manage": {
           "type": "object",
-          "description": "manage: config block (see object-management.md). Only manage.extension, manage.function and manage.privilege are implemented.",
+          "description": "manage: config block (see object-management.md). Only manage.extension, manage.function, manage.owner and manage.privilege are implemented.",
           "properties": {
             "extension": {
               "type": "array",
@@ -104,6 +104,13 @@
                 },
                 "additionalProperties": false
               }
+            },
+            "owner": {
+              "description": "Whose ownership is managed: true for every role, false for none, or a non-empty list of role names matched exactly as written (no regexp, no case folding).",
+              "oneOf": [
+                { "type": "boolean" },
+                { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              ]
             },
             "privilege": {
               "type": "array",

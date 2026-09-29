@@ -47,7 +47,9 @@ type TestCase struct {
 		Extension *[]database.ManageObjectRule `yaml:"extension"`
 		Function  *[]database.ManageObjectRule `yaml:"function"`
 		Privilege *[]database.ManageObjectRule `yaml:"privilege"`
+		Owner     any                          `yaml:"owner"` // parsed into ManageOwner by ReadTests
 	} `yaml:"manage"`
+	ManageOwner *database.ManageOwnerConfig `yaml:"-"`
 }
 
 func init() {
@@ -134,6 +136,21 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
 
+		// A null manage.owner decodes like an omitted one, so read the keys to reject it as psqldef does.
+		var manageKeys map[string]struct {
+			Manage map[string]any `yaml:"manage"`
+		}
+		if err := yaml.Unmarshal(buf, &manageKeys); err != nil {
+			return nil, fmt.Errorf("%s: %w", file, err)
+		}
+		for name, test := range tests {
+			if owner, ok := manageKeys[name].Manage["owner"]; ok {
+				if test.ManageOwner, err = database.ParseManageOwner(owner); err != nil {
+					return nil, fmt.Errorf("%s: test case '%s': %w", file, name, err)
+				}
+			}
+		}
+
 		for name, test := range tests {
 			// Check for deprecated 'output' field
 			if test.Output != nil {
@@ -206,6 +223,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		ManageExtensions:        test.Manage.Extension,
 		ManageFunctions:         test.Manage.Function,
 		ManagePrivileges:        test.Manage.Privilege,
+		ManageOwner:             test.ManageOwner,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,
