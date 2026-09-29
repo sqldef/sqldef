@@ -4668,9 +4668,6 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 	return aggregated, nil
 }
 
-// grantObjectKeyword returns the SQL object keyword used in GRANT/REVOKE
-// statements for the given privilege object type ("TABLE" by default).
-
 // grantStatementWithoutGrantOption splits a trailing " WITH GRANT OPTION" off a
 // GRANT statement, so the grantee list is the end of what remains.
 func grantStatementWithoutGrantOption(statement string) (body, tail string) {
@@ -4705,6 +4702,8 @@ func appendGranteeToGrantStatement(statement, granteeText string) string {
 	return body + ", " + granteeText + tail
 }
 
+// grantObjectKeyword returns the SQL object keyword used in GRANT/REVOKE
+// statements for the given privilege object type ("TABLE" by default).
 func grantObjectKeyword(objectType string) string {
 	if objectType == "SEQUENCE" {
 		return "SEQUENCE"

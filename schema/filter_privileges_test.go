@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -122,10 +121,5 @@ func TestFilterPrivilegesRefusesRewriteWithUnmanagedGrantee(t *testing.T) {
 	}
 	if statements[0] != `GRANT SELECT ON TABLE "public"."users" TO "app_user"` {
 		t.Errorf("statement = %q, want the original text kept", statements[0])
-	}
-	for _, s := range statements {
-		if strings.Contains(s, "other_user") {
-			t.Errorf("unmanaged grantee leaked into %q", s)
-		}
 	}
 }

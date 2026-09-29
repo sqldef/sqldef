@@ -2082,11 +2082,6 @@ func TestPsqldefPrivilegeFromMultipleGrantors(t *testing.T) {
 	})
 }
 
-// TestPsqldefOwnerWithTargetSchema tests that object-owner export (objectOwners)
-// honors TargetSchema. Without the filter, owners of objects in schemas outside
-// TargetSchema leak into the export and the generator aborts with
-// "ALTER TABLE ... OWNER TO performed before CREATE TABLE" because there is no
-// matching CREATE in the desired DDL (regression from the OWNER management PR).
 // Grants that carry the same privileges on the same object are consolidated into
 // one entry, and --export prints that entry's statement. The statement used to
 // keep only the grantee it was parsed from, so every other grantee of the group
@@ -2174,6 +2169,11 @@ func TestPsqldefExportGranteeNameContainingTo(t *testing.T) {
 	assert.Equal(t, nothingModified, dryRun)
 }
 
+// TestPsqldefOwnerWithTargetSchema tests that object-owner export (objectOwners)
+// honors TargetSchema. Without the filter, owners of objects in schemas outside
+// TargetSchema leak into the export and the generator aborts with
+// "ALTER TABLE ... OWNER TO performed before CREATE TABLE" because there is no
+// matching CREATE in the desired DDL (regression from the OWNER management PR).
 func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
 	resetTestDatabase()
 
