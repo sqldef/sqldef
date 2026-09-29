@@ -149,7 +149,7 @@ type Generator struct {
 
 	desiredComments []*Comment
 	currentComments []*Comment
-	recreatedViews  map[string]*View
+	recreatedViews  map[string]recreatedView
 
 	desiredExtensions []*Extension
 	currentExtensions []*Extension
@@ -228,7 +228,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentPartitionOfs: aggregated.PartitionOfs,
 		desiredComments:     desiredAggregated.Comments,
 		currentComments:     aggregated.Comments,
-		recreatedViews:      make(map[string]*View),
+		recreatedViews:      make(map[string]recreatedView),
 		desiredExtensions:   desiredAggregated.Extensions,
 		currentExtensions:   aggregated.Extensions,
 		desiredSchemas:      desiredAggregated.Schemas,
@@ -395,7 +395,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rawStatements(policyDDLs)...)
+			interDDLs = append(interDDLs, policyDDLs...)
 		case *SetTableOwner:
 			ddls, err := g.generateDDLsForSetTableOwner(desired)
 			if err != nil {
@@ -413,13 +413,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			viewDDLs = append(viewDDLs, rawStatements(ddls)...)
+			viewDDLs = append(viewDDLs, ddls...)
 		case *Trigger:
 			triggerDDLs, err := g.generateDDLsForCreateTrigger(desired.name, desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rawStatements(triggerDDLs)...)
+			interDDLs = append(interDDLs, triggerDDLs...)
 		case *Event:
 			eventDDLs, err := g.generateDDLsForCreateEvent(desired)
 			if err != nil {
@@ -1002,7 +1002,8 @@ func heldBack(config database.GeneratorConfig, s statement) bool {
 }
 
 // appendRecreateStatements appends a recreation and reports whether it will run. When
-// enable_drop holds back a drop in it, the whole recreation is held back. The caller must then
+// heldBack holds back a drop in it, the whole recreation is held back: the rest would run
+// against the object that is still there and fail with "already exists". The caller must then
 // leave the object as it is in its model of the current schema, or a later statement, such as
 // a COMMENT ON the recreated object, would be generated for an object that was never
 // recreated.
@@ -2208,34 +2209,34 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedName, desired
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desiredPolicy Policy, action string, statement string) ([]string, error) {
-	var ddls []string
+func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desiredPolicy Policy, action string, input string) ([]statement, error) {
+	var ddls []statement
 	tableNameStr := tableName.RawString()
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
 	if currentTable == nil {
-		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableNameStr, statement)
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableNameStr, input)
 	}
 
 	currentPolicy := g.findPolicyByName(currentTable.policies, desiredPolicy.name)
 	if currentPolicy == nil {
 		// Policy not found, add policy.
-		ddls = append(ddls, statement)
+		ddls = append(ddls, inputStatement{statement: input})
 		currentTable.policies = append(currentTable.policies, desiredPolicy)
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
-			ddls, _ = g.appendRecreate(ddls,
-				fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(currentPolicy.name), g.escapeTableName(currentTable)),
-				statement,
-			)
+			ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
+				dropPolicyStatement{d: g.dialect, name: currentPolicy.name, table: currentTable.name},
+				inputStatement{statement: input},
+			}})
 		}
 	}
 
 	// Examine policies in desiredTable to delete obsoleted policies later
 	desiredTable := g.findTableByName(g.desiredTables, tableName)
 	if desiredTable == nil {
-		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableNameStr, statement)
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableNameStr, input)
 	}
 	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findPolicyByName(desiredTable.policies, desiredPolicy.name) == nil {
@@ -2362,32 +2363,40 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	return false
 }
 
-func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, error) {
-	var ddls []string
+// recreatedView is a view that the recreation of a view it depends on dropped. Its CREATE comes
+// later, when the desired schema reaches it, and runs only when that recreation does.
+type recreatedView struct {
+	view     *View
+	heldBack bool
+}
+
+func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, error) {
+	var ddls []statement
 
 	currentView := g.findViewByName(g.currentViews, desiredView.name)
 	if currentView == nil {
 		view := *desiredView
 		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-		if previous := g.recreatedViews[key]; previous != nil {
-			view.owner = previous.owner
-			recreateDDLs := []string{g.createViewDDL(&view)}
-			if ownerDDL := g.restoreViewOwnerDDL(&view); ownerDDL != "" {
-				recreateDDLs = append(recreateDDLs, ownerDDL)
+		if previous, ok := g.recreatedViews[key]; ok {
+			// The dependent view was dropped by the recreation of a view it depends on, which
+			// decided whether this CREATE runs too.
+			view.owner = previous.view.owner
+			recreateDDLs := []statement{g.createView(&view, false)}
+			if owner, ok := g.restoreViewOwner(&view); ok {
+				recreateDDLs = append(recreateDDLs, owner)
 			}
-			if g.config.EnableDrop {
-				ddls = append(ddls, recreateDDLs...)
-			} else {
+			if previous.heldBack {
 				for _, ddl := range recreateDDLs {
-					ddls = append(ddls, skippedStatement(ddl))
+					ddls = append(ddls, skipped{ddl})
 				}
-				view = *previous
+				// A held-back recreation keeps its existing indexes.
+				view = *previous.view
+			} else {
+				ddls = append(ddls, recreateDDLs...)
+				view.indexes = nil
 			}
 		} else {
-			ddls = append(ddls, desiredView.statement)
-		}
-		// A held-back recreation keeps its existing indexes.
-		if g.recreatedViews[key] == nil || g.config.EnableDrop {
+			ddls = append(ddls, inputStatement{statement: desiredView.statement})
 			view.indexes = nil
 		}
 		g.currentViews = append(g.currentViews, &view)
@@ -2414,50 +2423,42 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		)
 
 		if currentNormalized != desiredNormalized {
-			viewDefinition := parser.String(desiredView.definition)
-
-			// Build the WITH [NO] DATA clause for materialized views
-			withDataClause := ""
-			if desiredView.withNoData {
-				withDataClause = " WITH NO DATA"
-			} else if desiredView.withData {
-				withDataClause = " WITH DATA"
-			}
-
-			viewName := g.escapeViewName(desiredView)
 			if g.shouldDropAndCreateView(currentView, desiredView) {
-				var recreateDDLs []string
+				var recreateDDLs []statement
+				var dependents []*View
 				if g.mode == GeneratorModePostgres {
 					// Drop current dependents first. The main loop recreates them in desired
 					// dependency order, which may differ from the current graph.
 					for _, depView := range slices.Backward(g.findDependentViews(desiredView.name)) {
-						recreateDDLs = append(recreateDDLs, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
-						key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-						g.recreatedViews[key] = depView
+						recreateDDLs = append(recreateDDLs, dropObjectStatement{d: g.dialect, kind: depView.viewType, name: depView.name})
+						dependents = append(dependents, depView)
 						g.forgetViewMetadata(depView)
 						g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == depView })
 					}
 				}
 				recreateDDLs = append(recreateDDLs,
-					fmt.Sprintf("DROP %s %s", currentView.viewType, viewName),
-					g.createViewDDL(desiredView),
+					dropObjectStatement{d: g.dialect, kind: currentView.viewType, name: currentView.name},
+					g.createView(desiredView, false),
 				)
 				g.forgetViewMetadata(currentView)
-				if ownerDDL := g.restoreViewOwnerDDL(currentView); ownerDDL != "" {
-					recreateDDLs = append(recreateDDLs, ownerDDL)
+				if owner, ok := g.restoreViewOwner(currentView); ok {
+					recreateDDLs = append(recreateDDLs, owner)
 				}
 
-				ddls, _ = g.appendRecreate(ddls, recreateDDLs...)
+				var recreated bool
+				ddls, recreated = g.appendRecreateStatements(ddls, recreate{statements: recreateDDLs})
+				for _, depView := range dependents {
+					key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					g.recreatedViews[key] = recreatedView{view: depView, heldBack: !recreated}
+				}
 			} else {
-				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
+				ddls = append(ddls, g.createView(desiredView, true))
 			}
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
 		// VIEW with the specified security type found. If it's different, create or replace view.
 		if !strings.EqualFold(currentView.securityType, desiredView.securityType) {
-			viewDefinition := parser.String(desiredView.definition)
-			viewName := g.escapeViewName(desiredView)
-			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE SQL SECURITY %s VIEW %s AS %s", desiredView.securityType, viewName, viewDefinition))
+			ddls = append(ddls, g.createView(desiredView, true))
 		}
 	}
 
@@ -2472,16 +2473,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 	}
 
 	return ddls, nil
-}
-
-func (g *Generator) createViewDDL(view *View) string {
-	suffix := ""
-	if view.withNoData {
-		suffix = " WITH NO DATA"
-	} else if view.withData {
-		suffix = " WITH DATA"
-	}
-	return fmt.Sprintf("CREATE %s %s AS %s%s", view.viewType, g.escapeViewName(view), parser.String(view.definition), suffix)
 }
 
 // findDependentViews finds all views that reference the given view name in their definitions.
@@ -2586,84 +2577,41 @@ func normalizeTriggerForEach(forEach string) string {
 	return forEach
 }
 
-func (g *Generator) formatTriggerEvent(event TriggerEvent) string {
+func (d dialect) formatTriggerEvent(event TriggerEvent) string {
 	if len(event.columns) == 0 {
 		return event.eventType
 	}
 	escapedCols := util.TransformSlice(event.columns, func(col Ident) string {
-		return g.escapeSQLIdent(col)
+		return d.escapeSQLIdent(col)
 	})
 	return event.eventType + " OF " + strings.Join(escapedCols, ", ")
 }
 
-func (g *Generator) formatTriggerEvents(events []TriggerEvent, sep string) string {
+func (d dialect) formatTriggerEvents(events []TriggerEvent, sep string) string {
 	var parts []string
 	for _, event := range events {
-		parts = append(parts, g.formatTriggerEvent(event))
+		parts = append(parts, d.formatTriggerEvent(event))
 	}
 	return strings.Join(parts, sep)
 }
 
-func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
-	var ddls []string
+func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]statement, error) {
+	var ddls []statement
 	currentTrigger := g.findTriggerByName(g.currentTriggers, triggerName)
-
-	var triggerDefinition string
-	switch g.mode {
-	case GeneratorModeMssql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeQualifiedName(desiredTrigger.name), g.escapeQualifiedName(desiredTrigger.tableName), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
-	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
-	case GeneratorModeSQLite3:
-		triggerDefinition = desiredTrigger.statement
-	case GeneratorModePostgres:
-		whenClause := ""
-		if desiredTrigger.whenCondition != "" {
-			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
-		}
-		triggerKeyword := "TRIGGER"
-		deferrableClause := ""
-		if desiredTrigger.constraint {
-			triggerKeyword = "CONSTRAINT TRIGGER"
-			// generateConstraintOptions omits NOT DEFERRABLE, so state it explicitly like pg_get_triggerdef() does
-			deferrableClause = "NOT DEFERRABLE "
-			if desiredTrigger.constraintOptions.deferrable {
-				deferrableClause = strings.TrimPrefix(g.generateConstraintOptions(desiredTrigger.constraintOptions), " ") + " "
-			}
-		}
-		triggerDefinition += fmt.Sprintf("%s %s %s %s ON %s %sFOR EACH %s %s%s", triggerKeyword, g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), deferrableClause, normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
-	default:
-		return ddls, nil
-	}
 
 	if currentTrigger == nil {
 		// Trigger not found, add trigger.
-		var createPrefix string
-		if g.mode != GeneratorModeSQLite3 {
-			createPrefix = "CREATE "
-		}
-		ddls = append(ddls, createPrefix+triggerDefinition)
+		ddls = append(ddls, createTriggerStatement{d: g.dialect, trigger: *desiredTrigger})
 	} else {
 		// Trigger found. If it's different, drop and recreate (or alter for MSSQL).
 		if !g.areSameTriggerDefinition(currentTrigger, desiredTrigger) {
-			switch g.mode {
-			case GeneratorModeMssql:
-				ddls = append(ddls, "CREATE OR ALTER "+triggerDefinition)
-			case GeneratorModePostgres:
-				ddls, _ = g.appendRecreate(ddls,
-					fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(triggerName), g.escapeQualifiedName(desiredTrigger.tableName)),
-					"CREATE "+triggerDefinition,
-				)
-			case GeneratorModeSQLite3:
-				ddls, _ = g.appendRecreate(ddls,
-					fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)),
-					triggerDefinition,
-				)
-			default:
-				ddls, _ = g.appendRecreate(ddls,
-					fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)),
-					"CREATE "+triggerDefinition,
-				)
+			if g.mode == GeneratorModeMssql {
+				ddls = append(ddls, createTriggerStatement{d: g.dialect, trigger: *desiredTrigger, orAlter: true})
+			} else {
+				ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
+					dropTriggerStatement{d: g.dialect, name: triggerName, table: desiredTrigger.tableName},
+					createTriggerStatement{d: g.dialect, trigger: *desiredTrigger},
+				}})
 			}
 		}
 	}
@@ -3963,22 +3911,6 @@ func (g *Generator) replaceIndex(indexes []Index, name Ident, replacement Index)
 	return result
 }
 
-// appendRecreate emits statements that drop an object and recreate it, and reports whether they
-// will run. When enable_drop leaves a drop among them commented out, the rest has to be held
-// back as well: it would run against the object that is still there and fail with "already
-// exists". The caller must then leave the object as it is in its model of the current schema,
-// or a later statement, such as a COMMENT ON the recreated object, would be generated for an
-// object that was never recreated. A drop that enable_drop does not gate, such as ALTER TABLE
-// DROP CONSTRAINT, is unaffected.
-func (g *Generator) appendRecreate(ddls []string, statements ...string) ([]string, bool) {
-	if g.config.EnableDrop || !slices.ContainsFunc(statements, isDropStatement) {
-		return append(ddls, statements...), true
-	}
-	for _, statement := range statements {
-		ddls = append(ddls, skippedStatement(statement))
-	}
-	return ddls, false
-}
 
 func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) statement {
 	switch g.mode {
@@ -4039,15 +3971,20 @@ func (g *Generator) forgetViewMetadata(view *View) {
 	})
 }
 
-// restoreViewOwnerDDL gives a view that is about to be dropped and created again its owner back.
+// restoreViewOwner gives a view that is about to be dropped and created again its owner back.
 // The recreated view belongs to the connecting role, which would silently reassign an object the
 // desired schema may say nothing about. A declaration that wants a different owner converges on
-// top of this, in generateDDLsForSetTableOwner.
-func (g *Generator) restoreViewOwnerDDL(view *View) string {
+// top of this, in generateDDLsForSetTableOwner. ok is false for a view without a known owner.
+func (g *Generator) restoreViewOwner(view *View) (s viewOwnerStatement, ok bool) {
 	if view.owner == "" {
-		return ""
+		return viewOwnerStatement{}, false
 	}
-	return fmt.Sprintf("ALTER %s %s OWNER TO %s", view.viewType, g.escapeViewName(view), g.forceEscapeSQLName(view.owner))
+	return viewOwnerStatement{d: g.dialect, viewType: view.viewType, name: view.name, owner: view.owner}, true
+}
+
+// createView creates view, or replaces it when orReplace is set.
+func (g *Generator) createView(view *View, orReplace bool) createViewStatement {
+	return createViewStatement{d: g.dialect, view: *view, orReplace: orReplace}
 }
 
 // escapeViewName escapes a view name using quote-aware logic.

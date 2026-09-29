@@ -220,6 +220,90 @@ type inputStatement struct {
 
 func (s inputStatement) Render() string { return s.statement }
 
+// createViewStatement creates a view the generator builds from its definition.
+type createViewStatement struct {
+	statementDefaults
+	d         dialect
+	view      View
+	orReplace bool
+}
+
+func (s createViewStatement) Render() string {
+	ddl := "CREATE "
+	if s.orReplace {
+		ddl += "OR REPLACE "
+	}
+	if s.view.viewType == "SQL SECURITY" {
+		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), parser.String(s.view.definition))
+	}
+	ddl += fmt.Sprintf("%s %s AS %s", s.view.viewType, s.d.escapeQualifiedName(s.view.name), parser.String(s.view.definition))
+	if s.view.withNoData {
+		ddl += " WITH NO DATA"
+	} else if s.view.withData {
+		ddl += " WITH DATA"
+	}
+	return ddl
+}
+
+// viewOwnerStatement gives a PostgreSQL view its owner.
+type viewOwnerStatement struct {
+	statementDefaults
+	d        dialect
+	viewType string
+	name     QualifiedName
+	owner    string
+}
+
+func (s viewOwnerStatement) Render() string {
+	return fmt.Sprintf("ALTER %s %s OWNER TO %s", s.viewType, s.d.escapeQualifiedName(s.name), s.d.forceEscapeSQLName(s.owner))
+}
+
+// createTriggerStatement creates a trigger, or alters it with SQL Server's CREATE OR ALTER.
+// SQLite's is emitted as written.
+type createTriggerStatement struct {
+	statementDefaults
+	d       dialect
+	trigger Trigger
+	orAlter bool
+}
+
+func (s createTriggerStatement) Render() string {
+	t := s.trigger
+	name := s.d.escapeQualifiedName(t.name)
+	table := s.d.escapeQualifiedName(t.tableName)
+	body := strings.Join(t.body, "\n")
+	switch s.d.mode {
+	case GeneratorModeMssql:
+		ddl := "CREATE "
+		if s.orAlter {
+			ddl += "OR ALTER "
+		}
+		return ddl + fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", name, table, t.time, s.d.formatTriggerEvents(t.event, ", "), body)
+	case GeneratorModeMysql:
+		return fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s", name, t.time, s.d.formatTriggerEvents(t.event, ", "), table, body)
+	case GeneratorModeSQLite3:
+		return t.statement
+	case GeneratorModePostgres:
+		whenClause := ""
+		if t.whenCondition != "" {
+			whenClause = "WHEN " + t.whenCondition + " "
+		}
+		triggerKeyword := "TRIGGER"
+		deferrableClause := ""
+		if t.constraint {
+			triggerKeyword = "CONSTRAINT TRIGGER"
+			// generateConstraintOptions omits NOT DEFERRABLE, so state it explicitly like pg_get_triggerdef() does
+			deferrableClause = "NOT DEFERRABLE "
+			if t.constraintOptions.deferrable {
+				deferrableClause = strings.TrimPrefix(s.d.generateConstraintOptions(t.constraintOptions), " ") + " "
+			}
+		}
+		return fmt.Sprintf("CREATE %s %s %s %s ON %s %sFOR EACH %s %s%s", triggerKeyword, name, t.time, s.d.formatTriggerEvents(t.event, " OR "), table, deferrableClause, normalizeTriggerForEach(t.forEach), whenClause, body)
+	default:
+		panic(fmt.Sprintf("CREATE TRIGGER is not generated for mode %d", s.d.mode))
+	}
+}
+
 // mssqlClusteredOption renders whether a SQL Server index is clustered.
 func mssqlClusteredOption(index Index) string {
 	if index.clustered {
