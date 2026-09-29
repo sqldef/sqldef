@@ -1777,6 +1777,64 @@ DropMultiColumnCheck:
     ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";
   down: |
     ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);
+MultipleSingleColumnChecksOnSameColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id integer NOT NULL,
+      q jsonb NOT NULL,
+      CONSTRAINT t_q_is_array CHECK (jsonb_typeof(q) = 'array'),
+      CONSTRAINT t_q_not_empty CHECK (jsonb_array_length(q) >= 1)
+    );
+AddSecondSingleColumnCheckOnSameColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id integer NOT NULL,
+      q jsonb NOT NULL,
+      CONSTRAINT t_q_is_array CHECK (jsonb_typeof(q) = 'array')
+    );
+  desired: |
+    CREATE TABLE t (
+      id integer NOT NULL,
+      q jsonb NOT NULL,
+      CONSTRAINT t_q_is_array CHECK (jsonb_typeof(q) = 'array'),
+      CONSTRAINT t_q_not_empty CHECK (jsonb_array_length(q) >= 1)
+    );
+  up: |
+    ALTER TABLE public.t ADD CONSTRAINT t_q_not_empty CHECK (jsonb_array_length(q) >= 1);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_q_not_empty;
+ModifyOneOfSingleColumnChecksOnSameColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id integer NOT NULL,
+      n integer NOT NULL,
+      CONSTRAINT t_n_min CHECK (n >= 0),
+      CONSTRAINT t_n_max CHECK (n <= 10)
+    );
+  desired: |
+    CREATE TABLE t (
+      id integer NOT NULL,
+      n integer NOT NULL,
+      CONSTRAINT t_n_min CHECK (n >= 0),
+      CONSTRAINT t_n_max CHECK (n <= 20)
+    );
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT t_n_max;
+    ALTER TABLE public.t ADD CONSTRAINT t_n_max CHECK (n <= 20);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_n_max;
+    ALTER TABLE public.t ADD CONSTRAINT t_n_max CHECK (n <= 10);
+ColumnCheckAndTableCheckOnSameColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id integer NOT NULL,
+      n integer NOT NULL CONSTRAINT t_n_min CHECK (n >= 0),
+      CONSTRAINT t_n_max CHECK (n <= 10)
+    );
 AddUniqueConstraint:
   current: |
     create table dummy(

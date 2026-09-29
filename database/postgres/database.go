@@ -1020,10 +1020,12 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 	return ddls, nil
 }
 
-// CheckConstraint holds a CHECK constraint's name and definition.
+// CheckConstraint holds a CHECK constraint's name and definition, and the
+// column it references when it references exactly one.
 type CheckConstraint struct {
 	Name       Ident
 	Definition string
+	column     string
 }
 
 type TableDDLComponents struct {
@@ -1082,6 +1084,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table))
+	inlineChecks, tableChecks := splitInlineChecks(components.CheckConstraints)
 	for i, col := range components.Columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
@@ -1097,8 +1100,8 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		if col.IdentityGeneration != "" {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
-		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(col.Check.name), col.Check.definition)
+		if check, ok := inlineChecks[col.Name]; ok {
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
@@ -1122,7 +1125,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		}
 	}
 
-	for _, check := range components.CheckConstraints {
+	for _, check := range tableChecks {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 	}
@@ -1157,11 +1160,6 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
 
-type columnConstraint struct {
-	definition string
-	name       Ident
-}
-
 type column struct {
 	Name               string
 	dataType           string
@@ -1170,7 +1168,6 @@ type column struct {
 	Default            string
 	IsAutoIncrement    bool
 	IdentityGeneration string
-	Check              *columnConstraint
 }
 
 func (c *column) GetDataType() string {
@@ -1540,69 +1537,41 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 }
 
 func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string][]column, error) {
-	const query = `WITH
-	  columns AS (
-	    SELECT
-	      n.nspname || '.' || c.relname AS qualified_table_name,
-	      s.column_name,
-	      s.column_default,
-	      s.is_nullable,
-	      CASE
-	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	      ELSE s.data_type
-	      END,
-	      -- formattedDataType: also return type name for domain and enum types
-	      CASE
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      ELSE format_type(f.atttypid, f.atttypmod)
-	      END,
-	      s.identity_generation
-	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
-	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
-	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-	    WHERE c.relkind in ('r', 'p')
-	    AND n.nspname || '.' || c.relname = ANY($1::text[])
-	    AND f.attnum > 0
-	    ORDER BY n.nspname, c.relname, f.attnum
-	  ),
-	  column_constraints AS (
-	    SELECT att.attname column_name, tmp.qualified_table_name, tmp.name, tmp.type, tmp.definition
-	    FROM (
-	      SELECT unnest(con.conkey) AS conkey,
-	             pg_get_constraintdef(con.oid, true) AS definition,
-	             cls.oid AS relid,
-	             con.conname AS name,
-	             con.contype AS type,
-	             nsp.nspname || '.' || cls.relname AS qualified_table_name
-	      FROM   pg_constraint con
-	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	      JOIN   pg_class cls ON cls.oid = con.conrelid
-	      WHERE  nsp.nspname || '.' || cls.relname = ANY($1::text[])
-	      AND    array_length(con.conkey, 1) = 1
-	    ) tmp
-	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
-	  ),
-	  check_constraints AS (
-	    SELECT column_name, qualified_table_name, name, definition
-	    FROM   column_constraints
-	    WHERE  type = 'c'
-	  )
-	SELECT    columns.*, checks.name, checks.definition
-	FROM      columns
-	LEFT JOIN check_constraints checks USING (column_name, qualified_table_name);`
+	const query = `SELECT
+	  n.nspname || '.' || c.relname AS qualified_table_name,
+	  s.column_name,
+	  s.column_default,
+	  s.is_nullable,
+	  CASE
+	  -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	  WHEN t.typtype IN ('d', 'e') THEN
+	    CASE
+	      WHEN tn.nspname = 'public' THEN t.typname
+	      ELSE tn.nspname || '.' || t.typname
+	    END
+	  WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
+	  ELSE s.data_type
+	  END,
+	  -- formattedDataType: also return type name for domain and enum types
+	  CASE
+	  WHEN t.typtype IN ('d', 'e') THEN
+	    CASE
+	      WHEN tn.nspname = 'public' THEN t.typname
+	      ELSE tn.nspname || '.' || t.typname
+	    END
+	  ELSE format_type(f.atttypid, f.atttypmod)
+	  END,
+	  s.identity_generation
+	FROM pg_attribute f
+	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
+	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+	LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
+	WHERE c.relkind in ('r', 'p')
+	AND n.nspname || '.' || c.relname = ANY($1::text[])
+	AND f.attnum > 0
+	ORDER BY n.nspname, c.relname, f.attnum`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {
@@ -1614,8 +1583,8 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	for rows.Next() {
 		col := column{}
 		var tableName, colName, isNullable, dataType, formattedDataType string
-		var colDefault, idGen, checkName, checkDefinition *string
-		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
+		var colDefault, idGen *string
+		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen)
 		if err != nil {
 			return nil, err
 		}
@@ -1631,13 +1600,6 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 		col.formattedDataType = formattedDataType
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
-		}
-		if checkName != nil && checkDefinition != nil {
-			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
-			col.Check = &columnConstraint{
-				definition: normalizedDef,
-				name:       NewIdentWithQuoteDetected(*checkName),
-			}
 		}
 		result[tableName] = append(result[tableName], col)
 	}
@@ -1992,13 +1954,15 @@ func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[stri
 }
 
 func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (map[string][]CheckConstraint, error) {
-	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, con.conname, pg_get_constraintdef(con.oid, true)
+	const query = `SELECT nsp.nspname || '.' || cls.relname, con.conname, pg_get_constraintdef(con.oid, true), att.attname
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	JOIN   pg_class cls ON cls.oid = con.conrelid
+	LEFT JOIN pg_attribute att ON att.attrelid = con.conrelid
+	                          AND array_length(con.conkey, 1) = 1
+	                          AND att.attnum = con.conkey[1]
 	WHERE  con.contype = 'c'
 	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
-	AND    coalesce(array_length(con.conkey, 1), 0) <> 1
 	ORDER BY nsp.nspname, cls.relname, con.conname`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
@@ -2010,19 +1974,44 @@ func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (ma
 	result := make(map[string][]CheckConstraint, len(tableNames))
 	for rows.Next() {
 		var tableName, constraintName, constraintDef string
-		err = rows.Scan(&tableName, &constraintName, &constraintDef)
+		var columnName *string
+		err = rows.Scan(&tableName, &constraintName, &constraintDef, &columnName)
 		if err != nil {
 			return nil, err
 		}
 		// Normalize type casts for generic parser compatibility
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		result[tableName] = append(result[tableName], CheckConstraint{
+		check := CheckConstraint{
 			Name:       NewIdentWithQuoteDetected(constraintName),
 			Definition: constraintDef,
-		})
+		}
+		if columnName != nil {
+			check.column = *columnName
+		}
+		result[tableName] = append(result[tableName], check)
 	}
 	return result, nil
+}
+
+// splitInlineChecks returns the CHECKs to export inline, keyed by column name,
+// and the rest as table constraints. A column holds at most one inline CHECK,
+// so a column with several keeps all of them as table constraints.
+func splitInlineChecks(checks []CheckConstraint) (map[string]CheckConstraint, []CheckConstraint) {
+	checksPerColumn := make(map[string]int)
+	for _, check := range checks {
+		checksPerColumn[check.column]++
+	}
+	inlineChecks := make(map[string]CheckConstraint)
+	var tableChecks []CheckConstraint
+	for _, check := range checks {
+		if check.column != "" && checksPerColumn[check.column] == 1 {
+			inlineChecks[check.column] = check
+		} else {
+			tableChecks = append(tableChecks, check)
+		}
+	}
+	return inlineChecks, tableChecks
 }
 
 func (d *PostgresDatabase) getUniqueConstraintsForTables(tableNames []string) (map[string]map[string]string, error) {

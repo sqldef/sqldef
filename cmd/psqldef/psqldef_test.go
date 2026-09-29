@@ -835,6 +835,51 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	))
 }
 
+func TestPsqldefExportMultipleChecksOnSameColumn(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, tu.StripHeredoc(`
+		CREATE TABLE t (
+		    a integer CONSTRAINT t_a_positive CHECK (a > 0),
+		    b integer CONSTRAINT t_b_min CHECK (b >= 0),
+		    CONSTRAINT t_b_max CHECK (b <= 10)
+		);`,
+	))
+
+	assertExportOutput(t, tu.StripHeredoc(`
+		CREATE TABLE "public"."t" (
+		    "a" integer CONSTRAINT t_a_positive CHECK (a > 0),
+		    "b" integer,
+		    CONSTRAINT t_b_max CHECK (b <= 10),
+		    CONSTRAINT t_b_min CHECK (b >= 0)
+		);
+		`,
+	))
+}
+
+func TestPsqldefExportChecksWithoutSingleColumn(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, tu.StripHeredoc(`
+		CREATE TABLE t (
+		    "Mixed" integer CONSTRAINT t_mixed_positive CHECK ("Mixed" > 0),
+		    b integer,
+		    CONSTRAINT t_always CHECK (true),
+		    CONSTRAINT t_mixed_lt_b CHECK ("Mixed" < b)
+		);`,
+	))
+
+	assertExportOutput(t, tu.StripHeredoc(`
+		CREATE TABLE "public"."t" (
+		    "Mixed" integer CONSTRAINT t_mixed_positive CHECK ("Mixed" > 0),
+		    "b" integer,
+		    CONSTRAINT t_always CHECK (true),
+		    CONSTRAINT t_mixed_lt_b CHECK ("Mixed" < b)
+		);
+		`,
+	))
+}
+
 func TestPsqldefExportConcurrency(t *testing.T) {
 	resetTestDatabase()
 
