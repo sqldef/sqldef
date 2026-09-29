@@ -131,7 +131,7 @@ func TestStripFuncResultTextCasts(t *testing.T) {
 }
 
 func TestAreSamePolicyExprs(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	testCases := []struct {
 		name  string
@@ -172,7 +172,7 @@ func TestAreSamePolicyExprs(t *testing.T) {
 	}
 
 	t.Run("no cast stripping fallback for non-postgres mode", func(t *testing.T) {
-		mysqlG := &Generator{mode: GeneratorModeMysql}
+		mysqlG := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 		exprA := extractPolicyUsingExpr(t, "lower('a')::text = 'a'")
 		exprB := extractPolicyUsingExpr(t, "lower('a') = 'a'")
 		if mysqlG.areSamePolicyExprs(exprA, exprB) {
