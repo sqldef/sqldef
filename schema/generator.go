@@ -531,11 +531,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		g.forgetViewMetadata(currentView)
-		kind := "VIEW"
-		if currentView.viewType == "MATERIALIZED VIEW" {
-			kind = "MATERIALIZED VIEW"
-		}
-		ddls = append(ddls, dropObjectStatement{d: g.dialect, kind: kind, name: currentView.name})
+		ddls = append(ddls, g.dropView(currentView))
 	}
 
 	var tablesToDrop []*Table
@@ -897,11 +893,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				}
 
 				if !found {
-					revoke, err := g.revoke(currentPriv.privileges, true, currentPriv.objectType, currentPriv.tableName, grantee)
-					if err != nil {
+					if err := validateGrantee(grantee); err != nil {
 						return nil, err
 					}
-					ddls = append(ddls, revoke)
+					ddls = append(ddls, revokeStatement{d: g.dialect, privileges: currentPriv.privileges, spellAll: true, objectType: currentPriv.objectType, object: currentPriv.tableName, grantee: grantee})
 				}
 			}
 		}
@@ -926,19 +921,16 @@ func heldBack(config database.GeneratorConfig, s statement) bool {
 	switch s := s.(type) {
 	case revokeStatement:
 		if config.ManagePrivileges != nil {
-			return !granteeRevokeAllowed(config, s.grantee)
+			return !ruleAllowsDrop(*config.ManagePrivileges, s.grantee)
 		}
 	case dropFunctionStatement:
 		if config.ManageFunctions != nil {
 			// A rule names the function alone, whatever its schema.
-			rule, matched := matchManageObjectRule(*config.ManageFunctions, s.name.Name.Name)
-			return !matched || !rule.Drop
+			return !ruleAllowsDrop(*config.ManageFunctions, s.name.Name.Name)
 		}
 	case dropExtensionStatement:
-		if config.ManageExtensions != nil {
-			if rule, _ := matchManageObjectRule(*config.ManageExtensions, s.name.Name); !rule.Drop {
-				return true
-			}
+		if config.ManageExtensions != nil && !ruleAllowsDrop(*config.ManageExtensions, s.name.Name) {
+			return true
 		}
 	}
 	return !config.EnableDrop
@@ -954,10 +946,7 @@ func (g *Generator) appendRecreateStatements(ddls []statement, r recreate) ([]st
 	if !slices.ContainsFunc(r.statements, func(s statement) bool { return heldBack(g.config, s) }) {
 		return append(ddls, r.statements...), true
 	}
-	for _, s := range r.statements {
-		ddls = append(ddls, skipped{s})
-	}
-	return ddls, false
+	return append(ddls, skippedStatements(r.statements)...), false
 }
 
 func (g *Generator) alterTarget(name QualifiedName) alterTarget {
@@ -2324,14 +2313,12 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 			// The dependent view was dropped by the recreation of a view it depends on, which
 			// decided whether this CREATE runs too.
 			view.owner = previous.view.owner
-			recreateDDLs := []statement{g.createView(&view, false)}
+			recreateDDLs := []statement{createViewStatement{d: g.dialect, view: view}}
 			if owner, ok := g.restoreViewOwner(&view); ok {
 				recreateDDLs = append(recreateDDLs, owner)
 			}
 			if previous.heldBack {
-				for _, ddl := range recreateDDLs {
-					ddls = append(ddls, skipped{ddl})
-				}
+				ddls = append(ddls, skippedStatements(recreateDDLs)...)
 				// A held-back recreation keeps its existing indexes.
 				view = *previous.view
 			} else {
@@ -2373,15 +2360,15 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 					// Drop current dependents first. The main loop recreates them in desired
 					// dependency order, which may differ from the current graph.
 					for _, depView := range slices.Backward(g.findDependentViews(desiredView.name)) {
-						recreateDDLs = append(recreateDDLs, dropObjectStatement{d: g.dialect, kind: depView.viewType, name: depView.name})
+						recreateDDLs = append(recreateDDLs, g.dropView(depView))
 						dependents = append(dependents, depView)
 						g.forgetViewMetadata(depView)
 						g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == depView })
 					}
 				}
 				recreateDDLs = append(recreateDDLs,
-					dropObjectStatement{d: g.dialect, kind: currentView.viewType, name: currentView.name},
-					g.createView(desiredView, false),
+					g.dropView(currentView),
+					createViewStatement{d: g.dialect, view: *desiredView},
 				)
 				g.forgetViewMetadata(currentView)
 				if owner, ok := g.restoreViewOwner(currentView); ok {
@@ -2395,13 +2382,13 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 					g.recreatedViews[key] = recreatedView{view: depView, heldBack: !recreated}
 				}
 			} else {
-				ddls = append(ddls, g.createView(desiredView, true))
+				ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
 			}
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
 		// VIEW with the specified security type found. If it's different, create or replace view.
 		if !strings.EqualFold(currentView.securityType, desiredView.securityType) {
-			ddls = append(ddls, g.createView(desiredView, true))
+			ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
 		}
 	}
 
@@ -2767,6 +2754,7 @@ func (g *Generator) dropFunction(current *Function) dropFunctionStatement {
 			return drop
 		}
 	}
+	drop.withArgs = true
 	drop.argTypes = argTypes
 	return drop
 }
@@ -3905,9 +3893,12 @@ func (g *Generator) restoreViewOwner(view *View) (s viewOwnerStatement, ok bool)
 	return viewOwnerStatement{d: g.dialect, viewType: view.viewType, name: view.name, owner: view.owner}, true
 }
 
-// createView creates view, or replaces it when orReplace is set.
-func (g *Generator) createView(view *View, orReplace bool) createViewStatement {
-	return createViewStatement{d: g.dialect, view: *view, orReplace: orReplace}
+func (g *Generator) dropView(view *View) dropObjectStatement {
+	kind := "VIEW"
+	if view.viewType == "MATERIALIZED VIEW" {
+		kind = "MATERIALIZED VIEW"
+	}
+	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
 func (d dialect) forceEscapeSQLName(name string) string {
@@ -4009,21 +4000,31 @@ func (d dialect) escapeAndJoinNames(names []Ident) string {
 
 // validateAndEscapeGrantee validates and escapes a grantee name to prevent SQL injection
 func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
-	// PUBLIC is a special keyword and should not be quoted
-	if grantee == "PUBLIC" {
-		return "PUBLIC", nil
+	if err := validateGrantee(grantee); err != nil {
+		return "", err
 	}
+	return g.escapeGrantee(grantee), nil
+}
 
+// validateGrantee rejects a grantee name that could inject SQL.
+func validateGrantee(grantee string) error {
 	// Check for potentially dangerous characters that shouldn't be in role names
 	// PostgreSQL role names can contain letters, digits, underscores, and some special chars
 	// but we'll be conservative to prevent injection
 	// Note: quotes, backticks, and brackets are allowed as escapeSQLName handles them
 	if strings.ContainsAny(grantee, ";\n\r\t\x00") {
-		return "", fmt.Errorf("invalid characters in grantee name: %s", grantee)
+		return fmt.Errorf("invalid characters in grantee name: %s", grantee)
 	}
+	return nil
+}
 
+func (d dialect) escapeGrantee(grantee string) string {
+	// PUBLIC is a special keyword and should not be quoted
+	if grantee == "PUBLIC" {
+		return "PUBLIC"
+	}
 	// Use escapeSQLName which handles proper escaping including quotes/brackets/backticks
-	return g.forceEscapeSQLName(grantee), nil
+	return d.forceEscapeSQLName(grantee)
 }
 
 // normalizeOldObjectName creates a QualifiedName from a renamedFrom Ident,
@@ -4521,20 +4522,17 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	}
 
 	for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
-		revoke, err := g.revoke(privileges, false, desired.objectType, desired.tableName, grantee)
-		if err != nil {
+		if err := validateGrantee(grantee); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, revoke)
+		ddls = append(ddls, revokeStatement{d: g.dialect, privileges: privileges, objectType: desired.objectType, object: desired.tableName, grantee: grantee})
 	}
 
 	for grantee, privileges := range util.CanonicalMapIter(revokeGrantOptionByGrantee) {
-		revoke, err := g.revoke(privileges, false, desired.objectType, desired.tableName, grantee)
-		if err != nil {
+		if err := validateGrantee(grantee); err != nil {
 			return nil, err
 		}
-		revoke.grantOption = true
-		ddls = append(ddls, revoke)
+		ddls = append(ddls, revokeStatement{d: g.dialect, privileges: privileges, grantOption: true, objectType: desired.objectType, object: desired.tableName, grantee: grantee})
 	}
 
 	var privilegeKeys []string
@@ -4585,11 +4583,10 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 		}
 	}
 
-	revoke, err := g.revoke(desired.privileges, true, desired.objectType, desired.tableName, desired.grantees[0])
-	if err != nil {
+	if err := validateGrantee(desired.grantees[0]); err != nil {
 		return nil, err
 	}
-	revoke.cascade = desired.cascadeOption
+	revoke := revokeStatement{d: g.dialect, privileges: desired.privileges, spellAll: true, objectType: desired.objectType, object: desired.tableName, grantee: desired.grantees[0], cascade: desired.cascadeOption}
 
 	// DO NOT update current privileges here - this breaks idempotency
 	// The state should only be updated after DDLs are successfully applied
@@ -7414,12 +7411,9 @@ func isManagedGrantee(config database.GeneratorConfig, grantee string) bool {
 	return slices.Contains(config.ManagedRoles, grantee)
 }
 
-// granteeRevokeAllowed reports whether REVOKE statements may be emitted for
-// grantee under manage.privilege. Only meaningful when ManagePrivileges is set;
-// the per-rule drop flag then decides, independent of the global enable_drop
-// (which the manage: RFC deprecates).
-func granteeRevokeAllowed(config database.GeneratorConfig, grantee string) bool {
-	rule, matched := database.MatchManageObjectRule(*config.ManagePrivileges, grantee)
+// ruleAllowsDrop reports whether a manage.* rule matches name and lets it be dropped.
+func ruleAllowsDrop(rules []database.ManageObjectRule, name string) bool {
+	rule, matched := matchManageObjectRule(rules, name)
 	return matched && rule.Drop
 }
 

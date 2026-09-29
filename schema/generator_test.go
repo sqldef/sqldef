@@ -1268,9 +1268,7 @@ func TestDestructiveStatements(t *testing.T) {
 	assert.True(t, dropPolicyStatement{d: postgres.dialect, name: Ident{Name: "p"}, table: users}.Destructive())
 	assert.True(t, dropFunctionStatement{d: postgres.dialect, name: QualifiedName{Name: Ident{Name: "f"}}}.Destructive())
 	assert.True(t, dropExtensionStatement{d: postgres.dialect, name: Ident{Name: "pgcrypto"}}.Destructive())
-	revoke, err := postgres.revoke([]Privilege{{Name: "SELECT"}}, false, "TABLE", users, "app_user")
-	assert.NoError(t, err)
-	assert.True(t, revoke.Destructive())
+	assert.True(t, revokeStatement{d: postgres.dialect, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user"}.Destructive())
 
 	// One destructive action makes the whole statement destructive.
 	assert.True(t, mysql.alterTable(users,
@@ -1300,7 +1298,7 @@ func TestSkippedRender(t *testing.T) {
 	users := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "users"}}
 
 	assert.Equal(t, `-- Skipped: DROP TABLE "public"."users"`, skipped{dropObjectStatement{d: d, kind: "TABLE", name: users}}.Render())
-	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, spellAll: true, objectType: "TABLE", object: users, grantee: "PUBLIC", escapedGrantee: "PUBLIC", cascade: true}
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, spellAll: true, objectType: "TABLE", object: users, grantee: "PUBLIC", cascade: true}
 	assert.Equal(t, `-- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM PUBLIC CASCADE`, skipped{revoke}.Render())
 
 	// Every line is commented, so that no executable SQL can leak after the first one.
@@ -1317,7 +1315,7 @@ func TestHeldBack(t *testing.T) {
 	dropEvent := dropObjectStatement{d: d, kind: "EVENT", name: QualifiedName{Name: Ident{Name: "cleanup"}}}
 	dropFunction := dropFunctionStatement{d: d, name: QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "f"}}}
 	dropExtension := dropExtensionStatement{d: d, name: Ident{Name: "pgcrypto"}}
-	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user", escapedGrantee: `"app_user"`}
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user"}
 	rules := func(rules ...database.ManageObjectRule) *[]database.ManageObjectRule { return &rules }
 
 	tests := []struct {

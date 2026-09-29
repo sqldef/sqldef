@@ -63,6 +63,10 @@ func (s skipped) Render() string {
 
 func (s skipped) Skipped() bool { return true }
 
+func skippedStatements(statements []statement) []statement {
+	return util.TransformSlice(statements, func(s statement) statement { return skipped{s} })
+}
+
 // recreate drops an object and brings it back. appendRecreateStatements emits it.
 type recreate struct {
 	statements []statement
@@ -461,7 +465,7 @@ func (d dialect) indexColumnList(index Index) string {
 
 // dropIndexStatement is a standalone DROP INDEX.
 type dropIndexStatement struct {
-	statementDefaults
+	destructiveDefaults
 	d     dialect
 	table QualifiedName
 	name  Ident
@@ -479,8 +483,6 @@ func (s dropIndexStatement) Render() string {
 		panic(fmt.Sprintf("DROP INDEX is not generated for mode %d", s.d.mode))
 	}
 }
-
-func (s dropIndexStatement) Destructive() bool { return true }
 
 // renameIndexStatement is PostgreSQL's ALTER INDEX ... RENAME TO.
 type renameIndexStatement struct {
@@ -576,13 +578,15 @@ type dropFunctionStatement struct {
 	destructiveDefaults
 	d    dialect
 	name QualifiedName
-	// argTypes tell the function apart from its overloads; nil drops it by its name alone.
+	// withArgs appends argTypes, which tell the function apart from its overloads, even when
+	// there are none. Without it the function is dropped by its name alone.
+	withArgs bool
 	argTypes []string
 }
 
 func (s dropFunctionStatement) Render() string {
 	ddl := "DROP FUNCTION " + s.d.escapeQualifiedName(s.name)
-	if s.argTypes != nil {
+	if s.withArgs {
 		ddl += "(" + strings.Join(s.argTypes, ", ") + ")"
 	}
 	return ddl
@@ -611,24 +615,9 @@ type revokeStatement struct {
 	grantOption bool
 	objectType  string
 	object      QualifiedName
-	grantee     string
-	// escapedGrantee is the grantee as validateAndEscapeGrantee renders it, which leaves
-	// PUBLIC unquoted.
-	escapedGrantee string
-	cascade        bool
-}
-
-func (g *Generator) revoke(privileges []Privilege, spellAll bool, objectType string, object QualifiedName, grantee string) (revokeStatement, error) {
-	escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
-	return revokeStatement{
-		d:              g.dialect,
-		privileges:     privileges,
-		spellAll:       spellAll,
-		objectType:     objectType,
-		object:         object,
-		grantee:        grantee,
-		escapedGrantee: escapedGrantee,
-	}, err
+	// grantee has passed validateGrantee.
+	grantee string
+	cascade bool
 }
 
 func (s revokeStatement) Render() string {
@@ -640,7 +629,7 @@ func (s revokeStatement) Render() string {
 	if s.grantOption {
 		ddl += "GRANT OPTION FOR "
 	}
-	ddl += fmt.Sprintf("%s ON %s %s FROM %s", privileges, grantObjectKeyword(s.objectType), s.d.escapeQualifiedName(s.object), s.escapedGrantee)
+	ddl += fmt.Sprintf("%s ON %s %s FROM %s", privileges, grantObjectKeyword(s.objectType), s.d.escapeQualifiedName(s.object), s.d.escapeGrantee(s.grantee))
 	if s.cascade {
 		ddl += " CASCADE"
 	}
