@@ -16,28 +16,24 @@ type statement interface {
 	Render() string
 	// Destructive reports whether enable_drop has to allow the statement.
 	Destructive() bool
-	// Transactional reports whether the statement may run inside a transaction.
-	Transactional() bool
 	// Skipped reports whether the statement is emitted only as a comment.
 	Skipped() bool
 }
 
-// statementDefaults is what a statement is unless it says otherwise: not destructive,
-// transactional and not skipped.
+// statementDefaults is what a statement is unless it says otherwise: not destructive and
+// not skipped.
 type statementDefaults struct{}
 
-func (statementDefaults) Destructive() bool   { return false }
-func (statementDefaults) Transactional() bool { return true }
-func (statementDefaults) Skipped() bool       { return false }
+func (statementDefaults) Destructive() bool { return false }
+func (statementDefaults) Skipped() bool     { return false }
 
 // rawStatement is SQL the generator has not typed yet. The text-based enable_drop gate
 // still runs on it after rendering.
 type rawStatement string
 
-func (s rawStatement) Render() string      { return string(s) }
-func (s rawStatement) Destructive() bool   { return false }
-func (s rawStatement) Transactional() bool { return true }
-func (s rawStatement) Skipped() bool       { return false }
+func (s rawStatement) Render() string    { return string(s) }
+func (s rawStatement) Destructive() bool { return false }
+func (s rawStatement) Skipped() bool     { return false }
 
 func rawStatements(ddls []string) []statement {
 	return util.TransformSlice(ddls, func(ddl string) statement { return rawStatement(ddl) })
@@ -201,23 +197,13 @@ func (s createIndexStatement) Render() string {
 	}
 }
 
-func (s createIndexStatement) Transactional() bool { return createsIndexInTransaction(s.index) }
-
 // inputCreateIndexStatement is a CREATE INDEX from the desired schema, emitted as written.
 type inputCreateIndexStatement struct {
 	statementDefaults
 	statement string
-	index     Index
 }
 
-func (s inputCreateIndexStatement) Render() string      { return s.statement }
-func (s inputCreateIndexStatement) Transactional() bool { return createsIndexInTransaction(s.index) }
-
-// createsIndexInTransaction reports whether PostgreSQL and Aurora DSQL build the index inside a
-// transaction; they refuse to build it CONCURRENTLY or ASYNC there.
-func createsIndexInTransaction(index Index) bool {
-	return !index.concurrently && !index.async
-}
+func (s inputCreateIndexStatement) Render() string { return s.statement }
 
 // mssqlClusteredOption renders whether a SQL Server index is clustered.
 func mssqlClusteredOption(index Index) string {
