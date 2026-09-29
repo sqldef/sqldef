@@ -304,6 +304,145 @@ func (s createTriggerStatement) Render() string {
 	}
 }
 
+// renameTypeStatement renames a PostgreSQL type.
+type renameTypeStatement struct {
+	statementDefaults
+	d    dialect
+	from QualifiedName
+	to   Ident
+}
+
+func (s renameTypeStatement) Render() string {
+	// The old name must be qualified, and the new one must not.
+	return fmt.Sprintf("ALTER TYPE %s RENAME TO %s", s.d.escapeQualifiedName(s.from), s.d.escapeSQLIdent(s.to))
+}
+
+// renameEnumValueStatement renames a value of a PostgreSQL enum type.
+type renameEnumValueStatement struct {
+	statementDefaults
+	d        dialect
+	typeName QualifiedName
+	from     string
+	to       string
+}
+
+func (s renameEnumValueStatement) Render() string {
+	return fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'", s.d.escapeQualifiedName(s.typeName), s.from, s.to)
+}
+
+// addEnumValueStatement adds a value to a PostgreSQL enum type.
+type addEnumValueStatement struct {
+	statementDefaults
+	d        dialect
+	typeName QualifiedName
+	value    string
+}
+
+func (s addEnumValueStatement) Render() string {
+	return fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", s.d.escapeQualifiedName(s.typeName), s.value)
+}
+
+// alterDomainStatement changes one thing about a PostgreSQL domain.
+type alterDomainStatement struct {
+	statementDefaults
+	d      dialect
+	domain QualifiedName
+	action alterDomainAction
+}
+
+func (s alterDomainStatement) Render() string {
+	return fmt.Sprintf("ALTER DOMAIN %s %s", s.d.escapeQualifiedName(s.domain), s.action.render())
+}
+
+// alterDomainAction is the action of an ALTER DOMAIN. None of them loses data.
+type alterDomainAction interface {
+	render() string
+}
+
+// domainDefaultAction sets the default, or drops it when there is none.
+type domainDefaultAction struct {
+	expr parser.Expr
+}
+
+func (a domainDefaultAction) render() string {
+	if a.expr == nil {
+		return "DROP DEFAULT"
+	}
+	return "SET DEFAULT " + parser.String(a.expr)
+}
+
+type domainNotNullAction struct {
+	notNull bool
+}
+
+func (a domainNotNullAction) render() string {
+	if a.notNull {
+		return "SET NOT NULL"
+	}
+	return "DROP NOT NULL"
+}
+
+// dropDomainConstraintAction drops a constraint by the name the database reports, as is.
+type dropDomainConstraintAction struct {
+	name string
+}
+
+func (a dropDomainConstraintAction) render() string { return "DROP CONSTRAINT " + a.name }
+
+// addDomainCheckAction adds a CHECK. PostgreSQL names an unnamed one itself.
+type addDomainCheckAction struct {
+	name string
+	expr parser.Expr
+}
+
+func (a addDomainCheckAction) render() string {
+	if a.name == "" {
+		return fmt.Sprintf("ADD CHECK (%s)", parser.String(a.expr))
+	}
+	return fmt.Sprintf("ADD CONSTRAINT %s CHECK (%s)", a.name, parser.String(a.expr))
+}
+
+// alterEventStatement is a MySQL ALTER EVENT built from an Event struct.
+// All clauses are always emitted with MySQL defaults for empty values, because
+// ALTER EVENT only modifies the clauses you specify and preserves the rest.
+type alterEventStatement struct {
+	statementDefaults
+	d     dialect
+	event Event
+}
+
+func (s alterEventStatement) Render() string {
+	event := s.event
+	var buf strings.Builder
+	buf.WriteString("ALTER EVENT ")
+	buf.WriteString(s.d.escapeQualifiedName(event.name))
+
+	if event.schedule != "" {
+		buf.WriteString(" ON SCHEDULE ")
+		buf.WriteString(event.schedule)
+	}
+	if event.onCompletion != "" {
+		buf.WriteString(" ON COMPLETION ")
+		buf.WriteString(event.onCompletion)
+	} else {
+		buf.WriteString(" ON COMPLETION NOT PRESERVE")
+	}
+	if event.status != "" {
+		buf.WriteString(" ")
+		buf.WriteString(event.status)
+	} else {
+		buf.WriteString(" ENABLE")
+	}
+	buf.WriteString(" COMMENT '")
+	buf.WriteString(event.comment) // empty string is valid: removes comment
+	buf.WriteString("'")
+	if len(event.body) > 0 {
+		buf.WriteString(" DO ")
+		buf.WriteString(strings.Join(event.body, "\n"))
+	}
+	return buf.String()
+}
+
 // mssqlClusteredOption renders whether a SQL Server index is clustered.
 func mssqlClusteredOption(index Index) string {
 	if index.clustered {

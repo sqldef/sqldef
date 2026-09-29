@@ -425,7 +425,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rawStatements(eventDDLs)...)
+			interDDLs = append(interDDLs, eventDDLs...)
 		case *Function:
 			functionDDLs, err := g.generateDDLsForCreateFunction(desired)
 			if err != nil {
@@ -437,13 +437,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rawStatements(typeDDLs)...)
+			interDDLs = append(interDDLs, typeDDLs...)
 		case *Domain:
 			domainDDLs, err := g.generateDDLsForCreateDomain(desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, rawStatements(domainDDLs)...)
+			interDDLs = append(interDDLs, domainDDLs...)
 		case *Comment:
 			commentDDLs, err := g.generateDDLsForComment(desired)
 			if err != nil {
@@ -460,13 +460,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			createExtensionDDLs = append(createExtensionDDLs, rawStatements(extensionDDLs)...)
+			createExtensionDDLs = append(createExtensionDDLs, extensionDDLs...)
 		case *Schema:
 			schemaDDLs, err := g.generateDDLsForSchema(desired)
 			if err != nil {
 				return nil, err
 			}
-			createSchemaDDLs = append(createSchemaDDLs, rawStatements(schemaDDLs)...)
+			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
 		case *GrantPrivilege:
 			// Desired GRANTs for the same object, grantees, and grant option are
 			// merged into one entry of g.desiredPrivileges, which keeps the first
@@ -2981,8 +2981,8 @@ func normalizeFunctionOption(opt string) string {
 	return opt
 }
 
-func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
-	ddls := []string{}
+func (g *Generator) generateDDLsForCreateType(desired *Type) ([]statement, error) {
+	var ddls []statement
 
 	currentType := g.findType(g.currentTypes, desired)
 	if currentType == nil && !desired.renamedFrom.IsEmpty() {
@@ -2991,9 +2991,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		oldName := g.normalizeOldObjectName(desired.renamedFrom, desired.name)
 		if oldType := g.findType(g.currentTypes, &Type{name: oldName}); oldType != nil {
 			slog.Debug("Renaming enum type", "from", oldName.RawString(), "to", desired.name.RawString())
-			ddls = append(ddls, fmt.Sprintf("ALTER TYPE %s RENAME TO %s",
-				g.escapeQualifiedName(oldName),       // must be qualified
-				g.escapeSQLIdent(desired.name.Name))) // must not be qualified
+			ddls = append(ddls, renameTypeStatement{d: g.dialect, from: oldName, to: desired.name.Name})
 			// Must run before oldType is renamed, as they match against the old name.
 			g.renameEnumTypeInCurrentColumns(oldType, desired.name)
 			g.renameTypeInCurrentComments(oldName, desired.name)
@@ -3005,15 +3003,11 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	}
 
 	if currentType != nil {
-		typeName := g.escapeTypeName(currentType)
-
 		// Handle RENAME VALUE for values with @renamed annotation in desired
 		for _, enumValue := range desired.enumValues {
 			if !enumValue.renamedFrom.IsEmpty() {
 				if containsEnumValue(currentType.enumValues, enumValue.renamedFrom.Name) {
-					ddl := fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'",
-						typeName, enumValue.renamedFrom.Name, enumValue.value)
-					ddls = append(ddls, ddl)
+					ddls = append(ddls, renameEnumValueStatement{d: g.dialect, typeName: currentType.name, from: enumValue.renamedFrom.Name, to: enumValue.value})
 				}
 			}
 		}
@@ -3021,13 +3015,12 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		// Handle ADD VALUE for new values (not renamed)
 		for _, enumValue := range desired.enumValues {
 			if enumValue.renamedFrom.IsEmpty() && !containsEnumValue(currentType.enumValues, enumValue.value) {
-				ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", typeName, enumValue.value)
-				ddls = append(ddls, ddl)
+				ddls = append(ddls, addEnumValueStatement{d: g.dialect, typeName: currentType.name, value: enumValue.value})
 			}
 		}
 	} else {
 		// Type not found, add type.
-		ddls = append(ddls, desired.statement)
+		ddls = append(ddls, inputStatement{statement: desired.statement})
 	}
 	// Only add to desiredTypes if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findType(g.desiredTypes, desired) == nil {
@@ -3047,8 +3040,8 @@ func containsEnumValue(enumValues []EnumValue, value string) bool {
 	return false
 }
 
-func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
-	ddls := []string{}
+func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]statement, error) {
+	var ddls []statement
 
 	if currentDomain := g.findDomainByName(g.currentDomains, desired.name); currentDomain != nil {
 		alterDDLs, err := g.generateAlterDomainDDLs(currentDomain, desired)
@@ -3057,7 +3050,7 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 		}
 		ddls = append(ddls, alterDDLs...)
 	} else {
-		ddls = append(ddls, desired.statement)
+		ddls = append(ddls, inputStatement{statement: desired.statement})
 	}
 	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findDomainByName(g.desiredDomains, desired.name) == nil {
@@ -3067,47 +3060,35 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 	return ddls, nil
 }
 
-func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]string, error) {
-	var ddls []string
-	domainName := g.escapeDomainName(current)
+func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]statement, error) {
+	var ddls []statement
+	alter := func(action alterDomainAction) {
+		ddls = append(ddls, alterDomainStatement{d: g.dialect, domain: current.name, action: action})
+	}
 
 	if !g.areSameDefaultValue(current.defaultValue, desired.defaultValue, current.dataType) {
 		if desired.defaultValue == nil {
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP DEFAULT", domainName))
+			alter(domainDefaultAction{})
 		} else {
-			normalizedExpr := normalizeExpr(desired.defaultValue.expression, g.mode)
-			exprStr := parser.String(normalizedExpr)
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET DEFAULT %s", domainName, exprStr))
+			alter(domainDefaultAction{expr: normalizeExpr(desired.defaultValue.expression, g.mode)})
 		}
 	}
 
 	if current.notNull != desired.notNull {
-		if desired.notNull {
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET NOT NULL", domainName))
-		} else {
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP NOT NULL", domainName))
-		}
+		alter(domainNotNullAction{notNull: desired.notNull})
 	}
 
 	for _, currentConstraint := range current.constraints {
 		if !g.findDomainConstraintByExpression(desired.constraints, currentConstraint.expression) {
 			if currentConstraint.name != "" {
-				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP CONSTRAINT %s",
-					domainName, currentConstraint.name))
+				alter(dropDomainConstraintAction{name: currentConstraint.name})
 			}
 		}
 	}
 
 	for _, desiredConstraint := range desired.constraints {
 		if !g.findDomainConstraintByExpression(current.constraints, desiredConstraint.expression) {
-			exprStr := parser.String(desiredConstraint.expression)
-			if desiredConstraint.name != "" {
-				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s ADD CONSTRAINT %s CHECK (%s)",
-					domainName, desiredConstraint.name, exprStr))
-			} else {
-				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s ADD CHECK (%s)",
-					domainName, exprStr))
-			}
+			alter(addDomainCheckAction{name: desiredConstraint.name, expr: desiredConstraint.expression})
 		}
 	}
 
@@ -3230,12 +3211,12 @@ func (g *Generator) buildFunctionSignature(comment *Comment) string {
 	return fmt.Sprintf("%s(%s)", escapedObject, strings.Join(args, ", "))
 }
 
-func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
-	ddls := []string{}
+func (g *Generator) generateDDLsForExtension(desired *Extension) ([]statement, error) {
+	var ddls []statement
 
 	if currentExtension := g.findExtensionByName(g.currentExtensions, desired.extension.Name); currentExtension == nil {
 		// Extension not found, add extension.
-		ddls = append(ddls, desired.statement)
+		ddls = append(ddls, inputStatement{statement: desired.statement})
 		extension := *desired // copy extension
 		g.currentExtensions = append(g.currentExtensions, &extension)
 	}
@@ -3248,12 +3229,12 @@ func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, erro
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForSchema(desired *Schema) ([]string, error) {
-	ddls := []string{}
+func (g *Generator) generateDDLsForSchema(desired *Schema) ([]statement, error) {
+	var ddls []statement
 
 	if currentSchema := findSchemaByName(g.currentSchemas, desired.schema.Name); currentSchema == nil {
 		// Schema not found, add schema.
-		ddls = append(ddls, desired.statement)
+		ddls = append(ddls, inputStatement{statement: desired.statement})
 		schema := *desired // copy schema
 		g.currentSchemas = append(g.currentSchemas, &schema)
 	}
@@ -3985,21 +3966,6 @@ func (g *Generator) restoreViewOwner(view *View) (s viewOwnerStatement, ok bool)
 // createView creates view, or replaces it when orReplace is set.
 func (g *Generator) createView(view *View, orReplace bool) createViewStatement {
 	return createViewStatement{d: g.dialect, view: *view, orReplace: orReplace}
-}
-
-// escapeViewName escapes a view name using quote-aware logic.
-func (g *Generator) escapeViewName(view *View) string {
-	return g.escapeQualifiedName(view.name)
-}
-
-// escapeTypeName escapes a type name using quote-aware logic.
-func (g *Generator) escapeTypeName(t *Type) string {
-	return g.escapeQualifiedName(t.name)
-}
-
-// escapeDomainName escapes a domain name using quote-aware logic.
-func (g *Generator) escapeDomainName(d *Domain) string {
-	return g.escapeQualifiedName(d.name)
 }
 
 func (d dialect) forceEscapeSQLName(name string) string {
@@ -6424,14 +6390,14 @@ func (g *Generator) findEventByName(events []*Event, name QualifiedName) *Event 
 
 // generateDDLsForCreateEvent generates DDLs for MySQL CREATE EVENT statements.
 // Uses ALTER EVENT for modifications instead of DROP+CREATE.
-func (g *Generator) generateDDLsForCreateEvent(desiredEvent *Event) ([]string, error) {
-	var ddls []string
+func (g *Generator) generateDDLsForCreateEvent(desiredEvent *Event) ([]statement, error) {
+	var ddls []statement
 	currentEvent := g.findEventByName(g.currentEvents, desiredEvent.name)
 
 	if currentEvent == nil {
-		ddls = append(ddls, desiredEvent.statement)
+		ddls = append(ddls, inputStatement{statement: desiredEvent.statement})
 	} else if !g.areSameEventDefinition(currentEvent, desiredEvent) {
-		ddls = append(ddls, g.generateAlterEvent(desiredEvent))
+		ddls = append(ddls, alterEventStatement{d: g.dialect, event: *desiredEvent})
 	}
 
 	if g.findEventByName(g.desiredEvents, desiredEvent.name) == nil {
@@ -6439,41 +6405,6 @@ func (g *Generator) generateDDLsForCreateEvent(desiredEvent *Event) ([]string, e
 	}
 
 	return ddls, nil
-}
-
-// generateAlterEvent builds a MySQL ALTER EVENT statement from an Event struct.
-// All clauses are always emitted with MySQL defaults for empty values, because
-// ALTER EVENT only modifies the clauses you specify and preserves the rest.
-func (g *Generator) generateAlterEvent(event *Event) string {
-	var buf strings.Builder
-	buf.WriteString("ALTER EVENT ")
-	buf.WriteString(g.escapeQualifiedName(event.name))
-
-	if event.schedule != "" {
-		buf.WriteString(" ON SCHEDULE ")
-		buf.WriteString(event.schedule)
-	}
-	if event.onCompletion != "" {
-		buf.WriteString(" ON COMPLETION ")
-		buf.WriteString(event.onCompletion)
-	} else {
-		buf.WriteString(" ON COMPLETION NOT PRESERVE")
-	}
-	if event.status != "" {
-		buf.WriteString(" ")
-		buf.WriteString(event.status)
-	} else {
-		buf.WriteString(" ENABLE")
-	}
-	buf.WriteString(" COMMENT '")
-	buf.WriteString(event.comment) // empty string is valid: removes comment
-	buf.WriteString("'")
-	if len(event.body) > 0 {
-		buf.WriteString(" DO ")
-		buf.WriteString(strings.Join(event.body, "\n"))
-	}
-
-	return buf.String()
 }
 
 func (g *Generator) areSameEventDefinition(a, b *Event) bool {
