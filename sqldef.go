@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -62,6 +63,18 @@ const CheckExitCode = 2
 
 // Main function shared by all commands
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
+	if generatorMode == schema.GeneratorModePostgres {
+		if options.Config.ManagesOwnersImplicitly() {
+			slog.Warn("manage.owner is not set, so ownership of all roles is managed because manage.privilege or managed_roles is set. From psqldef v4, an unset manage.owner will not manage ownership. Set manage.owner to true, false, or a list of role names.")
+		}
+	} else {
+		if options.Config.ManageOwner != nil {
+			slog.Warn("manage.owner is supported only by psqldef and will be ignored")
+		}
+		// Only PostgreSQL has owners; privilege management must not turn owner declarations on.
+		options.Config.ManageOwner = &database.ManageOwnerConfig{}
+	}
+
 	// Set the generator config on the database for privilege filtering
 	// Note: MySQL will populate MysqlLowerCaseTableNames from the server
 	db.SetGeneratorConfig(options.Config)
@@ -90,6 +103,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 				log.Fatal(err)
 			}
 			ddls = schema.FilterObjects(ddls, options.Config)
+			ddls = schema.FilterOwners(ddls, options.Config)
 			ddls = schema.FilterPrivileges(ddls, options.Config)
 			ddls = schema.FilterExtensions(ddls, options.Config)
 			ddls = schema.FilterFunctions(ddls, options.Config, defaultSchema)

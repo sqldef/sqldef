@@ -267,6 +267,7 @@ Note: These settings control explicit destructive operations only. Implicit drop
 | `policy` | ✓ | - | - | - |
 | `extension` | ✓ | - | - | - |
 | `privilege` | ✓ | ✓ | ✓ | - |
+| `owner` | ✓ | - | - | - |
 
 Using an unsupported object type emits a warning and is ignored.
 
@@ -292,6 +293,26 @@ Behavior:
 - `drop: true`: both GRANT and REVOKE operations
 - Privileges are managed only on objects listed in other `manage:` sections
 - Roles are cluster-global in PostgreSQL; sqldef manages privileges per-database
+
+## Owner Management
+
+The `owner:` section (psqldef only) controls which roles' ownership is managed. Unlike the other sections, it is not a list of rules: it takes a list of role names, `true`, or `false`.
+
+```yaml
+manage:
+  owner: [app_owner]
+  privilege:
+    - target: 'readonly_.*'
+```
+
+Behavior:
+- Role names match exactly as written (no regexp, no case folding); `true` matches every role, `false` none
+- An empty value is an error, so that "no roles" is always spelled `false`
+- An owner changes only when both the current owner and the declared owner are listed
+- `--export` emits `OWNER TO` only for objects owned by listed roles
+- Independent of `privilege:`; roles must already exist
+
+Why not `target`: the entries of the other sections pair a match (`target`, `schema`, `table`) with permissions (`drop`, ...), and `target` is a regexp so patterns can overlap with first-match-wins. Ownership has no per-entry permissions and roles have no schema, so a plain list of names is enough, and exact names avoid an unescaped `.` in a role name matching more than intended.
 
 ## Schema Management
 
@@ -364,11 +385,14 @@ When a managed object references an object in an unmanaged schema (e.g., a forei
 | `--skip-extension` | Use `manage.extension` for selective management; the flag remains an absolute opt-out |
 | `--skip-partition` | Set `partition: false` on table entries |
 | `managed_roles` | `manage.privilege[].target` |
+| Implicit ownership management by `managed_roles` / `manage.privilege` | `manage.owner` |
 
 Transition:
 1. Both old and new options work
 2. If `manage:` is specified, deprecated options are ignored, except that `--skip-extension` takes precedence over `manage.extension`
 3. Emit deprecation warnings when mixing old and new options
+
+Until v4, an omitted `manage.owner` follows privilege management and logs a warning when that turns ownership management on. From v4, an omitted `manage.owner` means `false`.
 
 ## Configuration Generation
 
