@@ -255,6 +255,25 @@ jobs:
       - name: Regenerate parser
         run: make parser
 
+      # tagpr tags the commit of the merged release pull request, and never a
+      # later one, so a release merged before parser.yml regenerates parser.go
+      # would be tagged with a stale parser.go. Only the release pull request
+      # changes VERSION; hold it back until master is in sync.
+      - name: Reject a release with a stale parser.go
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: |
+          if git diff --quiet "$BASE_SHA" HEAD -- VERSION; then
+            echo "✓ not a release"
+            exit 0
+          fi
+          if ! git diff --quiet -- parser/parser.go; then
+            echo "::error file=parser/parser.go::parser.go does not match parser.y, so this release would be tagged with a stale parser. Wait for the parser workflow to regenerate it on master, then queue the release again."
+            exit 1
+          fi
+          echo "✓ the release carries a parser.go in sync with parser.y"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+
       - name: Report grammar conflicts
         if: github.event_name == 'pull_request'
         run: |
