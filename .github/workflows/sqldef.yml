@@ -262,6 +262,11 @@ jobs:
       - name: Reject a release with a stale parser.go
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
+          # A failing `git diff` below would be read as "VERSION changed".
+          if ! git rev-parse --verify --quiet "$BASE_SHA^{commit}" >/dev/null; then
+            echo "::error::base commit '${BASE_SHA}' is not available"
+            exit 1
+          fi
           if git diff --quiet "$BASE_SHA" HEAD -- VERSION; then
             echo "✓ not a release"
             exit 0
