@@ -5,6 +5,7 @@ import (
 
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -250,5 +251,69 @@ func TestTypeModifierKeepsQuotedIdentifierCase(t *testing.T) {
 			columnType := ddl.TableSpec.Columns[0].Type
 			assert.Equal(t, tt.want, parser.String(&columnType))
 		})
+	}
+}
+
+// The modifier has to reach the schema model, not just the CREATE TABLE that echoes the statement
+// it was declared in: a column added later has to carry it, and a change to the modifier alone has
+// to read as a change. This is the case the pull request exists for, so it is asserted end to end
+// through the generator rather than on the parsed column.
+func TestIdentifierTypeModifierReachesGenerator(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		desired string
+		want    []string
+	}{
+		{
+			name:    "add column keeps the modifier",
+			current: `CREATE TABLE places (id int PRIMARY KEY);`,
+			desired: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,4326));`,
+			want:    []string{`ALTER TABLE public.places ADD COLUMN g geometry(point,4326)`},
+		},
+		{
+			name:    "a change to only the modifier is detected",
+			current: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,4326));`,
+			desired: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Polygon,4326));`,
+			want:    []string{`ALTER TABLE public.places ALTER COLUMN g TYPE geometry(polygon,4326)`},
+		},
+		{
+			name:    "a change to only the srid is detected",
+			current: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,4326));`,
+			desired: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,3857));`,
+			want:    []string{`ALTER TABLE public.places ALTER COLUMN g TYPE geometry(point,3857)`},
+		},
+		{
+			name:    "dropping the modifier is detected",
+			current: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,4326));`,
+			desired: `CREATE TABLE places (id int PRIMARY KEY, g geometry);`,
+			want:    []string{`ALTER TABLE public.places ALTER COLUMN g TYPE geometry`},
+		},
+		{
+			name:    "a schema-qualified type behaves the same",
+			current: `CREATE TABLE places (id int PRIMARY KEY);`,
+			desired: `CREATE TABLE places (id int PRIMARY KEY, g public.geometry(Point,4326));`,
+			want:    []string{`ALTER TABLE public.places ADD COLUMN g public.geometry(point,4326)`},
+		},
+		{
+			name:    "an unchanged column is left alone",
+			current: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,4326));`,
+			desired: `CREATE TABLE places (id int PRIMARY KEY, g geometry(Point,4326));`,
+			want:    []string{},
+		},
+	}
+
+	for name, mode := range map[string]PsqldefParserMode{
+		"generic": PsqldefParserModeGeneric,
+		"pgquery": PsqldefParserModePgquery,
+	} {
+		p := PostgresParser{parser: database.NewParser(parser.ParserModePostgres), mode: mode}
+		for _, tt := range tests {
+			t.Run(name+"/"+tt.name, func(t *testing.T) {
+				ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModePostgres, p, tt.desired, tt.current, database.GeneratorConfig{LegacyIgnoreQuotes: false}, "public")
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, ddls)
+			})
+		}
 	}
 }
