@@ -10634,9 +10634,14 @@ yydefault:
 	case 435:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
-			// Custom type with a modifier that is not a plain length, such as the
-			// PostGIS geometry(Point,4326). Length and Scale cannot carry it.
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.Name, TypeIdent: yyDollar[1].ident, TypeModifier: yyDollar[3].str}
+			// Custom type with a modifier, such as the PostGIS geometry(Point,4326).
+			//
+			// TypeIdent is deliberately left unset, unlike the rule above. It carries the quoting of a
+			// custom type name, and the pgquery parser never sets it, while haveSameDataType reads an
+			// empty one on one side as a different type. Until this PR every one of these statements
+			// failed here and went to pgquery, so setting it would make a column that never changed
+			// come out altered whenever the two schemas were read by different parsers.
+			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name}, yyDollar[3].str)
 		}
 	case 436:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -10659,14 +10664,14 @@ yydefault:
 			// A schema-qualified type with a modifier, which is how PostgreSQL spells
 			// the type when the extension's schema is not on the search_path:
 			// public.geometry(Point,4326).
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].ident.Name, TypeModifier: yyDollar[5].str}
+			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].ident.Name}, yyDollar[5].str)
 		}
 	case 440:
 		yyDollar = yyS[yypt-6 : yypt+1]
 		{
 			// GEOMETRY is a keyword of this grammar, so the rule above does not cover
 			// public.geometry(Point,4326).
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].str, TypeModifier: yyDollar[5].str}
+			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].str}, yyDollar[5].str)
 		}
 	case 441:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -11994,7 +11999,7 @@ yydefault:
 		{
 			// PostGIS constrains a geometry column with a modifier that names a shape
 			// and, optionally, an SRID: geometry(Point,4326).
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].str, TypeModifier: yyDollar[3].str}
+			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].str}, yyDollar[3].str)
 		}
 	case 684:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -12067,7 +12072,12 @@ yydefault:
 		{
 			// PostgreSQL downcases an unquoted identifier, and the pgquery parser
 			// reports it downcased, so do the same here to keep both parsers in step.
-			yyVAL.str = strings.ToLower(yyDollar[1].ident.Name)
+			// A quoted one keeps its spelling, as PostgreSQL does.
+			if yyDollar[1].ident.Quoted {
+				yyVAL.str = yyDollar[1].ident.Name
+			} else {
+				yyVAL.str = strings.ToLower(yyDollar[1].ident.Name)
+			}
 		}
 	case 698:
 		yyDollar = yyS[yypt-1 : yypt+1]

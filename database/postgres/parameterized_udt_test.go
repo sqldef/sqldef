@@ -160,3 +160,95 @@ func TestParseParameterizedUserDefinedTypeWithGenericParser(t *testing.T) {
 		})
 	}
 }
+
+// Only PostgreSQL spells a type modifier this way, and the grammar is shared with the other
+// dialects, so accepting one elsewhere would let a statement through that their server rejects.
+// MySQL, for one, has no geometry(Point).
+func TestParameterizedTypeIsRejectedOutsidePostgres(t *testing.T) {
+	sqls := []string{
+		`CREATE TABLE t (g geometry(Point,4326))`,
+		`CREATE TABLE t (g mytype(10))`,
+		`CREATE TABLE t (g mytype(a))`,
+		`CREATE TABLE t (g s.geometry(Point,4326))`,
+	}
+	for name, mode := range map[string]parser.ParserMode{
+		"mysql":   parser.ParserModeMysql,
+		"mssql":   parser.ParserModeMssql,
+		"sqlite3": parser.ParserModeSQLite3,
+	} {
+		p := database.NewParser(mode)
+		for _, sql := range sqls {
+			t.Run(name+"/"+sql, func(t *testing.T) {
+				_, err := p.Parse(sql)
+				assert.Error(t, err)
+			})
+		}
+	}
+
+	p := database.NewParser(parser.ParserModePostgres)
+	for _, sql := range sqls {
+		t.Run("postgres/"+sql, func(t *testing.T) {
+			_, err := p.Parse(sql)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// The two parsers have to represent the same column the same way. psqldef reads the schema it
+// compares against with whichever parser accepts each side, so a modifier that one of them puts in
+// Length and the other in TypeModifier would make a column that never changed come out altered.
+func TestTypeModifierRepresentationMatchesPgquery(t *testing.T) {
+	sql := `CREATE TABLE t (a halfvec(3), b varchar(10), c numeric(10,2), d vector(3), e geometry(Point,4326), f mytype(5))`
+
+	generic := PostgresParser{parser: database.NewParser(parser.ParserModePostgres), mode: PsqldefParserModeGeneric}
+	pgquery := PostgresParser{parser: database.NewParser(parser.ParserModePostgres), mode: PsqldefParserModePgquery}
+
+	columnsOf := func(t *testing.T, p PostgresParser) []*parser.ColumnDefinition {
+		t.Helper()
+		stmts, err := p.Parse(sql)
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		ddl, ok := stmts[0].Statement.(*parser.DDL)
+		require.True(t, ok, "expected a DDL statement")
+		require.NotNil(t, ddl.TableSpec)
+		return ddl.TableSpec.Columns
+	}
+
+	genericColumns := columnsOf(t, generic)
+	pgqueryColumns := columnsOf(t, pgquery)
+	require.Len(t, genericColumns, len(pgqueryColumns))
+
+	for i, column := range genericColumns {
+		other := pgqueryColumns[i]
+		t.Run(column.Name.Name, func(t *testing.T) {
+			assert.Equal(t, other.Type.Length, column.Type.Length, "Length")
+			assert.Equal(t, other.Type.Scale, column.Type.Scale, "Scale")
+			assert.Equal(t, other.Type.TypeModifier, column.Type.TypeModifier, "TypeModifier")
+			assert.Equal(t, other.Type.TypeIdent, column.Type.TypeIdent, "TypeIdent")
+		})
+	}
+}
+
+// PostgreSQL downcases an unquoted identifier and keeps a quoted one, and so does the modifier.
+func TestTypeModifierKeepsQuotedIdentifierCase(t *testing.T) {
+	p := database.NewParser(parser.ParserModePostgres)
+	for _, tt := range []struct {
+		sql  string
+		want string
+	}{
+		{`CREATE TABLE t (g geometry("Point",4326))`, "geometry(Point,4326)"},
+		{`CREATE TABLE t (g geometry(Point,4326))`, "geometry(point,4326)"},
+	} {
+		t.Run(tt.sql, func(t *testing.T) {
+			stmts, err := p.Parse(tt.sql)
+			require.NoError(t, err)
+			require.Len(t, stmts, 1)
+			ddl, ok := stmts[0].Statement.(*parser.DDL)
+			require.True(t, ok, "expected a DDL statement")
+			require.NotNil(t, ddl.TableSpec)
+			require.Len(t, ddl.TableSpec.Columns, 1)
+			columnType := ddl.TableSpec.Columns[0].Type
+			assert.Equal(t, tt.want, parser.String(&columnType))
+		})
+	}
+}

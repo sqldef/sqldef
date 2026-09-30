@@ -364,3 +364,63 @@ CreatePartialIndexWithStorageOptions:
   down: |
     DROP INDEX public.idx_items_partial;
   flavor: pgvector
+# The generic parser reads halfvec(3) since the type modifier rule was added, so its dimension has
+# to reach the column the way the pgquery parser puts it there, or the two parsers would disagree
+# about the same column.
+AddHalfvecColumnKeepsDimension:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding halfvec(3)
+    );
+  up: |
+    ALTER TABLE public.items ADD COLUMN embedding halfvec(3);
+  down: |
+    ALTER TABLE public.items DROP COLUMN embedding;
+  flavor: pgvector
+
+ChangeHalfvecDimension:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding halfvec(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding halfvec(8)
+    );
+  up: |
+    ALTER TABLE public.items ALTER COLUMN embedding TYPE halfvec(8);
+  down: |
+    ALTER TABLE public.items ALTER COLUMN embedding TYPE halfvec(3);
+  flavor: pgvector
+
+AddSparsevecColumnKeepsDimension:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding sparsevec(5)
+    );
+  up: |
+    ALTER TABLE public.items ADD COLUMN embedding sparsevec(5);
+  down: |
+    ALTER TABLE public.items DROP COLUMN embedding;
+  flavor: pgvector

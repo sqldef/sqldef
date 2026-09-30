@@ -3805,9 +3805,14 @@ column_type:
   }
 | sql_id '(' type_modifier_list ')'
   {
-    // Custom type with a modifier that is not a plain length, such as the
-    // PostGIS geometry(Point,4326). Length and Scale cannot carry it.
-    $$ = ColumnType{Type: $1.Name, TypeIdent: $1, TypeModifier: $3}
+    // Custom type with a modifier, such as the PostGIS geometry(Point,4326).
+    //
+    // TypeIdent is deliberately left unset, unlike the rule above. It carries the quoting of a
+    // custom type name, and the pgquery parser never sets it, while haveSameDataType reads an
+    // empty one on one side as a different type. Until this PR every one of these statements
+    // failed here and went to pgquery, so setting it would make a column that never changed
+    // come out altered whenever the two schemas were read by different parsers.
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name}, $3)
   }
 | ANY
   {
@@ -3826,13 +3831,13 @@ column_type:
     // A schema-qualified type with a modifier, which is how PostgreSQL spells
     // the type when the extension's schema is not on the search_path:
     // public.geometry(Point,4326).
-    $$ = ColumnType{Type: $1.Name + "." + $3.Name, TypeModifier: $5}
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3.Name}, $5)
   }
 | ID '.' GEOMETRY '(' type_modifier_list ')'
   {
     // GEOMETRY is a keyword of this grammar, so the rule above does not cover
     // public.geometry(Point,4326).
-    $$ = ColumnType{Type: $1.Name + "." + $3, TypeModifier: $5}
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3}, $5)
   }
 | ID '.' GEOMETRY
   {
@@ -5071,7 +5076,7 @@ spatial_type:
   {
     // PostGIS constrains a geometry column with a modifier that names a shape
     // and, optionally, an SRID: geometry(Point,4326).
-    $$ = ColumnType{Type: $1, TypeModifier: $3}
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1}, $3)
   }
 | POINT
   {
@@ -5136,7 +5141,12 @@ type_modifier:
   {
     // PostgreSQL downcases an unquoted identifier, and the pgquery parser
     // reports it downcased, so do the same here to keep both parsers in step.
-    $$ = strings.ToLower($1.Name)
+    // A quoted one keeps its spelling, as PostgreSQL does.
+    if $1.Quoted {
+      $$ = $1.Name
+    } else {
+      $$ = strings.ToLower($1.Name)
+    }
   }
 | INTEGRAL
   {
