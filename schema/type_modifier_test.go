@@ -8,7 +8,7 @@ import (
 // it, a column declared as geometry(Point,4326) is added as a plain geometry:
 // the constraint the schema asked for is silently dropped.
 func TestGenerateDataTypeKeepsTypeModifier(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		name   string
@@ -55,7 +55,7 @@ func TestGenerateDataTypeKeepsTypeModifier(t *testing.T) {
 // geometry(Point,4326) and geometry(MultiPolygon,3857) are both "geometry".
 // Treating them as equal leaves an SRID or shape change silently unapplied.
 func TestHaveSameDataTypeComparesTypeModifier(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		name    string
