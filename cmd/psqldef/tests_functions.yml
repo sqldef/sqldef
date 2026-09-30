@@ -638,3 +638,20 @@ FunctionWithFloatOutParameterAndOmittedReturnsIsIdempotent:
       b := 1;
     END
     $$ LANGUAGE plpgsql;
+
+# Dropping an overloaded function needs the argument types: a bare
+# DROP FUNCTION is rejected with "function name is not unique" (42725), and the
+# failure takes the whole apply with it.
+DropOverloadedFunctionsNamesArgumentTypes:
+  legacy_ignore_quotes: false
+  enable_drop: true
+  current: |
+    CREATE FUNCTION calc(a integer) RETURNS integer AS $$ BEGIN RETURN a * 2; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION calc(a integer, b integer) RETURNS integer AS $$ BEGIN RETURN a + b; END; $$ LANGUAGE plpgsql;
+  desired: ""
+  up: |
+    DROP FUNCTION public.calc(integer);
+    DROP FUNCTION public.calc(integer, integer);
+  down: |
+    CREATE FUNCTION calc(a integer) RETURNS integer AS $$ BEGIN RETURN a * 2; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION calc(a integer, b integer) RETURNS integer AS $$ BEGIN RETURN a + b; END; $$ LANGUAGE plpgsql;
