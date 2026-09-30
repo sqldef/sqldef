@@ -1724,19 +1724,19 @@ func TestFilterObjectsOwnerStatements(t *testing.T) {
 	}
 
 	// target_tables is about tables and does not filter views, so neither owner goes away.
-	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}})
+	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
 
 	// skip_views is about views, so a regexp that happens to match a table name must not reach
 	// the table's owner.
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
 
 	// The owner of a filtered object goes with it.
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.v_users"}, owners(filtered))
 
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users"}, owners(filtered))
 }
 
@@ -1773,7 +1773,7 @@ func TestFilterObjectsOwnerIdentity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), test.sql, "public")
 			assert.NoError(t, err)
-			assert.Empty(t, FilterObjects(ddls, test.config))
+			assert.Empty(t, FilterObjects(ddls, test.config, GeneratorModePostgres, "public"))
 		})
 	}
 }

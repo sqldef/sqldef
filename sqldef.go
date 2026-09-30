@@ -102,7 +102,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 			if err != nil {
 				log.Fatal(err)
 			}
-			ddls = schema.FilterObjects(ddls, options.Config)
+			ddls = schema.FilterObjects(ddls, options.Config, generatorMode, defaultSchema)
 			ddls = schema.FilterOwners(ddls, options.Config)
 			ddls = schema.FilterPrivileges(ddls, options.Config)
 			ddls = schema.FilterExtensions(ddls, options.Config)
