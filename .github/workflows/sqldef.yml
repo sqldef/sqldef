@@ -236,6 +236,26 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # pull_request.base.sha is not the tip the merge commit was built on: it
+      # lags behind master, and diffing against it picks up whatever master
+      # gained since. The merge commit's first parent is the exact base.
+      - name: Determine the base commit
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            base="$(git rev-parse HEAD^1)"
+          else
+            base="$MERGE_GROUP_BASE_SHA"
+          fi
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; then
+            echo "::error::base commit '${base}' is not available"
+            exit 1
+          fi
+          echo "base: ${base}"
+          echo "BASE_SHA=${base}" >> "$GITHUB_ENV"
+        env:
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+
       # parser.go is generated. Letting pull requests carry it makes every
       # concurrent grammar change conflict on the generated output, so only
       # .github/workflows/parser.yml may update it.
@@ -245,12 +265,10 @@ jobs:
           if git diff --name-only "$BASE_SHA...HEAD" | grep -qx 'parser/parser.go'; then
             echo "::error file=parser/parser.go::parser/parser.go is generated and must not be committed. Edit parser/parser.y only; parser.go is regenerated on master."
             echo "To drop it from this branch:"
-            echo "    git checkout $BASE_SHA -- parser/parser.go && git commit -m 'parser: drop generated parser.go'"
+            echo "    git checkout \"\$(git merge-base origin/master HEAD)\" -- parser/parser.go && git commit -m 'parser: drop generated parser.go'"
             exit 1
           fi
           echo "✓ the pull request does not touch generated files"
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
       - name: Regenerate parser
         run: make parser
@@ -262,11 +280,6 @@ jobs:
       - name: Reject a release with a stale parser.go
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
-          # A failing `git diff` below would be read as "VERSION changed".
-          if ! git rev-parse --verify --quiet "$BASE_SHA^{commit}" >/dev/null; then
-            echo "::error::base commit '${BASE_SHA}' is not available"
-            exit 1
-          fi
           if git diff --quiet "$BASE_SHA" HEAD -- VERSION; then
             echo "✓ not a release"
             exit 0
@@ -276,8 +289,6 @@ jobs:
             exit 1
           fi
           echo "✓ the release carries a parser.go in sync with parser.y"
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
 
       - name: Report grammar conflicts
         if: github.event_name == 'pull_request'
@@ -298,8 +309,6 @@ jobs:
           if [ "$current" != "$base" ]; then
             echo "::warning file=parser/parser.y::grammar conflicts changed: ${base} -> ${current}"
           fi
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
       # master is brought back in sync by .github/workflows/parser.yml right
       # after a merge, so it is only a warning there. A tag must never ship a
