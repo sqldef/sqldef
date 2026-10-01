@@ -562,6 +562,14 @@ ViewBasic:
     );
     CREATE SQL SECURITY DEFINER VIEW user_posts AS select `mysqldef_test`.`users`.`id` AS `user_id`, `mysqldef_test`.`posts`.`id` AS `post_id` from (`mysqldef_test`.`users` join `mysqldef_test`.`posts` on(`mysqldef_test`.`users`.`id` = `mysqldef_test`.`posts`.`user_id`));
 
+ViewWithUuidColumn:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      uuid varchar(36) NOT NULL
+    );
+    CREATE VIEW user_uuids AS select id, uuid from users where uuid is not null;
+
 ViewDrop:
   current: |
     CREATE TABLE users (
@@ -706,3 +714,12 @@ ViewWithJoinIdempotency:
       FROM purchase_orders po
       LEFT JOIN projects sp ON sp.id = po.project_id
       WHERE po.status IN ('ordered', 'received');
+ViewWithCastAsChar:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int
+    );
+    CREATE VIEW user_num_texts AS SELECT CAST(num AS CHAR) AS num_text FROM users;

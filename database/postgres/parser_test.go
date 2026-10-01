@@ -761,7 +761,11 @@ func TestParseGrantStmtWithPgquery(t *testing.T) {
 			require.True(t, ok, "expected DDL, got %T", statements[0].Statement)
 			require.NotNil(t, ddl.Grant)
 			assert.Equal(t, tt.objectType, ddl.Grant.ObjectType)
-			assert.Equal(t, tt.privileges, ddl.Grant.Privileges)
+			privileges := make([]string, len(ddl.Grant.Privileges))
+			for i, priv := range ddl.Grant.Privileges {
+				privileges[i] = priv.String()
+			}
+			assert.Equal(t, tt.privileges, privileges)
 			assert.Equal(t, tt.wgo, ddl.Grant.WithGrantOption)
 		})
 	}

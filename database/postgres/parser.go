@@ -340,12 +340,13 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
-			Name:     parser.NewIdent(stmt.Idxname, false),
-			Type:     parser.NewIdent(stmt.AccessMethod, false),
-			Unique:   stmt.Unique,
-			Async:    false, // go_pgquery doesn't support ASYNC, will be set by generic parser
-			Where:    where,
-			Included: included,
+			Name:         parser.NewIdent(stmt.Idxname, false),
+			Type:         parser.NewIdent(stmt.AccessMethod, false),
+			Unique:       stmt.Unique,
+			Concurrently: stmt.Concurrent,
+			Async:        false, // pg_query doesn't parse ASYNC
+			Where:        where,
+			Included:     included,
 		},
 		IndexCols: indexCols,
 	}, nil
@@ -1566,6 +1567,13 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 
 	typmods, err := p.parseTypmods(node.Typmods)
 	if err != nil {
+		// A modifier that is not a list of numbers cannot go into Length and
+		// Scale. PostGIS spells one as geometry(Point,4326). Keep it verbatim so
+		// the column round-trips instead of failing the whole statement.
+		if modifier, ok := p.typmodText(node.Typmods); ok {
+			columnType.TypeModifier = modifier
+			return columnType, nil
+		}
 		return columnType, err
 	}
 	switch len(typmods) {
@@ -1577,6 +1585,25 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 	}
 
 	return columnType, nil
+}
+
+// typmodText renders a type modifier that parseTypmods cannot represent as
+// numbers. The parts are joined the way PostgreSQL's format_type() prints them,
+// so that a column declared as geometry(Point,4326) and the same column read
+// back from the catalog produce the same text.
+func (p PostgresParser) typmodText(typmods []*pgquery.Node) (string, bool) {
+	if len(typmods) == 0 {
+		return "", false
+	}
+	parts := make([]string, 0, len(typmods))
+	for _, mod := range typmods {
+		expr, err := p.parseExpr(mod)
+		if err != nil {
+			return "", false
+		}
+		parts = append(parts, parser.String(expr))
+	}
+	return strings.Join(parts, ","), true
 }
 
 func (p PostgresParser) parseTypmods(typmods []*pgquery.Node) ([]*parser.SQLVal, error) {
@@ -1789,25 +1816,21 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 			return nil, fmt.Errorf("unexpected object type in grant statement")
 		}
 
-		var privileges []string
+		var privileges []parser.Privilege
 		if stmt.Privileges == nil {
 			// ALL PRIVILEGES case
-			privileges = []string{"ALL"}
+			privileges = []parser.Privilege{parser.NewPrivilege("ALL", nil)}
 		} else {
 			for _, priv := range stmt.Privileges {
 				if accessPriv, ok := priv.Node.(*pgquery.Node_AccessPriv); ok {
-					if accessPriv.AccessPriv.Cols == nil {
-						privileges = append(privileges, strings.ToUpper(accessPriv.AccessPriv.PrivName))
-					} else {
-						// Column-level privilege: GRANT SELECT (col1, col2) ON ...
-						cols := make([]parser.Ident, 0, len(accessPriv.AccessPriv.Cols))
-						for _, colNode := range accessPriv.AccessPriv.Cols {
-							if str, ok := colNode.Node.(*pgquery.Node_String_); ok {
-								cols = append(cols, parser.NewIdent(str.String_.Sval, false))
-							}
+					// Column-level privilege: GRANT SELECT (col1, col2) ON ...
+					var cols []parser.Ident
+					for _, colNode := range accessPriv.AccessPriv.Cols {
+						if str, ok := colNode.Node.(*pgquery.Node_String_); ok {
+							cols = append(cols, parser.NewIdent(str.String_.Sval, false))
 						}
-						privileges = append(privileges, parser.FormatColumnPrivilege(accessPriv.AccessPriv.PrivName, cols))
 					}
+					privileges = append(privileges, parser.NewPrivilege(accessPriv.AccessPriv.PrivName, cols))
 				}
 			}
 		}

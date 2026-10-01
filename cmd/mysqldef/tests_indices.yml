@@ -603,3 +603,13 @@ RenamedIndexWhoseDefinitionAlsoChanged:
   down: |
     ALTER TABLE t ADD KEY old_idx (a);
     ALTER TABLE `t` DROP INDEX `new_idx`;
+FunctionalIndexWithCastAsChar:
+  flavor: "!mariadb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      num int,
+      KEY idx_num_text ((CAST(num AS CHAR(10))))
+    );
+  min_version: '8.0.13'

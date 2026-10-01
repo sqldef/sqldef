@@ -23,9 +23,66 @@ func TestStringConstantContainingSingleQuote(t *testing.T) {
 	assert.Equal(t, StringConstant("'example'"), "'''example'''")
 }
 
+func TestSkipExtension(t *testing.T) {
+	manageAllExtensions := &[]database.ManageObjectRule{{Target: ".*", Drop: true}}
+	tests := []struct {
+		name     string
+		desired  string
+		current  string
+		config   database.GeneratorConfig
+		expected []string
+	}{
+		{
+			name:     "desired extension",
+			desired:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true},
+			expected: []string{},
+		},
+		{
+			name:     "current extension",
+			current:  "CREATE EXTENSION pgcrypto;",
+			config:   database.GeneratorConfig{SkipExtension: true, EnableDrop: true},
+			expected: []string{},
+		},
+		{
+			name:    "manage.extension match",
+			desired: "CREATE EXTENSION pgcrypto;",
+			config: database.GeneratorConfig{
+				SkipExtension:    true,
+				ManageExtensions: manageAllExtensions,
+			},
+			expected: []string{},
+		},
+		{
+			name:    "non-extension DDL remains",
+			desired: "CREATE EXTENSION pgcrypto; CREATE TABLE users (id bigint);",
+			config:  database.GeneratorConfig{SkipExtension: true},
+			expected: []string{
+				"CREATE TABLE users (id bigint)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.config.LegacyIgnoreQuotes = false
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				tt.config,
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
 func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 
 	// Create two indexes with empty directions
 	indexA := Index{
@@ -62,7 +119,7 @@ func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 
 func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	// Test comparing primary keys with different explicit directions
-	g := &Generator{mode: GeneratorModeMysql}
+	g := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
 
 	indexA := Index{
 		primary: true,
@@ -203,6 +260,231 @@ func TestPostgresCheckConstraintMatching(t *testing.T) {
 	}
 }
 
+func TestPostgresIndexMatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		desired  string
+		expected []string
+	}{
+		{
+			name: "one current index is not reused",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX t_a_idx ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);
+				CREATE INDEX ON t (a);`,
+			expected: []string{
+				"CREATE INDEX ON public.t (a)",
+			},
+		},
+		{
+			name: "one desired index is not reused",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX t_a_idx ON t (a);
+				CREATE INDEX t_a_idx1 ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			expected: []string{
+				"DROP INDEX public.t_a_idx1",
+			},
+		},
+		{
+			name: "named indexes match before unnamed indexes",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX my_idx ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);
+				CREATE INDEX my_idx ON t (a);`,
+			expected: []string{
+				"CREATE INDEX ON public.t (a)",
+			},
+		},
+		{
+			name: "current indexes are matched in name order",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX t_a_idx1 ON t (a);
+				CREATE INDEX t_a_idx ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			expected: []string{
+				"DROP INDEX public.t_a_idx1",
+			},
+		},
+		{
+			name: "unnamed current index matches unnamed desired index",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			expected: []string{},
+		},
+		{
+			name: "one current unique constraint is not reused",
+			current: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD CONSTRAINT t_a_key UNIQUE (a);`,
+			desired: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD UNIQUE (a);
+				ALTER TABLE t ADD UNIQUE (a);`,
+			expected: []string{
+				"ALTER TABLE t ADD UNIQUE (a)",
+			},
+		},
+		{
+			name: "unnamed current unique constraints declared twice in CREATE TABLE are one",
+			current: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a),
+				UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{},
+		},
+		{
+			name: "unnamed unique constraints declared twice in CREATE TABLE are one",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT t_a_key UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a),
+				UNIQUE (a)
+			);`,
+			expected: []string{},
+		},
+		{
+			name: "one desired unique constraint is not reused",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT t_a_key UNIQUE (a),
+				CONSTRAINT t_a_key1 UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.t DROP CONSTRAINT t_a_key1",
+			},
+		},
+		{
+			name: "named unique constraints match before unnamed unique constraints",
+			current: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD CONSTRAINT my_key UNIQUE (a);`,
+			desired: `CREATE TABLE t (a integer);
+				ALTER TABLE t ADD UNIQUE (a);
+				ALTER TABLE t ADD CONSTRAINT my_key UNIQUE (a);`,
+			expected: []string{
+				"ALTER TABLE t ADD UNIQUE (a)",
+			},
+		},
+		{
+			name: "current unique constraints are matched in name order",
+			current: `CREATE TABLE t (
+				a integer,
+				CONSTRAINT t_a_key1 UNIQUE (a),
+				CONSTRAINT t_a_key UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.t DROP CONSTRAINT t_a_key1",
+			},
+		},
+		{
+			name: "unnamed current unique constraint matches unnamed desired unique constraint",
+			current: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			desired: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
+func TestPostgresIndexMatchInvariantPanics(t *testing.T) {
+	generator := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
+	assert.PanicsWithValue(t, "PostgreSQL desired index not found", func() {
+		generator.claimPostgresIndex(&postgresIndexMatchPlan{}, Index{})
+	})
+}
+
+func TestPostgresUnnamedCurrentIndexDropError(t *testing.T) {
+	tests := []struct {
+		name          string
+		current       string
+		desired       string
+		expectedError string
+	}{
+		{
+			name: "remove index",
+			current: `CREATE TABLE t (a integer);
+				CREATE INDEX ON t (a);`,
+			desired:       `CREATE TABLE t (a integer);`,
+			expectedError: "cannot drop unnamed PostgreSQL index on table public.t: the current schema does not contain the index name required by DROP INDEX; export the current schema from a live database or specify the index name explicitly",
+		},
+		{
+			name: "remove unique constraint",
+			current: `CREATE TABLE t (
+				a integer,
+				UNIQUE (a)
+			);`,
+			desired:       `CREATE TABLE t (a integer);`,
+			expectedError: "cannot drop unnamed PostgreSQL UNIQUE constraint on table public.t: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly",
+		},
+		{
+			name: "remove index on materialized view",
+			current: `CREATE TABLE t (a integer);
+				CREATE MATERIALIZED VIEW mv AS SELECT a FROM t;
+				CREATE INDEX ON mv (a);`,
+			desired: `CREATE TABLE t (a integer);
+				CREATE MATERIALIZED VIEW mv AS SELECT a FROM t;`,
+			expectedError: "cannot drop unnamed PostgreSQL index on table public.mv: the current schema does not contain the index name required by DROP INDEX; export the current schema from a live database or specify the index name explicitly",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+
+			require.EqualError(t, err, tt.expectedError)
+			assert.Nil(t, ddls)
+		})
+	}
+}
+
 func TestPostgresUnnamedCurrentCheckDropError(t *testing.T) {
 	const expectedError = "cannot drop unnamed PostgreSQL CHECK constraint on table public.measurements: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly"
 
@@ -270,12 +552,12 @@ func TestPostgresUnnamedCurrentCheckDoesNotBlockTableDrop(t *testing.T) {
 
 func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
 	return &Generator{
-		mode:               GeneratorModePostgres,
+		dialect:            dialect{mode: GeneratorModePostgres, defaultSchema: "public"},
 		currentTables:      []*Table{currentTable},
 		desiredTables:      []*Table{desiredTable},
-		defaultSchema:      "public",
-		config:             database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		config:             database.GeneratorConfig{EnableDrop: true},
 		postgresCheckPlans: make(map[string]*postgresCheckMatchPlan),
+		postgresIndexPlans: make(map[string]*postgresIndexMatchPlan),
 	}
 }
 
@@ -312,7 +594,7 @@ func TestPostgresCheckConstraintCleanup(t *testing.T) {
 
 func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
 	t.Run("missing desired check", func(t *testing.T) {
-		generator := &Generator{mode: GeneratorModePostgres}
+		generator := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 		assert.PanicsWithValue(t, "PostgreSQL desired column CHECK constraint not found", func() {
 			generator.postgresColumnCheckCanBeAddedInline(&postgresCheckMatchPlan{}, parser.NewIdent("amount", false))
 		})
@@ -453,7 +735,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := &Generator{mode: tt.mode}
+			g := &Generator{dialect: dialect{mode: tt.mode}}
 
 			// Parse the input SQL into a view definition
 			viewSQL := fmt.Sprintf("CREATE VIEW test_view AS %s", tt.input)
@@ -901,7 +1183,7 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 }
 
 func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	fkNil := ForeignKey{
 		constraintName:     Ident{Name: "fk_test"},
@@ -927,45 +1209,6 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 		"FK with nil ConstraintOptions and FK with default ConstraintOptions{false, false} should be considered the same")
 	assert.True(t, g.areSameForeignKeys(fkDefault, fkNil),
 		"FK with default ConstraintOptions{false, false} and FK with nil ConstraintOptions should be considered the same")
-}
-
-func TestAlterBundler(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
-	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
-	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
-
-	bundler := newAlterBundler(g, true)
-
-	slotA := bundler.emit(tableA, "ALTER TABLE a ADD COLUMN x int")
-	assert.NotEqual(t, "ALTER TABLE a ADD COLUMN x int", slotA, "first action should be replaced by a placeholder")
-
-	slotB := bundler.emit(tableB, "ALTER TABLE b ADD COLUMN z int")
-	assert.NotEqual(t, slotA, slotB, "each table gets its own placeholder")
-
-	folded := bundler.emit(tableA, "ALTER TABLE a DROP COLUMN y")
-	assert.Equal(t, "", folded, "subsequent same-table action should fold, not emit")
-
-	other := bundler.emit(tableA, "DROP INDEX idx ON a")
-	assert.Equal(t, "DROP INDEX idx ON a", other, "non-ALTER statement should pass through")
-
-	ddls := bundler.finalize([]string{slotA, slotB, "DROP INDEX idx ON a"})
-	assert.Equal(t, []string{
-		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
-		"ALTER TABLE b ADD COLUMN z int",
-		"DROP INDEX idx ON a",
-	}, ddls)
-}
-
-func TestAlterBundlerDisabledPassesThrough(t *testing.T) {
-	g := &Generator{mode: GeneratorModeMysql}
-	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
-	bundler := newAlterBundler(g, false)
-
-	stmt := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
-	assert.Equal(t, "ALTER TABLE a ADD COLUMN x int", stmt)
-
-	ddls := bundler.finalize([]string{stmt})
-	assert.Equal(t, []string{"ALTER TABLE a ADD COLUMN x int"}, ddls)
 }
 
 func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
@@ -1012,29 +1255,44 @@ func TestIsDropStatement(t *testing.T) {
 	assert.True(t, isDropStatement("DROP EVENT `cleanup`"))
 	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`))
 
-	// Destructive clauses embedded in ALTER TABLE are detected.
-	assert.True(t, isDropStatement(`ALTER TABLE "public"."users" DROP COLUMN "name"`))
-	assert.True(t, isDropStatement("ALTER TABLE `users` DROP INDEX `idx_name`"))
-	assert.True(t, isDropStatement("ALTER TABLE `logs` DROP PARTITION p2024"))
-	assert.True(t, isDropStatement(`ALTER TABLE public.users DISABLE ROW LEVEL SECURITY`))
-	assert.True(t, isDropStatement(`ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY`))
-
-	// Non-destructive ALTER clauses stay allowed (needed for non-destructive
-	// schema changes).
-	assert.False(t, isDropStatement(`ALTER TABLE users DROP CONSTRAINT users_check`))
-	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c DROP DEFAULT`))
-	assert.False(t, isDropStatement("ALTER TABLE `users` DROP FOREIGN KEY `fk_users`"))
-
 	// Additive statements are never destructive, even when their payload
 	// mentions destructive keywords (function bodies, comment text, literals).
 	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"))
 	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"))
 	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`))
 	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`))
-	assert.False(t, isDropStatement(`ALTER TABLE audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')`))
-	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c SET DEFAULT 'DROP TABLE'`))
 	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'"))
+	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nALTER TABLE logs DROP PARTITION p2024"))
 	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
+}
+
+func TestDestructiveStatements(t *testing.T) {
+	users := QualifiedName{Name: Ident{Name: "users"}}
+	mysql := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
+	postgres := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
+
+	// Dropping data, an index or a partition, or turning row level security off, is destructive.
+	assert.True(t, mysql.alterTable(users, dropColumnAction{column: Ident{Name: "name"}}).Destructive())
+	assert.True(t, mysql.alterTable(users, dropIndexAction{name: Ident{Name: "idx_name"}}).Destructive())
+	assert.True(t, mysql.alterTable(users, dropPartitionAction{name: "p2024"}).Destructive())
+	assert.True(t, postgres.alterTable(users, disableRowLevelSecurityAction{}).Destructive())
+	assert.True(t, postgres.alterTable(users, disableRowLevelSecurityAction{force: true}).Destructive())
+	assert.True(t, postgres.generateDropIndex(users, Ident{Name: "idx_name"}, false).Destructive())
+	assert.True(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: false}).Destructive())
+
+	// One destructive action makes the whole statement destructive.
+	assert.True(t, mysql.alterTable(users,
+		addColumnAction{column: Column{name: Ident{Name: "a"}, typeName: "int"}},
+		dropColumnAction{column: Ident{Name: "name"}},
+	).Destructive())
+
+	// Drops that non-destructive changes need are not destructive.
+	assert.False(t, postgres.alterTable(users, dropConstraintAction{name: Ident{Name: "users_check"}}).Destructive())
+	assert.False(t, postgres.generateDropIndex(users, Ident{Name: "users_key"}, true).Destructive())
+	assert.False(t, postgres.alterTable(users, alterColumnDefaultAction{column: Ident{Name: "c"}}).Destructive())
+	assert.False(t, mysql.alterTable(users, dropForeignKeyAction{name: Ident{Name: "fk_users"}}).Destructive())
+	assert.False(t, mysql.alterTable(users, dropPrimaryKeyAction{}).Destructive())
+	assert.False(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: true}).Destructive())
 }
 
 func TestCommentOutDropStatements(t *testing.T) {
@@ -1136,7 +1394,7 @@ func TestInsertOrReplaceIntoCreateFunction(t *testing.T) {
 }
 
 func TestAreSameFunctionSignature(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	fn := func(returnType string, args ...FunctionArg) *Function {
 		return &Function{returnType: returnType, args: args}
 	}
@@ -1181,10 +1439,83 @@ func TestAreSameFunctionSignature(t *testing.T) {
 	// RETURNS TABLE(...) loses its column list in parsing, so it is never
 	// considered replaceable.
 	assert.False(t, g.areSameFunctionSignature(fn("TABLE"), fn("TABLE")))
+
+	// An omitted RETURNS is derived from the output parameters, so a function
+	// written in the PostgreSQL-native form still matches the exported one.
+	// Without this the signature check falls back to DROP + CREATE, which the
+	// default flags gate away and leave the CREATE failing with 42723.
+	outInt := FunctionArg{mode: "OUT", name: parser.NewIdent("b", false), typ: "int"}
+	assert.True(t, g.areSameFunctionSignature(
+		fn("integer", FunctionArg{mode: "OUT", name: parser.NewIdent("b", false), typ: "integer"}),
+		fn("", outInt)))
+}
+
+func TestAreSameFunctionDefinition(t *testing.T) {
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
+	mssql := &Generator{dialect: dialect{mode: GeneratorModeMssql}}
+	fn := func(returnType string, args ...FunctionArg) *Function {
+		return &Function{returnType: returnType, body: " SELECT 1 ", language: "sql", args: args}
+	}
+	out := func(name, typ string) FunctionArg {
+		return FunctionArg{mode: "OUT", name: parser.NewIdent(name, false), typ: typ}
+	}
+
+	// Type aliases equal their canonical spelling: the current side comes from
+	// pg_get_functiondef, which always prints the canonical name.
+	assert.True(t, g.areSameFunctionDefinition(fn("integer"), fn("int")))
+	assert.True(t, g.areSameFunctionDefinition(fn("boolean"), fn("bool")))
+	assert.True(t, g.areSameFunctionDefinition(fn("character varying"), fn("varchar")))
+	assert.True(t, g.areSameFunctionDefinition(fn("setof integer"), fn("SETOF int")))
+	assert.True(t, g.areSameFunctionDefinition(fn("double precision"), fn("float")))
+	assert.False(t, g.areSameFunctionDefinition(fn("integer"), fn("bigint")))
+
+	// The aliases are PostgreSQL-specific; other dialects keep the raw compare.
+	assert.False(t, mssql.areSameFunctionDefinition(fn("integer"), fn("int")))
+	assert.True(t, mssql.areSameFunctionDefinition(fn("int"), fn("int")))
+
+	// An omitted RETURNS is derived from the output parameters.
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("integer", out("b", "integer")),
+		fn("", out("b", "int"))))
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("integer", FunctionArg{mode: "INOUT", name: parser.NewIdent("a", false), typ: "integer"}),
+		fn("", FunctionArg{mode: "INOUT", name: parser.NewIdent("a", false), typ: "int"})))
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("record", out("b", "integer"), out("c", "integer")),
+		fn("", out("b", "int"), out("c", "int"))))
+
+	assert.True(t, g.areSameFunctionDefinition(
+		fn("timestamp with time zone", out("b", "timestamp with time zone")),
+		fn("", out("b", "timestamptz"))))
+
+	// VARIADIC and IN are not output parameters, so nothing is derived and the
+	// mismatch against the exported RETURNS stays visible.
+	assert.False(t, g.areSameFunctionDefinition(
+		fn("integer", FunctionArg{mode: "VARIADIC", name: parser.NewIdent("a", false), typ: "integer[]"}),
+		fn("", FunctionArg{mode: "VARIADIC", name: parser.NewIdent("a", false), typ: "int[]"})))
+
+	// Body and language still participate in the comparison.
+	changedBody := fn("integer")
+	changedBody.body = " SELECT 2 "
+	assert.False(t, g.areSameFunctionDefinition(fn("int"), changedBody))
+}
+
+func TestNormalizePGFunctionType(t *testing.T) {
+	assert.Equal(t, "integer", normalizePGFunctionType("INT"))
+	assert.Equal(t, "integer[]", normalizePGFunctionType("int4[]"))
+	assert.Equal(t, "timestamp with time zone", normalizePGFunctionType("timestamptz"))
+
+	// SETOF is a modifier on the return type, not part of the type name, so it
+	// has to be stripped before the alias lookup.
+	assert.Equal(t, "setof integer", normalizePGFunctionType("SETOF int"))
+	assert.Equal(t, "setof integer", normalizePGFunctionType("setof  integer"))
+	assert.Equal(t, "setof integer[]", normalizePGFunctionType("SETOF int[]"))
+	assert.Equal(t, "double precision", normalizePGFunctionType("float"))
+	assert.Equal(t, "setof", normalizePGFunctionType("setof"))
 }
 
 func TestDropFunctionDDL(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres, defaultSchema: "public"}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
 	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
 
 	// Identity argument types are appended so overloads stay unambiguous.
@@ -1205,7 +1536,7 @@ func TestDropFunctionDDL(t *testing.T) {
 func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
 	// PostgreSQL parses an index key part as `expr [opclass] [ASC|DESC]`, so the operator class
 	// has to be emitted before the direction.
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	tests := []struct {
 		name        string
@@ -1262,7 +1593,7 @@ func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.
 // generateAddIndex has no PostgreSQL-reachable path carrying an operator class today, so the
 // key-part ordering of both index generators is asserted here instead of in cmd/psqldef.
 func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
-	g := &Generator{mode: GeneratorModePostgres}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 	table := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "products"}}
 	index := Index{
 		name:      Ident{Name: "idx_name"},
@@ -1275,7 +1606,7 @@ func TestIndexGeneratorsEmitOperatorClassBeforeDirection(t *testing.T) {
 	}
 
 	assert.Contains(t, g.generateCreateIndexStatement(table, index), "(name text_pattern_ops desc)")
-	assert.Contains(t, g.generateAddIndex(table, index), "(name text_pattern_ops desc)")
+	assert.Contains(t, g.generateAddIndex(table, index).Render(), "(name text_pattern_ops desc)")
 }
 
 // TestCreateIndexStatementRoundTrip guards the clause loss that quote-aware mode is prone to:
@@ -1302,7 +1633,7 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 	}
 
 	sqlParser := database.NewParser(parser.ParserModePostgres)
-	g := &Generator{mode: GeneratorModePostgres, config: database.GeneratorConfig{LegacyIgnoreQuotes: false}}
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
 
 	parseIndexOf := func(t *testing.T, statement string) (QualifiedName, Index) {
 		t.Helper()
@@ -1325,19 +1656,19 @@ func TestCreateIndexStatementRoundTrip(t *testing.T) {
 			assert.Equal(t, index.indexType, regenerated.indexType)
 			assert.Equal(t, index.options, regenerated.options)
 			assert.Equal(t, index.included, regenerated.included)
-			assert.True(t, g.areSameIndexes(index, regenerated),
+			assert.True(t, g.areSameIndexes(nil, index, regenerated),
 				"regenerated statement describes a different index:\n%s\n%s", statement, generated)
 		})
 	}
 }
 
-// TestAutoIndexName covers the names PostgreSQL and MySQL give an index or constraint declared
-// without one. A name that does not match what the server chose makes the desired schema differ
-// from the exported one on every run, so the index is dropped and recreated each time.
+// TestAutoIndexName covers the names MySQL gives an index or constraint declared without one. A
+// name that does not match what the server chose makes the desired schema differ from the
+// exported one on every run, so the index is dropped and recreated each time.
 func TestAutoIndexName(t *testing.T) {
-	nameOf := func(t *testing.T, mode GeneratorMode, parserMode parser.ParserMode, statement string) string {
+	nameOf := func(t *testing.T, statement string) string {
 		t.Helper()
-		ddls, err := ParseDDLs(mode, database.NewParser(parserMode), statement+";", "public")
+		ddls, err := ParseDDLs(GeneratorModeMysql, database.NewParser(parser.ParserModeMysql), statement+";", "public")
 		require.NoError(t, err)
 		require.Len(t, ddls, 1)
 		switch ddl := ddls[0].(type) {
@@ -1353,37 +1684,6 @@ func TestAutoIndexName(t *testing.T) {
 		}
 	}
 
-	postgres := []struct {
-		statement string
-		expected  string
-	}{
-		{`CREATE INDEX ON t (a)`, "t_a_idx"},
-		{`CREATE UNIQUE INDEX ON t (a)`, "t_a_idx"},
-		{`CREATE INDEX ON t (a) INCLUDE (b, c)`, "t_a_b_c_idx"},
-		{`CREATE INDEX ON t (lower(a), lower(b))`, "t_lower_lower1_idx"},
-		{`CREATE INDEX ON t ((a::text))`, "t_a_idx"},
-		{`CREATE INDEX ON t ((a COLLATE "C"))`, "t_a_idx"},
-		{`CREATE INDEX ON t (((a COLLATE "C")))`, "t_a_idx"},
-		{`CREATE INDEX ON t ((CAST(a AS text)))`, "t_a_idx"},
-		{`CREATE INDEX ON t ((CASE WHEN a > 0 THEN 1 ELSE 0 END))`, "t_case_idx"},
-		{`CREATE INDEX ON t ((a + b))`, "t_expr_idx"},
-		{`ALTER TABLE t ADD UNIQUE (a, b)`, "t_a_b_key"},
-		{`ALTER TABLE t ADD PRIMARY KEY (a)`, "t_pkey"},
-		{
-			`CREATE INDEX ON a_table_whose_name_is_quite_long_and_will_certainly_be_truncated (a)`,
-			"a_table_whose_name_is_quite_long_and_will_certainly_be_tr_a_idx",
-		},
-		{
-			`ALTER TABLE a_table_whose_name_is_quite_long_and_will_certainly_be_truncated ADD PRIMARY KEY (a)`,
-			"a_table_whose_name_is_quite_long_and_will_certainly_be_tru_pkey",
-		},
-	}
-	for _, tt := range postgres {
-		t.Run(tt.statement, func(t *testing.T) {
-			assert.Equal(t, tt.expected, nameOf(t, GeneratorModePostgres, parser.ParserModePostgres, tt.statement))
-		})
-	}
-
 	mysql := []struct {
 		statement string
 		expected  string
@@ -1393,7 +1693,7 @@ func TestAutoIndexName(t *testing.T) {
 	}
 	for _, tt := range mysql {
 		t.Run("mysql "+tt.statement, func(t *testing.T) {
-			assert.Equal(t, tt.expected, nameOf(t, GeneratorModeMysql, parser.ParserModeMysql, tt.statement))
+			assert.Equal(t, tt.expected, nameOf(t, tt.statement))
 		})
 	}
 }
@@ -1478,6 +1778,21 @@ func TestFilterObjectsOwnerIdentity(t *testing.T) {
 	}
 }
 
+func TestFilterPrivilegesMergesGranteesOnce(t *testing.T) {
+	sql := `
+		GRANT SELECT ON TABLE users TO app_user, readonly_user WITH GRANT OPTION;
+		GRANT SELECT ON TABLE users TO app_user WITH GRANT OPTION;
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+	rules := []database.ManageObjectRule{{Target: "app_user|readonly_user"}}
+
+	filtered := FilterPrivileges(ddls, database.GeneratorConfig{ManagePrivileges: &rules})
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, []string{"app_user", "readonly_user"}, filtered[0].(*GrantPrivilege).grantees)
+}
+
 func TestRecreatedViewOwnerEscaping(t *testing.T) {
 	rules := []database.ManageObjectRule{}
 	current := `
@@ -1515,4 +1830,90 @@ func TestHeldBackViewRecreationKeepsIndexState(t *testing.T) {
 	for _, ddl := range ddls {
 		assert.Contains(t, ddl, "-- Skipped:")
 	}
+}
+
+func TestRenamePrivilegeColumn(t *testing.T) {
+	g := &Generator{dialect: dialect{mode: GeneratorModePostgres}}
+
+	tests := []struct {
+		privilege Privilege
+		oldColumn Ident
+		newColumn Ident
+		expected  string
+	}{
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: "id"}, {Name: "secret"}}),
+			Ident{Name: "secret"}, Ident{Name: "secret_v2"},
+			"SELECT (id, secret_v2)",
+		},
+		// The column list is re-sorted, and a name is quoted only where it has to be
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: "id"}, {Name: "secret"}}),
+			Ident{Name: "id"}, Ident{Name: "Key"},
+			`SELECT ("Key", secret)`,
+		},
+		// A quoted name is matched case-sensitively
+		{
+			parser.NewPrivilege("UPDATE", []Ident{{Name: "Odd, \"Name", Quoted: true}}),
+			Ident{Name: `Odd, "Name`, Quoted: true}, Ident{Name: "plain"},
+			"UPDATE (plain)",
+		},
+		// A column the rename does not touch keeps its exact name, whitespace
+		// and all, because the column list is never re-parsed out of the SQL
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: " secret ", Quoted: true}, {Name: "id"}}),
+			Ident{Name: "id"}, Ident{Name: "id_v2"},
+			`SELECT (" secret ", id_v2)`,
+		},
+		// A quoted name may begin or end with a space
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: " secret ", Quoted: true}, {Name: "id"}}),
+			Ident{Name: " secret ", Quoted: true}, Ident{Name: "secret_v2"},
+			"SELECT (id, secret_v2)",
+		},
+		// Privileges that are not column-level, or do not mention the column
+		{
+			parser.NewPrivilege("SELECT", nil),
+			Ident{Name: "secret"}, Ident{Name: "secret_v2"},
+			"SELECT",
+		},
+		{
+			parser.NewPrivilege("SELECT", []Ident{{Name: "id"}}),
+			Ident{Name: "secret"}, Ident{Name: "secret_v2"},
+			"SELECT (id)",
+		},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.expected, g.renamePrivilegeColumn(test.privilege, test.oldColumn, test.newColumn).String())
+	}
+}
+
+func TestRenameColumnOfGrantOnMultipleTables(t *testing.T) {
+	current := `
+		CREATE TABLE t1 (id integer, a integer);
+		CREATE TABLE t2 (id integer, a integer);
+		GRANT SELECT (a) ON t1, t2 TO app_user;
+	`
+	desired := `
+		CREATE TABLE t1 (
+		  id integer,
+		  b integer -- @renamed from=a
+		);
+		CREATE TABLE t2 (id integer, a integer);
+		GRANT SELECT (b) ON t1 TO app_user;
+		GRANT SELECT (a) ON t2 TO app_user;
+	`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModePostgres,
+		database.NewParser(parser.ParserModePostgres),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false, ManagedRoles: []string{"app_user"}},
+		"public",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ALTER TABLE public.t1 RENAME COLUMN a TO b"}, ddls)
 }

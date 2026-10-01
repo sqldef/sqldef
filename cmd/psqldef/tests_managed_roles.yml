@@ -636,7 +636,8 @@ ManagedRolesDropTable:
     GRANT SELECT, INSERT ON TABLE "public"."audit_logs" TO "app_user";
 
 ManagedRolesRenameTable:
-  # A rename carries the privileges over, so the old name is not revoked.
+  # A rename carries the privileges over, so neither a REVOKE of the old name nor
+  # a re-GRANT of the unchanged privilege is emitted.
   current: |
     CREATE TABLE old_logs (
       id BIGINT PRIMARY KEY
@@ -651,10 +652,234 @@ ManagedRolesRenameTable:
     - app_user
   up: |
     ALTER TABLE "public"."old_logs" RENAME TO "new_logs";
-    GRANT SELECT ON TABLE "public"."new_logs" TO "app_user";
   down: |
     CREATE TABLE old_logs (
       id BIGINT PRIMARY KEY
     );
     GRANT SELECT ON TABLE "public"."old_logs" TO "app_user";
     DROP TABLE "public"."new_logs";
+
+ManagedRolesRenameTableRevokeRemovedPrivilege:
+  # A privilege dropped in the same run as the rename is revoked under the new
+  # name, which is where the carried-over privilege now lives.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE old_logs TO app_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE new_logs TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public.old_logs RENAME TO new_logs;
+    REVOKE UPDATE ON TABLE public.new_logs FROM "app_user";
+  down: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE public.old_logs TO "app_user";
+    DROP TABLE public.new_logs;
+
+ManagedRolesRenameTableGrantAddedPrivilege:
+  # Only the privilege added in the same run as the rename is granted.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE old_logs TO app_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE new_logs TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public.old_logs RENAME TO new_logs;
+    GRANT INSERT ON TABLE public.new_logs TO "app_user";
+  down: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE public.old_logs TO "app_user";
+    DROP TABLE public.new_logs;
+
+ManagedRolesRenameTableRevokeAllPrivileges:
+  # The desired schema declares no grant for the renamed table, so the whole
+  # carried-over privilege is revoked under the new name.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE old_logs TO app_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY
+    );
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public.old_logs RENAME TO new_logs;
+    REVOKE INSERT, SELECT ON TABLE public.new_logs FROM "app_user";
+  down: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE public.old_logs TO "app_user";
+    DROP TABLE public.new_logs;
+
+ManagedRolesRenameTableAndColumnOfColumnLevelGrant:
+  # Renaming the table and the column of a column-level privilege in one run
+  # leaves the privilege as it is, under both new names.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY,
+      secret TEXT
+    );
+    GRANT SELECT (secret) ON TABLE old_logs TO app_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY,
+      secret_v2 TEXT -- @renamed from=secret
+    );
+    GRANT SELECT (secret_v2) ON TABLE new_logs TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public.old_logs RENAME TO new_logs;
+    ALTER TABLE public.new_logs RENAME COLUMN secret TO secret_v2;
+  down: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY,
+      secret TEXT
+    );
+    GRANT SELECT (secret) ON TABLE public.old_logs TO "app_user";
+    DROP TABLE public.new_logs;
+
+ManagedRolesRenameColumnAndRevokeColumnPrivilege:
+  # A renamed column is renamed inside the privilege too: the surviving privilege
+  # needs no DDL, and the dropped one is revoked under the new column name.
+  # Revoking the old column name would fail with 42703.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE logs (
+      id BIGINT PRIMARY KEY,
+      secret TEXT
+    );
+    GRANT SELECT (secret), UPDATE (secret) ON TABLE logs TO app_user;
+  desired: |
+    CREATE TABLE logs (
+      id BIGINT PRIMARY KEY,
+      secret_v2 TEXT -- @renamed from=secret
+    );
+    GRANT SELECT (secret_v2) ON TABLE logs TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public.logs RENAME COLUMN secret TO secret_v2;
+    REVOKE UPDATE (secret_v2) ON TABLE public.logs FROM "app_user";
+  down: |
+    ALTER TABLE public.logs ADD COLUMN secret text;
+    REVOKE SELECT (secret_v2) ON TABLE public.logs FROM "app_user";
+    GRANT SELECT (secret), UPDATE (secret) ON TABLE public.logs TO "app_user";
+    ALTER TABLE public.logs DROP COLUMN secret_v2;
+
+ManagedRolesRenameTableMixedTableAndColumnGrants:
+  # Table-level and column-level privileges of several grantees are all carried
+  # over by the table rename, and only the dropped one is revoked.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY,
+      secret TEXT
+    );
+    GRANT SELECT, UPDATE ON TABLE old_logs TO app_user;
+    GRANT INSERT (secret) ON TABLE old_logs TO readonly_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY,
+      secret TEXT
+    );
+    GRANT SELECT ON TABLE new_logs TO app_user;
+    GRANT INSERT (secret) ON TABLE new_logs TO readonly_user;
+  managed_roles:
+    - app_user
+    - readonly_user
+  up: |
+    ALTER TABLE public.old_logs RENAME TO new_logs;
+    REVOKE UPDATE ON TABLE public.new_logs FROM "app_user";
+  down: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY,
+      secret TEXT
+    );
+    GRANT SELECT, UPDATE ON TABLE public.old_logs TO "app_user";
+    GRANT INSERT (secret) ON TABLE public.old_logs TO "readonly_user";
+    DROP TABLE public.new_logs;
+
+ManagedRolesRenameTableAndRecreateOldName:
+  # The privileges belong to the renamed table, not to the name: a new table
+  # taking over the old name starts without them.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE old_logs TO app_user;
+  desired: |
+    CREATE TABLE new_logs ( -- @renamed from=old_logs
+      id BIGINT PRIMARY KEY
+    );
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT, INSERT ON TABLE new_logs TO app_user;
+    GRANT SELECT ON TABLE old_logs TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public.old_logs RENAME TO new_logs;
+    CREATE TABLE old_logs (
+      id BIGINT PRIMARY KEY
+    );
+    GRANT SELECT ON TABLE public.old_logs TO "app_user";
+  down: |
+    GRANT INSERT ON TABLE public.old_logs TO "app_user";
+    DROP TABLE public.new_logs;
+
+ManagedRolesRenameQuotedTableAndColumnOfColumnLevelGrant:
+  # Quoted mixed-case names keep their quotes when renamed inside the privilege.
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "OldLogs" (
+      id BIGINT PRIMARY KEY,
+      "Secret" TEXT
+    );
+    GRANT SELECT (id, "Secret"), UPDATE ("Secret") ON TABLE "OldLogs" TO app_user;
+  desired: |
+    CREATE TABLE "NewLogs" ( -- @renamed from="OldLogs"
+      id BIGINT PRIMARY KEY,
+      "SecretV2" TEXT -- @renamed from="Secret"
+    );
+    GRANT SELECT (id, "SecretV2") ON TABLE "NewLogs" TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    ALTER TABLE public."OldLogs" RENAME TO "NewLogs";
+    ALTER TABLE public."NewLogs" RENAME COLUMN "Secret" TO "SecretV2";
+    REVOKE UPDATE ("SecretV2") ON TABLE public."NewLogs" FROM "app_user";
+  down: |
+    CREATE TABLE "OldLogs" (
+      id BIGINT PRIMARY KEY,
+      "Secret" TEXT
+    );
+    GRANT SELECT ("Secret", id), UPDATE ("Secret") ON TABLE public."OldLogs" TO "app_user";
+    DROP TABLE public."NewLogs";

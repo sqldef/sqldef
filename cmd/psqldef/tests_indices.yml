@@ -427,6 +427,21 @@ CreateIndexWithoutConcurrentlyConfig:
     CREATE INDEX idx_users_name ON users (name);
   down: |
     DROP INDEX "public"."idx_users_name";
+CreateIndexConcurrentlyWithoutConcurrentlyConfig:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX CONCURRENTLY t_a_idx ON t USING btree (a);
+  up: |
+    CREATE INDEX CONCURRENTLY t_a_idx ON public.t USING btree (a);
+  down: |
+    DROP INDEX public.t_a_idx;
 CreateIndexWithStorageParameterString:
   desired: |
     CREATE TABLE test_table (
@@ -1249,7 +1264,7 @@ UnnamedIndexWithAccessMethod:
     );
     CREATE INDEX ON t USING btree (y);
   up: |
-    CREATE INDEX t_y_idx ON public.t USING btree (y);
+    CREATE INDEX ON public.t USING btree (y);
   down: |
     DROP INDEX public.t_y_idx;
 
@@ -1271,3 +1286,349 @@ ChangeCollationOfIndex:
   down: |
     DROP INDEX public.t_a_idx;
     CREATE INDEX t_a_idx ON public.t USING btree (a COLLATE "C");
+
+CreateIndexOnTableNamedStream:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE stream (
+      id bigint NOT NULL PRIMARY KEY,
+      start_at timestamp
+    );
+    CREATE TABLE stream_comment (
+      id bigint NOT NULL,
+      stream_id bigint NOT NULL REFERENCES stream (id)
+    );
+  desired: |
+    CREATE TABLE stream (
+      id bigint NOT NULL PRIMARY KEY,
+      start_at timestamp
+    );
+    CREATE TABLE stream_comment (
+      id bigint NOT NULL,
+      stream_id bigint NOT NULL REFERENCES stream (id)
+    );
+    CREATE INDEX idx_stream_start_at ON stream USING btree (id, start_at) WHERE (start_at IS NOT NULL);
+  up: |
+    CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE start_at is not null;
+  down: |
+    DROP INDEX public.idx_stream_start_at;
+
+IndexWithExplicitDefaultCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "default");
+
+IndexRestatingTheCollationOfItsColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "C");
+
+IndexInheritingTheCollationOfItsColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name);
+  desired: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "POSIX");
+  up: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name COLLATE "POSIX");
+  down: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name);
+
+# FIXME: Changing the collation of a column emits no DDL, and the index collation is resolved against
+# the desired column for both sides, so the index change is missed as well.
+#IndexCollationChangedTogetherWithItsColumn:
+#  legacy_ignore_quotes: false
+#  current: |
+#    CREATE TABLE products (name TEXT COLLATE "C");
+#    CREATE INDEX idx_name ON products USING btree (name);
+#  desired: |
+#    CREATE TABLE products (name TEXT COLLATE "POSIX");
+#    CREATE INDEX idx_name ON products USING btree (name COLLATE "POSIX");
+#  up: |
+#    ALTER TABLE public.products ALTER COLUMN name TYPE text COLLATE "POSIX";
+#    DROP INDEX public.idx_name;
+#    CREATE INDEX idx_name ON public.products USING btree (name COLLATE "POSIX");
+#  down: |
+#    ALTER TABLE public.products ALTER COLUMN name TYPE text COLLATE "C";
+#    DROP INDEX public.idx_name;
+#    CREATE INDEX idx_name ON public.products USING btree (name);
+
+UnnamedIndexDuplicatesKeepBoth:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+    CREATE INDEX t_a_idx1 ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+    CREATE INDEX ON t (a);
+  up: ""
+  down: ""
+
+UnnamedIndexDuplicatesDropOne:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+    CREATE INDEX t_a_idx1 ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+  up: |
+    DROP INDEX public.t_a_idx1;
+  down: |
+    CREATE INDEX t_a_idx1 ON public.t USING btree (a);
+
+UnnamedIndexDuplicatesAddOne:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+    CREATE INDEX ON t (a);
+  up: |
+    CREATE INDEX ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx1;
+
+UnnamedIndexMatchesNamedIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX my_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+  up: ""
+  down: ""
+
+NamedIndexReservedBeforeUnnamedIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX my_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+    CREATE INDEX my_idx ON t USING btree (a);
+  up: |
+    CREATE INDEX ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx;
+
+NamedIndexReservedBeforeUnnamedIndexDeclaredLater:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX my_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX my_idx ON t USING btree (a);
+    CREATE INDEX ON t (a);
+  up: |
+    CREATE INDEX ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx;
+
+UnnamedUniqueIndexDoesNotMatchUniqueConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      CONSTRAINT t_a_key UNIQUE (a)
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE UNIQUE INDEX ON t (a);
+  up: |
+    CREATE UNIQUE INDEX ON public.t (a);
+    ALTER TABLE public.t DROP CONSTRAINT t_a_key;
+  down: |
+    ALTER TABLE public.t ADD CONSTRAINT t_a_key UNIQUE (a);
+    DROP INDEX public.t_a_idx;
+
+NamedIndexDoesNotMatchUnnamedIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX t_a_idx ON t USING btree (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX my_idx ON t USING btree (a);
+  up: |
+    CREATE INDEX my_idx ON public.t USING btree (a);
+    DROP INDEX public.t_a_idx;
+  down: |
+    CREATE INDEX t_a_idx ON public.t USING btree (a);
+    DROP INDEX public.my_idx;
+
+UnnamedIndexDefinitionChanged:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+    CREATE INDEX ON t (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+    CREATE INDEX ON t (a, b);
+  up: |
+    CREATE INDEX ON public.t (a, b);
+    DROP INDEX public.t_a_idx;
+  down: |
+    CREATE INDEX ON public.t (a);
+    DROP INDEX public.t_a_b_idx;
+
+UnnamedIndexDefinitionChangedWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+    CREATE INDEX ON t (a);
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+    CREATE INDEX ON t (a, b);
+  up: |
+    CREATE INDEX ON public.t (a, b);
+    -- Skipped: DROP INDEX public.t_a_idx;
+  down: |
+    -- Skipped: DROP INDEX public.t_a_b_idx;
+
+AddTwoUnnamedIndexesWithSameDefinition:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+    CREATE INDEX ON t (a);
+  up: |
+    CREATE INDEX ON public.t (a);
+    CREATE INDEX ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx;
+    DROP INDEX public.t_a_idx1;
+
+AddTwoUnnamedIndexesWithDifferentDefinitions:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint,
+      b bigint
+    );
+    CREATE INDEX ON t (a);
+    CREATE INDEX ON t (b);
+  up: |
+    CREATE INDEX ON public.t (a);
+    CREATE INDEX ON public.t (b);
+  down: |
+    DROP INDEX public.t_a_idx;
+    DROP INDEX public.t_b_idx;
+
+CreateIndexWithoutNameConcurrently:
+  legacy_ignore_quotes: false
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE t (
+      a bigint
+    );
+  desired: |
+    CREATE TABLE t (
+      a bigint
+    );
+    CREATE INDEX ON t (a);
+  up: |
+    CREATE INDEX CONCURRENTLY ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx;
+
+UnnamedIndexWhoseDefaultNameIsTaken:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int, b int);
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE INDEX t_a_idx ON t (b);
+    CREATE INDEX ON t (a);
+  up: |
+    CREATE INDEX t_a_idx ON public.t (b);
+    CREATE INDEX ON public.t (a);
+  down: |
+    DROP INDEX public.t_a_idx;
+    DROP INDEX public.t_a_idx1;
+
+RenameTableKeepsUnnamedIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE INDEX ON t (a);
+  desired: |
+    CREATE TABLE u ( -- @renamed from=t
+      a int
+    );
+    CREATE INDEX ON u (a);
+  up: |
+    ALTER TABLE public.t RENAME TO u;
+  down: |
+    CREATE TABLE t (a int);
+    CREATE INDEX ON public.t (a);
+    DROP TABLE public.u;

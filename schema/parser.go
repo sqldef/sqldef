@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -231,15 +230,25 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				)
 			}
 
+			var triggerConstraintOptions *ConstraintOptions
+			if stmt.Trigger.ConstraintOptions != nil {
+				triggerConstraintOptions = &ConstraintOptions{
+					deferrable:        stmt.Trigger.ConstraintOptions.Deferrable,
+					initiallyDeferred: stmt.Trigger.ConstraintOptions.InitiallyDeferred,
+				}
+			}
+
 			return &Trigger{
-				statement:     ddl,
-				name:          normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
-				tableName:     normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
-				time:          stmt.Trigger.Time,
-				event:         events,
-				forEach:       stmt.Trigger.ForEach,
-				whenCondition: whenCondition,
-				body:          body,
+				statement:         ddl,
+				name:              normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
+				tableName:         normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
+				time:              stmt.Trigger.Time,
+				event:             events,
+				forEach:           stmt.Trigger.ForEach,
+				whenCondition:     whenCondition,
+				constraint:        stmt.Trigger.Constraint,
+				constraintOptions: triggerConstraintOptions,
+				body:              body,
 			}, nil
 		} else if stmt.Action == parser.CreateEvent {
 			body := util.TransformSlice(stmt.Event.Body, func(s parser.Statement) string {
@@ -320,13 +329,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			grantees := stmt.Grant.Grantees
 
 			if len(grantees) > 0 {
-				// Normalize privilege names to uppercase for consistency
-				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, normalizePrivilegeCase)
 				return &GrantPrivilege{
 					statement:       ddl,
 					tableName:       normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:        grantees,
-					privileges:      normalizedPrivileges,
+					privileges:      stmt.Grant.Privileges,
 					withGrantOption: stmt.Grant.WithGrantOption,
 					objectType:      normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
@@ -341,13 +348,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			// For now, return the first grantee as a single statement
 			if len(grantees) > 0 {
-				// Normalize privilege names to uppercase for consistency
-				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, normalizePrivilegeCase)
 				return &RevokePrivilege{
 					statement:     ddl,
 					tableName:     normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
-					privileges:    normalizedPrivileges,
+					privileges:    stmt.Grant.Privileges,
 					cascadeOption: stmt.Grant.CascadeOption,
 					objectType:    normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
@@ -454,6 +459,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			position:                   i,
 			typeName:                   typeName,
 			typeIdent:                  typeIdent,
+			typeModifier:               parsedCol.Type.TypeModifier,
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
@@ -623,11 +629,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		nameIdent := indexDef.Info.Name
 		if nameIdent.IsEmpty() {
-			tableName := stmt.Table.Name.Name
-			if tableName == "" {
-				tableName = stmt.NewName.Name.Name
-			}
-			nameIdent = autoIndexName(tableName, indexColumns, indexDef.Included, indexDef.Info.Unique, indexDef.Info.Primary, true, mode)
+			nameIdent = autoIndexName(indexColumns, indexDef.Info.Primary, mode)
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -754,71 +756,17 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}, nil
 }
 
-// autoIndexName reproduces the name the database gives an index or constraint declared
-// without one. PostgreSQL (ChooseIndexName) joins the table name, the key columns and the
-// INCLUDE columns, truncated to NAMEDATALEN, and suffixes _key for a UNIQUE constraint but
-// _idx for a bare index; a primary key is named after the table alone. The other engines
-// name it after the first column, as MySQL does.
-func autoIndexName(tableName string, indexColumns []IndexColumn, included []Ident, unique bool, primary bool, constraint bool, mode GeneratorMode) Ident {
-	if mode != GeneratorModePostgres {
-		if primary {
-			return parser.NewIdent("PRIMARY", false)
-		}
-		return parser.NewIdent(indexColumns[0].ColumnName(), false)
+// autoIndexName names an index or constraint declared without one after its first column, as
+// MySQL does. PostgreSQL chooses the name from the state of its catalog, so a PostgreSQL index
+// stays unnamed and is matched by definition instead.
+func autoIndexName(indexColumns []IndexColumn, primary bool, mode GeneratorMode) Ident {
+	if mode == GeneratorModePostgres {
+		return Ident{}
 	}
-
 	if primary {
-		return NewIdentWithQuoteDetected(buildPostgresPrimaryKeyName(tableName))
+		return parser.NewIdent("PRIMARY", false)
 	}
-
-	columnNames := []string{}
-	for _, indexColumn := range indexColumns {
-		columnNames = append(columnNames, autoIndexColumnName(indexColumn, columnNames))
-	}
-	for _, includedColumn := range included {
-		columnNames = append(columnNames, includedColumn.Name)
-	}
-
-	suffix := "idx"
-	if unique && constraint {
-		suffix = "key"
-	}
-	return buildPostgresConstraintNameIdent(tableName, strings.Join(columnNames, "_"), suffix)
-}
-
-// autoIndexColumnName is PostgreSQL's ChooseIndexColumnNames: a name already taken by an
-// earlier column gets a counter appended.
-func autoIndexColumnName(indexColumn IndexColumn, taken []string) string {
-	name := figureIndexColumnName(indexColumn.columnExpr)
-
-	candidate := name
-	for i := 1; slices.Contains(taken, candidate); i++ {
-		candidate = fmt.Sprintf("%s%d", name, i)
-	}
-	return candidate
-}
-
-// figureIndexColumnName is PostgreSQL's FigureIndexColname: it looks through the wrappers that
-// name nothing themselves, takes a function call's name, and falls back to "expr".
-func figureIndexColumnName(expr parser.Expr) string {
-	switch expr := expr.(type) {
-	case *parser.ColName:
-		return expr.Name.Name
-	case *parser.ParenExpr:
-		return figureIndexColumnName(expr.Expr)
-	case *parser.CollateExpr:
-		return figureIndexColumnName(expr.Expr)
-	case *parser.CastExpr:
-		return figureIndexColumnName(expr.Expr)
-	case *parser.ConvertExpr:
-		return figureIndexColumnName(expr.Expr)
-	case *parser.FuncExpr:
-		return strings.ToLower(expr.Name.Name)
-	case *parser.CaseExpr:
-		return "case"
-	default:
-		return "expr"
-	}
+	return parser.NewIdent(indexColumns[0].ColumnName(), false)
 }
 
 func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, error) {
@@ -886,7 +834,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	nameIdent := stmt.IndexSpec.Name
 	if nameIdent.IsEmpty() {
-		nameIdent = autoIndexName(stmt.Table.Name.Name, indexColumns, stmt.IndexSpec.Included, stmt.IndexSpec.Unique, stmt.IndexSpec.Primary, stmt.Action != parser.CreateIndex, mode)
+		nameIdent = autoIndexName(indexColumns, stmt.IndexSpec.Primary, mode)
 	}
 
 	// Extract index comments and look for @renamed annotation
@@ -1790,16 +1738,6 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 	}
 
 	return comments
-}
-
-// normalizePrivilegeCase uppercases a privilege name while preserving the case
-// of any parenthesized column list (column names are case-sensitive):
-// "select (Col)" -> "SELECT (Col)".
-func normalizePrivilegeCase(priv string) string {
-	if i := strings.Index(priv, "("); i >= 0 {
-		return strings.ToUpper(strings.TrimRight(priv[:i], " ")) + " " + priv[i:]
-	}
-	return strings.ToUpper(priv)
 }
 
 // normalizeGrantObjectType maps the parser's Grant.ObjectType to the canonical

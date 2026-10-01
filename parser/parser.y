@@ -48,6 +48,8 @@ func setDDL(yylex any, ddl *DDL) {
   str                      string
   ident                    Ident
   idents                   []Ident
+  privilege                Privilege
+  privileges               []Privilege
   strs                     []string
   selectExprs              SelectExprs
   selectExpr               SelectExpr
@@ -144,7 +146,7 @@ func setDDL(yylex any, ddl *DDL) {
 
 %token LEX_ERROR
 %left <str> UNION INTERSECT EXCEPT
-%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
+%token <str> SELECT INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <str> ROWID PRAGMA
 %token <str> VALUES LAST_INSERT_ID
@@ -443,6 +445,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
+%type <str> type_modifier_list type_modifier spatial_keyword
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
 %type <str> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword numeric_bool_literal_type
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
@@ -462,8 +465,10 @@ func setDDL(yylex any, ddl *DDL) {
 %type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <ident> reference_option match_type_opt
-%type <ident> sql_id_opt privilege grantee
-%type <idents> sql_id_list privilege_list grantee_list
+%type <ident> sql_id_opt grantee
+%type <idents> sql_id_list grantee_list
+%type <privilege> privilege
+%type <privileges> privilege_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -513,13 +518,14 @@ func setDDL(yylex any, ddl *DDL) {
 %type <boolVal> variadic_opt
 %type <str> with_data_opt
 %type <constraintOpts> deferrable_option
+%type <constraintOpts> trigger_deferrable_opt
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
 %type <functionArg> function_arg
 %type <str> function_arg_mode_opt
 %type <expr> function_arg_default_opt
-%type <str> function_return_type function_option set_value_list set_value
+%type <str> function_return_type returns_opt function_option set_value_list set_value
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
@@ -1325,6 +1331,59 @@ create_statement:
       },
     }
   }
+/*
+ * For PostgreSQL: CREATE CONSTRAINT TRIGGER ... FOR EACH ROW [WHEN (...)] EXECUTE FUNCTION/PROCEDURE
+ * PostgreSQL requires FOR EACH ROW for constraint triggers.
+ * The optional "FROM referenced_table_name" clause isn't supported yet.
+ */
+| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW when_expression_opt EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    constraintOpts := $9
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $4},
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        ForEach: "ROW",
+        When: $13,
+        Constraint: true,
+        ConstraintOptions: &constraintOpts,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $16,
+            Args: SelectExprsToExprs($18),
+          },
+        },
+      },
+    }
+  }
+| CREATE CONSTRAINT TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_deferrable_opt FOR EACH ROW when_expression_opt EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    constraintOpts := $9
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $4},
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        ForEach: "ROW",
+        When: $13,
+        Constraint: true,
+        ConstraintOptions: &constraintOpts,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $16,
+            Args: SelectExprsToExprs($18),
+          },
+        },
+      },
+    }
+  }
 /* For PostgreSQL: CREATE TRIGGER ... FOR EACH { ROW | STATEMENT } WHEN (...) EXECUTE FUNCTION/PROCEDURE */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW WHEN '(' expression ')' EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
   {
@@ -1504,60 +1563,57 @@ create_statement:
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
-/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 1: RETURNS type AS body LANGUAGE lang */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type AS STRING LANGUAGE reserved_sql_id function_options_opt
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 1: [RETURNS type] AS body LANGUAGE lang */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' returns_opt AS STRING LANGUAGE reserved_sql_id function_options_opt
   {
     $$ = &DDL{
       Action: CreateFunction,
       Function: &Function{
         Name: $4,
         Args: $6,
-        ReturnType: $9,
-        Body: $11,
-        Language: $13.Name,
+        ReturnType: $8,
+        Body: $10,
+        Language: $12.Name,
         OrReplace: $2 != "",
-        Options: $14,
+        Options: $13,
       },
     }
   }
-/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 2: RETURNS type LANGUAGE lang AS body (pg_get_functiondef format) */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE reserved_sql_id AS STRING function_options_opt
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 2: [RETURNS type] LANGUAGE lang AS body (pg_get_functiondef format) */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' returns_opt LANGUAGE reserved_sql_id AS STRING function_options_opt
   {
     $$ = &DDL{
       Action: CreateFunction,
       Function: &Function{
         Name: $4,
         Args: $6,
-        ReturnType: $9,
+        ReturnType: $8,
+        Body: $12,
+        Language: $10.Name,
+        OrReplace: $2 != "",
+        Options: $13,
+      },
+    }
+  }
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 3: [RETURNS type] LANGUAGE lang options AS body (pg_get_functiondef format with options before AS) */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' returns_opt LANGUAGE reserved_sql_id function_options AS STRING
+  {
+    $$ = &DDL{
+      Action: CreateFunction,
+      Function: &Function{
+        Name: $4,
+        Args: $6,
+        ReturnType: $8,
         Body: $13,
-        Language: $11.Name,
+        Language: $10.Name,
         OrReplace: $2 != "",
-        Options: $14,
-      },
-    }
-  }
-/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 3: RETURNS type LANGUAGE lang options AS body (pg_get_functiondef format with options before AS) */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE reserved_sql_id function_options AS STRING
-  {
-    $$ = &DDL{
-      Action: CreateFunction,
-      Function: &Function{
-        Name: $4,
-        Args: $6,
-        ReturnType: $9,
-        Body: $14,
-        Language: $11.Name,
-        OrReplace: $2 != "",
-        Options: $12,
+        Options: $11,
       },
     }
   }
 | GRANT privilege_list ON TABLE table_name_list TO grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1591,10 +1647,7 @@ create_statement:
   }
 | GRANT privilege_list ON TABLE table_name_list TO grantee_list WITH GRANT OPTION
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1630,10 +1683,7 @@ create_statement:
   }
 | GRANT privilege_list ON table_name_list TO grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -1667,10 +1717,7 @@ create_statement:
   }
 | GRANT privilege_list ON table_name_list TO grantee_list WITH GRANT OPTION
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -1706,10 +1753,7 @@ create_statement:
   }
 | GRANT privilege_list ON SEQUENCE table_name_list TO grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1745,10 +1789,7 @@ create_statement:
   }
 | GRANT privilege_list ON SEQUENCE table_name_list TO grantee_list WITH GRANT OPTION
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1786,10 +1827,7 @@ create_statement:
   }
 | REVOKE privilege_list ON SEQUENCE table_name_list FROM grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1825,10 +1863,7 @@ create_statement:
   }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1862,10 +1897,7 @@ create_statement:
   }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list CASCADE
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1901,10 +1933,7 @@ create_statement:
   }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list RESTRICT
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($7))
     for i, g := range $7 {
       grantees[i] = g.Name
@@ -1940,10 +1969,7 @@ create_statement:
   }
 | REVOKE privilege_list ON table_name_list FROM grantee_list
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -1977,10 +2003,7 @@ create_statement:
   }
 | REVOKE privilege_list ON table_name_list FROM grantee_list CASCADE
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -2016,10 +2039,7 @@ create_statement:
   }
 | REVOKE privilege_list ON table_name_list FROM grantee_list RESTRICT
   {
-    privs := make([]string, len($2))
-    for i, p := range $2 {
-      privs[i] = p.Name
-    }
+    privs := $2
     grantees := make([]string, len($6))
     for i, g := range $6 {
       grantees[i] = g.Name
@@ -3783,6 +3803,17 @@ column_type:
     // Custom type (e.g., domain name) - preserve quote information in TypeIdent
     $$ = ColumnType{Type: $1.Name, TypeIdent: $1}
   }
+| sql_id '(' type_modifier_list ')'
+  {
+    // Custom type with a modifier, such as the PostGIS geometry(Point,4326).
+    //
+    // TypeIdent is deliberately left unset, unlike the rule above. It carries the quoting of a
+    // custom type name, and the pgquery parser never sets it, while haveSameDataType reads an
+    // empty one on one side as a different type. Until this PR every one of these statements
+    // failed here and went to pgquery, so setting it would make a column that never changed
+    // come out altered whenever the two schemas were read by different parsers.
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name}, $3)
+  }
 | ANY
   {
     $$ = ColumnType{Type: "ANY"}
@@ -3794,6 +3825,23 @@ column_type:
 | ID '.' ID
   {
     $$ = ColumnType{Type: $1.Name + "." + $3.Name}
+  }
+| ID '.' ID '(' type_modifier_list ')'
+  {
+    // A schema-qualified type with a modifier, which is how PostgreSQL spells
+    // the type when the extension's schema is not on the search_path:
+    // public.geometry(Point,4326).
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3.Name}, $5)
+  }
+| ID '.' GEOMETRY '(' type_modifier_list ')'
+  {
+    // GEOMETRY is a keyword of this grammar, so the rule above does not cover
+    // public.geometry(Point,4326).
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3}, $5)
+  }
+| ID '.' GEOMETRY
+  {
+    $$ = ColumnType{Type: $1.Name + "." + $3}
   }
 
 column_definition_type:
@@ -4190,7 +4238,7 @@ default_value_expression:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -4471,6 +4519,11 @@ function_arg:
   function_arg_mode_opt sql_id column_type array_opt function_arg_default_opt
   {
     typeStr := $3.Type
+    // The timezone flag is part of the type name, and the return type is
+    // derived from it when RETURNS is omitted, so it must not be dropped.
+    if $3.Timezone {
+      typeStr += " with time zone"
+    }
     if bool($4) {
       typeStr += "[]"
     }
@@ -4484,6 +4537,9 @@ function_arg:
 | function_arg_mode_opt column_type array_opt function_arg_default_opt
   {
     typeStr := $2.Type
+    if $2.Timezone {
+      typeStr += " with time zone"
+    }
     if bool($3) {
       typeStr += "[]"
     }
@@ -4528,12 +4584,23 @@ function_arg_default_opt:
     $$ = $2
   }
 
+/* PostgreSQL derives the return type from the OUT/INOUT parameters when RETURNS
+   is omitted, so the clause is optional. */
+returns_opt:
+  {
+    $$ = ""
+  }
+| RETURNS function_return_type
+  {
+    $$ = $2
+  }
+
 function_return_type:
   TRIGGER
   {
     $$ = "TRIGGER"
   }
-| column_type
+| column_type array_opt
   {
     // Handle timestamp/time with time zone types
     if $1.Timezone {
@@ -4541,18 +4608,24 @@ function_return_type:
     } else {
       $$ = $1.Type
     }
+    if bool($2) {
+      $$ += "[]"
+    }
   }
 | TABLE '(' function_table_columns ')'
   {
     $$ = "TABLE"
   }
-| SETOF column_type
+| SETOF column_type array_opt
   {
     // Handle timestamp/time with time zone types in SETOF
     if $2.Timezone {
       $$ = "SETOF " + $2.Type + " with time zone"
     } else {
       $$ = "SETOF " + $2.Type
+    }
+    if bool($3) {
+      $$ += "[]"
     }
   }
 
@@ -4999,6 +5072,12 @@ spatial_type:
   {
     $$ = ColumnType{Type: $1}
   }
+| GEOMETRY '(' type_modifier_list ')'
+  {
+    // PostGIS constrains a geometry column with a modifier that names a shape
+    // and, optionally, an SRID: geometry(Point,4326).
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1}, $3)
+  }
 | POINT
   {
     $$ = ColumnType{Type: $1}
@@ -5046,6 +5125,49 @@ enum_values:
   {
     $$ = append($1, $3)
   }
+
+type_modifier_list:
+  type_modifier
+  {
+    $$ = $1
+  }
+| type_modifier_list ',' type_modifier
+  {
+    $$ = $1 + "," + $3
+  }
+
+type_modifier:
+  sql_id
+  {
+    // PostgreSQL downcases an unquoted identifier, and the pgquery parser
+    // reports it downcased, so do the same here to keep both parsers in step.
+    // A quoted one keeps its spelling, as PostgreSQL does.
+    if $1.Quoted {
+      $$ = $1.Name
+    } else {
+      $$ = strings.ToLower($1.Name)
+    }
+  }
+| INTEGRAL
+  {
+    $$ = string($1)
+  }
+| spatial_keyword
+  {
+    // A shape name such as Point or MultiPolygon is a keyword of its own in this
+    // grammar, so it does not reach the sql_id case above.
+    $$ = strings.ToLower($1)
+  }
+
+spatial_keyword:
+  GEOMETRY
+| POINT
+| LINESTRING
+| POLYGON
+| GEOMETRYCOLLECTION
+| MULTIPOINT
+| MULTILINESTRING
+| MULTIPOLYGON
 
 length_opt:
   {
@@ -5157,6 +5279,14 @@ charset_opt:
 | CHARACTER SET BINARY
   {
     $$ = $3
+  }
+| CHARSET ID
+  {
+    $$ = $2.Name
+  }
+| CHARSET BINARY
+  {
+    $$ = $2
   }
 
 collate_opt:
@@ -5826,6 +5956,18 @@ deferrable_option:
     $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: bool(*$1)}
   }
 
+// CREATE CONSTRAINT TRIGGER's deferrable clause, unlike a table constraint's, is optional
+// (defaults to NOT DEFERRABLE when omitted).
+trigger_deferrable_opt:
+  /* empty */
+  {
+    $$ = ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+  }
+| deferrable_option
+  {
+    $$ = $1
+  }
+
 fk_defer_opts:
   /* empty */
   {
@@ -5876,43 +6018,43 @@ sql_id_list:
 privilege:
   reserved_sql_id
   {
-    $$ = $1
+    $$ = NewPrivilege($1.Name, nil)
   }
 /* USAGE etc. map to UNUSED; accept them as privilege names (GRANT USAGE ON SEQUENCE) */
 | UNUSED
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 /* Column-level privilege: GRANT SELECT (col1, col2) ON TABLE ... */
 | reserved_sql_id '(' sql_id_list ')'
   {
-    $$ = NewIdent(FormatColumnPrivilege($1.Name, $3), false)
+    $$ = NewPrivilege($1.Name, $3)
   }
 | ALL
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 | ALL PRIVILEGES
   {
-    $$ = NewIdent("ALL", false)
+    $$ = NewPrivilege("ALL", nil)
   }
 | REFERENCES
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 | TRIGGER
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 | TRUNCATE
   {
-    $$ = NewIdent($1, false)
+    $$ = NewPrivilege($1, nil)
   }
 
 privilege_list:
   privilege
   {
-    $$ = []Ident{$1}
+    $$ = []Privilege{$1}
   }
 | privilege_list ',' privilege
   {
@@ -6963,7 +7105,7 @@ value_expression:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -7549,17 +7691,25 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
-| TIMESTAMP '(' INTEGRAL ')'
+| TIMESTAMP '(' INTEGRAL ')' time_zone_opt
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    ct := &ConvertType{Type: $1, Length: NewIntVal($3)}
+    if bool($5) {
+      ct.TimeZone = " with time zone"
+    }
+    $$ = ct
   }
 | TIMESTAMP %prec LOWER_THAN_WITH
   {
     $$ = &ConvertType{Type: $1}
   }
-| TIME '(' INTEGRAL ')'
+| TIME '(' INTEGRAL ')' time_zone_opt
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    ct := &ConvertType{Type: $1, Length: NewIntVal($3)}
+    if bool($5) {
+      ct.TimeZone = " with time zone"
+    }
+    $$ = ct
   }
 | TIME %prec LOWER_THAN_WITH
   {
@@ -8260,7 +8410,7 @@ array_element:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -8272,7 +8422,7 @@ array_element:
   {
     t := $3
     if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
@@ -8554,6 +8704,7 @@ non_reserved_keyword:
 | ALLOW_ROW_LOCKS
 | ALLOW_PAGE_LOCKS
 | LANGUAGE
+| UUID
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
 // like PRIMARY KEY / FOREIGN KEY / VECTOR KEY work in both dialects while
@@ -8628,7 +8779,6 @@ type_func_name_keyword:
 | TINYINT
 | TSRANGE
 | TSTZRANGE
-| UUID
 | VARBINARY
 | VARCHAR
 | VARYING

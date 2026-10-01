@@ -261,11 +261,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 }
 
 // objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
-// and materialized views so that owners declared in the desired schema can be
-// diffed. Emitted only when manage.privilege or managed_roles is configured.
+// and materialized views when owners or privileges are managed. Every owner is exported, even an
+// unmanaged one: the generator needs it to leave an unmanaged role's object alone and to restore
+// the owner of a recreated view. schema.FilterOwners keeps only the managed ones in --export.
 // Extension-owned objects are excluded.
 func (d *PostgresDatabase) objectOwners() ([]string, error) {
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesOwners() && !d.generatorConfig.ManagesPrivileges() {
 		return nil, nil
 	}
 
@@ -355,29 +356,37 @@ func (d *PostgresDatabase) isExportedGrantee(grantee string) bool {
 }
 
 func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesPrivileges() {
 		return nil, nil
 	}
 
+	// The ACL holds one entry per grantor; see getPrivilegeDefsForTables.
 	const query = `
-		SELECT
-			n.nspname || '.' || c.relname AS seq_name,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
-		WHERE c.relkind = 'S'
-		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-		AND acl.grantee <> c.relowner
-		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
-		AND NOT EXISTS (
-			SELECT 1 FROM pg_depend dep
-			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		WITH sequence_privileges AS (
+			SELECT
+				n.nspname || '.' || c.relname AS seq_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+			WHERE c.relkind = 'S'
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND acl.grantee <> c.relowner
+			AND NOT EXISTS (
+				SELECT 1 FROM pg_depend dep
+				WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+			)
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
 		)
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
-		ORDER BY seq_name, grantee, acl.is_grantable
+		SELECT
+			seq_name, grantee, is_grantable,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+		FROM sequence_privileges
+		WHERE $1::text[] IS NULL OR grantee = ANY($1::text[])
+		GROUP BY seq_name, grantee, is_grantable
+		ORDER BY seq_name, grantee, is_grantable
 	`
 
 	rows, err := d.db.Query(query, d.managedGranteeArgs())
@@ -1012,10 +1021,12 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 	return ddls, nil
 }
 
-// CheckConstraint holds a CHECK constraint's name and definition.
+// CheckConstraint holds a CHECK constraint's name and definition, and the
+// column it references when it references exactly one.
 type CheckConstraint struct {
 	Name       Ident
 	Definition string
+	column     string
 }
 
 type TableDDLComponents struct {
@@ -1074,6 +1085,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table))
+	inlineChecks, tableChecks := splitInlineChecks(components.CheckConstraints)
 	for i, col := range components.Columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
@@ -1089,8 +1101,8 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		if col.IdentityGeneration != "" {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
-		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(col.Check.name), col.Check.definition)
+		if check, ok := inlineChecks[col.Name]; ok {
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
@@ -1114,7 +1126,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		}
 	}
 
-	for _, check := range components.CheckConstraints {
+	for _, check := range tableChecks {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 	}
@@ -1149,11 +1161,6 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
 
-type columnConstraint struct {
-	definition string
-	name       Ident
-}
-
 type column struct {
 	Name               string
 	dataType           string
@@ -1162,7 +1169,6 @@ type column struct {
 	Default            string
 	IsAutoIncrement    bool
 	IdentityGeneration string
-	Check              *columnConstraint
 }
 
 func (c *column) GetDataType() string {
@@ -1402,6 +1408,24 @@ func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 		typeName = strings.TrimSuffix(typeName, "[]")
 	}
 
+	// Split off a type modifier before the case detection below. format_type()
+	// returns the modifier as part of the name for non-built-in types, and a
+	// modifier may contain identifiers rather than numbers -- PostGIS spells one
+	// as geometry(Point,4326). Its uppercase letter would otherwise quote the
+	// whole string, yielding a type that does not exist:
+	//
+	//     "geometry(Point,4326)"  ->  pq: type "geometry(Point,4326)" does not exist
+	//
+	// The modifier is reattached unchanged: it is not an identifier, so it needs
+	// no quoting of its own. A name that is itself quoted is left alone, since
+	// the parenthesis would then belong to the quoted spelling.
+	typeModifier := ""
+	if idx := strings.Index(typeName, "("); idx > 0 && !strings.Contains(typeName[:idx], `"`) {
+		typeModifier = typeName[idx:]
+		typeName = typeName[:idx]
+	}
+	arraySuffix = typeModifier + arraySuffix
+
 	// If already quoted (from format_type()), return as-is
 	if strings.HasPrefix(typeName, "\"") && strings.HasSuffix(typeName, "\"") {
 		return typeName + arraySuffix
@@ -1532,69 +1556,41 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 }
 
 func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string][]column, error) {
-	const query = `WITH
-	  columns AS (
-	    SELECT
-	      n.nspname || '.' || c.relname AS qualified_table_name,
-	      s.column_name,
-	      s.column_default,
-	      s.is_nullable,
-	      CASE
-	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	      ELSE s.data_type
-	      END,
-	      -- formattedDataType: also return type name for domain and enum types
-	      CASE
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      ELSE format_type(f.atttypid, f.atttypmod)
-	      END,
-	      s.identity_generation
-	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
-	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
-	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-	    WHERE c.relkind in ('r', 'p')
-	    AND n.nspname || '.' || c.relname = ANY($1::text[])
-	    AND f.attnum > 0
-	    ORDER BY n.nspname, c.relname, f.attnum
-	  ),
-	  column_constraints AS (
-	    SELECT att.attname column_name, tmp.qualified_table_name, tmp.name, tmp.type, tmp.definition
-	    FROM (
-	      SELECT unnest(con.conkey) AS conkey,
-	             pg_get_constraintdef(con.oid, true) AS definition,
-	             cls.oid AS relid,
-	             con.conname AS name,
-	             con.contype AS type,
-	             nsp.nspname || '.' || cls.relname AS qualified_table_name
-	      FROM   pg_constraint con
-	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	      JOIN   pg_class cls ON cls.oid = con.conrelid
-	      WHERE  nsp.nspname || '.' || cls.relname = ANY($1::text[])
-	      AND    array_length(con.conkey, 1) = 1
-	    ) tmp
-	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
-	  ),
-	  check_constraints AS (
-	    SELECT column_name, qualified_table_name, name, definition
-	    FROM   column_constraints
-	    WHERE  type = 'c'
-	  )
-	SELECT    columns.*, checks.name, checks.definition
-	FROM      columns
-	LEFT JOIN check_constraints checks USING (column_name, qualified_table_name);`
+	const query = `SELECT
+	  n.nspname || '.' || c.relname AS qualified_table_name,
+	  s.column_name,
+	  s.column_default,
+	  s.is_nullable,
+	  CASE
+	  -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	  WHEN t.typtype IN ('d', 'e') THEN
+	    CASE
+	      WHEN tn.nspname = 'public' THEN t.typname
+	      ELSE tn.nspname || '.' || t.typname
+	    END
+	  WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
+	  ELSE s.data_type
+	  END,
+	  -- formattedDataType: also return type name for domain and enum types
+	  CASE
+	  WHEN t.typtype IN ('d', 'e') THEN
+	    CASE
+	      WHEN tn.nspname = 'public' THEN t.typname
+	      ELSE tn.nspname || '.' || t.typname
+	    END
+	  ELSE format_type(f.atttypid, f.atttypmod)
+	  END,
+	  s.identity_generation
+	FROM pg_attribute f
+	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
+	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+	LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
+	WHERE c.relkind in ('r', 'p')
+	AND n.nspname || '.' || c.relname = ANY($1::text[])
+	AND f.attnum > 0
+	ORDER BY n.nspname, c.relname, f.attnum`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {
@@ -1606,8 +1602,8 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	for rows.Next() {
 		col := column{}
 		var tableName, colName, isNullable, dataType, formattedDataType string
-		var colDefault, idGen, checkName, checkDefinition *string
-		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
+		var colDefault, idGen *string
+		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen)
 		if err != nil {
 			return nil, err
 		}
@@ -1623,13 +1619,6 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 		col.formattedDataType = formattedDataType
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
-		}
-		if checkName != nil && checkDefinition != nil {
-			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
-			col.Check = &columnConstraint{
-				definition: normalizedDef,
-				name:       NewIdentWithQuoteDetected(*checkName),
-			}
 		}
 		result[tableName] = append(result[tableName], col)
 	}
@@ -1984,13 +1973,15 @@ func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[stri
 }
 
 func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (map[string][]CheckConstraint, error) {
-	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, con.conname, pg_get_constraintdef(con.oid, true)
+	const query = `SELECT nsp.nspname || '.' || cls.relname, con.conname, pg_get_constraintdef(con.oid, true), att.attname
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	JOIN   pg_class cls ON cls.oid = con.conrelid
+	LEFT JOIN pg_attribute att ON att.attrelid = con.conrelid
+	                          AND array_length(con.conkey, 1) = 1
+	                          AND att.attnum = con.conkey[1]
 	WHERE  con.contype = 'c'
 	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
-	AND    coalesce(array_length(con.conkey, 1), 0) <> 1
 	ORDER BY nsp.nspname, cls.relname, con.conname`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
@@ -2002,19 +1993,44 @@ func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (ma
 	result := make(map[string][]CheckConstraint, len(tableNames))
 	for rows.Next() {
 		var tableName, constraintName, constraintDef string
-		err = rows.Scan(&tableName, &constraintName, &constraintDef)
+		var columnName *string
+		err = rows.Scan(&tableName, &constraintName, &constraintDef, &columnName)
 		if err != nil {
 			return nil, err
 		}
 		// Normalize type casts for generic parser compatibility
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		result[tableName] = append(result[tableName], CheckConstraint{
+		check := CheckConstraint{
 			Name:       NewIdentWithQuoteDetected(constraintName),
 			Definition: constraintDef,
-		})
+		}
+		if columnName != nil {
+			check.column = *columnName
+		}
+		result[tableName] = append(result[tableName], check)
 	}
 	return result, nil
+}
+
+// splitInlineChecks returns the CHECKs to export inline, keyed by column name,
+// and the rest as table constraints. A column holds at most one inline CHECK,
+// so a column with several keeps all of them as table constraints.
+func splitInlineChecks(checks []CheckConstraint) (map[string]CheckConstraint, []CheckConstraint) {
+	checksPerColumn := make(map[string]int)
+	for _, check := range checks {
+		checksPerColumn[check.column]++
+	}
+	inlineChecks := make(map[string]CheckConstraint)
+	var tableChecks []CheckConstraint
+	for _, check := range checks {
+		if check.column != "" && checksPerColumn[check.column] == 1 {
+			inlineChecks[check.column] = check
+		} else {
+			tableChecks = append(tableChecks, check)
+		}
+	}
+	return inlineChecks, tableChecks
 }
 
 func (d *PostgresDatabase) getUniqueConstraintsForTables(tableNames []string) (map[string]map[string]string, error) {
@@ -2183,23 +2199,46 @@ func (d *PostgresDatabase) getCommentsForTables(tableNames []string) (map[string
 
 func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[string][]string, error) {
 	// If no roles are specified to include, don't query privileges at all
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesPrivileges() {
 		return map[string][]string{}, nil
 	}
 
+	// Privileges are read from pg_class.relacl rather than
+	// information_schema.table_privileges, which reports
+	//
+	//     is_grantable = pg_has_role(grantee, relowner, 'USAGE') OR <ACL grant option>
+	//
+	// so every grantee that holds the table owner role (directly or through
+	// another role) is reported as grantable even when the ACL carries no grant
+	// option. The diff then emits REVOKE GRANT OPTION FOR ... on every run, and
+	// the REVOKE cannot take a grant option away from an ACL that never had one,
+	// so the schema never converges. The same view also hides rows from anyone
+	// who is neither the grantor nor a member of the grantee, which leaves a
+	// non-superuser connection seeing no privileges at all.
+	//
+	// relkind and privilege_type keep the coverage the view had ('r', 'v', 'f',
+	// 'p' and the seven SQL-standard privileges) plus the materialized views
+	// added in #1376, so MAINTAIN (PostgreSQL 17+) is not read as an extra
+	// privilege to revoke.
+	//
+	// The ACL holds one entry per grantor, so a privilege granted to the same
+	// grantee by several roles is collapsed into one row that is grantable when
+	// any grantor gave the grant option.
 	const query = `
 		WITH relation_privileges AS (
-			SELECT table_schema, table_name, grantee, is_grantable, privilege_type
-			FROM information_schema.table_privileges
-			UNION ALL
-			SELECT n.nspname, c.relname,
-				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END,
-				CASE WHEN acl.is_grantable THEN 'YES' ELSE 'NO' END,
+			SELECT
+				n.nspname AS table_schema,
+				c.relname AS table_name,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				CASE WHEN bool_or(acl.is_grantable) THEN 'YES' ELSE 'NO' END AS is_grantable,
 				acl.privilege_type
 			FROM pg_class c
 			JOIN pg_namespace n ON n.oid = c.relnamespace,
 			LATERAL aclexplode(c.relacl) AS acl
-			WHERE c.relkind = 'm'
+			WHERE c.relkind IN ('r', 'v', 'f', 'p', 'm')
+			AND acl.grantee <> c.relowner
+			AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type
 		)
 		SELECT
 			table_schema, table_name,
@@ -2209,11 +2248,6 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		FROM relation_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
 		AND ($2::text[] IS NULL OR grantee = ANY($2::text[]))
-		AND grantee != (
-			SELECT pg_get_userbyid(c.relowner)
-			FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-			WHERE n.nspname = table_schema AND c.relname = table_name
-		)
 		GROUP BY table_schema, table_name, grantee, is_grantable
 		ORDER BY table_schema, table_name, grantee, is_grantable
 	`
@@ -2254,23 +2288,31 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	// Column-level privileges (pg_attribute.attacl). Unlike
 	// information_schema.column_privileges, attacl contains only explicit
-	// column grants, not ones implied by table-level grants.
+	// column grants, not ones implied by table-level grants. As with table
+	// privileges, entries from several grantors are collapsed per column.
 	const columnQuery = `
+		WITH column_privileges AS (
+			SELECT
+				n.nspname, c.relname,
+				CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+				bool_or(acl.is_grantable) AS is_grantable,
+				acl.privilege_type,
+				at.attname
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
+			LATERAL aclexplode(at.attacl) AS acl
+			WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+			AND acl.grantee <> c.relowner
+			GROUP BY n.nspname, c.relname, acl.grantee, acl.privilege_type, at.attname
+		)
 		SELECT
-			n.nspname, c.relname,
-			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
-			acl.is_grantable,
-			acl.privilege_type,
-			string_agg(at.attname, ', ' ORDER BY at.attname) AS columns
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
-		LATERAL aclexplode(at.attacl) AS acl
-		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
-		AND acl.grantee <> c.relowner
-		AND ($2::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[]))
-		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
-		ORDER BY n.nspname, c.relname, grantee, acl.privilege_type, acl.is_grantable
+			nspname, relname, grantee, is_grantable, privilege_type,
+			string_agg(attname, ', ' ORDER BY attname) AS columns
+		FROM column_privileges
+		WHERE $2::text[] IS NULL OR grantee = ANY($2::text[])
+		GROUP BY nspname, relname, grantee, is_grantable, privilege_type
+		ORDER BY nspname, relname, grantee, privilege_type, is_grantable
 	`
 
 	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), d.managedGranteeArgs())

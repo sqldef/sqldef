@@ -10,6 +10,7 @@ import (
 type (
 	Ident         = database.Ident
 	QualifiedName = database.QualifiedName
+	Privilege     = parser.Privilege
 )
 
 var (
@@ -170,7 +171,7 @@ type GrantPrivilege struct {
 	statement       string
 	tableName       QualifiedName
 	grantees        []string
-	privileges      []string
+	privileges      []Privilege
 	withGrantOption bool
 	objectType      string // "TABLE" or "SEQUENCE"
 }
@@ -179,7 +180,7 @@ type RevokePrivilege struct {
 	statement     string
 	tableName     QualifiedName
 	grantees      []string
-	privileges    []string
+	privileges    []Privilege
 	cascadeOption bool   // CASCADE option for REVOKE
 	objectType    string // "TABLE" or "SEQUENCE"
 }
@@ -236,10 +237,13 @@ type PartitionDefinition struct {
 }
 
 type Column struct {
-	name                       Ident
-	position                   int
-	typeName                   string
-	typeIdent                  Ident // Type name with quote information (for custom types like domains)
+	name      Ident
+	position  int
+	typeName  string
+	typeIdent Ident // Type name with quote information (for custom types like domains)
+	// typeModifier is a type modifier that is not a length, such as the PostGIS
+	// geometry(Point,4326). length and scale cannot represent it.
+	typeModifier               string
 	unsigned                   bool
 	notNull                    *bool
 	autoIncrement              bool
@@ -421,14 +425,16 @@ type TriggerEvent struct {
 }
 
 type Trigger struct {
-	statement     string
-	name          QualifiedName
-	tableName     QualifiedName
-	time          string
-	event         []TriggerEvent
-	forEach       string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
-	whenCondition string
-	body          []string
+	statement         string
+	name              QualifiedName
+	tableName         QualifiedName
+	time              string
+	event             []TriggerEvent
+	forEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
+	whenCondition     string
+	body              []string
+	constraint        bool // true for PostgreSQL's CREATE CONSTRAINT TRIGGER
+	constraintOptions *ConstraintOptions
 }
 
 // Event represents a MySQL scheduled event for schema comparison and DDL generation.

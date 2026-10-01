@@ -351,3 +351,54 @@ func setupTestDatabase(t *testing.T) *PostgresDatabase {
 
 	return db.(*PostgresDatabase)
 }
+
+func TestSplitInlineChecks(t *testing.T) {
+	check := func(name, column string) CheckConstraint {
+		return CheckConstraint{Name: NewIdentWithQuoteDetected(name), Definition: "CHECK (" + name + ")", column: column}
+	}
+
+	cases := []struct {
+		name        string
+		checks      []CheckConstraint
+		wantInline  map[string]CheckConstraint
+		wantInTable []CheckConstraint
+	}{
+		{
+			name:        "no checks",
+			checks:      nil,
+			wantInline:  map[string]CheckConstraint{},
+			wantInTable: nil,
+		},
+		{
+			name:        "one check per column goes inline",
+			checks:      []CheckConstraint{check("a_chk", "a"), check("b_chk", "b")},
+			wantInline:  map[string]CheckConstraint{"a": check("a_chk", "a"), "b": check("b_chk", "b")},
+			wantInTable: nil,
+		},
+		{
+			name:        "several checks on one column all go to table constraints in order",
+			checks:      []CheckConstraint{check("b_max", "b"), check("a_chk", "a"), check("b_min", "b")},
+			wantInline:  map[string]CheckConstraint{"a": check("a_chk", "a")},
+			wantInTable: []CheckConstraint{check("b_max", "b"), check("b_min", "b")},
+		},
+		{
+			name:        "checks without a single column go to table constraints even when alone",
+			checks:      []CheckConstraint{check("ab_chk", ""), check("a_chk", "a")},
+			wantInline:  map[string]CheckConstraint{"a": check("a_chk", "a")},
+			wantInTable: []CheckConstraint{check("ab_chk", "")},
+		},
+		{
+			name:        "several checks without a single column do not affect inline checks",
+			checks:      []CheckConstraint{check("ab_chk", ""), check("a_chk", "a"), check("true_chk", "")},
+			wantInline:  map[string]CheckConstraint{"a": check("a_chk", "a")},
+			wantInTable: []CheckConstraint{check("ab_chk", ""), check("true_chk", "")},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotInline, gotInTable := splitInlineChecks(tc.checks)
+			assert.Equal(t, tc.wantInline, gotInline)
+			assert.Equal(t, tc.wantInTable, gotInTable)
+		})
+	}
+}

@@ -53,3 +53,19 @@ DropIndexSkipped:
   up: |
     -- Skipped: DROP INDEX [idx_email] ON [dbo].[users];
   down: ""
+
+AddCheckSpellingDropColumnNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, note varchar(40));
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      note varchar(40),
+      CONSTRAINT note_ck CHECK (note != 'set before DROP COLUMN runs')
+    );
+  up: |
+    ALTER TABLE dbo.users ADD CONSTRAINT note_ck CHECK (note != 'set before DROP COLUMN runs');
+  down: |
+    ALTER TABLE dbo.users DROP CONSTRAINT [note_ck];

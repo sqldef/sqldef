@@ -297,6 +297,14 @@ CreateViewWithMultiline:
     CREATE VIEW v AS
     SELECT
     10 as N;
+ViewWithUuidColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      uuid varchar(36) NOT NULL
+    );
+    CREATE VIEW user_uuids AS SELECT id, uuid FROM users WHERE uuid IS NOT NULL;
 PercentConstraintName:
   current: |
     CREATE TABLE [dbo].[percent_test] (

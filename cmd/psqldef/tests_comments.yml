@@ -263,6 +263,20 @@ CommentOnView:
   down: |
     COMMENT ON VIEW public.test_view IS NULL;
 
+DropViewWithComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (id integer);
+    CREATE VIEW test_view AS SELECT id FROM test;
+    COMMENT ON VIEW test_view IS 'This is a test view';
+  desired: |
+    CREATE TABLE test (id integer);
+  up: |
+    DROP VIEW public.test_view;
+  down: |
+    CREATE VIEW test_view AS SELECT id FROM test;
+    COMMENT ON VIEW public.test_view IS 'This is a test view';
+
 CommentOnFunction:
   legacy_ignore_quotes: false
   current: |

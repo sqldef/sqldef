@@ -1015,7 +1015,7 @@ ForeignKeyAutoNameWithQuotedColumn:
       "CategoryId" int REFERENCES categories (id)
     );
   up: |
-    ALTER TABLE public.products ADD CONSTRAINT "products_CategoryId_fkey" FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
+    ALTER TABLE public.products ADD FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "products_CategoryId_fkey";
 CheckConstraintQuotedMixedCaseName:
@@ -1649,3 +1649,91 @@ CreateIndexWithDateColumn_QuoteAware:
       "date" date
     );
     CREATE INDEX idx_date ON test_table USING btree (date);
+
+UnnamedUniqueConstraintOnUnquotedMixedCaseColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id int,
+      Stateful int
+    );
+  desired: |
+    CREATE TABLE t (
+      id int,
+      Stateful int,
+      UNIQUE (Stateful)
+    );
+  up: |
+    ALTER TABLE public.t ADD UNIQUE (stateful);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT t_stateful_key;
+
+UnnamedIndexOnUnquotedMixedCaseColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id int,
+      Stateful int
+    );
+  desired: |
+    CREATE TABLE t (
+      id int,
+      Stateful int
+    );
+    CREATE INDEX ON t (Stateful);
+  up: |
+    CREATE INDEX ON public.t (stateful);
+  down: |
+    DROP INDEX public.t_stateful_idx;
+
+UnnamedUniqueConstraintOnUnquotedMixedCaseTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Tmixed (
+      id int,
+      a int
+    );
+  desired: |
+    CREATE TABLE Tmixed (
+      id int,
+      a int,
+      UNIQUE (a)
+    );
+  up: |
+    ALTER TABLE public.tmixed ADD UNIQUE (a);
+  down: |
+    ALTER TABLE public.tmixed DROP CONSTRAINT tmixed_a_key;
+
+UnnamedIndexMatchesQuotedMixedCaseName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id int,
+      stateful int
+    );
+    CREATE INDEX "t_Stateful_idx" ON t (stateful);
+  desired: |
+    CREATE TABLE t (
+      id int,
+      Stateful int
+    );
+    CREATE INDEX ON t (Stateful);
+  up: ""
+  down: ""
+
+UnnamedUniqueConstraintMatchesQuotedMixedCaseName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id int,
+      stateful int,
+      CONSTRAINT "t_Stateful_key" UNIQUE (stateful)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int,
+      Stateful int,
+      UNIQUE (Stateful)
+    );
+  up: ""
+  down: ""

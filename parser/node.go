@@ -854,6 +854,10 @@ type ColumnType struct {
 	// TypeIdent stores the original identifier with quote information for custom types (e.g., domains).
 	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted to determine quoting.
 	TypeIdent Ident
+	// TypeModifier holds a type modifier that is not a list of numbers and so
+	// cannot be carried by Length and Scale, such as the PostGIS
+	// geometry(Point,4326). It is the text between the parentheses.
+	TypeModifier string
 
 	// Generic field options.
 	NotNull             *BoolVal
@@ -975,7 +979,9 @@ func (ed *ExclusionDefinition) Format(buf *nodeBuffer) {
 func (ct *ColumnType) Format(buf *nodeBuffer) {
 	buf.Printf("%s", ct.Type)
 
-	if ct.Length != nil && ct.Scale != nil {
+	if ct.TypeModifier != "" {
+		buf.Printf("(%s)", ct.TypeModifier)
+	} else if ct.Length != nil && ct.Scale != nil {
 		buf.Printf("(%v,%v)", ct.Length, ct.Scale)
 
 	} else if ct.Length != nil {
@@ -1308,8 +1314,8 @@ type Schema struct {
 }
 
 type Grant struct {
-	IsGrant         bool     // true for GRANT, false for REVOKE
-	Privileges      []string // e.g., ["SELECT", "INSERT", "UPDATE"]
+	IsGrant         bool        // true for GRANT, false for REVOKE
+	Privileges      []Privilege // e.g., ["SELECT", "INSERT", "UPDATE"]
 	TableName       TableName
 	Grantees        []string
 	ObjectType      string // "" or "TABLE" for tables, "SEQUENCE" for sequences
@@ -1491,13 +1497,15 @@ type TriggerEvent struct {
 }
 
 type Trigger struct {
-	Name      *ColName
-	TableName TableName
-	Time      string
-	Event     []TriggerEvent
-	ForEach   string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
-	When      Expr
-	Body      []Statement
+	Name              *ColName
+	TableName         TableName
+	Time              string
+	Event             []TriggerEvent
+	ForEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
+	When              Expr
+	Body              []Statement
+	Constraint        bool               // true for PostgreSQL's CREATE CONSTRAINT TRIGGER
+	ConstraintOptions *ConstraintOptions // Deferrable/InitiallyDeferred; nil unless Constraint is true
 }
 
 // Event represents a MySQL CREATE EVENT statement.
@@ -2229,6 +2237,60 @@ func NewIntVal(in string) *SQLVal {
 	return &SQLVal{Type: IntVal, Val: in}
 }
 
+// typeWithModifier puts a parenthesised type modifier on a column type. A modifier that is only
+// numbers goes into Length and Scale, and only one that holds an identifier, such as the PostGIS
+// geometry(Point,4326), is kept verbatim in TypeModifier. That is what the pgquery parser does,
+// and the two have to agree: psqldef reads the two schemas it compares with whichever parser
+// accepts each of them, so the same column read by both would otherwise differ, and a column that
+// never changed would be altered to what it already is.
+//
+// Only PostgreSQL spells a modifier this way. MySQL, SQL Server and SQLite reject it, and a
+// grammar shared between them would accept a statement their server does not, so the other modes
+// report the syntax error they reported before this rule existed.
+func typeWithModifier(yylex any, columnType ColumnType, modifier string) ColumnType {
+	tkn := yylex.(*Tokenizer)
+	if tkn.mode != ParserModePostgres {
+		tkn.Error(fmt.Sprintf("a type modifier is not supported here: '%s'", modifier))
+		return columnType
+	}
+
+	parts := strings.Split(modifier, ",")
+	numbers := make([]*SQLVal, 0, len(parts))
+	for _, part := range parts {
+		if !isAllDigits(part) {
+			numbers = numbers[:0]
+			break
+		}
+		numbers = append(numbers, NewIntVal(part))
+	}
+
+	switch len(numbers) {
+	case 1:
+		columnType.Length = numbers[0]
+	case 2:
+		columnType.Length = numbers[0]
+		columnType.Scale = numbers[1]
+	default:
+		// Anything else keeps its text: an identifier cannot become a number, and dropping a
+		// modifier of three numbers or more, which no type takes, would lose the declaration.
+		columnType.TypeModifier = modifier
+	}
+	return columnType
+}
+
+// isAllDigits reports whether s is a non-empty run of ASCII digits.
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // NewFloatVal builds a new FloatVal.
 func NewFloatVal(in string) *SQLVal {
 	return &SQLVal{Type: FloatVal, Val: in}
@@ -2721,6 +2783,10 @@ type ConvertType struct {
 	Operator string
 	Charset  string
 	Array    BoolVal
+	// TimeZone holds the timestamp/time timezone modifier for a cast target
+	// (e.g. " with time zone"), emitted after the length so a cast such as
+	// timestamp(0) with time zone round-trips. Empty for other types.
+	TimeZone string
 }
 
 // this string is "character set" and this comment is required
@@ -2730,13 +2796,23 @@ const (
 
 // Format formats the node.
 func (node *ConvertType) Format(buf *nodeBuffer) {
-	buf.Printf("%s", node.Type)
+	// A PostgreSQL array cast keeps the [] suffix in Type, but the length and the
+	// timezone modifier belong to the element type, so they have to be emitted
+	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
+	typeName, isArray := strings.CutSuffix(node.Type, "[]")
+	buf.Printf("%s", typeName)
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)
 		if node.Scale != nil {
 			buf.Printf(", %v", node.Scale)
 		}
 		buf.Printf(")")
+	}
+	if node.TimeZone != "" {
+		buf.Printf("%s", node.TimeZone)
+	}
+	if isArray {
+		buf.Printf("[]")
 	}
 	if node.Charset != "" {
 		buf.Printf("%s %s", node.Operator, node.Charset)
@@ -3233,13 +3309,33 @@ func NewIdent(name string, quoted bool) Ident {
 	return Ident{Name: name, Quoted: quoted}
 }
 
-// FormatColumnPrivilege builds the canonical string form of a column-level
-// privilege, e.g. `SELECT (col_a, "Col-B")`. The privilege keyword is
-// uppercased and column names are sorted so that the same privilege always
-// compares equal regardless of declaration order.
-func FormatColumnPrivilege(priv string, cols []Ident) string {
-	names := make([]string, len(cols))
-	for i, col := range cols {
+// Privilege is a single privilege of a GRANT or REVOKE statement. Columns is
+// empty for a table-level privilege such as `SELECT`, and holds the column list
+// of a column-level one such as `SELECT (col_a, "Col-B")`.
+//
+// The structured form is what schema comparison works on: a privilege is never
+// parsed back out of its SQL spelling, so String is the only place that knows
+// how the spelling is built.
+type Privilege struct {
+	Name    string // privilege keyword, uppercased by NewPrivilege
+	Columns []Ident
+}
+
+// NewPrivilege creates a Privilege, uppercasing the keyword so that privileges
+// parsed from differently-cased SQL compare equal.
+func NewPrivilege(name string, cols []Ident) Privilege {
+	return Privilege{Name: strings.ToUpper(name), Columns: cols}
+}
+
+// String builds the canonical SQL form of the privilege. Column names are
+// sorted so that the same privilege always compares equal regardless of
+// declaration order.
+func (p Privilege) String() string {
+	if len(p.Columns) == 0 {
+		return p.Name
+	}
+	names := make([]string, len(p.Columns))
+	for i, col := range p.Columns {
 		name := col.Name
 		// Quote only when necessary: a quoted simple lowercase identifier is
 		// semantically identical to its unquoted form in PostgreSQL, so both
@@ -3250,7 +3346,7 @@ func FormatColumnPrivilege(priv string, cols []Ident) string {
 		names[i] = name
 	}
 	sort.Strings(names)
-	return strings.ToUpper(priv) + " (" + strings.Join(names, ", ") + ")"
+	return p.Name + " (" + strings.Join(names, ", ") + ")"
 }
 
 // isSimpleLowerIdent reports whether name can appear unquoted in DDL output.

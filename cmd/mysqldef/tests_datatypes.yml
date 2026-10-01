@@ -164,6 +164,71 @@ AddColumnWithParenthesizedBooleanDefault:
       enabled tinyint(1) DEFAULT (true)
     );
   min_version: '8.0.13'
+TextColumnWithCastAsCharDefault:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL DEFAULT (CAST('foo' AS CHAR))
+    );
+  min_version: '8.0.13'
+ChangeColumnCastAsCharDefaultCharset:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL DEFAULT (CAST('foo' AS CHAR CHARSET latin1))
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL DEFAULT (CAST('foo' AS CHAR CHARSET ascii))
+    );
+  up: |
+    ALTER TABLE users CHANGE COLUMN `name` name text NOT NULL DEFAULT(cast('foo' as char character set ascii));
+  down: |
+    ALTER TABLE users CHANGE COLUMN `name` name text NOT NULL DEFAULT(cast('foo' as char character set latin1));
+  min_version: '8.0.13'
+ChangeColumnCastAsCharDefaultFromImplicitCharset:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL DEFAULT (CAST('foo' AS CHAR))
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL DEFAULT (CAST('foo' AS CHAR CHARSET latin1))
+    );
+  up: |
+    ALTER TABLE users CHANGE COLUMN `name` name text NOT NULL DEFAULT(cast('foo' as char character set latin1));
+  down: |
+    ALTER TABLE users CHANGE COLUMN `name` name text NOT NULL DEFAULT(cast('foo' as char));
+  min_version: '8.0.13'
+TextColumnWithNestedCastAsCharDefault:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text DEFAULT (CONCAT(CAST('a' AS CHAR), 'b'))
+    );
+  min_version: '8.0.13'
+BlobColumnWithCastAsBinaryDefault:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      data blob DEFAULT (CAST('foo' AS BINARY))
+    );
+  min_version: '8.0.13'
+ColumnWithCharsetKeyword:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name varchar(20) CHARSET ascii NOT NULL
+    );
 CollateOnColumn:
   flavor: "!mariadb"
   desired: |

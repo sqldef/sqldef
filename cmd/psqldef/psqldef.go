@@ -91,6 +91,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	// merge --config and --config-inline in order
 	config := database.MergeGeneratorConfigs(configs)
+	config.SkipExtension = opts.SkipExtension
 
 	if opts.EnableDrop {
 		config.EnableDrop = true

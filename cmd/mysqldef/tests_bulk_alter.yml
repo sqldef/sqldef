@@ -3,12 +3,17 @@
 # These cases exercise bulk_alter: a table's add/change ALTERs and its later
 # drop ALTERs are fused into one `ALTER TABLE t a1, a2, ...` statement.
 #
-# TiDB note: bundles that contain `ADD COLUMN ... AFTER <col-added-in-the
-# -same-ALTER>` fail on TiDB because it cannot resolve the just-added column
-# in subsequent subcommands of the same statement (MySQL processes the
-# subcommands sequentially and accepts this). Tests that emit such a bundle
-# are marked `flavor: !tidb`.
+# TiDB note: bundles whose later subcommands reference something added in the
+# same ALTER — `ADD COLUMN ... AFTER <col-added-in-the-same-ALTER>`, or
+# `ADD KEY` on such a column — fail on TiDB because it cannot resolve the
+# just-added column in subsequent subcommands of the same statement (MySQL
+# processes the subcommands sequentially and accepts this). Tests that emit
+# such a bundle are marked `flavor: !tidb`.
 # Ref. https://docs.pingcap.com/tidb/stable/sql-statement-alter-table/
+#
+# The CHECK cases are marked `flavor: !tidb` too: TiDB rejects adding or
+# dropping a CHECK constraint in an ALTER TABLE with other actions ("Error 8200:
+# Unsupported multi schema change").
 
 BulkAlterAddDropColumns:
   legacy_ignore_quotes: false
@@ -102,3 +107,251 @@ BulkAlterPerTableScope:
   down: |
     ALTER TABLE a DROP COLUMN `y`, DROP COLUMN `x`;
     ALTER TABLE b DROP COLUMN `y`, DROP COLUMN `x`;
+
+BulkAlterDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id;
+    -- Skipped: ALTER TABLE patients DROP COLUMN `c`;
+  down: |
+    -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
+
+BulkAlterDropIndexSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE `patients` (
+      `id` bigint NOT NULL,
+      `b` int,
+      KEY `b_idx` (`b`)
+    );
+  desired: |
+    CREATE TABLE `patients` (
+      `id` bigint NOT NULL,
+      `b` int,
+      `a` int
+    );
+  up: |
+    ALTER TABLE `patients` ADD COLUMN `a` int AFTER `b`;
+    -- Skipped: ALTER TABLE `patients` DROP INDEX `b_idx`;
+  down: |
+    -- Skipped: ALTER TABLE `patients` DROP COLUMN `a`;
+
+BulkAlterDropForeignKeyDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      c int,
+      CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id)
+    );
+  desired: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      KEY pets_owner_fk (owner_id)
+    );
+  up: |
+    ALTER TABLE pets DROP FOREIGN KEY `pets_owner_fk`;
+    -- Skipped: ALTER TABLE pets DROP COLUMN `c`;
+  down: |
+    ALTER TABLE pets ADD CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);
+
+BulkAlterAddIndexDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      KEY a_idx (a)
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id, ADD KEY a_idx (a);
+    -- Skipped: ALTER TABLE patients DROP COLUMN `c`;
+  down: |
+    -- Skipped: ALTER TABLE `patients` DROP INDEX `a_idx`;
+    -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
+
+BulkAlterAddColumnDropIndex:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      b int,
+      INDEX i (b)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER id, DROP INDEX `i`;
+  down: |
+    ALTER TABLE t ADD INDEX i (b), DROP COLUMN `a`;
+
+BulkAlterAddColumnDropCheck:
+  legacy_ignore_quotes: false
+  min_version: '8.0.16'
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      b int,
+      CONSTRAINT c CHECK (b > 0)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER id, DROP CONSTRAINT `c`;
+  down: |
+    ALTER TABLE t ADD CONSTRAINT c CHECK (b > 0), DROP COLUMN `a`;
+
+BulkAlterAddColumnAddCheckMentioningForeignKey:
+  legacy_ignore_quotes: false
+  min_version: '8.0.16'
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      label varchar(20)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      label varchar(20),
+      a int,
+      CONSTRAINT c CHECK (label <> 'FOREIGN KEY')
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER label, ADD CONSTRAINT c CHECK (label != 'FOREIGN KEY');
+  down: |
+    ALTER TABLE t DROP CONSTRAINT `c`, DROP COLUMN `a`;
+
+BulkAlterAddColumnAddAutoIncrement:
+  legacy_ignore_quotes: false
+  min_version: '8.0'
+  flavor: mysql
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      b int,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL AUTO_INCREMENT,
+      b int,
+      a int,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER b, CHANGE COLUMN id id int NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE t CHANGE COLUMN `id` `id` int NOT NULL, DROP COLUMN `a`;
+
+BulkAlterAddColumnDropForeignKeyDropColumnSkipped:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      c int,
+      CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id)
+    );
+  desired: |
+    CREATE TABLE owners (
+      id bigint NOT NULL PRIMARY KEY
+    );
+    CREATE TABLE pets (
+      id bigint NOT NULL PRIMARY KEY,
+      owner_id bigint,
+      a int,
+      KEY pets_owner_fk (owner_id)
+    );
+  up: |
+    ALTER TABLE pets ADD COLUMN a int AFTER owner_id, DROP FOREIGN KEY `pets_owner_fk`;
+    -- Skipped: ALTER TABLE pets DROP COLUMN `c`;
+  down: |
+    ALTER TABLE pets ADD CONSTRAINT pets_owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);
+    -- Skipped: ALTER TABLE pets DROP COLUMN `a`;
+
+BulkAlterAddColumnAddPartition:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      PRIMARY KEY (id)
+    )
+    PARTITION BY RANGE (id)
+    (PARTITION p0 VALUES LESS THAN (10));
+  desired: |
+    CREATE TABLE t (
+      id int NOT NULL,
+      a int,
+      PRIMARY KEY (id)
+    )
+    PARTITION BY RANGE (id)
+    (PARTITION p0 VALUES LESS THAN (10),
+     PARTITION p1 VALUES LESS THAN (20));
+  up: |
+    ALTER TABLE t ADD COLUMN a int AFTER id;
+    ALTER TABLE t ADD PARTITION (PARTITION p1 VALUES LESS THAN (20));
+  down: |
+    ALTER TABLE t DROP PARTITION p1;
+    ALTER TABLE t DROP COLUMN `a`;

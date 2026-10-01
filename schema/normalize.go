@@ -155,6 +155,19 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 	typeStr := convertType.Type
 	isArray := strings.HasSuffix(typeStr, "[]")
 
+	// normalizeTypeName folds timestamptz/timetz (and the spelled-out "with time
+	// zone" forms) down to timestamp/time on the assumption that the timezone
+	// flag lives elsewhere (Column.timezone). ConvertType has no such flag unless
+	// the cast was written out in full and parsed by the generic grammar, so
+	// recover it from the type name here before the alias erases it.
+	timeZone := convertType.TimeZone
+	if timeZone == "" && mode == GeneratorModePostgres {
+		switch strings.ToLower(strings.TrimSuffix(typeStr, "[]")) {
+		case "timestamptz", "timetz", "timestamp with time zone", "time with time zone":
+			timeZone = " with time zone"
+		}
+	}
+
 	// For array types, normalize the base type and then re-append the []
 	if isArray {
 		baseType := strings.TrimSuffix(typeStr, "[]")
@@ -171,36 +184,44 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
+		TimeZone: timeZone,
 	}
 }
 
-// nameDataLen is PostgreSQL's NAMEDATALEN - 1: the longest identifier the server stores.
-const nameDataLen = 63
-
-// buildPostgresPrimaryKeyName is buildPostgresConstraintName for a primary key, whose name
-// PostgreSQL builds from the table name alone.
-func buildPostgresPrimaryKeyName(tableName string) string {
-	suffix := "_pkey"
-	if len(tableName)+len(suffix) > nameDataLen {
-		tableName = tableName[:nameDataLen-len(suffix)]
+// normalizeMysqlConvertType normalizes the target type of CAST/CONVERT to the form MySQL stores.
+// MySQL stores BINARY(N) as CHAR(N) CHARSET binary, and fills in the connection charset for CHAR
+// without a charset. mysqldef always connects with the driver's default utf8mb4, so CHAR CHARSET
+// utf8mb4 is what CHAR without a charset becomes when applied by mysqldef.
+func normalizeMysqlConvertType(convertType *parser.ConvertType) *parser.ConvertType {
+	normalized := *convertType
+	switch strings.ToLower(normalized.Type) {
+	case "binary":
+		normalized.Type = "char"
+		normalized.Charset = "binary"
+		normalized.Operator = parser.CharacterSetStr
+	case "char":
+		if strings.EqualFold(normalized.Charset, "utf8mb4") {
+			normalized.Charset = ""
+		}
 	}
-	return tableName + suffix
+	return &normalized
 }
 
-// buildPostgresConstraintName approximates PostgreSQL's base constraint name before
-// the server resolves catalog collisions. It truncates names to 63 bytes using this logic:
-// - If column > 28 bytes: reduce column to 28 first, then apply remaining overflow to table
-// - If column == 28 bytes and table <= 29 bytes: truncate table
-// - If column == 28 bytes and table > 29 bytes: truncate table
-// - If column < 28 bytes: truncate table
-// In summary: when column <= 28 bytes, always truncate the table first
-func buildPostgresConstraintName(tableName, columnName, suffix string) string {
+// checkConstraintNameMaxLen is shorter than SQL Server's 128-character limit so that the names
+// match those of the constraints mssqldef has already added.
+const checkConstraintNameMaxLen = 63
+
+// buildMssqlCheckConstraintName names the column-level CHECK constraint mssqldef adds as
+// <table>_<column>_check, truncating the table name first unless the column name is longer
+// than 28 bytes.
+func buildMssqlCheckConstraintName(tableName, columnName string) Ident {
+	const suffix = "check"
 	fullName := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix)
-	if len(fullName) <= nameDataLen {
-		return fullName
+	if len(fullName) <= checkConstraintNameMaxLen {
+		return NewIdentWithQuoteDetected(fullName)
 	}
 
-	overflow := len(fullName) - nameDataLen
+	overflow := len(fullName) - checkConstraintNameMaxLen
 	tableLen := len(tableName)
 	columnLen := len(columnName)
 
@@ -223,14 +244,7 @@ func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 	truncatedTable := tableName[:tableLen-tableRemove]
 	truncatedColumn := columnName[:columnLen-columnRemove]
 
-	return fmt.Sprintf("%s_%s_%s", truncatedTable, truncatedColumn, suffix)
-}
-
-// buildPostgresConstraintNameIdent builds the base name approximation and returns it
-// as an Ident with quote information inferred from case.
-func buildPostgresConstraintNameIdent(tableName, columnName, suffix string) Ident {
-	name := buildPostgresConstraintName(tableName, columnName, suffix)
-	return NewIdentWithQuoteDetected(name)
+	return NewIdentWithQuoteDetected(fmt.Sprintf("%s_%s_%s", truncatedTable, truncatedColumn, suffix))
 }
 
 // buildMysqlForeignKeyName builds a MySQL auto-generated foreign key constraint name
@@ -285,7 +299,8 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 }
 
 // normalizeCheckExprForOutput normalizes a CHECK constraint expression for DDL generation.
-// Unlike normalizeCheckExpr it leaves ANY/ALL array elements in the order they were written:
+// Unlike normalizeCheckExpr it keeps IN as written, which the DDL needs in order to run (see
+// normalizeComparisonExpr), and leaves ANY/ALL array elements in the order they were written:
 // comparison canonicalizes both sides anyway, so reordering here would only rewrite the
 // author's schema, discarding an order that often carries meaning (a status lifecycle, say).
 func normalizeCheckExprForOutput(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -331,11 +346,10 @@ func normalizeTrimFunction(e *parser.FuncExpr, exprs parser.SelectExprs) (parser
 	}
 }
 
-// canonicalizeArrays sorts and deduplicates ANY/ALL array elements, which is wanted when
-// comparing but not when generating DDL.
-func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeArrays bool) parser.Expr {
+// forComparison is on when comparing and off when generating DDL; see normalizeComparisonExpr.
+func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison bool) parser.Expr {
 	recur := func(expr parser.Expr, mode GeneratorMode) parser.Expr {
-		return normalizeCheckExprWith(expr, mode, canonicalizeArrays)
+		return normalizeCheckExprWith(expr, mode, forComparison)
 	}
 	if expr == nil {
 		return nil
@@ -405,9 +419,10 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 		}
 		// Unwrap parentheses around simple expressions (literals, column names, etc.)
 		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name.
-		// AtTimeZoneExpr self-parenthesizes, so a wrapper around it is redundant too.
+		// AtTimeZoneExpr self-parenthesizes and CASE ... END is self-delimiting, so a wrapper
+		// around them is redundant too. MySQL wraps CASE in parentheses.
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr:
+		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr, *parser.CaseExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
@@ -443,9 +458,13 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 
 		// Try to convert OR chain of equality comparisons to IN expression
 		// MSSQL transforms IN (a, b, c) to col=a OR col=b OR col=c
-		// We normalize back to IN for comparison
-		if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
-			return inExpr
+		// We normalize back to IN for comparison only; generated DDL keeps the chain as written.
+		// The folded IN goes through the same normalization as a written IN; otherwise the
+		// two spellings would not compare equal. Its operands are already normalized.
+		if forComparison {
+			if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
+				return normalizeComparisonExpr(inExpr, mode, func(e parser.Expr, _ GeneratorMode) parser.Expr { return e }, forComparison)
+			}
 		}
 
 		return &parser.OrExpr{
@@ -460,7 +479,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 	case *parser.NotExpr:
 		return normalizeNotExpr(recur(e.Expr, mode))
 	case *parser.ComparisonExpr:
-		return normalizeComparisonExpr(e, mode, recur, canonicalizeArrays)
+		return normalizeComparisonExpr(e, mode, recur, forComparison)
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
@@ -501,6 +520,29 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 			Distinct:  e.Distinct,
 			Exprs:     normalizedExprs,
 			Over:      e.Over,
+		}
+	case *parser.CaseExpr:
+		// Each operand is delimited by keywords, so parentheses around it (MySQL wraps each
+		// WHEN condition) are redundant.
+		recurUnwrapped := func(expr parser.Expr) parser.Expr {
+			return unwrapParenExpr(recur(expr, mode))
+		}
+		return &parser.CaseExpr{
+			Expr: recurUnwrapped(e.Expr),
+			Whens: util.TransformSlice(e.Whens, func(when *parser.When) *parser.When {
+				return &parser.When{Cond: recurUnwrapped(when.Cond), Val: recurUnwrapped(when.Val)}
+			}),
+			Else: recurUnwrapped(e.Else),
+		}
+	case *parser.SubstrExpr:
+		name := e.Name
+		if aliased, ok := name.(*parser.AliasedExpr); ok {
+			name = &parser.AliasedExpr{Expr: recur(aliased.Expr, mode), As: aliased.As}
+		}
+		return &parser.SubstrExpr{
+			Name: name,
+			From: recur(e.From, mode),
+			To:   recur(e.To, mode),
 		}
 	case *parser.ArrayConstructor:
 		normalizedElements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
@@ -546,6 +588,14 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
+		// MySQL column names are case-insensitive even when quoted, and MySQL stores column
+		// references quoted in the column's own case, so compare them in lowercase.
+		if mode == GeneratorModeMysql && forComparison {
+			return &parser.ColName{
+				Name:      parser.NewIdent(strings.ToLower(e.Name.Name), false),
+				Qualifier: e.Qualifier,
+			}
+		}
 		// Normalize column names while preserving quoting information:
 		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted
 		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)
@@ -565,6 +615,16 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeAr
 		// Strip the prefix for temporal/json/uuid: pg_get_constraintdef emits typed
 		// literals but user SQL writes bare ones; dropping it on both sides compares equal.
 		return recur(e.Value, mode)
+	case *parser.ConvertExpr:
+		if mode == GeneratorModeMysql {
+			return &parser.ConvertExpr{
+				Action: e.Action,
+				Expr:   recur(e.Expr, mode),
+				Type:   normalizeMysqlConvertType(e.Type),
+				Style:  e.Style,
+			}
+		}
+		return expr
 	default:
 		// For all other expression types (literals, etc.), return as-is
 		return expr
@@ -991,10 +1051,14 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				Type: e.Type,
 			}, mode)
 		}
+		convertType := e.Type
+		if mode == GeneratorModeMysql {
+			convertType = normalizeMysqlConvertType(convertType)
+		}
 		return &parser.ConvertExpr{
 			Action: e.Action,
 			Expr:   normalizeExpr(e.Expr, mode),
-			Type:   e.Type,
+			Type:   convertType,
 			Style:  e.Style,
 		}
 	case *parser.CollateExpr:
@@ -1563,31 +1627,40 @@ var postgresSequencePrivilegeList = []string{
 	"USAGE",
 }
 
-func normalizePrivilegesForComparison(privileges []string, objectType string) []string {
-	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
+// privilegesFromNames builds table-level privileges from a list of keywords.
+func privilegesFromNames(names []string) []Privilege {
+	return util.TransformSlice(names, func(name string) Privilege {
+		return Privilege{Name: name}
+	})
+}
+
+func normalizePrivilegesForComparison(privileges []Privilege, objectType string) []Privilege {
+	if len(privileges) == 1 && (privileges[0].String() == "ALL" || privileges[0].String() == "ALL PRIVILEGES") {
 		if objectType == "SEQUENCE" {
-			return postgresSequencePrivilegeList
+			return privilegesFromNames(postgresSequencePrivilegeList)
 		}
-		return postgresTablePrivilegeList
+		return privilegesFromNames(postgresTablePrivilegeList)
 	}
 	return privileges
 }
 
-// Sort privileges in PostgreSQL canonical order
-func sortPrivilegesByCanonicalOrder(privileges []string) {
+// Sort privileges in PostgreSQL canonical order. Column-level privileges are not
+// in that list, so they sort after the table-level ones by their SQL spelling.
+func sortPrivilegesByCanonicalOrder(privileges []Privilege) {
 	orderMap := make(map[string]int)
 	for i, priv := range postgresTablePrivilegeList {
 		orderMap[priv] = i
 	}
 
-	slices.SortFunc(privileges, func(a, b string) int {
-		orderA, hasA := orderMap[a]
-		orderB, hasB := orderMap[b]
+	slices.SortFunc(privileges, func(a, b Privilege) int {
+		nameA, nameB := a.String(), b.String()
+		orderA, hasA := orderMap[nameA]
+		orderB, hasB := orderMap[nameB]
 		if hasA && hasB {
 			return cmp.Compare(orderA, orderB)
 		}
 		if !hasA && !hasB {
-			return cmp.Compare(a, b)
+			return cmp.Compare(nameA, nameB)
 		}
 		if hasA {
 			return -1
@@ -1622,19 +1695,21 @@ func normalizeNotExpr(operand parser.Expr) parser.Expr {
 	return &parser.NotExpr{Expr: operand}
 }
 
-// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores:
-// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]).
+// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores.
 //
-// canonicalizeArrays additionally sorts and deduplicates ANY/ALL array elements and
-// collapses a single-element array to a scalar comparison. That is what makes the two
-// spellings PostgreSQL may store compare equal, so it is on when comparing and off when
-// generating DDL, where it would only rewrite the order the author wrote.
+// forComparison is on when comparing and off when generating DDL. When on, PostgreSQL's
+// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]), IN lists and ANY/ALL
+// arrays are sorted and deduplicated, and a single-element array collapses to a scalar
+// comparison. That is what makes the spellings PostgreSQL may store compare equal.
+// When off, IN stays IN: PostgreSQL resolves IN list literals against the left operand's
+// type, but resolves an ARRAY[...] of untyped literals on its own (to text[]), so the ANY
+// spelling fails with "operator does not exist" against an ENUM column.
 //
 // recur is the caller's own normalizer: CHECK constraints and value expressions share
 // this comparison handling but normalize their operands differently. Keeping it in one
 // place is deliberate — the two used to carry copies of this logic, and fixes to one
 // repeatedly failed to reach the other (see #1182).
-func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur func(parser.Expr, GeneratorMode) parser.Expr, canonicalizeArrays bool) parser.Expr {
+func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur func(parser.Expr, GeneratorMode) parser.Expr, forComparison bool) parser.Expr {
 	left := recur(e.Left, mode)
 	right := recur(e.Right, mode)
 	op := normalizeOperator(e.Operator, mode)
@@ -1675,7 +1750,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 	// Handle IN clauses based on mode.
 	if op == "in" || op == "not in" {
 		if tuple, ok := right.(parser.ValTuple); ok {
-			if mode == GeneratorModePostgres {
+			if mode == GeneratorModePostgres && forComparison {
 				// Elements are normalized by the ANY/ALL block below.
 				right = &parser.ArrayConstructor{Elements: parser.Exprs(tuple)}
 				if op == "in" {
@@ -1686,11 +1761,11 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 					allFlag = true
 				}
 			} else {
-				// For other databases, keep IN.
+				// Keep IN for other databases, and for PostgreSQL DDL generation.
 				normalizedElements := util.TransformSlice(tuple, func(elem parser.Expr) parser.Expr {
 					return recur(elem, mode)
 				})
-				if canonicalizeArrays {
+				if forComparison {
 					normalizedElements = sortAndDeduplicateValues(normalizedElements)
 				}
 				right = parser.ValTuple(normalizedElements)
@@ -1707,7 +1782,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 			})
 			// Element order does not affect ANY/ALL, and PostgreSQL keeps whichever order
 			// was written, so sorting is what lets the two sides compare equal.
-			if canonicalizeArrays {
+			if forComparison {
 				normalizedElements = sortAndDeduplicateValues(normalizedElements)
 			}
 			right = &parser.ArrayConstructor{Elements: normalizedElements}
@@ -1717,7 +1792,7 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 		// = 'a') but keeps the array for an explicitly written ANY/ALL, so both spellings
 		// have to be folded to compare equal. A single element makes ANY and ALL collapse
 		// to the same comparison whatever the operator is, so this holds beyond = and <>.
-		if arrayConst, ok := right.(*parser.ArrayConstructor); ok && canonicalizeArrays && len(arrayConst.Elements) == 1 {
+		if arrayConst, ok := right.(*parser.ArrayConstructor); ok && forComparison && len(arrayConst.Elements) == 1 {
 			right = arrayConst.Elements[0]
 			anyFlag = false
 			allFlag = false
@@ -1759,61 +1834,50 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 // tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
 // (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
 // Returns nil if the conversion is not applicable.
-func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
+func tryConvertOrChainToIn(orExpr *parser.OrExpr) *parser.ComparisonExpr {
 	var column parser.Expr
 	var values []parser.Expr
 
-	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
-		cmp, ok := expr.(*parser.ComparisonExpr)
-		if !ok || cmp.Operator != "=" {
-			return nil, nil, false
+	// Nested ORs arrive already folded: as IN (...), or as = ANY (ARRAY[...]) once
+	// PostgreSQL's comparison normalization has converted that IN.
+	extractValues := func(cmp *parser.ComparisonExpr) ([]parser.Expr, bool) {
+		switch {
+		case strings.EqualFold(cmp.Operator, "in"):
+			tuple, ok := cmp.Right.(parser.ValTuple)
+			return tuple, ok
+		case cmp.Operator == "=" && cmp.Any:
+			arrayConst, ok := cmp.Right.(*parser.ArrayConstructor)
+			if !ok {
+				return nil, false
+			}
+			return arrayConst.Elements, true
+		case cmp.Operator == "=" && !cmp.All:
+			return []parser.Expr{cmp.Right}, true
 		}
-		return cmp.Left, cmp.Right, true
+		return nil, false
 	}
 
 	columnsEqual := func(col1, col2 parser.Expr) bool {
 		return normalizeName(parser.String(col1)) == normalizeName(parser.String(col2))
 	}
 
-	// Walk the OR chain and collect comparisons
-	// Also handle already-normalized IN expressions from nested ORs
 	var walk func(expr parser.Expr) bool
 	walk = func(expr parser.Expr) bool {
 		switch e := expr.(type) {
 		case *parser.OrExpr:
 			return walk(e.Left) && walk(e.Right)
 		case *parser.ComparisonExpr:
-			// Handle IN expressions that were already normalized
-			if strings.EqualFold(e.Operator, "in") {
-				if column == nil {
-					column = e.Left
-				} else if !columnsEqual(column, e.Left) {
-					return false
-				}
-				// Extract values from IN clause
-				if tuple, ok := e.Right.(parser.ValTuple); ok {
-					for _, v := range tuple {
-						values = append(values, v)
-					}
-					return true
-				}
-				return false
-			}
-
-			col, val, ok := extractEqComparison(e)
+			vals, ok := extractValues(e)
 			if !ok {
 				return false
 			}
 			if column == nil {
-				column = col
-				values = append(values, val)
-				return true
+				column = e.Left
+			} else if !columnsEqual(column, e.Left) {
+				return false
 			}
-			if columnsEqual(column, col) {
-				values = append(values, val)
-				return true
-			}
-			return false
+			values = append(values, vals...)
+			return true
 		default:
 			return false
 		}
@@ -1823,12 +1887,10 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 		return nil
 	}
 
-	sortedValues := sortAndDeduplicateValues(values)
-
 	return &parser.ComparisonExpr{
 		Operator: "in",
 		Left:     column,
-		Right:    parser.ValTuple(sortedValues),
+		Right:    parser.ValTuple(values),
 	}
 }
 

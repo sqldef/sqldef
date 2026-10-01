@@ -71,6 +71,14 @@ CreateView:
     CREATE VIEW "view_users" AS select id from users where age = 1;
   down: |
     DROP VIEW "view_users";
+ViewWithUuidColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      uuid text NOT NULL
+    );
+    CREATE VIEW user_uuids AS select id, uuid from users where uuid is not null;
 DropAndCreateView:
   current: |
     CREATE TABLE users (

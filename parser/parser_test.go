@@ -297,6 +297,18 @@ func TestIntervalColumnType(t *testing.T) {
 			description: "Should support ::time(p) casting",
 		},
 		{
+			name:        "TYPECAST to TIMESTAMP with precision and time zone",
+			sql:         "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
+			shouldParse: true,
+			description: "Should support ::timestamp(p) with time zone casting",
+		},
+		{
+			name:        "TYPECAST to TIME with precision and time zone",
+			sql:         "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
+			shouldParse: true,
+			description: "Should support ::time(p) with time zone casting",
+		},
+		{
 			name:        "TYPECAST in VIEW with numeric parameters",
 			sql:         "CREATE VIEW test_view AS SELECT amount::numeric(10,2) AS amount_num FROM orders",
 			shouldParse: true,
@@ -578,6 +590,35 @@ func TestNowFunctionInDefaultExpression(t *testing.T) {
 	}
 }
 
+func TestTypecastTimestampWithTimeZonePreserved(t *testing.T) {
+	// Regression: a cast to timestamp(p)/time(p) with time zone must keep the
+	// time zone modifier when re-serialized. Dropping it turns the cast into a
+	// different type (without time zone), silently diverging the stored DEFAULT.
+	cases := []struct {
+		sql  string
+		want string
+	}{
+		{
+			sql:  "CREATE TABLE test (a timestamp(0) with time zone DEFAULT (now())::timestamp(0) with time zone)",
+			want: "a timestamp(0) with time zone default((now())::timestamp(0) with time zone)",
+		},
+		{
+			sql:  "CREATE TABLE test (a time(0) with time zone DEFAULT (now())::time(0) with time zone)",
+			want: "a time(0) with time zone default((now())::time(0) with time zone)",
+		},
+	}
+	for _, tc := range cases {
+		statement, err := ParseDDL(tc.sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("failed to parse %q: %v", tc.sql, err)
+		}
+		got := String(statement)
+		if !strings.Contains(got, tc.want) {
+			t.Fatalf("time zone modifier not preserved.\nSQL:  %s\nwant substring: %s\ngot:  %s", tc.sql, tc.want, got)
+		}
+	}
+}
+
 func TestUniqueNullsNotDistinctConstraintFormatting(t *testing.T) {
 	sql := "CREATE TABLE test (a integer, b integer, CONSTRAINT x UNIQUE NULLS NOT DISTINCT (a, b))"
 
@@ -779,6 +820,32 @@ func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
 					}
 				}
 			})
+		}
+	}
+}
+
+// No supported database reserves stream, and pg_get_indexdef writes it unquoted.
+func TestStreamAsUnquotedIdentifier(t *testing.T) {
+	sqls := []string{
+		`CREATE TABLE stream (id bigint NOT NULL, stream text)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (start_at)`,
+		`CREATE INDEX idx_stream_start_at ON public.stream USING btree (id, start_at) WHERE (start_at IS NOT NULL)`,
+		`CREATE INDEX idx_t_stream ON t (stream)`,
+		`ALTER TABLE t ADD CONSTRAINT t_stream_id_fkey FOREIGN KEY (stream_id) REFERENCES stream (id)`,
+	}
+	for _, m := range []struct {
+		name string
+		mode ParserMode
+	}{
+		{"MySQL", ParserModeMysql},
+		{"PostgreSQL", ParserModePostgres},
+		{"SQLite3", ParserModeSQLite3},
+		{"SQL Server", ParserModeMssql},
+	} {
+		for _, sql := range sqls {
+			if _, err := ParseDDL(sql, m.mode); err != nil {
+				t.Errorf("unquoted stream should parse in %s mode: %q: %v", m.name, sql, err)
+			}
 		}
 	}
 }
@@ -1376,6 +1443,14 @@ func TestCreateFunctionArgDefaultsAndModes(t *testing.T) {
 			},
 		},
 		{
+			name: "timezone-qualified argument types",
+			sql:  "CREATE FUNCTION f(IN a timestamp with time zone, OUT b time with time zone) AS $$ BEGIN b := a::time with time zone; END $$ LANGUAGE plpgsql",
+			want: []expectedArg{
+				{Mode: "IN", Name: "a", Type: "timestamp with time zone"},
+				{Mode: "OUT", Name: "b", Type: "time with time zone"},
+			},
+		},
+		{
 			name: "VARIADIC argument mode",
 			sql:  "CREATE FUNCTION f(VARIADIC a int[]) RETURNS int AS $$ SELECT 0 $$ LANGUAGE sql",
 			want: []expectedArg{
@@ -1447,6 +1522,99 @@ $$ LANGUAGE plpgsql VOLATILE`,
 				} else if got.Default != nil {
 					t.Errorf("arg[%d] Default: got %q, want nil", i, String(got.Default))
 				}
+			}
+		})
+	}
+}
+
+func TestCreateFunctionReturnType(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "omitted with a single OUT parameter",
+			sql:  "CREATE FUNCTION f(IN a int, OUT b int) AS $$ BEGIN b := a; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted with multiple OUT parameters",
+			sql:  "CREATE FUNCTION f(OUT b int, OUT c int) AS $$ BEGIN b := 1; c := 2; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted with an INOUT parameter",
+			sql:  "CREATE FUNCTION f(INOUT a int) AS $$ BEGIN a := a + 1; END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "omitted in the LANGUAGE-before-AS format",
+			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "omitted in the options-before-AS format",
+			sql:  "CREATE FUNCTION f(OUT b int) LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN b := 1; END $$",
+			want: "",
+		},
+		{
+			name: "omitted with a timezone-qualified OUT parameter",
+			sql:  "CREATE FUNCTION f(OUT b timestamp with time zone) AS $$ BEGIN b := now(); END $$ LANGUAGE plpgsql",
+			want: "",
+		},
+		{
+			name: "SETOF alongside an OUT parameter",
+			sql:  "CREATE FUNCTION f(OUT b int) RETURNS SETOF int AS $$ SELECT 1 $$ LANGUAGE sql",
+			want: "SETOF int",
+		},
+		{
+			name: "array",
+			sql:  "CREATE FUNCTION f() RETURNS int[] AS $$ SELECT ARRAY[1] $$ LANGUAGE sql",
+			want: "int[]",
+		},
+		{
+			name: "SETOF array",
+			sql:  "CREATE FUNCTION f() RETURNS SETOF int[] AS $$ SELECT ARRAY[1] $$ LANGUAGE sql",
+			want: "SETOF int[]",
+		},
+		{
+			name: "timezone-qualified array",
+			sql:  "CREATE FUNCTION f() RETURNS timestamp with time zone[] AS $$ SELECT ARRAY[now()] $$ LANGUAGE sql",
+			want: "timestamp with time zone[]",
+		},
+		{
+			name: "present in the AS-before-LANGUAGE format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int AS $$ SELECT a $$ LANGUAGE sql",
+			want: "int",
+		},
+		{
+			name: "present in the LANGUAGE-before-AS format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int LANGUAGE sql AS $$ SELECT a $$",
+			want: "int",
+		},
+		{
+			name: "present in the options-before-AS format",
+			sql:  "CREATE FUNCTION f(a int) RETURNS int LANGUAGE sql IMMUTABLE AS $$ SELECT a $$",
+			want: "int",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("ParseDDL failed: %v", err)
+			}
+			ddl, ok := stmt.(*DDL)
+			if !ok {
+				t.Fatalf("expected *DDL, got %T", stmt)
+			}
+			if ddl.Function == nil {
+				t.Fatalf("expected non-nil Function")
+			}
+			if got := ddl.Function.ReturnType; got != tc.want {
+				t.Errorf("ReturnType: got %q, want %q", got, tc.want)
 			}
 		})
 	}

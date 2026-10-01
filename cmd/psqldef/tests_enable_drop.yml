@@ -308,3 +308,15 @@ CheckConstraintLiteralMentioningDropNotSkipped:
     ALTER TABLE public.audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE');
   down: |
     ALTER TABLE public.audit DROP CONSTRAINT note_ck;
+
+AddColumnWithDefaultSpellingDropColumnNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint);
+  desired: |
+    CREATE TABLE users (id bigint, note text DEFAULT 'set before DROP COLUMN runs');
+  up: |
+    ALTER TABLE public.users ADD COLUMN note text DEFAULT 'set before DROP COLUMN runs';
+  down: |
+    -- Skipped: ALTER TABLE public.users DROP COLUMN note;
