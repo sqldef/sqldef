@@ -459,6 +459,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			position:                   i,
 			typeName:                   typeName,
 			typeIdent:                  typeIdent,
+			typeModifier:               parsedCol.Type.TypeModifier,
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
