@@ -1,3 +1,9 @@
+## [v3.11.26](https://github.com/sqldef/sqldef/compare/v3.11.25...v3.11.26) - 2026-10-01
+
+- schema: generate ALTER TABLE and index statements as typed changes by @178inaba in https://github.com/sqldef/sqldef/pull/1394
+- psqldef: add manage.owner to manage ownership separately from privileges by @gfx in https://github.com/sqldef/sqldef/pull/1402
+- psqldef: round-trip a type modifier that holds identifiers by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1397
+
 ## [v3.11.25](https://github.com/sqldef/sqldef/compare/v3.11.24...v3.11.25) - 2026-09-29
 
 - psqldef: match unnamed indexes and constraints by definition by @178inaba in https://github.com/sqldef/sqldef/pull/1378
