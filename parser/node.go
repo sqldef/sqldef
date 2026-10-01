@@ -854,6 +854,10 @@ type ColumnType struct {
 	// TypeIdent stores the original identifier with quote information for custom types (e.g., domains).
 	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted to determine quoting.
 	TypeIdent Ident
+	// TypeModifier holds a type modifier that is not a list of numbers and so
+	// cannot be carried by Length and Scale, such as the PostGIS
+	// geometry(Point,4326). It is the text between the parentheses.
+	TypeModifier string
 
 	// Generic field options.
 	NotNull             *BoolVal
@@ -975,7 +979,9 @@ func (ed *ExclusionDefinition) Format(buf *nodeBuffer) {
 func (ct *ColumnType) Format(buf *nodeBuffer) {
 	buf.Printf("%s", ct.Type)
 
-	if ct.Length != nil && ct.Scale != nil {
+	if ct.TypeModifier != "" {
+		buf.Printf("(%s)", ct.TypeModifier)
+	} else if ct.Length != nil && ct.Scale != nil {
 		buf.Printf("(%v,%v)", ct.Length, ct.Scale)
 
 	} else if ct.Length != nil {
@@ -2229,6 +2235,60 @@ func isFoldableValueCast(t *ConvertType) bool {
 // NewIntVal builds a new IntVal.
 func NewIntVal(in string) *SQLVal {
 	return &SQLVal{Type: IntVal, Val: in}
+}
+
+// typeWithModifier puts a parenthesised type modifier on a column type. A modifier that is only
+// numbers goes into Length and Scale, and only one that holds an identifier, such as the PostGIS
+// geometry(Point,4326), is kept verbatim in TypeModifier. That is what the pgquery parser does,
+// and the two have to agree: psqldef reads the two schemas it compares with whichever parser
+// accepts each of them, so the same column read by both would otherwise differ, and a column that
+// never changed would be altered to what it already is.
+//
+// Only PostgreSQL spells a modifier this way. MySQL, SQL Server and SQLite reject it, and a
+// grammar shared between them would accept a statement their server does not, so the other modes
+// report the syntax error they reported before this rule existed.
+func typeWithModifier(yylex any, columnType ColumnType, modifier string) ColumnType {
+	tkn := yylex.(*Tokenizer)
+	if tkn.mode != ParserModePostgres {
+		tkn.Error(fmt.Sprintf("a type modifier is not supported here: '%s'", modifier))
+		return columnType
+	}
+
+	parts := strings.Split(modifier, ",")
+	numbers := make([]*SQLVal, 0, len(parts))
+	for _, part := range parts {
+		if !isAllDigits(part) {
+			numbers = numbers[:0]
+			break
+		}
+		numbers = append(numbers, NewIntVal(part))
+	}
+
+	switch len(numbers) {
+	case 1:
+		columnType.Length = numbers[0]
+	case 2:
+		columnType.Length = numbers[0]
+		columnType.Scale = numbers[1]
+	default:
+		// Anything else keeps its text: an identifier cannot become a number, and dropping a
+		// modifier of three numbers or more, which no type takes, would lose the declaration.
+		columnType.TypeModifier = modifier
+	}
+	return columnType
+}
+
+// isAllDigits reports whether s is a non-empty run of ASCII digits.
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // NewFloatVal builds a new FloatVal.

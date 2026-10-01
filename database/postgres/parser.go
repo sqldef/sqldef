@@ -1567,6 +1567,13 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 
 	typmods, err := p.parseTypmods(node.Typmods)
 	if err != nil {
+		// A modifier that is not a list of numbers cannot go into Length and
+		// Scale. PostGIS spells one as geometry(Point,4326). Keep it verbatim so
+		// the column round-trips instead of failing the whole statement.
+		if modifier, ok := p.typmodText(node.Typmods); ok {
+			columnType.TypeModifier = modifier
+			return columnType, nil
+		}
 		return columnType, err
 	}
 	switch len(typmods) {
@@ -1578,6 +1585,25 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 	}
 
 	return columnType, nil
+}
+
+// typmodText renders a type modifier that parseTypmods cannot represent as
+// numbers. The parts are joined the way PostgreSQL's format_type() prints them,
+// so that a column declared as geometry(Point,4326) and the same column read
+// back from the catalog produce the same text.
+func (p PostgresParser) typmodText(typmods []*pgquery.Node) (string, bool) {
+	if len(typmods) == 0 {
+		return "", false
+	}
+	parts := make([]string, 0, len(typmods))
+	for _, mod := range typmods {
+		expr, err := p.parseExpr(mod)
+		if err != nil {
+			return "", false
+		}
+		parts = append(parts, parser.String(expr))
+	}
+	return strings.Join(parts, ","), true
 }
 
 func (p PostgresParser) parseTypmods(typmods []*pgquery.Node) ([]*parser.SQLVal, error) {

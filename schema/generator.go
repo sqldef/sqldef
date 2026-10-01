@@ -2291,6 +2291,17 @@ func (g *Generator) generateDDLsForSetRowLevelSecurity(desired *SetRowLevelSecur
 	return ddls, nil
 }
 
+// keepsUnmanagedOwner reports whether an object has to stay with its current owner because
+// manage.owner does not list that owner: psqldef never takes an object away from an unmanaged
+// role. A new object has no current owner yet.
+func (g *Generator) keepsUnmanagedOwner(desired *SetTableOwner, currentOwner string) bool {
+	if currentOwner == "" || g.config.IsManagedOwner(currentOwner) {
+		return false
+	}
+	slog.Warn("ALTER TABLE ... OWNER TO is ignored because the current owner is not listed in manage.owner", "table", desired.tableName.RawString(), "current_owner", currentOwner, "owner", desired.owner)
+	return true
+}
+
 // generateDDLsForSetTableOwner converges the owner of a table or view when the
 // desired schema declares one (declare-to-manage: undeclared objects are left
 // untouched). Ownership has to be managed for this, because --export only emits current owners
@@ -2304,14 +2315,14 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 		if g.findTableByName(g.desiredTables, desired.tableName) == nil {
 			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 		}
-		if currentTable.owner != desired.owner {
+		if currentTable.owner != desired.owner && !g.keepsUnmanagedOwner(desired, currentTable.owner) {
 			ddls = append(ddls, g.inputAlterTable(desired))
 			currentTable.owner = desired.owner
 		}
 		return ddls, nil
 	}
 	if currentView := findViewQuoteAware(g.currentViews, desired.tableName, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); currentView != nil {
-		if currentView.owner != desired.owner {
+		if currentView.owner != desired.owner && !g.keepsUnmanagedOwner(desired, currentView.owner) {
 			ddls = append(ddls, g.inputAlterTable(desired))
 			currentView.owner = desired.owner
 		}
@@ -2321,7 +2332,7 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 		if g.findPartitionOfByName(g.desiredPartitionOfs, desired.tableName) == nil {
 			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 		}
-		if currentPartition.owner != desired.owner {
+		if currentPartition.owner != desired.owner && !g.keepsUnmanagedOwner(desired, currentPartition.owner) {
 			ddls = append(ddls, g.inputAlterTable(desired))
 			currentPartition.owner = desired.owner
 		}
@@ -3459,6 +3470,13 @@ func (d dialect) generateDataType(column Column) string {
 	// Preserve quoting for case-sensitive types like domains.
 	if column.typeIdent.Quoted {
 		typeName = d.escapeSQLIdent(column.typeIdent)
+	}
+
+	// A modifier that is not a length, such as the PostGIS geometry(Point,4326).
+	// Without it an added column would be created unconstrained, which is not what
+	// the schema declared.
+	if column.typeModifier != "" {
+		return fmt.Sprintf("%s(%s)%s", typeName, column.typeModifier, suffix)
 	}
 
 	if column.displayWidth != nil {
@@ -4754,7 +4772,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 }
 
 func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]string, error) {
-	if (g.config.ManagePrivileges != nil || len(g.config.ManagedRoles) > 0) && len(desired.grantees) > 0 {
+	if g.config.ManagesPrivileges() && len(desired.grantees) > 0 {
 		hasIncludedGrantee := false
 		for _, grantee := range desired.grantees {
 			if isManagedGrantee(g.config, grantee) {
@@ -5986,6 +6004,13 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		}
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
+		return false
+	}
+
+	// A modifier that is not a length distinguishes two columns of the same type
+	// name: geometry(Point,4326) and geometry(MultiPolygon,3857) are both
+	// "geometry". Without this an SRID or shape change is silently ignored.
+	if current.typeModifier != desired.typeModifier {
 		return false
 	}
 
@@ -7262,18 +7287,31 @@ func generateSridDefinition(sridVal Value) (string, error) {
 	}
 }
 
-// Ignore disabled owner declarations before aggregation, which requires each owner to have an object.
+// Ignore owner declarations that manage.owner leaves unmanaged before aggregation, which requires
+// each owner to have an object.
 func filterDesiredOwners(ddls []DDL, config database.GeneratorConfig) []DDL {
+	for _, ddl := range ddls {
+		owner, ok := ddl.(*SetTableOwner)
+		if !ok || config.IsManagedOwner(owner.owner) {
+			continue
+		}
+		switch {
+		case config.ManagesOwners():
+			slog.Warn("ALTER TABLE ... OWNER TO is ignored because the role is not listed in manage.owner", "table", owner.tableName.RawString(), "owner", owner.owner)
+		case config.ManageOwner != nil:
+			slog.Warn("ALTER TABLE ... OWNER TO is ignored because manage.owner is false", "table", owner.tableName.RawString())
+		default:
+			slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.owner; owner cannot be diffed against the database", "table", owner.tableName.RawString())
+		}
+	}
+	return FilterOwners(ddls, config)
+}
+
+// FilterOwners drops the ALTER ... OWNER TO statements of the roles manage.owner leaves unmanaged.
+func FilterOwners(ddls []DDL, config database.GeneratorConfig) []DDL {
 	return slices.DeleteFunc(ddls, func(ddl DDL) bool {
 		owner, ok := ddl.(*SetTableOwner)
-		if !ok {
-			return false
-		}
-		if config.ManagePrivileges == nil && len(config.ManagedRoles) == 0 {
-			slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.privilege or managed_roles; owner cannot be diffed against the database", "table", owner.tableName.RawString())
-			return true
-		}
-		return false
+		return ok && !config.IsManagedOwner(owner.owner)
 	})
 }
 
@@ -7398,7 +7436,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 	}
 
 	// If no roles specified, exclude all privileges
-	if config.ManagePrivileges == nil && len(config.ManagedRoles) == 0 {
+	if !config.ManagesPrivileges() {
 		filtered := []DDL{}
 		for _, ddl := range ddls {
 			switch ddl.(type) {

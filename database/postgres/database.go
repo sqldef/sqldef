@@ -261,11 +261,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 }
 
 // objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
-// and materialized views so that owners declared in the desired schema can be
-// diffed. Emitted only when manage.privilege or managed_roles is configured.
+// and materialized views when owners or privileges are managed. Every owner is exported, even an
+// unmanaged one: the generator needs it to leave an unmanaged role's object alone and to restore
+// the owner of a recreated view. schema.FilterOwners keeps only the managed ones in --export.
 // Extension-owned objects are excluded.
 func (d *PostgresDatabase) objectOwners() ([]string, error) {
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesOwners() && !d.generatorConfig.ManagesPrivileges() {
 		return nil, nil
 	}
 
@@ -355,7 +356,7 @@ func (d *PostgresDatabase) isExportedGrantee(grantee string) bool {
 }
 
 func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesPrivileges() {
 		return nil, nil
 	}
 
@@ -1407,6 +1408,24 @@ func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 		typeName = strings.TrimSuffix(typeName, "[]")
 	}
 
+	// Split off a type modifier before the case detection below. format_type()
+	// returns the modifier as part of the name for non-built-in types, and a
+	// modifier may contain identifiers rather than numbers -- PostGIS spells one
+	// as geometry(Point,4326). Its uppercase letter would otherwise quote the
+	// whole string, yielding a type that does not exist:
+	//
+	//     "geometry(Point,4326)"  ->  pq: type "geometry(Point,4326)" does not exist
+	//
+	// The modifier is reattached unchanged: it is not an identifier, so it needs
+	// no quoting of its own. A name that is itself quoted is left alone, since
+	// the parenthesis would then belong to the quoted spelling.
+	typeModifier := ""
+	if idx := strings.Index(typeName, "("); idx > 0 && !strings.Contains(typeName[:idx], `"`) {
+		typeModifier = typeName[idx:]
+		typeName = typeName[:idx]
+	}
+	arraySuffix = typeModifier + arraySuffix
+
 	// If already quoted (from format_type()), return as-is
 	if strings.HasPrefix(typeName, "\"") && strings.HasSuffix(typeName, "\"") {
 		return typeName + arraySuffix
@@ -2180,7 +2199,7 @@ func (d *PostgresDatabase) getCommentsForTables(tableNames []string) (map[string
 
 func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[string][]string, error) {
 	// If no roles are specified to include, don't query privileges at all
-	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+	if !d.generatorConfig.ManagesPrivileges() {
 		return map[string][]string{}, nil
 	}
 
