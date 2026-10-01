@@ -445,6 +445,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
+%type <str> type_modifier_list type_modifier spatial_keyword
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
 %type <str> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword numeric_bool_literal_type
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
@@ -3802,6 +3803,17 @@ column_type:
     // Custom type (e.g., domain name) - preserve quote information in TypeIdent
     $$ = ColumnType{Type: $1.Name, TypeIdent: $1}
   }
+| sql_id '(' type_modifier_list ')'
+  {
+    // Custom type with a modifier, such as the PostGIS geometry(Point,4326).
+    //
+    // TypeIdent is deliberately left unset, unlike the rule above. It carries the quoting of a
+    // custom type name, and the pgquery parser never sets it, while haveSameDataType reads an
+    // empty one on one side as a different type. Until this PR every one of these statements
+    // failed here and went to pgquery, so setting it would make a column that never changed
+    // come out altered whenever the two schemas were read by different parsers.
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name}, $3)
+  }
 | ANY
   {
     $$ = ColumnType{Type: "ANY"}
@@ -3813,6 +3825,23 @@ column_type:
 | ID '.' ID
   {
     $$ = ColumnType{Type: $1.Name + "." + $3.Name}
+  }
+| ID '.' ID '(' type_modifier_list ')'
+  {
+    // A schema-qualified type with a modifier, which is how PostgreSQL spells
+    // the type when the extension's schema is not on the search_path:
+    // public.geometry(Point,4326).
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3.Name}, $5)
+  }
+| ID '.' GEOMETRY '(' type_modifier_list ')'
+  {
+    // GEOMETRY is a keyword of this grammar, so the rule above does not cover
+    // public.geometry(Point,4326).
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3}, $5)
+  }
+| ID '.' GEOMETRY
+  {
+    $$ = ColumnType{Type: $1.Name + "." + $3}
   }
 
 column_definition_type:
@@ -5043,6 +5072,12 @@ spatial_type:
   {
     $$ = ColumnType{Type: $1}
   }
+| GEOMETRY '(' type_modifier_list ')'
+  {
+    // PostGIS constrains a geometry column with a modifier that names a shape
+    // and, optionally, an SRID: geometry(Point,4326).
+    $$ = typeWithModifier(yylex, ColumnType{Type: $1}, $3)
+  }
 | POINT
   {
     $$ = ColumnType{Type: $1}
@@ -5090,6 +5125,49 @@ enum_values:
   {
     $$ = append($1, $3)
   }
+
+type_modifier_list:
+  type_modifier
+  {
+    $$ = $1
+  }
+| type_modifier_list ',' type_modifier
+  {
+    $$ = $1 + "," + $3
+  }
+
+type_modifier:
+  sql_id
+  {
+    // PostgreSQL downcases an unquoted identifier, and the pgquery parser
+    // reports it downcased, so do the same here to keep both parsers in step.
+    // A quoted one keeps its spelling, as PostgreSQL does.
+    if $1.Quoted {
+      $$ = $1.Name
+    } else {
+      $$ = strings.ToLower($1.Name)
+    }
+  }
+| INTEGRAL
+  {
+    $$ = string($1)
+  }
+| spatial_keyword
+  {
+    // A shape name such as Point or MultiPolygon is a keyword of its own in this
+    // grammar, so it does not reach the sql_id case above.
+    $$ = strings.ToLower($1)
+  }
+
+spatial_keyword:
+  GEOMETRY
+| POINT
+| LINESTRING
+| POLYGON
+| GEOMETRYCOLLECTION
+| MULTIPOINT
+| MULTILINESTRING
+| MULTIPOLYGON
 
 length_opt:
   {
