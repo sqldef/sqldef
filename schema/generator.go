@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"maps"
 	"math/big"
 	"reflect"
 	"regexp"
@@ -173,7 +174,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	desiredDDLs = FilterObjects(desiredDDLs, config)
+	desiredDDLs = FilterObjects(desiredDDLs, config, mode, defaultSchema)
 	desiredDDLs = filterDesiredOwners(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 	desiredDDLs = FilterExtensions(desiredDDLs, config)
@@ -185,7 +186,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	currentDDLs = FilterObjects(currentDDLs, config)
+	currentDDLs = FilterObjects(currentDDLs, config, mode, defaultSchema)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 	currentDDLs = FilterExtensions(currentDDLs, config)
 	currentDDLs = FilterFunctions(currentDDLs, config, defaultSchema)
@@ -7278,31 +7279,150 @@ func FilterOwners(ddls []DDL, config database.GeneratorConfig) []DDL {
 	})
 }
 
-// FilterObjects applies the table and view filters, then drops the ALTER ... OWNER TO statements
-// left behind by whatever they removed. The owner statements cannot go through the filters
-// themselves: they name a table or a view and, running before aggregation, the filters cannot
-// tell which, so each would be judged by both target_tables and skip_views.
-func FilterObjects(ddls []DDL, config database.GeneratorConfig) []DDL {
+// FilterObjects applies the table and view filters, then drops the statements that belong to an
+// object the filters leave out: its ALTER ... OWNER TO, its triggers and its comments. None of
+// them can go through the filters themselves, because they name a table or a view and, running
+// before aggregation, the filters cannot tell which, so each would be judged by both target_tables
+// and skip_views.
+func FilterObjects(ddls []DDL, config database.GeneratorConfig, mode GeneratorMode, defaultSchema string) []DDL {
 	filtered := FilterViews(FilterTables(ddls, config), config)
+	if !filtersObjects(config) {
+		return filtered
+	}
 
-	dropped := createdObjectNames(ddls, config)
+	declared := createdObjectNames(ddls, config)
+	dropped := maps.Clone(declared)
 	for name := range util.CanonicalMapIter(createdObjectNames(filtered, config)) {
 		delete(dropped, name)
 	}
-	if len(dropped) == 0 {
-		return filtered
+
+	indexTables := indexToTableNames(ddls)
+	// excluded reports whether the filters leave an object out, so that what belongs to it can be
+	// left out with it. An object these DDLs create is judged by what the filters did to it, which
+	// tells a table from a view for certain. One they do not create is judged by name against both
+	// filters, because nothing is left to say which it is: that is the schema which leaves the
+	// object out, and the statements it still carries for it have to go the same way as the ones
+	// the other schema carries, or the two stop agreeing about an object neither manages.
+	excluded := func(name database.QualifiedName) bool {
+		key := normalizeNameKey(name, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)
+		if declared[key] {
+			return dropped[key]
+		}
+		raw := []string{name.RawString()}
+		return skipTables(raw, config) || skipViews(raw, config)
 	}
 
 	result := make([]DDL, 0, len(filtered))
 	for _, ddl := range filtered {
-		// An owner statement whose object was never created stays, so that aggregation still
-		// reports it as performed before CREATE TABLE.
-		if stmt, ok := ddl.(*SetTableOwner); ok && dropped[normalizeNameKey(stmt.tableName, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)] {
-			continue
+		switch stmt := ddl.(type) {
+		case *SetTableOwner:
+			// An owner statement whose object was never created stays, so that aggregation still
+			// reports it as performed before CREATE TABLE.
+			if dropped[normalizeNameKey(stmt.tableName, "", GeneratorModePostgres, config.LegacyIgnoreQuotes, 0)] {
+				continue
+			}
+		case *Trigger:
+			// A trigger belongs to its table, so a schema that leaves the table out leaves the
+			// trigger out too and the trigger reads as obsolete. enable_drop holds the DROP TRIGGER
+			// back in a plan, but a run that enables it drops a trigger of a table the filters were
+			// told to leave alone.
+			if excluded(stmt.tableName) {
+				continue
+			}
+		case *Comment:
+			// A comment describes an object rather than naming one, so it has to go wherever the
+			// object went: left behind, it would be a comment of the current schema that the
+			// desired schema can no longer declare, and the obsolete-comment cleanup would reset it
+			// with COMMENT ... IS NULL. That statement carries no DROP, so enable_drop does not hold
+			// it back, and a comment of an object the filters exclude cannot be declared back.
+			if name, ok := commentObjectName(stmt.comment, indexTables, mode, defaultSchema); ok && excluded(name) {
+				continue
+			}
 		}
 		result = append(result, ddl)
 	}
 	return result
+}
+
+// filtersObjects reports whether any of the table and view filters is configured, and therefore
+// whether an object can be left out at all.
+func filtersObjects(config database.GeneratorConfig) bool {
+	return config.TargetTables != nil || len(config.SkipTables) > 0 || len(config.SkipViews) > 0
+}
+
+// indexToTableNames maps every index the DDLs create to its table, so that a COMMENT ON INDEX can
+// be traced back to the object the filters judged: the comment names the index, not its table. An
+// index is keyed by its own name together with the schema of its table, because CREATE INDEX never
+// qualifies the index name while COMMENT ON INDEX does, and two schemas may hold indexes of the
+// same name.
+func indexToTableNames(ddls []DDL) map[string]database.QualifiedName {
+	indexTables := map[string]database.QualifiedName{}
+	for _, ddl := range ddls {
+		switch stmt := ddl.(type) {
+		case *CreateIndex:
+			indexTables[indexSchemaKey(stmt.tableName.Schema, stmt.index.name)] = stmt.tableName
+		case *AddIndex:
+			indexTables[indexSchemaKey(stmt.tableName.Schema, stmt.index.name)] = stmt.tableName
+		}
+	}
+	return indexTables
+}
+
+// indexSchemaKey keys an index by the schema it lives in and its own name.
+func indexSchemaKey(schema, indexName Ident) string {
+	return schema.Name + "\x00" + indexName.Name
+}
+
+// commentObjectName returns the table or view a COMMENT describes, so that the comment can be
+// matched against the objects the filters removed. A comment on something that is neither, such as
+// a type or a function, returns false and is left alone.
+func commentObjectName(comment parser.Comment, indexTables map[string]database.QualifiedName, mode GeneratorMode, defaultSchema string) (database.QualifiedName, bool) {
+	// The object of a COMMENT is still spelled as it was written, while the name of a table has
+	// already been qualified with the default schema, so the comment is qualified the same way
+	// before the two are compared.
+	object := normalizeCommentObject(&comment, mode, defaultSchema)
+	switch comment.ObjectType {
+	case "OBJECT_TABLE", "OBJECT_VIEW":
+		// [schema, object] or [object]
+		return qualifiedNameOf(object)
+	case "OBJECT_COLUMN":
+		// [schema, object, column] or [object, column]
+		if len(object) < 2 {
+			return database.QualifiedName{}, false
+		}
+		return qualifiedNameOf(object[:len(object)-1])
+	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
+		// [name, schema, object] or [name, object]
+		if len(object) < 2 {
+			return database.QualifiedName{}, false
+		}
+		return qualifiedNameOf(object[1:])
+	case "OBJECT_INDEX":
+		// [schema, index] or [index]: the object is the one the index was created on.
+		if len(object) == 0 || len(object) > 2 {
+			return database.QualifiedName{}, false
+		}
+		var schema Ident
+		if len(object) == 2 {
+			schema = object[0]
+		}
+		table, ok := indexTables[indexSchemaKey(schema, object[len(object)-1])]
+		return table, ok
+	default:
+		return database.QualifiedName{}, false
+	}
+}
+
+// qualifiedNameOf reads a [schema, name] or [name] object path as a qualified name.
+func qualifiedNameOf(object []Ident) (database.QualifiedName, bool) {
+	switch len(object) {
+	case 1:
+		return database.QualifiedName{Name: object[0]}, true
+	case 2:
+		return database.QualifiedName{Schema: object[0], Name: object[1]}, true
+	default:
+		return database.QualifiedName{}, false
+	}
 }
 
 // createdObjectNames collects the names of the tables and views that the DDLs create.

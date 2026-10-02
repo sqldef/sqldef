@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1724,19 +1725,19 @@ func TestFilterObjectsOwnerStatements(t *testing.T) {
 	}
 
 	// target_tables is about tables and does not filter views, so neither owner goes away.
-	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}})
+	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
 
 	// skip_views is about views, so a regexp that happens to match a table name must not reach
 	// the table's owner.
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
 
 	// The owner of a filtered object goes with it.
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.v_users"}, owners(filtered))
 
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users"}, owners(filtered))
 }
 
@@ -1773,7 +1774,7 @@ func TestFilterObjectsOwnerIdentity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), test.sql, "public")
 			assert.NoError(t, err)
-			assert.Empty(t, FilterObjects(ddls, test.config))
+			assert.Empty(t, FilterObjects(ddls, test.config, GeneratorModePostgres, "public"))
 		})
 	}
 }
@@ -1916,4 +1917,224 @@ func TestRenameColumnOfGrantOnMultipleTables(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ALTER TABLE public.t1 RENAME COLUMN a TO b"}, ddls)
+}
+
+// A comment and a trigger belong to an object, so the filters have to take them along with it.
+func TestFilterObjectsDependentStatements(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint, name text, CONSTRAINT users_name_len CHECK (length(name) > 0));
+		CREATE TABLE logs (id bigint, note text, CONSTRAINT logs_note_len CHECK (length(note) > 0));
+		CREATE VIEW v_users AS SELECT id FROM users;
+		CREATE INDEX idx_users_name ON users (name);
+		CREATE INDEX idx_logs_note ON logs (note);
+		CREATE TRIGGER trg_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION touch();
+		CREATE TRIGGER trg_logs BEFORE UPDATE ON logs FOR EACH ROW EXECUTE FUNCTION touch();
+		COMMENT ON TABLE users IS 'users';
+		COMMENT ON TABLE logs IS 'logs';
+		COMMENT ON COLUMN users.name IS 'users.name';
+		COMMENT ON COLUMN logs.note IS 'logs.note';
+		COMMENT ON INDEX idx_users_name IS 'idx_users_name';
+		COMMENT ON INDEX idx_logs_note IS 'idx_logs_note';
+		COMMENT ON CONSTRAINT users_name_len ON users IS 'users_name_len';
+		COMMENT ON CONSTRAINT logs_note_len ON logs IS 'logs_note_len';
+		COMMENT ON TRIGGER trg_users ON users IS 'trg_users';
+		COMMENT ON TRIGGER trg_logs ON logs IS 'trg_logs';
+		COMMENT ON VIEW v_users IS 'v_users';
+		COMMENT ON TYPE status IS 'status';
+		COMMENT ON FUNCTION touch() IS 'touch';
+	`
+	parse := func(t *testing.T) []DDL {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+		require.NoError(t, err)
+		return ddls
+	}
+	kept := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			switch stmt := ddl.(type) {
+			case *Comment:
+				names = append(names, "comment:"+stmt.comment.Comment)
+			case *Trigger:
+				names = append(names, "trigger:"+stmt.name.RawString())
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	for _, test := range []struct {
+		name   string
+		config database.GeneratorConfig
+		want   []string
+	}{
+		{
+			// Without a filter nothing is left out, so every statement stays.
+			name:   "no filter",
+			config: database.GeneratorConfig{},
+			want: []string{
+				"comment:idx_logs_note", "comment:idx_users_name", "comment:logs", "comment:logs.note", "comment:logs_note_len", "comment:status", "comment:touch", "comment:trg_logs", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "comment:v_users", "trigger:trg_logs", "trigger:trg_users",
+			},
+		},
+		{
+			// skip_tables leaves logs out, so its comments and its trigger go with it. The
+			// comments of a type and of a function belong to neither a table nor a view and stay.
+			name:   "skip_tables",
+			config: database.GeneratorConfig{SkipTables: []string{`public\.logs`}},
+			want: []string{
+				"comment:idx_users_name", "comment:status", "comment:touch", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "comment:v_users", "trigger:trg_users",
+			},
+		},
+		{
+			// target_tables leaves out every table it does not name, and a view is not a table,
+			// so v_users keeps its comment.
+			name:   "target_tables",
+			config: database.GeneratorConfig{TargetTables: []string{`public\.users`}},
+			want: []string{
+				"comment:idx_users_name", "comment:status", "comment:touch", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "comment:v_users", "trigger:trg_users",
+			},
+		},
+		{
+			// skip_views leaves the view out, and only its comment goes.
+			name:   "skip_views",
+			config: database.GeneratorConfig{SkipViews: []string{`public\.v_users`}},
+			want: []string{
+				"comment:idx_logs_note", "comment:idx_users_name", "comment:logs", "comment:logs.note", "comment:logs_note_len", "comment:status", "comment:touch", "comment:trg_logs", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "trigger:trg_logs", "trigger:trg_users",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, kept(FilterObjects(parse(t), test.config, GeneratorModePostgres, "public")))
+		})
+	}
+}
+
+// The schema that leaves an object out is the one that cannot declare it, so its statements for
+// that object have to go by name: nothing in it says whether the object is a table or a view.
+func TestFilterObjectsDependentStatementsOfUndeclaredObject(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint);
+		CREATE TRIGGER trg_logs BEFORE UPDATE ON logs FOR EACH ROW EXECUTE FUNCTION touch();
+		COMMENT ON TABLE logs IS 'logs';
+		COMMENT ON TABLE users IS 'users';
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+
+	remaining := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			switch stmt := ddl.(type) {
+			case *Comment:
+				names = append(names, stmt.comment.Comment)
+			case *Trigger:
+				names = append(names, stmt.name.RawString())
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	// Nothing declares logs here, and skip_tables names it, so its trigger and its comment go.
+	filtered := FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.logs`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"users"}, remaining(filtered))
+
+	// skip_views names it instead, which cannot be told apart once the object is undeclared.
+	filtered = FilterObjects(ddls, database.GeneratorConfig{SkipViews: []string{`public\.logs`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"users"}, remaining(filtered))
+
+	// A filter that does not name it leaves it alone.
+	filtered = FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.other`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"logs", "trg_logs", "users"}, remaining(filtered))
+}
+
+// An index comment names the index, and index names are unique per schema rather than per
+// database, so the schema of the table decides which index a comment describes.
+func TestFilterObjectsIndexCommentIsResolvedPerSchema(t *testing.T) {
+	const sql = `
+		CREATE TABLE public.users (id bigint, name text);
+		CREATE TABLE other.users (id bigint, name text);
+		CREATE INDEX idx_dup ON public.users (name);
+		CREATE INDEX idx_dup ON other.users (name);
+		COMMENT ON INDEX public.idx_dup IS 'public';
+		COMMENT ON INDEX other.idx_dup IS 'other';
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+
+	comments := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			if stmt, ok := ddl.(*Comment); ok {
+				names = append(names, stmt.comment.Comment)
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	filtered := FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.users`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"other"}, comments(filtered))
+
+	filtered = FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`other\.users`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"public"}, comments(filtered))
+}
+
+// commentObjectName has to say "not an object I know" rather than guess, so that a comment it
+// cannot place is left where it is instead of being filtered by the wrong name.
+func TestCommentObjectName(t *testing.T) {
+	ident := func(name string) parser.Ident { return parser.NewIdent(name, false) }
+	indexTables := map[string]database.QualifiedName{
+		indexSchemaKey(ident("public"), ident("idx_users")): {Schema: ident("public"), Name: ident("users")},
+	}
+
+	for _, test := range []struct {
+		name    string
+		comment parser.Comment
+		want    string
+		wantOK  bool
+	}{
+		{"table", parser.Comment{ObjectType: "OBJECT_TABLE", Object: []parser.Ident{ident("public"), ident("users")}}, "public.users", true},
+		{"view", parser.Comment{ObjectType: "OBJECT_VIEW", Object: []parser.Ident{ident("public"), ident("v_users")}}, "public.v_users", true},
+		{"column", parser.Comment{ObjectType: "OBJECT_COLUMN", Object: []parser.Ident{ident("public"), ident("users"), ident("name")}}, "public.users", true},
+		{"constraint", parser.Comment{ObjectType: "OBJECT_CONSTRAINT", Object: []parser.Ident{ident("c"), ident("public"), ident("users")}}, "public.users", true},
+		{"trigger", parser.Comment{ObjectType: "OBJECT_TRIGGER", Object: []parser.Ident{ident("t"), ident("public"), ident("users")}}, "public.users", true},
+		{"index", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("public"), ident("idx_users")}}, "public.users", true},
+
+		{"index of another schema", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("other"), ident("idx_users")}}, "", false},
+		{"index that no DDL creates", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("public"), ident("idx_missing")}}, "", false},
+		{"type", parser.Comment{ObjectType: "OBJECT_TYPE", Object: []parser.Ident{ident("public"), ident("status")}}, "", false},
+		{"function", parser.Comment{ObjectType: "OBJECT_FUNCTION", Object: []parser.Ident{ident("public"), ident("touch")}}, "", false},
+
+		{"table without a name", parser.Comment{ObjectType: "OBJECT_TABLE"}, "", false},
+		{"table of too many parts", parser.Comment{ObjectType: "OBJECT_TABLE", Object: []parser.Ident{ident("a"), ident("b"), ident("c")}}, "", false},
+		{"column without a table", parser.Comment{ObjectType: "OBJECT_COLUMN", Object: []parser.Ident{ident("name")}}, "", false},
+		{"constraint without a table", parser.Comment{ObjectType: "OBJECT_CONSTRAINT", Object: []parser.Ident{ident("c")}}, "", false},
+		{"index without a name", parser.Comment{ObjectType: "OBJECT_INDEX"}, "", false},
+		{"index of too many parts", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("a"), ident("b"), ident("c")}}, "", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// The default schema is left empty so that the object paths are taken as written.
+			name, ok := commentObjectName(test.comment, indexTables, GeneratorModePostgres, "")
+			assert.Equal(t, test.wantOK, ok)
+			if test.wantOK {
+				assert.Equal(t, test.want, name.RawString())
+			}
+		})
+	}
+}
+
+// An index added through ALTER TABLE belongs to its table the same way one created on its own does.
+func TestIndexToTableNamesCoversAddIndex(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint, name text);
+		ALTER TABLE users ADD INDEX idx_users_name (name);
+	`
+	ddls, err := ParseDDLs(GeneratorModeMysql, database.NewParser(parser.ParserModeMysql), sql, "")
+	require.NoError(t, err)
+
+	indexTables := indexToTableNames(ddls)
+	table, ok := indexTables[indexSchemaKey(parser.Ident{}, parser.NewIdent("idx_users_name", false))]
+	require.True(t, ok)
+	assert.Equal(t, "users", table.RawString())
 }
