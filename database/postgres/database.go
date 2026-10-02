@@ -19,7 +19,6 @@ import (
 )
 
 type (
-	Ident         = database.Ident
 	QualifiedName = database.QualifiedName
 )
 
@@ -1024,7 +1023,7 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 // CheckConstraint holds a CHECK constraint's name and definition, and the
 // column it references when it references exactly one.
 type CheckConstraint struct {
-	Name       Ident
+	Name       string
 	Definition string
 	column     string
 }
@@ -1032,7 +1031,7 @@ type CheckConstraint struct {
 type TableDDLComponents struct {
 	TableName          string
 	Columns            []column
-	PrimaryKeyName     Ident
+	PrimaryKeyName     string
 	PrimaryKeyCols     []string
 	PrimaryKeyPeriod   bool
 	PrimaryKeyIncluded []string
@@ -1102,7 +1101,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
 		if check, ok := inlineChecks[col.Name]; ok {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdentifierIfNeeded(check.Name), check.Definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
@@ -1117,9 +1116,9 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 				}
 				quotedCols = append(quotedCols, quoted)
 			}
-			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (%s)", d.quoteIdent(components.PrimaryKeyName), strings.Join(quotedCols, ", "))
+			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (%s)", d.quoteIdentifierIfNeeded(components.PrimaryKeyName), strings.Join(quotedCols, ", "))
 		} else {
-			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdentifierIfNeeded(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
 		}
 		if len(components.PrimaryKeyIncluded) > 0 {
 			fmt.Fprintf(&queryBuilder, " INCLUDE (\"%s\")", strings.Join(components.PrimaryKeyIncluded, "\", \""))
@@ -1128,7 +1127,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 
 	for _, check := range tableChecks {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdentifierIfNeeded(check.Name), check.Definition)
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -1284,7 +1283,7 @@ func normalizePostgresTypeCasts(sql string) string {
 }
 
 type primaryKeyInfo struct {
-	name     Ident
+	name     string
 	period   bool
 	included []string
 }
@@ -1367,19 +1366,6 @@ func postgresBuildDSN(config database.Config) string {
 
 func forceQuoteIdentifier(name string) string {
 	return fmt.Sprintf("\"%s\"", strings.ReplaceAll(name, "\"", "\"\""))
-}
-
-// quoteIdent quotes a constraint name for DDL output.
-// In legacy mode (LegacyIgnoreQuotes=true): don't quote (original behavior).
-// In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
-func (d *PostgresDatabase) quoteIdent(ident Ident) string {
-	if d.generatorConfig.LegacyIgnoreQuotes {
-		return ident.Name
-	}
-	if ident.Quoted {
-		return forceQuoteIdentifier(ident.Name)
-	}
-	return ident.Name
 }
 
 // quoteIdentifierIfNeeded quotes an identifier for DDL output.
@@ -1696,7 +1682,7 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 			return nil, err
 		}
 		result[tableName] = primaryKeyInfo{
-			name:     NewIdentWithQuoteDetected(keyName),
+			name:     keyName,
 			period:   period,
 			included: included,
 		}
@@ -2002,7 +1988,7 @@ func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (ma
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
 		check := CheckConstraint{
-			Name:       NewIdentWithQuoteDetected(constraintName),
+			Name:       constraintName,
 			Definition: constraintDef,
 		}
 		if columnName != nil {
