@@ -47,6 +47,13 @@ To update the generic SQL parser, edit `parser/parser.y` and regenerate:
 make parser  # regenerate parser/parser.go from parser/parser.y
 ```
 
+`parser/parser.go` is a generated file with a single writer:
+
+- **Never commit `parser/parser.go` in a pull request.** CI rejects a pull request whose diff touches it. Commit only `parser/parser.y`; concurrent grammar changes conflict on the generated output otherwise
+- master is brought back in sync automatically by `.github/workflows/parser.yml` after every merge, so release tags always carry a matching `parser.go`
+- `make build` / `make test*` / `make lint` regenerate it when `parser.y` is newer. Running `go test ./...` directly does not, so run `make parser` first after editing the grammar
+- Regeneration leaves `parser/parser.go` dirty in your working tree. That is expected; leave it out of your commits
+
 ### Requirements
 
 - No reduce/reduce conflicts are allowed
