@@ -418,10 +418,10 @@ type View struct {
 	owner        string // PostgreSQL owner role ("" = not tracked/declared)
 }
 
-// TriggerEvent represents a single trigger event (INSERT, UPDATE, DELETE, or UPDATE OF columns)
+// TriggerEvent represents a single trigger event (INSERT, UPDATE, DELETE, TRUNCATE, or UPDATE OF columns)
 type TriggerEvent struct {
-	eventType string  // "INSERT", "UPDATE", "DELETE"
-	columns   []Ident // For UPDATE OF col1, col2 - nil for INSERT/DELETE/plain UPDATE
+	eventType string  // "INSERT", "UPDATE", "DELETE", "TRUNCATE"
+	columns   []Ident // For UPDATE OF col1, col2 - nil for INSERT/DELETE/TRUNCATE/plain UPDATE
 }
 
 type Trigger struct {

@@ -1490,10 +1490,10 @@ type View struct {
 	WithNoData   bool // true for "WITH NO DATA"
 }
 
-// TriggerEvent represents a single trigger event (INSERT, UPDATE, DELETE, or UPDATE OF columns)
+// TriggerEvent represents a single trigger event (INSERT, UPDATE, DELETE, TRUNCATE, or UPDATE OF columns)
 type TriggerEvent struct {
-	Type    string  // "INSERT", "UPDATE", "DELETE"
-	Columns Columns // For UPDATE OF col1, col2 - nil for INSERT/DELETE/plain UPDATE
+	Type    string  // "INSERT", "UPDATE", "DELETE", "TRUNCATE"
+	Columns Columns // For UPDATE OF col1, col2 - nil for INSERT/DELETE/TRUNCATE/plain UPDATE
 }
 
 type Trigger struct {
