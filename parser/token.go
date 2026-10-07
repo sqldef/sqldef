@@ -1194,6 +1194,9 @@ exit:
 
 func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 	var buffer strings.Builder
+	// PostgreSQL's standard_conforming_strings, the default, treats a
+	// backslash as a literal character. MySQL still uses backslash escapes.
+	postgresLiteral := tkn.mode == ParserModePostgres
 	for {
 		ch := tkn.lastChar
 		if ch == eofChar {
@@ -1201,14 +1204,14 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 			return LEX_ERROR, buffer.String()
 		}
 
-		if ch != delim && ch != '\\' {
+		if ch != delim && (ch != '\\' || postgresLiteral) {
 			buffer.WriteRune(ch)
 
 			start := tkn.bufPos
 			delimByte := byte(delim)
 			for ; tkn.bufPos < tkn.bufSize; tkn.bufPos++ {
 				b := tkn.buf[tkn.bufPos]
-				if b == delimByte || b == '\\' {
+				if b == delimByte || (b == '\\' && !postgresLiteral) {
 					break
 				}
 			}

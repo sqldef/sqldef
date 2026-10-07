@@ -2717,6 +2717,23 @@ AddUnnamedPrimaryKeyConstraint:
   up: ""
   down: ""
 
+# standard_conforming_strings keeps a backslash in a regular string literal.
+# '\s' is a backslash and an s, not an escaped s.
+CheckRegexKeepsBackslash:
+  current: |
+    CREATE TABLE users (
+      email text
+    );
+  desired: |
+    CREATE TABLE users (
+      email text,
+      CONSTRAINT users_email_check CHECK (email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    );
+  up: |
+    ALTER TABLE "public"."users" ADD CONSTRAINT "users_email_check" CHECK (email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  down: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_email_check";
+
 AddUnnamedUniqueConstraint:
   legacy_ignore_quotes: false
   current: |
