@@ -31,6 +31,9 @@ type SQLNode interface {
 // nodeBuffer extends strings.Builder to format SQLNode easily.
 type nodeBuffer struct {
 	strings.Builder
+	// postgresStrings quotes with standard_conforming_strings rules:
+	// a backslash is literal, and a quote is doubled.
+	postgresStrings bool
 }
 
 // Printf mimics fmt.Fprintf(buf, ...), but limited to %s for string and %v for Node.
@@ -72,11 +75,20 @@ func (buf *nodeBuffer) Printf(format string, values ...any) {
 
 // String returns a string representation of an SQLNode.
 func String(node SQLNode) string {
+	return stringify(node, false)
+}
+
+// StringPostgres is String with PostgreSQL standard_conforming_strings quoting.
+func StringPostgres(node SQLNode) string {
+	return stringify(node, true)
+}
+
+func stringify(node SQLNode, postgresStrings bool) string {
 	if node == nil {
 		return "<nil>"
 	}
 
-	var buf nodeBuffer
+	buf := nodeBuffer{postgresStrings: postgresStrings}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -2336,7 +2348,11 @@ func NewValArgWithOpt(in string, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
-		encodeSQLBytes(node.Val, buf)
+		if buf.postgresStrings {
+			encodePostgresString(node.Val, buf)
+		} else {
+			encodeSQLBytes(node.Val, buf)
+		}
 	case UnicodeStrVal:
 		buf.WriteRune('N')
 		encodeSQLBytes(node.Val, buf)
@@ -2363,6 +2379,20 @@ func encodeSQLBytes(val string, buf *nodeBuffer) {
 		} else {
 			buf.WriteByte('\\')
 			buf.WriteByte(encodedChar)
+		}
+	}
+	buf.WriteByte('\'')
+}
+
+// encodePostgresString quotes a value for standard_conforming_strings.
+// A backslash is kept, and the only escape is a doubled single quote.
+func encodePostgresString(val string, buf *nodeBuffer) {
+	buf.WriteByte('\'')
+	for _, ch := range val {
+		if ch == '\'' {
+			buf.WriteString("''")
+		} else {
+			buf.WriteRune(ch)
 		}
 	}
 	buf.WriteByte('\'')
