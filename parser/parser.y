@@ -3105,6 +3105,10 @@ trigger_event:
   {
     $$ = TriggerEvent{Type: $1}
   }
+| TRUNCATE
+  {
+    $$ = TriggerEvent{Type: $1}
+  }
 /* For SQLite3 and PostgreSQL */
 | UPDATE OF column_list
   {
