@@ -638,3 +638,36 @@ FunctionWithFloatOutParameterAndOmittedReturnsIsIdempotent:
       b := 1;
     END
     $$ LANGUAGE plpgsql;
+
+FunctionArgTypeOnlyChangeDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION label_of(x integer) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  up: |
+    DROP FUNCTION public.label_of(jsonb);
+    CREATE FUNCTION label_of(x integer) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  down: |
+    DROP FUNCTION public.label_of(integer);
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+
+FunctionArgAddedOnlyDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION label_of(x jsonb, y text) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  up: |
+    DROP FUNCTION public.label_of(jsonb);
+    CREATE FUNCTION label_of(x jsonb, y text) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  down: |
+    DROP FUNCTION public.label_of(jsonb, text);
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+
+FunctionArgNameAddedOnlyReplaces:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION label_of(jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
