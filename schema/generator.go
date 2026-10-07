@@ -6110,6 +6110,14 @@ func (d dialect) normalizeCheckExprString(expr parser.Expr) string {
 	return parser.String(expr)
 }
 
+func (d dialect) formatChildExpr(expr parser.Expr, parentPrec int) string {
+	rendered := d.formatExprQuoteAware(expr)
+	if parser.NeedsChildParen(expr, parentPrec) {
+		return "(" + rendered + ")"
+	}
+	return rendered
+}
+
 // formatExprQuoteAware formats an expression with quote-aware column name handling.
 // This walks the AST and uses escapeSQLIdent for column names to preserve quoting.
 func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
@@ -6134,7 +6142,7 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		elements := util.TransformSlice(e, d.formatExprQuoteAware)
 		return "(" + strings.Join(elements, ", ") + ")"
 	case *parser.ComparisonExpr:
-		result := d.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
+		result := d.formatChildExpr(e.Left, parser.PrecCmp) + " " + e.Operator + " "
 		if e.All {
 			result += "ALL "
 		} else if e.Any {
@@ -6143,22 +6151,22 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		if (e.All || e.Any) && parser.NeedsAnyAllParens(e.Right) {
 			return result + "(" + d.formatExprQuoteAware(e.Right) + ")"
 		}
-		return result + d.formatExprQuoteAware(e.Right)
+		return result + d.formatChildExpr(e.Right, parser.PrecCmp)
 	case *parser.AndExpr:
-		return d.formatExprQuoteAware(e.Left) + " AND " + d.formatExprQuoteAware(e.Right)
+		return d.formatChildExpr(e.Left, parser.PrecAnd) + " AND " + d.formatChildExpr(e.Right, parser.PrecAnd)
 	case *parser.OrExpr:
-		return d.formatExprQuoteAware(e.Left) + " OR " + d.formatExprQuoteAware(e.Right)
+		return d.formatChildExpr(e.Left, parser.PrecOr) + " OR " + d.formatChildExpr(e.Right, parser.PrecOr)
 	case *parser.ConcatExpr:
 		return d.formatExprQuoteAware(e.Left) + " || " + d.formatExprQuoteAware(e.Right)
 	case *parser.NotExpr:
-		return "NOT " + d.formatExprQuoteAware(e.Expr)
+		return "NOT " + d.formatChildExpr(e.Expr, parser.PrecNot)
 	case *parser.BinaryExpr:
 		return d.formatExprQuoteAware(e.Left) + " " + e.Operator + " " + d.formatExprQuoteAware(e.Right)
 	case *parser.UnaryExpr:
 		return e.Operator + d.formatExprQuoteAware(e.Expr)
 	case *parser.IsExpr:
 		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
-		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
+		return d.formatChildExpr(e.Expr, parser.PrecIs) + " " + e.Operator
 	case *parser.CastExpr:
 		return d.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
 	case *parser.AtTimeZoneExpr:
