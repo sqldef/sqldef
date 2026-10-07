@@ -354,7 +354,7 @@ func setupTestDatabase(t *testing.T) *PostgresDatabase {
 
 func TestSplitInlineChecks(t *testing.T) {
 	check := func(name, column string) CheckConstraint {
-		return CheckConstraint{Name: NewIdentWithQuoteDetected(name), Definition: "CHECK (" + name + ")", column: column}
+		return CheckConstraint{Name: name, Definition: "CHECK (" + name + ")", column: column}
 	}
 
 	cases := []struct {

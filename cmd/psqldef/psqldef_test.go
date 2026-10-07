@@ -731,7 +731,7 @@ func TestPsqldefExport(t *testing.T) {
 		    "c_char_10" character(10),
 		    "c_varchar_10" character varying(10),
 		    "c_varchar_unlimited" character varying,
-		    CONSTRAINT users_pkey PRIMARY KEY ("id")
+		    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 		);
 
 		ALTER TABLE "public"."users" ADD CONSTRAINT "users_c_char_1_key" UNIQUE (c_char_1);
@@ -897,7 +897,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 		    "col1" character varying(40) NOT NULL,
 		    "col2" character varying(6) NOT NULL,
 		    "created_at" timestamp NOT NULL,
-		    CONSTRAINT users_pkey PRIMARY KEY ("col1", "col2")
+		    CONSTRAINT "users_pkey" PRIMARY KEY ("col1", "col2")
 		);
 		`,
 	))
@@ -916,10 +916,10 @@ func TestPsqldefExportMultipleChecksOnSameColumn(t *testing.T) {
 
 	assertExportOutput(t, tu.StripHeredoc(`
 		CREATE TABLE "public"."t" (
-		    "a" integer CONSTRAINT t_a_positive CHECK (a > 0),
+		    "a" integer CONSTRAINT "t_a_positive" CHECK (a > 0),
 		    "b" integer,
-		    CONSTRAINT t_b_max CHECK (b <= 10),
-		    CONSTRAINT t_b_min CHECK (b >= 0)
+		    CONSTRAINT "t_b_max" CHECK (b <= 10),
+		    CONSTRAINT "t_b_min" CHECK (b >= 0)
 		);
 		`,
 	))
@@ -939,13 +939,31 @@ func TestPsqldefExportChecksWithoutSingleColumn(t *testing.T) {
 
 	assertExportOutput(t, tu.StripHeredoc(`
 		CREATE TABLE "public"."t" (
-		    "Mixed" integer CONSTRAINT t_mixed_positive CHECK ("Mixed" > 0),
+		    "Mixed" integer CONSTRAINT "t_mixed_positive" CHECK ("Mixed" > 0),
 		    "b" integer,
-		    CONSTRAINT t_always CHECK (true),
-		    CONSTRAINT t_mixed_lt_b CHECK ("Mixed" < b)
+		    CONSTRAINT "t_always" CHECK (true),
+		    CONSTRAINT "t_mixed_lt_b" CHECK ("Mixed" < b)
 		);
 		`,
 	))
+}
+
+func TestPsqldefExportMultibyteTableName(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `CREATE TABLE "注文" ("番号" bigint PRIMARY KEY);`)
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export")...)
+	assert.Contains(t, output, `CONSTRAINT "注文_pkey" PRIMARY KEY ("番号")`)
+}
+
+func TestPsqldefExportKeywordConstraintName(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `CREATE TABLE t2 (id int, CONSTRAINT "order" CHECK (id > 0));`)
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "legacy_ignore_quotes: false")...)
+	assert.Contains(t, output, `CONSTRAINT "order" CHECK (id > 0)`)
 }
 
 func TestPsqldefExportConcurrency(t *testing.T) {
@@ -981,17 +999,17 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 	assert.Equal(t, tu.StripHeredoc(`
 		CREATE TABLE "public"."users_1" (
 		    "id" bigint NOT NULL,
-		    CONSTRAINT users_1_pkey PRIMARY KEY ("id")
+		    CONSTRAINT "users_1_pkey" PRIMARY KEY ("id")
 		);
 
 		CREATE TABLE "public"."users_2" (
 		    "id" bigint NOT NULL,
-		    CONSTRAINT users_2_pkey PRIMARY KEY ("id")
+		    CONSTRAINT "users_2_pkey" PRIMARY KEY ("id")
 		);
 
 		CREATE TABLE "public"."users_3" (
 		    "id" bigint NOT NULL,
-		    CONSTRAINT users_3_pkey PRIMARY KEY ("id")
+		    CONSTRAINT "users_3_pkey" PRIMARY KEY ("id")
 		);
 		`,
 	), outputDefault)
