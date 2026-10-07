@@ -1,3 +1,10 @@
+## [v3.11.27](https://github.com/sqldef/sqldef/compare/v3.11.26...v3.11.27) - 2026-10-07
+
+- build(deps): bump golang from 1.27.0-alpine to 1.27.1-alpine in the docker group by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1406
+- build(deps): bump the github-actions group with 5 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1408
+- build(deps): bump the gomod group with 5 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1407
+- psqldef: detect argument-only changes to a function by @gfx in https://github.com/sqldef/sqldef/pull/1414
+
 ## [v3.11.26](https://github.com/sqldef/sqldef/compare/v3.11.25...v3.11.26) - 2026-10-01
 
 - schema: generate ALTER TABLE and index statements as typed changes by @178inaba in https://github.com/sqldef/sqldef/pull/1394
