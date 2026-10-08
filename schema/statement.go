@@ -35,6 +35,18 @@ func (s rawStatement) Render() string    { return string(s) }
 func (s rawStatement) Destructive() bool { return false }
 func (s rawStatement) Skipped() bool     { return false }
 
+// tdsqlStatement is a TDSQL-specific statement rendered as text. Its destructiveness is
+// declared explicitly, because the narrow text-based gate cannot recognize it from the
+// statement shape (e.g. a multi-partition DROP PARTITION with UPDATE GLOBAL INDEXES).
+type tdsqlStatement struct {
+	statementDefaults
+	ddl         string
+	destructive bool
+}
+
+func (s tdsqlStatement) Render() string    { return s.ddl }
+func (s tdsqlStatement) Destructive() bool { return s.destructive }
+
 func rawStatements(ddls []string) []statement {
 	return util.TransformSlice(ddls, func(ddl string) statement { return rawStatement(ddl) })
 }
@@ -705,13 +717,17 @@ type addPartitionAction struct {
 func (a addPartitionAction) render(d dialect) string {
 	part := a.partition
 	name := d.escapePartitionName(part.Name.Name)
+	storageTier := ""
+	if part.StorageTier != "" {
+		storageTier = " STORAGE_TIER = " + normalizePartitionStorageTier(part.StorageTier)
+	}
 	switch {
 	case part.In != nil:
-		return fmt.Sprintf("ADD PARTITION (PARTITION %s VALUES IN (%s))", name, d.formatExprs(part.In))
+		return fmt.Sprintf("ADD PARTITION (PARTITION %s VALUES IN (%s)%s)", name, d.formatExprs(part.In), storageTier)
 	case part.Maxvalue:
-		return fmt.Sprintf("ADD PARTITION (PARTITION %s VALUES LESS THAN MAXVALUE)", name)
+		return fmt.Sprintf("ADD PARTITION (PARTITION %s VALUES LESS THAN MAXVALUE%s)", name, storageTier)
 	case part.LessThan != nil:
-		return fmt.Sprintf("ADD PARTITION (PARTITION %s VALUES LESS THAN (%s))", name, d.formatExprs(part.LessThan))
+		return fmt.Sprintf("ADD PARTITION (PARTITION %s VALUES LESS THAN (%s)%s)", name, d.formatExprs(part.LessThan), storageTier)
 	default:
 		panic(fmt.Sprintf("partition %s has no bound", part.Name.Name))
 	}
