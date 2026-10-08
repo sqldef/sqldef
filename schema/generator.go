@@ -2779,7 +2779,16 @@ func (g *Generator) areSameFunctionSignature(a, b *Function) bool {
 	if strings.EqualFold(a.returnType, "TABLE") || strings.EqualFold(b.returnType, "TABLE") {
 		return false
 	}
-	if !g.areSameFunctionReturnType(a, b) || len(a.args) != len(b.args) {
+	// PostgreSQL allows adding a name to a previously unnamed parameter, but not
+	// renaming an existing one.
+	return g.areSameFunctionReturnType(a, b) && g.areSameFunctionArgs(a, b, true)
+}
+
+// areSameFunctionArgs compares argument lists in order. Argument names fold
+// like identifiers (unquoted ones lower-case); with allowNameAdded, a name on
+// b where a has none still counts as the same.
+func (g *Generator) areSameFunctionArgs(a, b *Function, allowNameAdded bool) bool {
+	if len(a.args) != len(b.args) {
 		return false
 	}
 	for i := range a.args {
@@ -2787,14 +2796,15 @@ func (g *Generator) areSameFunctionSignature(a, b *Function) bool {
 		if functionArgMode(ca.mode) != functionArgMode(da.mode) {
 			return false
 		}
-		// Argument names fold like identifiers (unquoted ones lower-case).
-		// PostgreSQL allows adding a name to a previously unnamed parameter,
-		// but not renaming an existing one.
 		can, dan := foldedIdentName(ca.name), foldedIdentName(da.name)
-		if can != "" && can != dan {
+		if can != dan && !(allowNameAdded && can == "") {
 			return false
 		}
-		if normalizePGFunctionType(ca.typ) != normalizePGFunctionType(da.typ) {
+		if g.mode == GeneratorModePostgres {
+			if normalizePGFunctionType(ca.typ) != normalizePGFunctionType(da.typ) {
+				return false
+			}
+		} else if ca.typ != da.typ {
 			return false
 		}
 	}
@@ -2938,6 +2948,7 @@ func pgFunctionReturnType(f *Function) string {
 func (g *Generator) areSameFunctionDefinition(a, b *Function) bool {
 	// Compare function properties
 	if !g.areSameFunctionReturnType(a, b) ||
+		(g.mode == GeneratorModePostgres && !g.areSameFunctionArgs(a, b, false)) ||
 		a.body != b.body ||
 		a.language != b.language {
 		return false
