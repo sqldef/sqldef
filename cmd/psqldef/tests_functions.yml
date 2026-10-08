@@ -639,6 +639,39 @@ FunctionWithFloatOutParameterAndOmittedReturnsIsIdempotent:
     END
     $$ LANGUAGE plpgsql;
 
+FunctionArgTypeOnlyChangeDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION label_of(x integer) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  up: |
+    DROP FUNCTION public.label_of(jsonb);
+    CREATE FUNCTION label_of(x integer) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  down: |
+    DROP FUNCTION public.label_of(integer);
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+
+FunctionArgAddedOnlyDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION label_of(x jsonb, y text) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  up: |
+    DROP FUNCTION public.label_of(jsonb);
+    CREATE FUNCTION label_of(x jsonb, y text) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  down: |
+    DROP FUNCTION public.label_of(jsonb, text);
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+
+FunctionArgNameAddedOnlyReplaces:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION label_of(jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION label_of(x jsonb) RETURNS text AS $$ SELECT 'x' $$ LANGUAGE sql;
+
 # Dropping an overloaded function needs the argument types: a bare
 # DROP FUNCTION is rejected with "function name is not unique" (42725), and the
 # failure takes the whole apply with it.

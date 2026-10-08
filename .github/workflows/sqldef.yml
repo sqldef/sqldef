@@ -110,7 +110,7 @@ jobs:
       - run: make test-${{ matrix.target }}
         id: test
         env:
-          GOTESTFLAGS: -coverprofile=coverage.out -coverpkg=./...
+          GOTESTFLAGS: -count=1 -coverprofile=coverage.out -coverpkg=./...
 
       - name: Generate coverage artifact name
         id: coverage-name
@@ -160,7 +160,7 @@ jobs:
       - run: make test-core
         id: test
         env:
-          GOTESTFLAGS: -coverprofile=coverage.out -coverpkg=./...
+          GOTESTFLAGS: -count=1 -coverprofile=coverage.out -coverpkg=./...
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
