@@ -820,13 +820,34 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		ddls = append(ddls, rawStatement(dropDDL))
 	}
 
-	// Clean up obsoleted functions
+	// Clean up obsoleted functions. The drops are collected and sorted so that
+	// an overloaded name produces the same plan on every run: the order the
+	// functions come back in is not stable, and the plan is something people
+	// read and diff.
+	functionDrops := []string{}
 	for _, currentFunction := range g.currentFunctions {
 		if g.findFunctionByName(g.desiredFunctions, currentFunction.name) != nil {
 			continue
 		}
+		// A bare DROP FUNCTION is ambiguous once the name is overloaded, and
+		// PostgreSQL rejects it -- taking the whole apply with it:
+		//
+		//     DROP FUNCTION "public"."fn_calc";
+		//     pq: function name "public.fn_calc" is not unique (42725)
+		//
+		// Name the argument types for those, which is what the signature-change
+		// path already emits. A name with a single function keeps the bare form,
+		// as do MySQL and SQL Server, which have no overloads to disambiguate
+		// and do not accept argument types there.
 		dropDDL := fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name))
-		ddls = append(ddls, rawStatement(gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL)))
+		if g.mode == GeneratorModePostgres && g.isOverloadedFunctionName(currentFunction) {
+			dropDDL = g.dropFunctionDDL(currentFunction)
+		}
+		functionDrops = append(functionDrops, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL))
+	}
+	slices.Sort(functionDrops)
+	for _, dropDDL := range functionDrops {
+		ddls = append(ddls, rawStatement(dropDDL))
 	}
 
 	// Clean up obsoleted types
@@ -2715,6 +2736,22 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, 
 	}
 
 	return ddls, nil
+}
+
+// isOverloadedFunctionName reports whether another function in the current
+// schema shares this one's name. Only then does a bare DROP FUNCTION become
+// ambiguous, so only then are the argument types needed.
+func (g *Generator) isOverloadedFunctionName(target *Function) bool {
+	seen := 0
+	for _, f := range g.currentFunctions {
+		if qualifiedNamesEqual(f.name, target.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+			seen++
+			if seen > 1 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName) *Function {
