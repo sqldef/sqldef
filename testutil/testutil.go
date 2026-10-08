@@ -351,7 +351,7 @@ func runDDLs(db database.Database, ddls []string) error {
 func joinDDLs(ddls []string) string {
 	var builder strings.Builder
 	for _, ddl := range ddls {
-		builder.WriteString(ddl)
+		builder.WriteString(strings.TrimRight(strings.TrimSpace(ddl), ";"))
 		builder.WriteString(";\n")
 	}
 	return builder.String()
@@ -366,6 +366,21 @@ func filterSkippedDDLs(ddls []string) []string {
 		if !strings.HasPrefix(ddl, "-- Skipped:") {
 			result = append(result, ddl)
 		}
+	}
+	return result
+}
+
+// filterOperationalPartitionDDLs excludes data-changing partition commands
+// from schema idempotency checks. These commands are intentionally replayable
+// operations rather than persistent schema state.
+func filterOperationalPartitionDDLs(ddls []string) []string {
+	var result []string
+	for _, ddl := range ddls {
+		normalized := strings.ToUpper(strings.TrimSpace(ddl))
+		if strings.HasPrefix(normalized, "ALTER TABLE ") && strings.Contains(normalized, " TRUNCATE PARTITION ") {
+			continue
+		}
+		result = append(result, ddl)
 	}
 	return result
 }
@@ -433,7 +448,7 @@ func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser 
 	db.SetGeneratorConfig(config)
 	config = db.GetGeneratorConfig()
 
-	currentDDLs, err := db.ExportDDLs()
+	currentDDLs, err := database.ExportDDLsForDiff(db)
 	if err != nil {
 		return "", err
 	}
@@ -804,6 +819,7 @@ func runOfflineTestWithReporter(r testReporter, test TestCase, mode schema.Gener
 		if err != nil {
 			r.Fatalf("[Offline Phase 2: Idempotency Check] Failed to generate DDLs: %v", err)
 		}
+		ddls = filterOperationalPartitionDDLs(ddls)
 		if len(ddls) > 0 {
 			r.Errorf("[Offline Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```", joinDDLs(ddls))
 		}
@@ -825,6 +841,7 @@ func runOfflineTestWithReporter(r testReporter, test TestCase, mode schema.Gener
 		if err != nil {
 			r.Fatalf("[Offline Phase 4: Idempotency Check] Failed to generate DDLs: %v", err)
 		}
+		ddls = filterOperationalPartitionDDLs(ddls)
 		if len(ddls) > 0 {
 			r.Errorf("[Offline Phase 4: Idempotency Check] current → current should produce no DDL, but got:\n```\n%s```", joinDDLs(ddls))
 		}

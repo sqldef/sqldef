@@ -277,6 +277,21 @@ type Database interface {
 	SessionSetupQueries() []string
 }
 
+// DiffDatabase is implemented by databases that need to expose metadata used
+// for schema comparison but not for the public export format.
+type DiffDatabase interface {
+	ExportDDLsForDiff() (string, error)
+}
+
+// ExportDDLsForDiff returns the comparison view when the database provides
+// one, while keeping the normal export contract for all other databases.
+func ExportDDLsForDiff(d Database) (string, error) {
+	if diffDatabase, ok := d.(DiffDatabase); ok {
+		return diffDatabase.ExportDDLsForDiff()
+	}
+	return d.ExportDDLs()
+}
+
 func isDryRun(d Database) bool {
 	_, isDryRun := d.(*DryRunDatabase)
 	return isDryRun
@@ -298,6 +313,10 @@ func isCommentedOut(s string) bool {
 		}
 	}
 	return true
+}
+
+func formatDDLForOutput(ddl string) string {
+	return strings.TrimRight(strings.TrimSpace(ddl), ";") + ";\n"
 }
 
 func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, logger Logger) error {

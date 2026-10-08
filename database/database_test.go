@@ -4,7 +4,25 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestFormatDDLForOutput(t *testing.T) {
+	tests := []struct {
+		name string
+		ddl  string
+		want string
+	}{
+		{name: "without semicolon", ddl: "CREATE DATABASE mydb", want: "CREATE DATABASE mydb;\n"},
+		{name: "with semicolon", ddl: "CREATE DATABASE mydb;", want: "CREATE DATABASE mydb;\n"},
+		{name: "with duplicate semicolon", ddl: "CREATE DATABASE mydb;;", want: "CREATE DATABASE mydb;\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, formatDDLForOutput(tt.ddl))
+		})
+	}
+}
 
 func TestIsCommentedOut(t *testing.T) {
 	tests := []struct {
@@ -170,4 +188,48 @@ func TestParseGeneratorConfigManageFunction(t *testing.T) {
 	config = ParseGeneratorConfigString("manage: {function: [{target: f}], privilege: [{target: p}]}", GeneratorConfig{})
 	assert.NotNil(t, config.ManageFunctions)
 	assert.NotNil(t, config.ManagePrivileges)
+}
+
+type fakePlainDatabase struct {
+	Database
+}
+
+func (f *fakePlainDatabase) ExportDDLs() (string, error)               { return "export from ExportDDLs", nil }
+func (f *fakePlainDatabase) GetTransactionQueries() TransactionQueries { return TransactionQueries{} }
+func (f *fakePlainDatabase) Close() error                              { return nil }
+
+type fakeDiffDatabase struct {
+	fakePlainDatabase
+}
+
+func (f *fakeDiffDatabase) ExportDDLsForDiff() (string, error) {
+	return "export from ExportDDLsForDiff", nil
+}
+
+func TestExportDDLsForDiff(t *testing.T) {
+	// Databases without a diff view fall back to the regular export.
+	ddl, err := ExportDDLsForDiff(&fakePlainDatabase{})
+	require.NoError(t, err)
+	assert.Equal(t, "export from ExportDDLs", ddl)
+
+	// Diff-capable databases expose their comparison view.
+	ddl, err = ExportDDLsForDiff(&fakeDiffDatabase{})
+	require.NoError(t, err)
+	assert.Equal(t, "export from ExportDDLsForDiff", ddl)
+}
+
+func TestDryRunDatabaseExportDDLsForDiff(t *testing.T) {
+	dryRun, err := NewDryRunDatabase(&fakeDiffDatabase{})
+	require.NoError(t, err)
+	defer dryRun.Close()
+	ddl, err := dryRun.ExportDDLsForDiff()
+	require.NoError(t, err)
+	assert.Equal(t, "export from ExportDDLsForDiff", ddl)
+
+	dryRunPlain, err := NewDryRunDatabase(&fakePlainDatabase{})
+	require.NoError(t, err)
+	defer dryRunPlain.Close()
+	ddl, err = dryRunPlain.ExportDDLsForDiff()
+	require.NoError(t, err)
+	assert.Equal(t, "export from ExportDDLs", ddl)
 }

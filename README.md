@@ -12,7 +12,7 @@ This is inspired by [Ridgepole](https://github.com/ridgepole/ridgepole), which u
 
 ## Supported Databases
 
-- mysqldef - MySQL, MariaDB, and TiDB
+- mysqldef - MySQL, MariaDB, TiDB, and TDSQL
 - psqldef - PostgreSQL
 - sqlite3def - SQLite3
 - mssqldef - SQL Server
