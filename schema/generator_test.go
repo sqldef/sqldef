@@ -646,11 +646,11 @@ func TestSQLiteCheckConstraintModification(t *testing.T) {
 
 func TestNormalizeViewDefinition(t *testing.T) {
 	tests := []struct {
-		name                              string
-		mode                              GeneratorMode
-		input                             string
-		postgresExtractDatePartEquivalent bool
-		expected                          string
+		name                           string
+		mode                           GeneratorMode
+		input                          string
+		postgresDatePartIsExtractAlias bool
+		expected                       string
 	}{
 		// PostgreSQL specific tests
 		{
@@ -720,32 +720,32 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
 		},
 		{
-			name:                              "PostgreSQL before 14: normalize unqualified date_part to EXTRACT",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT date_part('year'::text, created_at) AS event_year FROM events`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select extract(year from created_at) as event_year from events`,
+			name:                           "PostgreSQL before 14: normalize unqualified date_part to EXTRACT",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select extract(year from created_at) as event_year from events`,
 		},
 		{
-			name:                              "PostgreSQL before 14: normalize pg_catalog.date_part to EXTRACT",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT pg_catalog.date_part('year'::text, created_at) AS event_year FROM events`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select extract(year from created_at) as event_year from events`,
+			name:                           "PostgreSQL before 14: normalize pg_catalog.date_part to EXTRACT",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT pg_catalog.date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select extract(year from created_at) as event_year from events`,
 		},
 		{
-			name:                              "PostgreSQL before 14: normalize uppercase unquoted PG_CATALOG.date_part to EXTRACT",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT PG_CATALOG.date_part('year'::text, created_at) AS event_year FROM events`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select extract(year from created_at) as event_year from events`,
+			name:                           "PostgreSQL before 14: normalize uppercase unquoted PG_CATALOG.date_part to EXTRACT",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT PG_CATALOG.date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select extract(year from created_at) as event_year from events`,
 		},
 		{
-			name:                              "PostgreSQL before 14: preserve other schema date_part",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT app.date_part('year'::text, created_at) AS event_year FROM events`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select app.date_part('year', created_at) as event_year from events`,
+			name:                           "PostgreSQL before 14: preserve other schema date_part",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT app.date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select app.date_part('year', created_at) as event_year from events`,
 		},
 		{
 			name:     "PostgreSQL 14 and later: preserve date_part",
@@ -754,25 +754,25 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			expected: `select date_part('year', created_at) as event_year from events`,
 		},
 		{
-			name:                              "PostgreSQL before 14: normalize date_part in window expressions",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT sum(amount) OVER (PARTITION BY date_part('month'::text, created_at) ORDER BY date_part('year'::text, created_at)) AS running_total, percentile_cont(0.5) WITHIN GROUP (ORDER BY date_part('epoch'::text, created_at)) AS median FROM events`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select sum(amount) over(partition by extract(month from created_at) order by extract(year from created_at) asc) as running_total, percentile_cont(0.5) within group( order by extract(epoch from created_at) asc) as median from events`,
+			name:                           "PostgreSQL before 14: normalize date_part in window expressions",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT sum(amount) OVER (PARTITION BY date_part('month'::text, created_at) ORDER BY date_part('year'::text, created_at)) AS running_total, percentile_cont(0.5) WITHIN GROUP (ORDER BY date_part('epoch'::text, created_at)) AS median FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select sum(amount) over(partition by extract(month from created_at) order by extract(year from created_at) asc) as running_total, percentile_cont(0.5) within group( order by extract(epoch from created_at) asc) as median from events`,
 		},
 		{
-			name:                              "PostgreSQL before 14: normalize date_part in OR and unary expressions",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT -date_part('epoch'::text, created_at) AS negative_epoch FROM events WHERE date_part('year'::text, created_at) = 2026 OR date_part('month'::text, created_at) = 8`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select -extract(epoch from created_at) as negative_epoch from events where extract(year from created_at) = 2026 or extract(month from created_at) = 8`,
+			name:                           "PostgreSQL before 14: normalize date_part in OR and unary expressions",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT -date_part('epoch'::text, created_at) AS negative_epoch FROM events WHERE date_part('year'::text, created_at) = 2026 OR date_part('month'::text, created_at) = 8`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select -extract(epoch from created_at) as negative_epoch from events where extract(year from created_at) = 2026 or extract(month from created_at) = 8`,
 		},
 		{
-			name:                              "PostgreSQL before 14: normalize date_part in JOIN OR expressions",
-			mode:                              GeneratorModePostgres,
-			input:                             `SELECT l.id FROM events l JOIN events r ON date_part('year'::text, CURRENT_TIMESTAMP) = 2026 OR date_part('month'::text, CURRENT_TIMESTAMP) = 8`,
-			postgresExtractDatePartEquivalent: true,
-			expected:                          `select id from events as l join events as r on extract(year from current_timestamp) = 2026 or extract(month from current_timestamp) = 8`,
+			name:                           "PostgreSQL before 14: normalize date_part in JOIN OR expressions",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT l.id FROM events l JOIN events r ON date_part('year'::text, CURRENT_TIMESTAMP) = 2026 OR date_part('month'::text, CURRENT_TIMESTAMP) = 8`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select id from events as l join events as r on extract(year from current_timestamp) = 2026 or extract(month from current_timestamp) = 8`,
 		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
@@ -803,7 +803,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, parser.CreateView, ddl.Action)
 			assert.NotNil(t, ddl.View.Definition, "Definition should not be nil")
 
-			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil, tt.postgresExtractDatePartEquivalent)
+			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil, tt.postgresDatePartIsExtractAlias)
 			actual := strings.ToLower(parser.String(normalized))
 
 			assert.Equal(t, tt.expected, actual)
@@ -872,14 +872,14 @@ func TestGeneratePostgresViewExtractDatePartComparison(t *testing.T) {
 	datePart := `CREATE VIEW event_years AS SELECT date_part('year', created_at) AS event_year FROM events;`
 
 	for _, tt := range []struct {
-		name       string
-		equivalent bool
-		expected   []string
+		name                   string
+		datePartIsExtractAlias bool
+		expected               []string
 	}{
-		{name: "equivalent before PostgreSQL 14", equivalent: true, expected: []string{}},
+		{name: "equivalent before PostgreSQL 14", datePartIsExtractAlias: true, expected: []string{}},
 		{
-			name:       "different from PostgreSQL 14",
-			equivalent: false,
+			name:                   "different from PostgreSQL 14",
+			datePartIsExtractAlias: false,
 			expected: []string{
 				"DROP VIEW public.event_years",
 				"CREATE VIEW public.event_years AS select date_part('year', created_at) as event_year from events",
@@ -893,9 +893,9 @@ func TestGeneratePostgresViewExtractDatePartComparison(t *testing.T) {
 				datePart,
 				extract,
 				database.GeneratorConfig{
-					EnableDrop:                        true,
-					LegacyIgnoreQuotes:                false,
-					PostgresExtractDatePartEquivalent: tt.equivalent,
+					EnableDrop:                     true,
+					LegacyIgnoreQuotes:             false,
+					PostgresDatePartIsExtractAlias: tt.datePartIsExtractAlias,
 				},
 				"public",
 			)

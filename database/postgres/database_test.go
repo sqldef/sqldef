@@ -48,7 +48,7 @@ func TestUnixSocketConnection(t *testing.T) {
 	}
 }
 
-func TestSetGeneratorConfigDefaultsExtractDatePartToFalseOnVersionQueryError(t *testing.T) {
+func TestSetGeneratorConfigDisablesDatePartIsExtractAliasOnVersionQueryError(t *testing.T) {
 	sock := testutil.StartDummyUnixSocket(t, "postgres-config-test", ".s.PGSQL.5432")
 	defer sock.Close()
 
@@ -56,13 +56,13 @@ func TestSetGeneratorConfigDefaultsExtractDatePartToFalseOnVersionQueryError(t *
 	require.NoError(t, err)
 	defer db.Close()
 
-	db.SetGeneratorConfig(database.GeneratorConfig{PostgresExtractDatePartEquivalent: true})
-	assert.False(t, db.GetGeneratorConfig().PostgresExtractDatePartEquivalent)
+	db.SetGeneratorConfig(database.GeneratorConfig{PostgresDatePartIsExtractAlias: true})
+	assert.False(t, db.GetGeneratorConfig().PostgresDatePartIsExtractAlias)
 }
 
-func TestExtractDatePartEquivalent(t *testing.T) {
-	assert.True(t, extractDatePartEquivalent(139999))
-	assert.False(t, extractDatePartEquivalent(140000))
+func TestDatePartIsExtractAlias(t *testing.T) {
+	assert.True(t, datePartIsExtractAlias(139999))
+	assert.False(t, datePartIsExtractAlias(140000))
 }
 
 func TestExportMaterializedViewPreservesDatePart(t *testing.T) {

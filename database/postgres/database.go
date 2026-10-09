@@ -57,16 +57,19 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 		d.defaultOpclasses = map[string]bool{}
 	}
 	config.PostgresDefaultOperatorClasses = d.defaultOpclasses
-	config.PostgresExtractDatePartEquivalent = false
+	config.PostgresDatePartIsExtractAlias = false
 	var serverVersionNum int
 	if err := d.db.QueryRow("SHOW server_version_num").Scan(&serverVersionNum); err != nil {
-		slog.Debug("Failed to get PostgreSQL server_version_num", "error", err)
+		slog.Warn(
+			"Failed to get PostgreSQL server_version_num; EXTRACT and date_part are compared as different expressions",
+			"error", err,
+		)
 	} else {
-		config.PostgresExtractDatePartEquivalent = extractDatePartEquivalent(serverVersionNum)
+		config.PostgresDatePartIsExtractAlias = datePartIsExtractAlias(serverVersionNum)
 		slog.Debug(
-			"Determined PostgreSQL EXTRACT/date_part comparison capability",
+			"Determined whether date_part is an alias of EXTRACT",
 			"server_version_num", serverVersionNum,
-			"equivalent", config.PostgresExtractDatePartEquivalent,
+			"date_part_is_extract_alias", config.PostgresDatePartIsExtractAlias,
 		)
 	}
 	d.generatorConfig = config
@@ -75,8 +78,11 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	d.config.TargetSchema = config.TargetSchema
 }
 
-func extractDatePartEquivalent(serverVersionNum int) bool {
-	return serverVersionNum < 140000
+// PostgreSQL 14 changed EXTRACT to return numeric, while date_part still returns double precision.
+const extractReturnsNumericVersionNum = 140000
+
+func datePartIsExtractAlias(serverVersionNum int) bool {
+	return serverVersionNum < extractReturnsNumericVersionNum
 }
 
 // refreshDefaultOperatorClasses reloads the default operator class of every access method, keyed by
