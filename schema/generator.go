@@ -2342,8 +2342,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode)
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode)
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, g.normalizeOptions())
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, g.normalizeOptions())
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {

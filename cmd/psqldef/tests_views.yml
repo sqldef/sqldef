@@ -583,6 +583,29 @@ ExtractAndDatePartDifferFromPostgres14:
   down: |
     DROP VIEW public.event_years;
     CREATE VIEW public.event_years AS select EXTRACT(year FROM created_at) as event_year from events;
+ViewColumnAdditionWithExtractUsesReplace:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      created_at timestamp,
+      amount int
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(year FROM created_at) AS event_year
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp,
+      amount int
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(year FROM created_at) AS event_year, amount AS event_amount
+      FROM events;
+  up: |
+    CREATE OR REPLACE VIEW public.event_years AS select EXTRACT(year FROM created_at) as event_year, amount as event_amount from events;
+  down: |
+    DROP VIEW public.event_years;
+    CREATE VIEW public.event_years AS select EXTRACT(year FROM created_at) as event_year from events;
 ExtractInMaterializedView:
   desired: |
     CREATE TABLE events (
