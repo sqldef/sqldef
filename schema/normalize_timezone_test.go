@@ -38,7 +38,7 @@ func TestNormalizeExprRecoversTimezoneFromCastTypeAlias(t *testing.T) {
 			Expr: cast.Expr,
 			Type: &parser.ConvertType{Type: tc.typeName, Length: tc.length},
 		}
-		got := parser.String(normalizeExpr(expr, GeneratorModePostgres))
+		got := parser.String(normalizeExpr(expr, GeneratorModePostgres, normalizeOptions{}))
 		if got != tc.want {
 			t.Errorf("normalizeExpr(::%s) = %q, want %q", tc.typeName, got, tc.want)
 		}

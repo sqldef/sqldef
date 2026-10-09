@@ -803,7 +803,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, parser.CreateView, ddl.Action)
 			assert.NotNil(t, ddl.View.Definition, "Definition should not be nil")
 
-			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil, tt.postgresDatePartIsExtractAlias)
+			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil, normalizeOptions{postgresDatePartIsExtractAlias: tt.postgresDatePartIsExtractAlias})
 			actual := strings.ToLower(parser.String(normalized))
 
 			assert.Equal(t, tt.expected, actual)
@@ -926,7 +926,7 @@ func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T
 	tableLookup := func(QualifiedName) *Table { return nil }
 
 	normalize := func(definition parser.SelectStatement) string {
-		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup, false)
+		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup, normalizeOptions{})
 		return stripTableQualifiers(strings.ToLower(parser.String(normalized)))
 	}
 
@@ -955,7 +955,7 @@ func TestNormalizeViewDefinitionExpandsStarFromTable(t *testing.T) {
 	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, func(name QualifiedName) *Table {
 		assert.Equal(t, "users", name.Name.Name)
 		return table
-	}, false)
+	}, normalizeOptions{})
 
 	assert.Equal(t, "select first, second, 3 as marker from users", parser.String(normalized))
 }
@@ -967,19 +967,19 @@ func TestNormalizeTableExprParentheses(t *testing.T) {
 		}
 	}
 
-	assert.Nil(t, normalizeTableExpr(nil, GeneratorModePostgres, nil, false))
+	assert.Nil(t, normalizeTableExpr(nil, GeneratorModePostgres, nil, normalizeOptions{}))
 	assert.Equal(t, tableExpr("a"), normalizeTableExpr(
 		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a")}},
 		GeneratorModePostgres,
 		nil,
-		false,
+		normalizeOptions{},
 	))
 
 	normalized := normalizeTableExpr(
 		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a"), tableExpr("b")}},
 		GeneratorModeSQLite3,
 		nil,
-		false,
+		normalizeOptions{},
 	)
 	paren, ok := normalized.(*parser.ParenTableExpr)
 	assert.True(t, ok)
@@ -1119,7 +1119,7 @@ func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {
 		},
 	}
 
-	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, nil, false)
+	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, nil, normalizeOptions{})
 
 	assert.Equal(t, "select * from (select 1 as id) as s(a, b)", parser.String(normalized))
 }

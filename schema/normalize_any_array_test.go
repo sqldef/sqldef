@@ -111,7 +111,7 @@ func TestNormalizeSingleElementArrayComparison(t *testing.T) {
 			if got := parser.String(normalizeCheckExpr(expr, GeneratorModePostgres)); got != tt.expected {
 				t.Errorf("normalizeCheckExpr() = %q, want %q", got, tt.expected)
 			}
-			if got := parser.String(normalizeExpr(expr, GeneratorModePostgres)); got != tt.expected {
+			if got := parser.String(normalizeExpr(expr, GeneratorModePostgres, normalizeOptions{})); got != tt.expected {
 				t.Errorf("normalizeExpr() = %q, want %q", got, tt.expected)
 			}
 		})
