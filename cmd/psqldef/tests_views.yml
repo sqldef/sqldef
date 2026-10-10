@@ -645,12 +645,18 @@ ViewWithOrderedSetAggregatesOverArithmeticExpressionsIsIdempotent:
         percentile_disc(0.5) WITHIN GROUP (ORDER BY amount + 0.5) AS discrete_median,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY CAST(amount + 0.5 AS numeric(10, 0))) AS rounded_median
       FROM events;
-ViewWithPercentileContOverExtractIsIdempotent:
+ViewWithExtractInWindowAndWithinGroupIsIdempotent:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE events (
       created_at timestamp
     );
+    CREATE VIEW event_windows AS
+      SELECT row_number() OVER (
+        PARTITION BY EXTRACT(month FROM created_at)
+        ORDER BY EXTRACT(year FROM created_at)
+      ) AS row_num
+      FROM events;
     CREATE VIEW event_medians AS
       SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM created_at)) AS median
       FROM events;
