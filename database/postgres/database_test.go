@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -77,10 +78,14 @@ func TestExportMaterializedViewPreservesDatePart(t *testing.T) {
 	require.NoError(t, err)
 
 	db.SetGeneratorConfig(database.GeneratorConfig{LegacyIgnoreQuotes: false})
-	exported, err := db.ExportDDLs()
+	ddls, err := db.materializedViews()
 	require.NoError(t, err)
-	assert.Contains(t, exported, "date_part(")
-	assert.NotContains(t, exported, "EXTRACT(")
+	i := slices.IndexFunc(ddls, func(ddl string) bool {
+		return strings.Contains(ddl, "public.event_years AS")
+	})
+	require.NotEqual(t, -1, i)
+	assert.Contains(t, ddls[i], "date_part(")
+	assert.NotContains(t, ddls[i], "EXTRACT(")
 }
 
 // TestExtensionOIDCollisionByInjectedDependency verifies that ExportDDLs correctly
