@@ -2323,6 +2323,10 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
+func (g *Generator) normalizeOptions() normalizeOptions {
+	return normalizeOptions{postgresDatePartIsExtractAlias: g.config.PostgresDatePartIsExtractAlias}
+}
+
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
 	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 		return true
@@ -2338,8 +2342,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode)
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode)
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, g.normalizeOptions())
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, g.normalizeOptions())
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2391,8 +2395,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
-		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup, g.normalizeOptions())
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup, g.normalizeOptions())
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
@@ -3137,7 +3141,7 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]string,
 		if desired.defaultValue == nil {
 			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP DEFAULT", domainName))
 		} else {
-			normalizedExpr := normalizeExpr(desired.defaultValue.expression, g.mode)
+			normalizedExpr := normalizeExpr(desired.defaultValue.expression, g.mode, normalizeOptions{})
 			exprStr := parser.String(normalizedExpr)
 			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET DEFAULT %s", domainName, exprStr))
 		}
@@ -6244,8 +6248,8 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	// Also strip any parentheses a user wrote around a default (e.g. DEFAULT ('foo'));
 	// normalizeExpr only unwraps those for some modes (see its ParenExpr case), but parentheses
 	// are pure syntax noise for equality regardless of dialect.
-	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode))
-	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode))
+	normalizedCurrent := unwrapLiteralCastAndParens(normalizeExpr(currentDefault.expression, g.mode, normalizeOptions{}))
+	normalizedDesired := unwrapLiteralCastAndParens(normalizeExpr(desiredDefault.expression, g.mode, normalizeOptions{}))
 	normalizedCurrent, normalizedDesired = stripElidableCasts(normalizedCurrent, normalizedDesired)
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
@@ -6876,7 +6880,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 }
 
 func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
-	normalized := normalizeExpr(expr, g.mode)
+	normalized := normalizeExpr(expr, g.mode, normalizeOptions{})
 
 	if !g.legacyIgnoreQuotes {
 		if g.mode == GeneratorModePostgres {
@@ -6908,8 +6912,8 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 		return false
 	}
 
-	normalizedA := normalizeExpr(a, g.mode)
-	normalizedB := normalizeExpr(b, g.mode)
+	normalizedA := normalizeExpr(a, g.mode, normalizeOptions{})
+	normalizedB := normalizeExpr(b, g.mode, normalizeOptions{})
 
 	if !g.legacyIgnoreQuotes {
 		return g.formatExprQuoteAware(normalizedA) == g.formatExprQuoteAware(normalizedB)
@@ -7023,8 +7027,8 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	if exprA == nil || exprB == nil {
 		return false
 	}
-	normalizedA := normalizeExpr(exprA, g.mode)
-	normalizedB := normalizeExpr(exprB, g.mode)
+	normalizedA := normalizeExpr(exprA, g.mode, normalizeOptions{})
+	normalizedB := normalizeExpr(exprB, g.mode, normalizeOptions{})
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
@@ -7240,7 +7244,7 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
-	normalizedExpr := normalizeExpr(expr, d.mode)
+	normalizedExpr := normalizeExpr(expr, d.mode, normalizeOptions{})
 	exprStr := parser.String(normalizedExpr)
 	if d.mode == GeneratorModeMysql || d.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error

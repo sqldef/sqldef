@@ -57,10 +57,32 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 		d.defaultOpclasses = map[string]bool{}
 	}
 	config.PostgresDefaultOperatorClasses = d.defaultOpclasses
+	config.PostgresDatePartIsExtractAlias = false
+	var serverVersionNum int
+	if err := d.db.QueryRow("SHOW server_version_num").Scan(&serverVersionNum); err != nil {
+		slog.Warn(
+			"Failed to get PostgreSQL server_version_num; EXTRACT and date_part are compared as different expressions",
+			"error", err,
+		)
+	} else {
+		config.PostgresDatePartIsExtractAlias = datePartIsExtractAlias(serverVersionNum)
+		slog.Debug(
+			"Determined whether date_part is an alias of EXTRACT",
+			"server_version_num", serverVersionNum,
+			"date_part_is_extract_alias", config.PostgresDatePartIsExtractAlias,
+		)
+	}
 	d.generatorConfig = config
 	// Sync TargetSchema to d.config for backward compatibility
 	// (other methods read from d.config.TargetSchema)
 	d.config.TargetSchema = config.TargetSchema
+}
+
+// PostgreSQL 14 changed EXTRACT to return numeric, while date_part still returns double precision.
+const extractReturnsNumericVersionNum = 140000
+
+func datePartIsExtractAlias(serverVersionNum int) bool {
+	return serverVersionNum < extractReturnsNumericVersionNum
 }
 
 // refreshDefaultOperatorClasses reloads the default operator class of every access method, keyed by
@@ -583,8 +605,6 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
-		// Normalize PostgreSQL-specific syntax for generic parser compatibility
-		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE VIEW %s.%s AS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), definition,
@@ -661,8 +681,6 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
-		// Normalize PostgreSQL-specific syntax for generic parser compatibility
-		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE MATERIALIZED VIEW %s.%s AS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), definition,
@@ -1239,33 +1257,6 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 		indexes = append(indexes, indexdef)
 	}
 	return indexes, nil
-}
-
-// normalizeDatePartToExtract converts PostgreSQL's date_part() function calls to EXTRACT() expressions
-// PostgreSQL stores EXTRACT(field FROM source) as date_part('field'::text, source) internally.
-// The generic parser handles EXTRACT natively but parses date_part as a generic function call,
-// so we need to convert it back to EXTRACT for idempotent schema comparisons.
-func normalizeDatePartToExtract(sql string) string {
-	// Match date_part('field'::text, ...) or date_part('field', ...)
-	// The field can be: year, month, day, hour, minute, second, epoch, dow, doy, week, quarter, etc.
-	// We need to handle nested function calls and complex expressions as the second argument
-
-	// Use a regex that captures the field name and finds the matching closing parenthesis
-	// Pattern: date_part('field'::text, source) or date_part('field', source)
-	re := regexp.MustCompile(`date_part\('([^']+)'(?:::text)?,\s*([^)]+)\)`)
-
-	// Replace with EXTRACT(field FROM source)
-	sql = re.ReplaceAllStringFunc(sql, func(match string) string {
-		submatches := re.FindStringSubmatch(match)
-		if len(submatches) == 3 {
-			field := submatches[1]
-			source := strings.TrimSpace(submatches[2])
-			return fmt.Sprintf("EXTRACT(%s FROM %s)", field, source)
-		}
-		return match
-	})
-
-	return sql
 }
 
 // normalizePostgresTypeCasts normalizes PostgreSQL's verbose type cast syntax for generic parser compatibility.

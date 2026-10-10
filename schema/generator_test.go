@@ -646,10 +646,11 @@ func TestSQLiteCheckConstraintModification(t *testing.T) {
 
 func TestNormalizeViewDefinition(t *testing.T) {
 	tests := []struct {
-		name     string
-		mode     GeneratorMode
-		input    string
-		expected string
+		name                           string
+		mode                           GeneratorMode
+		input                          string
+		postgresDatePartIsExtractAlias bool
+		expected                       string
 	}{
 		// PostgreSQL specific tests
 		{
@@ -718,6 +719,152 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
 			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
 		},
+		{
+			name:                           "PostgreSQL before 14: normalize unqualified date_part to EXTRACT",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select extract(year from created_at) as event_year from events`,
+		},
+		{
+			name:                           "PostgreSQL before 14: normalize pg_catalog.date_part to EXTRACT",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT pg_catalog.date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select extract(year from created_at) as event_year from events`,
+		},
+		{
+			name:                           "PostgreSQL before 14: normalize uppercase unquoted PG_CATALOG.date_part to EXTRACT",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT PG_CATALOG.date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select extract(year from created_at) as event_year from events`,
+		},
+		{
+			name:                           "PostgreSQL before 14: preserve other schema date_part",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT app.date_part('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select app.date_part('year', created_at) as event_year from events`,
+		},
+		{
+			name:     "PostgreSQL 14 and later: preserve date_part",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT date_part('year'::text, created_at) AS event_year FROM events`,
+			expected: `select date_part('year', created_at) as event_year from events`,
+		},
+		{
+			name:                           "PostgreSQL before 14: normalize date_part in window expressions",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT sum(amount) OVER (PARTITION BY date_part('month'::text, created_at) ORDER BY date_part('year'::text, created_at)) AS running_total, percentile_cont(0.5) WITHIN GROUP (ORDER BY date_part('epoch'::text, created_at)) AS median FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select sum(amount) over(partition by extract(month from created_at) order by extract(year from created_at) asc) as running_total, percentile_cont(0.5) within group( order by extract(epoch from created_at) asc) as median from events`,
+		},
+		{
+			name:     "PostgreSQL 14 and later: preserve date_part in window expressions",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT sum(amount) OVER (PARTITION BY (date_part('month'::text, created_at)) ORDER BY (date_part('year'::text, created_at))) AS running_total, percentile_cont(0.5) WITHIN GROUP (ORDER BY (date_part('epoch'::text, created_at))) AS median FROM events`,
+			expected: `select sum(amount) over(partition by date_part('month', created_at) order by date_part('year', created_at) asc) as running_total, percentile_cont(0.5) within group( order by date_part('epoch', created_at) asc) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: normalize parentheses in OVER",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT sum(amount) OVER (PARTITION BY (created_at) ORDER BY (amount)) AS running_total FROM events`,
+			expected: `select sum(amount) over(partition by created_at order by amount asc) as running_total from events`,
+		},
+		{
+			name:     "PostgreSQL: normalize parentheses in the EXTRACT source",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT EXTRACT(YEAR FROM (created_at)) AS event_year FROM events`,
+			expected: `select extract(year from created_at) as event_year from events`,
+		},
+		{
+			name:                           "PostgreSQL before 14: normalize date_part in OR and unary expressions",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT -date_part('epoch'::text, created_at) AS negative_epoch FROM events WHERE date_part('year'::text, created_at) = 2026 OR date_part('month'::text, created_at) = 8`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select -extract(epoch from created_at) as negative_epoch from events where extract(year from created_at) = 2026 or extract(month from created_at) = 8`,
+		},
+		{
+			name:                           "PostgreSQL before 14: normalize date_part in JOIN OR expressions",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT l.id FROM events l JOIN events r ON date_part('year'::text, CURRENT_TIMESTAMP) = 2026 OR date_part('month'::text, CURRENT_TIMESTAMP) = 8`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select id from events as l join events as r on extract(year from current_timestamp) = 2026 or extract(month from current_timestamp) = 8`,
+		},
+		{
+			name:     "PostgreSQL: ignore the coercion of a percentile_cont argument",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_cont(0.5::double precision) WITHIN GROUP (ORDER BY (amount::double precision)) AS median FROM events`,
+			expected: `select percentile_cont(0.5) within group( order by amount asc) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: keep an inner cast of a percentile_cont argument",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_cont(0.5::double precision) WITHIN GROUP (ORDER BY (amount::numeric(10,0)::double precision)) AS median FROM events`,
+			expected: `select percentile_cont(0.5) within group( order by amount::decimal(10, 0) asc) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: keep a cast of a percentile_disc argument",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY amount::double precision) AS median FROM events`,
+			expected: `select percentile_disc(0.5) within group( order by amount::double precision asc) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: ignore WITHIN GROUP with arithmetic inside a cast",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY ((amount::numeric + 0.5)::numeric(10,0)::double precision)) AS median FROM events`,
+			expected: `select percentile_cont(0.5) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: ignore WITHIN GROUP with function argument coercion",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY ceil(amount::numeric)) AS median FROM events`,
+			expected: `select percentile_disc(0.5) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: ignore WITHIN GROUP with arithmetic inside EXTRACT",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM created_at + INTERVAL '1 day')) AS median FROM events`,
+			expected: `select percentile_cont(0.5) as median from events`,
+		},
+		{
+			name:     "PostgreSQL 14 and later: compare date_part inside WITHIN GROUP",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY date_part('epoch'::text, created_at)) AS median FROM events`,
+			expected: `select percentile_cont(0.5) within group( order by date_part('epoch', created_at) asc) as median from events`,
+		},
+		{
+			name:     "SQL Server: compare arithmetic inside WITHIN GROUP",
+			mode:     GeneratorModeMssql,
+			input:    `SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY amount + 0.5) AS user_names FROM users`,
+			expected: `select string_agg(name, ',') within group( order by amount + 0.5 asc) as user_names from users`,
+		},
+		{
+			name:     "PostgreSQL: ignore WITHIN GROUP of a hypothetical-set aggregate",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT rank(5.5) WITHIN GROUP (ORDER BY (amount::numeric)) AS event_rank FROM events`,
+			expected: `select rank(5.5) as event_rank from events`,
+		},
+		{
+			name:     "PostgreSQL: ignore WITHIN GROUP of a user-defined aggregate",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT my_median(0.5::double precision) WITHIN GROUP (ORDER BY (amount::double precision)) AS median FROM events`,
+			expected: `select my_median(0.5) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: ignore WITHIN GROUP of a quoted aggregate name",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT "PERCENTILE_CONT"(0.5) WITHIN GROUP (ORDER BY (amount::double precision)) AS median FROM events`,
+			expected: `select percentile_cont(0.5) as median from events`,
+		},
+		{
+			name:                           "PostgreSQL before 14: preserve a quoted DATE_PART",
+			mode:                           GeneratorModePostgres,
+			input:                          `SELECT "DATE_PART"('year'::text, created_at) AS event_year FROM events`,
+			postgresDatePartIsExtractAlias: true,
+			expected:                       `select date_part('year', created_at) as event_year from events`,
+		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
 			name:     "MySQL: normalize table qualifiers in SELECT",
@@ -747,10 +894,170 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, parser.CreateView, ddl.Action)
 			assert.NotNil(t, ddl.View.Definition, "Definition should not be nil")
 
-			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil)
+			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil, normalizeOptions{postgresDatePartIsExtractAlias: tt.postgresDatePartIsExtractAlias})
 			actual := strings.ToLower(parser.String(normalized))
 
 			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
+func TestIsPostgresCatalogQualifier(t *testing.T) {
+	tests := []struct {
+		name      string
+		qualifier parser.Ident
+		expected  bool
+	}{
+		{name: "unqualified", qualifier: parser.Ident{}, expected: true},
+		{name: "lowercase unquoted", qualifier: parser.NewIdent("pg_catalog", false), expected: true},
+		{name: "uppercase unquoted", qualifier: parser.NewIdent("PG_CATALOG", false), expected: true},
+		{name: "lowercase quoted", qualifier: parser.NewIdent("pg_catalog", true), expected: true},
+		{name: "uppercase quoted", qualifier: parser.NewIdent("PG_CATALOG", true), expected: false},
+		{name: "other schema", qualifier: parser.NewIdent("app", false), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isPostgresCatalogQualifier(tt.qualifier))
+		})
+	}
+}
+
+func TestIsPostgresBuiltinFuncName(t *testing.T) {
+	tests := []struct {
+		name     string
+		funcName parser.Ident
+		expected bool
+	}{
+		{name: "lowercase unquoted", funcName: parser.NewIdent("date_part", false), expected: true},
+		{name: "uppercase unquoted", funcName: parser.NewIdent("DATE_PART", false), expected: true},
+		{name: "lowercase quoted", funcName: parser.NewIdent("date_part", true), expected: true},
+		{name: "uppercase quoted", funcName: parser.NewIdent("DATE_PART", true), expected: false},
+		{name: "other function", funcName: parser.NewIdent("date_trunc", false), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isPostgresBuiltinFuncName(tt.funcName, "date_part"))
+		})
+	}
+}
+
+func TestNormalizeWithinGroup(t *testing.T) {
+	orderBy := parser.OrderBy{
+		&parser.Order{Expr: &parser.ColName{Name: parser.NewIdent("amount", false)}, Direction: "asc"},
+	}
+
+	tests := []struct {
+		name      string
+		mode      GeneratorMode
+		qualifier parser.Ident
+		funcName  parser.Ident
+		compared  bool
+	}{
+		{name: "mode", mode: GeneratorModePostgres, funcName: parser.NewIdent("mode", false), compared: true},
+		{name: "pg_catalog qualified", mode: GeneratorModePostgres, qualifier: parser.NewIdent("pg_catalog", false), funcName: parser.NewIdent("percentile_disc", false), compared: true},
+		{name: "other schema", mode: GeneratorModePostgres, qualifier: parser.NewIdent("app", false), funcName: parser.NewIdent("percentile_cont", false), compared: false},
+		{name: "SQL Server", mode: GeneratorModeMssql, funcName: parser.NewIdent("STRING_AGG", false), compared: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalized := normalizeWithinGroup(tt.qualifier, tt.funcName, orderBy, tt.mode, normalizeOptions{})
+			if tt.compared {
+				assert.Equal(t, " order by amount asc", parser.String(normalized))
+			} else {
+				assert.Nil(t, normalized)
+			}
+		})
+	}
+}
+
+func TestExtractFromDatePartCallRejectsInvalidArguments(t *testing.T) {
+	source := &parser.AliasedExpr{
+		Expr: &parser.ColName{Name: parser.NewIdent("created_at", false)},
+	}
+	tests := []struct {
+		name  string
+		exprs parser.SelectExprs
+	}{
+		{
+			name:  "field is not an aliased expression",
+			exprs: parser.SelectExprs{&parser.StarExpr{}, source},
+		},
+		{
+			name: "field is not a string literal",
+			exprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+				source,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			extract, ok := extractFromDatePartCall(
+				GeneratorModePostgres,
+				parser.Ident{},
+				parser.NewIdent("date_part", false),
+				tt.exprs,
+			)
+			assert.False(t, ok)
+			assert.Nil(t, extract)
+		})
+	}
+}
+
+func TestGeneratePostgresViewIgnoresWithinGroupOfUserDefinedAggregate(t *testing.T) {
+	desired := `CREATE VIEW event_medians AS SELECT my_median(0.5) WITHIN GROUP (ORDER BY amount) AS median FROM events;`
+	current := `CREATE VIEW event_medians AS SELECT my_median(0.5::double precision) WITHIN GROUP (ORDER BY (amount::double precision)) AS median FROM events;`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModePostgres,
+		database.NewParser(parser.ParserModePostgres),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		"public",
+	)
+	require.NoError(t, err)
+	assert.Empty(t, ddls)
+}
+
+func TestGeneratePostgresViewExtractDatePartComparison(t *testing.T) {
+	extract := `CREATE VIEW event_years AS SELECT EXTRACT(year FROM created_at) AS event_year FROM events;`
+	datePart := `CREATE VIEW event_years AS SELECT date_part('year', created_at) AS event_year FROM events;`
+
+	for _, tt := range []struct {
+		name                   string
+		datePartIsExtractAlias bool
+		expected               []string
+	}{
+		{name: "equivalent before PostgreSQL 14", datePartIsExtractAlias: true, expected: []string{}},
+		{
+			name:                   "different from PostgreSQL 14",
+			datePartIsExtractAlias: false,
+			expected: []string{
+				"DROP VIEW public.event_years",
+				"CREATE VIEW public.event_years AS select date_part('year', created_at) as event_year from events",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				datePart,
+				extract,
+				database.GeneratorConfig{
+					EnableDrop:                     true,
+					LegacyIgnoreQuotes:             false,
+					PostgresDatePartIsExtractAlias: tt.datePartIsExtractAlias,
+				},
+				"public",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
 		})
 	}
 }
@@ -776,7 +1083,7 @@ func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T
 	tableLookup := func(QualifiedName) *Table { return nil }
 
 	normalize := func(definition parser.SelectStatement) string {
-		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
+		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup, normalizeOptions{})
 		return stripTableQualifiers(strings.ToLower(parser.String(normalized)))
 	}
 
@@ -805,7 +1112,7 @@ func TestNormalizeViewDefinitionExpandsStarFromTable(t *testing.T) {
 	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, func(name QualifiedName) *Table {
 		assert.Equal(t, "users", name.Name.Name)
 		return table
-	})
+	}, normalizeOptions{})
 
 	assert.Equal(t, "select first, second, 3 as marker from users", parser.String(normalized))
 }
@@ -817,17 +1124,19 @@ func TestNormalizeTableExprParentheses(t *testing.T) {
 		}
 	}
 
-	assert.Nil(t, normalizeTableExpr(nil, GeneratorModePostgres, nil))
+	assert.Nil(t, normalizeTableExpr(nil, GeneratorModePostgres, nil, normalizeOptions{}))
 	assert.Equal(t, tableExpr("a"), normalizeTableExpr(
 		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a")}},
 		GeneratorModePostgres,
 		nil,
+		normalizeOptions{},
 	))
 
 	normalized := normalizeTableExpr(
 		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a"), tableExpr("b")}},
 		GeneratorModeSQLite3,
 		nil,
+		normalizeOptions{},
 	)
 	paren, ok := normalized.(*parser.ParenTableExpr)
 	assert.True(t, ok)
@@ -967,7 +1276,7 @@ func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {
 		},
 	}
 
-	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, nil)
+	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, nil, normalizeOptions{})
 
 	assert.Equal(t, "select * from (select 1 as id) as s(a, b)", parser.String(normalized))
 }

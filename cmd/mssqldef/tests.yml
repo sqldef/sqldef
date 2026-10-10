@@ -305,6 +305,40 @@ ViewWithUuidColumn:
       uuid varchar(36) NOT NULL
     );
     CREATE VIEW user_uuids AS SELECT id, uuid FROM users WHERE uuid IS NOT NULL;
+ViewWithStringAggWithinGroupIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id int NOT NULL,
+      name nvarchar(100) NOT NULL
+    );
+    CREATE VIEW user_name_list AS
+      SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name) AS user_names
+      FROM users;
+ViewWithStringAggWithinGroupOrderChangeIsDetected:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int NOT NULL,
+      name nvarchar(100) NOT NULL
+    );
+    CREATE VIEW user_name_list AS
+      SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name) AS user_names
+      FROM users;
+  desired: |
+    CREATE TABLE users (
+      id int NOT NULL,
+      name nvarchar(100) NOT NULL
+    );
+    CREATE VIEW user_name_list AS
+      SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) AS user_names
+      FROM users;
+  up: |
+    DROP VIEW dbo.user_name_list;
+    CREATE VIEW dbo.user_name_list AS select STRING_AGG(name, ',') within group( order by name desc) as user_names from users;
+  down: |
+    DROP VIEW dbo.user_name_list;
+    CREATE VIEW dbo.user_name_list AS select STRING_AGG(name, ',') within group( order by name asc) as user_names from users;
 PercentConstraintName:
   current: |
     CREATE TABLE [dbo].[percent_test] (

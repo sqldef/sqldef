@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,6 +47,45 @@ func TestUnixSocketConnection(t *testing.T) {
 	if strings.Contains(err.Error(), "connection refused") {
 		t.Errorf("expected socket to be used, got: %v", err)
 	}
+}
+
+func TestSetGeneratorConfigDisablesDatePartIsExtractAliasOnVersionQueryError(t *testing.T) {
+	sock := testutil.StartDummyUnixSocket(t, "postgres-config-test", ".s.PGSQL.5432")
+	defer sock.Close()
+
+	db, err := NewDatabase(database.Config{Socket: sock.Dir, Port: 5432})
+	require.NoError(t, err)
+	defer db.Close()
+
+	db.SetGeneratorConfig(database.GeneratorConfig{PostgresDatePartIsExtractAlias: true})
+	assert.False(t, db.GetGeneratorConfig().PostgresDatePartIsExtractAlias)
+}
+
+func TestDatePartIsExtractAlias(t *testing.T) {
+	assert.True(t, datePartIsExtractAlias(139999))
+	assert.False(t, datePartIsExtractAlias(140000))
+}
+
+func TestExportMaterializedViewPreservesDatePart(t *testing.T) {
+	db := setupTestDatabase(t)
+	defer db.Close()
+
+	_, err := db.DB().Exec(`
+		CREATE TABLE events (created_at timestamp);
+		CREATE MATERIALIZED VIEW event_years AS
+		SELECT date_part('year', created_at) AS event_year FROM events;
+	`)
+	require.NoError(t, err)
+
+	db.SetGeneratorConfig(database.GeneratorConfig{LegacyIgnoreQuotes: false})
+	ddls, err := db.materializedViews()
+	require.NoError(t, err)
+	i := slices.IndexFunc(ddls, func(ddl string) bool {
+		return strings.Contains(ddl, "public.event_years AS")
+	})
+	require.NotEqual(t, -1, i)
+	assert.Contains(t, ddls[i], "date_part(")
+	assert.NotContains(t, ddls[i], "EXTRACT(")
 }
 
 // TestExtensionOIDCollisionByInjectedDependency verifies that ExportDDLs correctly

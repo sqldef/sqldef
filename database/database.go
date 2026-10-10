@@ -87,6 +87,13 @@ type GeneratorConfig struct {
 	// Every copy of the config shares one map that ExportDDLs() refills, so read it only after
 	// exporting: the schema being applied may install an extension that registers operator classes.
 	PostgresDefaultOperatorClasses map[string]bool
+
+	// PostgreSQL-specific: whether date_part and EXTRACT return the same type and can be
+	// compared as equivalent expressions. This is true before PostgreSQL 14.
+	// Derived from server_version_num, so PostgreSQL-compatible servers are judged by
+	// PostgreSQL's version numbering and semantics.
+	// False in offline mode and when the server version cannot be determined.
+	PostgresDatePartIsExtractAlias bool
 }
 
 type ManageObjectRule struct {

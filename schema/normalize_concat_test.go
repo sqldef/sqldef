@@ -59,7 +59,7 @@ func TestNormalizeCheckExprConcatLowercasesNestedFunctionName(t *testing.T) {
 func TestNormalizeExprConcatLowercasesNestedFunctionName(t *testing.T) {
 	expr := extractFirstColumnDefaultExpr(t, `CREATE TABLE t (s text NOT NULL DEFAULT ('A' || UPPER('b')))`)
 
-	normalized := normalizeExpr(expr, GeneratorModePostgres)
+	normalized := normalizeExpr(expr, GeneratorModePostgres, normalizeOptions{})
 
 	got := parser.String(normalized)
 	if !strings.Contains(got, "upper(") {
@@ -73,7 +73,7 @@ func TestNormalizeExprConcatLowercasesNestedFunctionName(t *testing.T) {
 func TestNormalizeExprPreservingQualifiersConcatRecurses(t *testing.T) {
 	expr := extractFirstColumnDefaultExpr(t, `CREATE TABLE t (s text NOT NULL DEFAULT ('A' || UPPER('b')))`)
 
-	normalized := normalizeExprPreservingQualifiers(expr, GeneratorModePostgres)
+	normalized := normalizeExprPreservingQualifiers(expr, GeneratorModePostgres, normalizeOptions{})
 
 	got := parser.String(normalized)
 	if !strings.Contains(got, "upper(") {
