@@ -761,6 +761,24 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			expected:                       `select sum(amount) over(partition by extract(month from created_at) order by extract(year from created_at) asc) as running_total, percentile_cont(0.5) within group( order by extract(epoch from created_at) asc) as median from events`,
 		},
 		{
+			name:     "PostgreSQL 14 and later: preserve date_part in window expressions",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT sum(amount) OVER (PARTITION BY (date_part('month'::text, created_at)) ORDER BY (date_part('year'::text, created_at))) AS running_total, percentile_cont(0.5) WITHIN GROUP (ORDER BY (date_part('epoch'::text, created_at))) AS median FROM events`,
+			expected: `select sum(amount) over(partition by date_part('month', created_at) order by date_part('year', created_at) asc) as running_total, percentile_cont(0.5) within group( order by date_part('epoch', created_at) asc) as median from events`,
+		},
+		{
+			name:     "PostgreSQL: normalize parentheses in OVER",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT sum(amount) OVER (PARTITION BY (created_at) ORDER BY (amount)) AS running_total FROM events`,
+			expected: `select sum(amount) over(partition by created_at order by amount asc) as running_total from events`,
+		},
+		{
+			name:     "PostgreSQL: normalize parentheses in the EXTRACT source",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT EXTRACT(YEAR FROM (created_at)) AS event_year FROM events`,
+			expected: `select extract(year from created_at) as event_year from events`,
+		},
+		{
 			name:                           "PostgreSQL before 14: normalize date_part in OR and unary expressions",
 			mode:                           GeneratorModePostgres,
 			input:                          `SELECT -date_part('epoch'::text, created_at) AS negative_epoch FROM events WHERE date_part('year'::text, created_at) = 2026 OR date_part('month'::text, created_at) = 8`,
