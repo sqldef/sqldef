@@ -684,6 +684,30 @@ ViewWithExtractInWindowAndWithinGroupIsIdempotent:
 #  down: |
 #    DROP VIEW public.event_medians;
 #    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by amount + 0.5 asc) as median from events;
+ViewWithinGroupOrderByChangeIsDetected:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      amount double precision,
+      weight double precision
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount) AS median
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      amount double precision,
+      weight double precision
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY weight) AS median
+      FROM events;
+  up: |
+    DROP VIEW public.event_medians;
+    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by weight asc) as median from events;
+  down: |
+    DROP VIEW public.event_medians;
+    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by amount asc) as median from events;
 ViewWithPercentileContInnerCastChangeIsDetected:
   legacy_ignore_quotes: false
   current: |
