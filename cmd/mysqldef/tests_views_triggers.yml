@@ -723,3 +723,33 @@ ViewWithCastAsChar:
       num int
     );
     CREATE VIEW user_num_texts AS SELECT CAST(num AS CHAR) AS num_text FROM users;
+ViewWithExtractIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id int NOT NULL PRIMARY KEY,
+      created_at datetime
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(YEAR FROM created_at) AS event_year
+      FROM events;
+ViewExtractSourceParenthesesAreEquivalent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id int NOT NULL PRIMARY KEY,
+      created_at datetime
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(YEAR FROM created_at) AS event_year
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      id int NOT NULL PRIMARY KEY,
+      created_at datetime
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(YEAR FROM (created_at)) AS event_year
+      FROM events;
+  up: ""
+  down: ""

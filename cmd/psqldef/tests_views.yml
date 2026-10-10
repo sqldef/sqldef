@@ -660,6 +660,44 @@ ViewWithExtractInWindowAndWithinGroupIsIdempotent:
     CREATE VIEW event_medians AS
       SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM created_at)) AS median
       FROM events;
+ViewWindowPartitionParenthesesAreEquivalent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      created_at timestamp,
+      amount int
+    );
+    CREATE VIEW event_totals AS
+      SELECT sum(amount) OVER (PARTITION BY created_at) AS running_total
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp,
+      amount int
+    );
+    CREATE VIEW event_totals AS
+      SELECT sum(amount) OVER (PARTITION BY (created_at)) AS running_total
+      FROM events;
+  up: ""
+  down: ""
+ViewExtractSourceParenthesesAreEquivalent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(year FROM created_at) AS event_year
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_years AS
+      SELECT EXTRACT(year FROM (created_at)) AS event_year
+      FROM events;
+  up: ""
+  down: ""
 # FIXME: Comparing arithmetic WITHIN GROUP arguments needs type-aware cast normalization.
 # Keep master's behavior for these expressions until implicit casts can be distinguished from explicit casts.
 #ViewWithPercentileContArithmeticChangeIsDetected:
