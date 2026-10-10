@@ -651,8 +651,8 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
 }
 
-func extractFromDatePartCall(mode GeneratorMode, qualifier parser.Ident, funcName string, exprs parser.SelectExprs) (*parser.ExtractExpr, bool) {
-	if mode != GeneratorModePostgres || funcName != "date_part" || len(exprs) != 2 {
+func extractFromDatePartCall(mode GeneratorMode, qualifier parser.Ident, name parser.Ident, exprs parser.SelectExprs) (*parser.ExtractExpr, bool) {
+	if mode != GeneratorModePostgres || !isPostgresBuiltinFuncName(name, "date_part") || len(exprs) != 2 {
 		return nil, false
 	}
 	if !isPostgresCatalogQualifier(qualifier) {
@@ -678,6 +678,16 @@ func isPostgresCatalogQualifier(qualifier parser.Ident) bool {
 		return qualifier.Name == "pg_catalog"
 	}
 	return strings.EqualFold(qualifier.Name, "pg_catalog")
+}
+
+// isPostgresBuiltinFuncName reports whether name spells the built-in function builtin.
+// A quoted name is case-sensitive, so "DATE_PART" names a different function from date_part.
+// This only looks at the name: an unqualified name can still resolve to a user-defined function.
+func isPostgresBuiltinFuncName(name parser.Ident, builtin string) bool {
+	if name.Quoted {
+		return name.Name == builtin
+	}
+	return strings.EqualFold(name.Name, builtin)
 }
 
 // stripFuncResultTextCasts removes text/character varying casts applied to
@@ -842,7 +852,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode, opts normalizeOptions) 
 			return atz
 		}
 		if opts.postgresDatePartIsExtractAlias {
-			if extract, ok := extractFromDatePartCall(mode, e.Qualifier, funcName, normalizedExprs); ok {
+			if extract, ok := extractFromDatePartCall(mode, e.Qualifier, e.Name, normalizedExprs); ok {
 				return extract
 			}
 		}
@@ -857,7 +867,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode, opts normalizeOptions) 
 			Name:        normalizedName,
 			Distinct:    e.Distinct,
 			Exprs:       normalizedExprs,
-			WithinGroup: normalizeOrderBy(e.WithinGroup, mode, opts),
+			WithinGroup: normalizeWithinGroup(e.Qualifier, e.Name, e.WithinGroup, mode, opts),
 			Over:        normalizeOver(e.Over, mode, opts),
 		}
 	case *parser.ExtractExpr:
@@ -1413,6 +1423,54 @@ func normalizeOver(over *parser.OverExpr, mode GeneratorMode, opts normalizeOpti
 	return &parser.OverExpr{
 		PartitionBy: partitionBy,
 		OrderBy:     normalizeOrderBy(over.OrderBy, mode, opts),
+	}
+}
+
+// PostgreSQL renders implicit casts in pg_get_viewdef(). Keep master's omission of WITHIN GROUP
+// unless both the aggregate and the argument expression have supported cast normalization.
+func normalizeWithinGroup(qualifier parser.Ident, name parser.Ident, orderBy parser.OrderBy, mode GeneratorMode, opts normalizeOptions) parser.OrderBy {
+	if mode != GeneratorModePostgres {
+		return normalizeOrderBy(orderBy, mode, opts)
+	}
+	if !isPostgresCatalogQualifier(qualifier) {
+		return nil
+	}
+	isPercentileCont := isPostgresBuiltinFuncName(name, "percentile_cont")
+	if !isPercentileCont && !isPostgresBuiltinFuncName(name, "percentile_disc") && !isPostgresBuiltinFuncName(name, "mode") {
+		return nil
+	}
+	normalized := normalizeOrderBy(orderBy, mode, opts)
+	for _, order := range normalized {
+		if !isComparableWithinGroupExpr(order.Expr) {
+			return nil
+		}
+		if isPercentileCont {
+			// A numeric argument is coerced to double precision. Only that outermost cast is dropped:
+			// an inner cast such as ::numeric(10, 0) changes the result.
+			if cast, ok := order.Expr.(*parser.CastExpr); ok && cast.Type != nil && strings.EqualFold(cast.Type.Type, "double precision") {
+				order.Expr = cast.Expr
+			}
+		}
+	}
+	return normalized
+}
+
+// Even polymorphic aggregates can contain implicit casts inside their arguments:
+// amount + 0.5 reads back as amount::numeric + 0.5 for an integer column.
+// Comparing such expressions needs type information to distinguish implicit and explicit casts.
+func isComparableWithinGroupExpr(expr parser.Expr) bool {
+	switch e := expr.(type) {
+	case *parser.ColName, *parser.SQLVal, *parser.NullVal:
+		return true
+	case *parser.CastExpr:
+		return isComparableWithinGroupExpr(e.Expr)
+	case *parser.ExtractExpr:
+		return isComparableWithinGroupExpr(e.Source)
+	case *parser.FuncExpr:
+		extract, ok := extractFromDatePartCall(GeneratorModePostgres, e.Qualifier, e.Name, e.Exprs)
+		return ok && isComparableWithinGroupExpr(extract.Source)
+	default:
+		return false
 	}
 }
 

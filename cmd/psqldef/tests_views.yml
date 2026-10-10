@@ -606,6 +606,134 @@ ViewColumnAdditionWithExtractUsesReplace:
   down: |
     DROP VIEW public.event_years;
     CREATE VIEW public.event_years AS select EXTRACT(year FROM created_at) as event_year from events;
+ViewWithOrderedSetAggregateOverIntColumnIsIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      amount int
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount) AS median
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      amount int
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount) AS median
+      FROM events;
+  up: ""
+  down: ""
+ViewWithPercentileContOverNumericColumnIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      amount numeric
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount) AS median
+      FROM events;
+ViewWithOrderedSetAggregatesOverArithmeticExpressionsIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      amount int
+    );
+    CREATE VIEW event_medians AS
+      SELECT
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY amount + 0.5) AS continuous_median,
+        percentile_disc(0.5) WITHIN GROUP (ORDER BY amount + 0.5) AS discrete_median,
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY CAST(amount + 0.5 AS numeric(10, 0))) AS rounded_median
+      FROM events;
+ViewWithPercentileContOverExtractIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM created_at)) AS median
+      FROM events;
+# FIXME: Comparing arithmetic WITHIN GROUP arguments needs type-aware cast normalization.
+# Keep master's behavior for these expressions until implicit casts can be distinguished from explicit casts.
+#ViewWithPercentileContArithmeticChangeIsDetected:
+#  legacy_ignore_quotes: false
+#  current: |
+#    CREATE TABLE events (
+#      amount int
+#    );
+#    CREATE VIEW event_medians AS
+#      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount + 0.5) AS median
+#      FROM events;
+#  desired: |
+#    CREATE TABLE events (
+#      amount int
+#    );
+#    CREATE VIEW event_medians AS
+#      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount + 1.5) AS median
+#      FROM events;
+#  up: |
+#    DROP VIEW public.event_medians;
+#    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by amount + 1.5 asc) as median from events;
+#  down: |
+#    DROP VIEW public.event_medians;
+#    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by amount + 0.5 asc) as median from events;
+ViewWithPercentileContInnerCastChangeIsDetected:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      amount numeric
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount) AS median
+      FROM events;
+  desired: |
+    CREATE TABLE events (
+      amount numeric
+    );
+    CREATE VIEW event_medians AS
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY amount::numeric(10, 0)) AS median
+      FROM events;
+  up: |
+    DROP VIEW public.event_medians;
+    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by amount::numeric(10, 0) asc) as median from events;
+  down: |
+    DROP VIEW public.event_medians;
+    CREATE VIEW public.event_medians AS select percentile_cont(0.5) within group( order by amount asc) as median from events;
+ViewWithHypotheticalSetAggregateOverMixedTypesIsIdempotent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      amount int
+    );
+    CREATE VIEW event_ranks AS
+      SELECT rank(5.5) WITHIN GROUP (ORDER BY amount) AS event_rank
+      FROM events;
+# FIXME: WITHIN GROUP of hypothetical-set aggregates such as rank is not compared. PostgreSQL coerces the
+# direct and aggregated arguments to a common type, and telling that coercion from a meaningful cast needs
+# their types, so a change of an explicit cast is missed: here ::double precision changes the rank.
+#ViewWithHypotheticalSetAggregateCastChangeIsDetected:
+#  legacy_ignore_quotes: false
+#  current: |
+#    CREATE TABLE events (
+#      amount numeric
+#    );
+#    CREATE VIEW event_ranks AS
+#      SELECT rank(1) WITHIN GROUP (ORDER BY amount) AS event_rank
+#      FROM events;
+#  desired: |
+#    CREATE TABLE events (
+#      amount numeric
+#    );
+#    CREATE VIEW event_ranks AS
+#      SELECT rank(1) WITHIN GROUP (ORDER BY amount::double precision) AS event_rank
+#      FROM events;
+#  up: |
+#    DROP VIEW public.event_ranks;
+#    CREATE VIEW public.event_ranks AS select rank(1) within group( order by amount::double precision asc) as event_rank from events;
+#  down: |
+#    DROP VIEW public.event_ranks;
+#    CREATE VIEW public.event_ranks AS select rank(1) within group( order by amount asc) as event_rank from events;
 ExtractInMaterializedView:
   desired: |
     CREATE TABLE events (
