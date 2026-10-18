@@ -79,6 +79,36 @@ ViewWithUuidColumn:
       uuid text NOT NULL
     );
     CREATE VIEW user_uuids AS select id, uuid from users where uuid is not null;
+DatetimeFunctionInDefaultAndView:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id integer NOT NULL PRIMARY KEY,
+      created_at text NOT NULL DEFAULT (datetime('now')),
+      updated_at text DEFAULT (datetime())
+    );
+    CREATE VIEW due_events AS select id, datetime(created_at, '+1 day') as due_at from events;
+DatetimeFunctionInTrigger:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id integer NOT NULL PRIMARY KEY,
+      updated_at text
+    );
+  desired: |
+    CREATE TABLE events (
+      id integer NOT NULL PRIMARY KEY,
+      updated_at text
+    );
+    CREATE TRIGGER events_touch AFTER UPDATE ON events FOR EACH ROW BEGIN
+      UPDATE events SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+  up: |
+    CREATE TRIGGER events_touch AFTER UPDATE ON events FOR EACH ROW BEGIN
+      UPDATE events SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+  down: |
+    DROP TRIGGER events_touch;
 DropAndCreateView:
   current: |
     CREATE TABLE users (
