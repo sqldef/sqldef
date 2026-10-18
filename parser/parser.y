@@ -3868,6 +3868,13 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
+// SQLite3, MySQL and PostgreSQL also accept COLLATE after other column constraints,
+// e.g. "name text NOT NULL COLLATE NOCASE"
+| column_definition_type COLLATE ID
+  {
+    $1.Collate = $3.Name
+    $$ = $1
+  }
 | column_definition_type default_definition
   {
     $1.Default = &DefaultDefinition{Expression: $2}
