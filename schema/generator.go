@@ -2627,7 +2627,17 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 				deferrableClause = strings.TrimPrefix(g.generateConstraintOptions(desiredTrigger.constraintOptions), " ") + " "
 			}
 		}
-		triggerDefinition += fmt.Sprintf("%s %s %s %s ON %s %sFOR EACH %s %s%s", triggerKeyword, g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), deferrableClause, normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
+		referencingClause := ""
+		if !desiredTrigger.oldTable.IsEmpty() {
+			referencingClause += " OLD TABLE AS " + g.escapeSQLIdent(desiredTrigger.oldTable)
+		}
+		if !desiredTrigger.newTable.IsEmpty() {
+			referencingClause += " NEW TABLE AS " + g.escapeSQLIdent(desiredTrigger.newTable)
+		}
+		if referencingClause != "" {
+			referencingClause = "REFERENCING" + referencingClause + " "
+		}
+		triggerDefinition += fmt.Sprintf("%s %s %s %s ON %s %s%sFOR EACH %s %s%s", triggerKeyword, g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), deferrableClause, referencingClause, normalizeTriggerForEach(desiredTrigger.forEach), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -6439,6 +6449,9 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		return false
 	}
 	if normalizeTriggerForEach(triggerA.forEach) != normalizeTriggerForEach(triggerB.forEach) {
+		return false
+	}
+	if !g.identsEqual(triggerA.oldTable, triggerB.oldTable) || !g.identsEqual(triggerA.newTable, triggerB.newTable) {
 		return false
 	}
 	if !areSameEvents(triggerA.event, triggerB.event) {

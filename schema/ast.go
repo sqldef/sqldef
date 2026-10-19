@@ -430,6 +430,8 @@ type Trigger struct {
 	tableName         QualifiedName
 	time              string
 	event             []TriggerEvent
+	oldTable          Ident  // REFERENCING OLD TABLE name; empty if not declared
+	newTable          Ident  // REFERENCING NEW TABLE name; empty if not declared
 	forEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
 	whenCondition     string
 	body              []string

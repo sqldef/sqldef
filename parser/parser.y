@@ -141,6 +141,7 @@ func setDDL(yylex any, ddl *DDL) {
   tablePartition           *TablePartition
   triggerEvent             TriggerEvent
   triggerEvents            []TriggerEvent
+  transitionTables         TriggerTransitionTables
   distinctClause           *DistinctClause
 }
 
@@ -310,7 +311,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> DATABASES TABLES VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
 
 // SET tokens
-%token <str> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
+%token <str> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW REFERENCING
 
 // SET option tokens
 %token <str> CONCAT_NULL_YIELDS_NULL CURSOR_CLOSE_ON_COMMIT QUOTED_IDENTIFIER ARITHABORT FMTONLY NOCOUNT NOEXEC
@@ -519,6 +520,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> with_data_opt
 %type <constraintOpts> deferrable_option
 %type <constraintOpts> trigger_deferrable_opt
+%type <transitionTables> trigger_referencing
+%type <str> trigger_for_each_opt trigger_exec_keyword
+%type <empty> trigger_old_kw
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
@@ -1464,6 +1468,29 @@ create_statement:
             Keyword: "PROCEDURE",
             FuncName: $17,
             Args: SelectExprsToExprs($19),
+          },
+        },
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... REFERENCING { OLD | NEW } TABLE [AS] name ... [FOR EACH { ROW | STATEMENT }] [WHEN (...)] EXECUTE FUNCTION/PROCEDURE */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name trigger_referencing trigger_for_each_opt when_expression_opt EXECUTE trigger_exec_keyword object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        TransitionTables: $8,
+        ForEach: $9,
+        When: $10,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: $12,
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
           },
         },
       },
@@ -3090,6 +3117,58 @@ trigger_time:
 | INSTEAD OF
   {
     $$ = $1 + " " + $2
+  }
+
+trigger_referencing:
+  REFERENCING trigger_old_kw TABLE as_opt table_id
+  {
+    $$ = TriggerTransitionTables{Old: $5}
+  }
+| REFERENCING NEW TABLE as_opt table_id
+  {
+    $$ = TriggerTransitionTables{New: $5}
+  }
+| REFERENCING trigger_old_kw TABLE as_opt table_id NEW TABLE as_opt table_id
+  {
+    $$ = TriggerTransitionTables{Old: $5, New: $9}
+  }
+| REFERENCING NEW TABLE as_opt table_id trigger_old_kw TABLE as_opt table_id
+  {
+    $$ = TriggerTransitionTables{Old: $9, New: $5}
+  }
+
+// OLD is matched as an identifier instead of a keyword token so that the
+// OLD.column references in WHEN conditions and function bodies keep parsing as before.
+trigger_old_kw:
+  ID
+  {
+    if $1.Quoted || !strings.EqualFold($1.Name, "old") {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", $1.Name))
+    }
+    $$ = struct{}{}
+  }
+
+trigger_for_each_opt:
+  {
+    $$ = ""
+  }
+| FOR EACH ROW
+  {
+    $$ = "ROW"
+  }
+| FOR EACH STATEMENT
+  {
+    $$ = "STATEMENT"
+  }
+
+trigger_exec_keyword:
+  FUNCTION
+  {
+    $$ = "FUNCTION"
+  }
+| PROCEDURE
+  {
+    $$ = "PROCEDURE"
   }
 
 trigger_event:
@@ -8653,6 +8732,7 @@ non_reserved_keyword:
 | TYPE
 | STATEMENT
 | STATUS
+| REFERENCING
 | UNSAFE
 | VARIABLES
 | WITHOUT
