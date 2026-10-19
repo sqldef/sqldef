@@ -311,7 +311,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> DATABASES TABLES VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
 
 // SET tokens
-%token <str> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW REFERENCING
+%token <str> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
 
 // SET option tokens
 %token <str> CONCAT_NULL_YIELDS_NULL CURSOR_CLOSE_ON_COMMIT QUOTED_IDENTIFIER ARITHABORT FMTONLY NOCOUNT NOEXEC
@@ -522,7 +522,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <constraintOpts> trigger_deferrable_opt
 %type <transitionTables> trigger_referencing
 %type <str> trigger_for_each_opt trigger_exec_keyword
-%type <empty> trigger_old_kw
+%type <empty> trigger_old_kw trigger_referencing_kw
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
@@ -3120,21 +3120,33 @@ trigger_time:
   }
 
 trigger_referencing:
-  REFERENCING trigger_old_kw TABLE as_opt table_id
+  trigger_referencing_kw trigger_old_kw TABLE as_opt table_id
   {
     $$ = TriggerTransitionTables{Old: $5}
   }
-| REFERENCING NEW TABLE as_opt table_id
+| trigger_referencing_kw NEW TABLE as_opt table_id
   {
     $$ = TriggerTransitionTables{New: $5}
   }
-| REFERENCING trigger_old_kw TABLE as_opt table_id NEW TABLE as_opt table_id
+| trigger_referencing_kw trigger_old_kw TABLE as_opt table_id NEW TABLE as_opt table_id
   {
     $$ = TriggerTransitionTables{Old: $5, New: $9}
   }
-| REFERENCING NEW TABLE as_opt table_id trigger_old_kw TABLE as_opt table_id
+| trigger_referencing_kw NEW TABLE as_opt table_id trigger_old_kw TABLE as_opt table_id
   {
     $$ = TriggerTransitionTables{Old: $9, New: $5}
+  }
+
+// REFERENCING is matched as an identifier instead of a keyword token because keyword
+// tokens are case-folded, which would change the name of a table or column named
+// REFERENCING in other dialects (e.g. MySQL with lower_case_table_names=0).
+trigger_referencing_kw:
+  ID
+  {
+    if $1.Quoted || !strings.EqualFold($1.Name, "referencing") {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", $1.Name))
+    }
+    $$ = struct{}{}
   }
 
 // OLD is matched as an identifier instead of a keyword token so that the
@@ -8732,7 +8744,6 @@ non_reserved_keyword:
 | TYPE
 | STATEMENT
 | STATUS
-| REFERENCING
 | UNSAFE
 | VARIABLES
 | WITHOUT

@@ -133,3 +133,17 @@ func TestReferencingAndOldAsUnquotedIdentifiers(t *testing.T) {
 		})
 	}
 }
+
+func TestReferencingKeepsCaseAsIdentifier(t *testing.T) {
+	stmt, err := ParseDDL("CREATE TABLE REFERENCING (REFERENCING int)", ParserModeMysql)
+	if err != nil {
+		t.Fatalf("ParseDDL failed: %v", err)
+	}
+	ddl := stmt.(*DDL)
+	if got := ddl.NewName.Name.Name; got != "REFERENCING" {
+		t.Errorf("table name = %q, want %q", got, "REFERENCING")
+	}
+	if got := ddl.TableSpec.Columns[0].Name.Name; got != "REFERENCING" {
+		t.Errorf("column name = %q, want %q", got, "REFERENCING")
+	}
+}

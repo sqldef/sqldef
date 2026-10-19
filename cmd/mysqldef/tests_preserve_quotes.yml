@@ -133,3 +133,11 @@ CheckConstraintNameCaseInsensitive:
       CONSTRAINT chk_quantity CHECK (quantity > 0)
     );
   # No output - constraint names match case-insensitively
+# REFERENCING is a keyword only in PostgreSQL's CREATE TRIGGER, so its case must be kept
+# as a MySQL table name (REFERENCING and referencing are different tables here).
+UnquotedReferencingTableNameKeepsCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE REFERENCING (id int PRIMARY KEY);
+  desired: |
+    CREATE TABLE REFERENCING (id int PRIMARY KEY);

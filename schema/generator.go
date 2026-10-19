@@ -2600,6 +2600,21 @@ func (g *Generator) formatTriggerEvents(events []TriggerEvent, sep string) strin
 	return strings.Join(parts, sep)
 }
 
+// Transition table names are referenced by name from the trigger function body, which
+// sqldef passes through verbatim. legacy_ignore_quotes would quote an unquoted New_Rows
+// as "New_Rows" and compare names case-insensitively, so the function's FROM new_rows
+// would no longer resolve and a change from "rows" to "Rows" would go undetected.
+// They always follow PostgreSQL's identifier rules instead.
+var transitionTableDialect = dialect{mode: GeneratorModePostgres, legacyIgnoreQuotes: false}
+
+func escapeTransitionTableName(name Ident) string {
+	return transitionTableDialect.escapeSQLIdent(name)
+}
+
+func transitionTableNamesEqual(a, b Ident) bool {
+	return identsEqual(a, b, GeneratorModePostgres, false)
+}
+
 func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
 	var ddls []string
 	currentTrigger := g.findTriggerByName(g.currentTriggers, triggerName)
@@ -2629,10 +2644,10 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		}
 		referencingClause := ""
 		if !desiredTrigger.oldTable.IsEmpty() {
-			referencingClause += " OLD TABLE AS " + g.escapeSQLIdent(desiredTrigger.oldTable)
+			referencingClause += " OLD TABLE AS " + escapeTransitionTableName(desiredTrigger.oldTable)
 		}
 		if !desiredTrigger.newTable.IsEmpty() {
-			referencingClause += " NEW TABLE AS " + g.escapeSQLIdent(desiredTrigger.newTable)
+			referencingClause += " NEW TABLE AS " + escapeTransitionTableName(desiredTrigger.newTable)
 		}
 		if referencingClause != "" {
 			referencingClause = "REFERENCING" + referencingClause + " "
@@ -6451,7 +6466,7 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if normalizeTriggerForEach(triggerA.forEach) != normalizeTriggerForEach(triggerB.forEach) {
 		return false
 	}
-	if !g.identsEqual(triggerA.oldTable, triggerB.oldTable) || !g.identsEqual(triggerA.newTable, triggerB.newTable) {
+	if !transitionTableNamesEqual(triggerA.oldTable, triggerB.oldTable) || !transitionTableNamesEqual(triggerA.newTable, triggerB.newTable) {
 		return false
 	}
 	if !areSameEvents(triggerA.event, triggerB.event) {

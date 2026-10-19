@@ -405,7 +405,6 @@ var keywords = map[string]int{
 	"real":                   REAL,
 	"recursive":              RECURSIVE,
 	"references":             REFERENCES,
-	"referencing":            REFERENCING,
 	"regexp":                 REGEXP,
 	"release":                UNUSED,
 	"rename":                 RENAME,

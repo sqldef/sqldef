@@ -1350,11 +1350,95 @@ CreateTriggerReferencingLegacyIgnoreQuotes:
       id serial PRIMARY KEY,
       amount integer
     );
-    CREATE TRIGGER "record_changes" after delete ON "public"."orders" REFERENCING OLD TABLE AS "deleted_rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+    CREATE TRIGGER "record_changes" after delete ON "public"."orders" REFERENCING OLD TABLE AS deleted_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
   down: |
     DROP TRIGGER "record_changes" ON "public"."orders";
     DROP TABLE "public"."orders";
     DROP FUNCTION "public"."record_changes";
+
+# The function body refers to the transition table as new_rows, so an unquoted New_Rows
+# has to stay unquoted (folded to new_rows) even when legacy_ignore_quotes quotes other names.
+CreateTriggerReferencingUnquotedMixedCaseNameLegacyIgnoreQuotes:
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      PERFORM count(*) FROM new_rows;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER INSERT ON orders
+      REFERENCING NEW TABLE AS New_Rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      PERFORM count(*) FROM new_rows;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER "record_changes" after insert ON "public"."orders" REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    DROP TABLE "public"."orders";
+    DROP FUNCTION "public"."record_changes";
+
+# "rows" and "Rows" are different relations to the function body, so legacy_ignore_quotes
+# must not compare transition table names case-insensitively.
+ChangeTriggerReferencingQuotedTableNameCaseLegacyIgnoreQuotes:
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS "rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS "Rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    CREATE TRIGGER "record_changes" after update ON "public"."orders" REFERENCING NEW TABLE AS "Rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    CREATE TRIGGER "record_changes" after update ON "public"."orders" REFERENCING NEW TABLE AS "rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
 
 TriggerReferencingTableOrderIsNotAChange:
   legacy_ignore_quotes: false
