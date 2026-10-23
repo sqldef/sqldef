@@ -11,7 +11,7 @@ import (
 func TestParseErrorScopedToOffendingStatement(t *testing.T) {
 	sql := `CREATE TABLE foo (
     id bigint NOT NULL
-) WITH (some_bogus_totally_unsupported_syntax = true);
+) some_bogus_totally_unsupported_syntax;
 
 CREATE TABLE bar (
     id bigint NOT NULL
