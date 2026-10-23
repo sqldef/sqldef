@@ -331,6 +331,18 @@ CREATE TABLE t (
 	}
 }
 
+func TestIndexOptionsMatchAcrossParsers(t *testing.T) {
+	ddls := parseDDLWithEachParser(t, `
+CREATE UNIQUE INDEX i ON t USING btree (a)
+  NULLS NOT DISTINCT
+  WITH (fillfactor = 70, deduplicate_items = off);
+`)
+	for _, ddl := range ddls {
+		assert.True(t, ddl.IndexSpec.NullsNotDistinct)
+	}
+	assert.Equal(t, ddls[0].IndexSpec.Options, ddls[1].IndexSpec.Options)
+}
+
 func TestRangeSubselectWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
