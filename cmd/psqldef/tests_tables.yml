@@ -469,4 +469,89 @@ AddColumnWithIsNotDistinctFromDefault:
   down: |
     ALTER TABLE public.settings DROP COLUMN enabled;
 
-# GiST index with tstzrange type
+CreateTableWithStorageParameters:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id integer,
+      body text
+    ) WITH (
+      parallel_workers = 0,
+      fillfactor = '70',
+      autovacuum_enabled = FALSE,
+      autovacuum_vacuum_scale_factor = 0.01,
+      log_autovacuum_min_duration = -1,
+      vacuum_truncate,
+      vacuum_index_cleanup = 'ON',
+      autovacuum_freeze_min_age = 050,
+      oids = off,
+      toast.autovacuum_enabled = false
+    );
+
+AddTableStorageParameter:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id integer
+    );
+  desired: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (parallel_workers = 0);
+  up: |
+    ALTER TABLE public.t SET (parallel_workers = 0);
+  down: |
+    ALTER TABLE public.t RESET (parallel_workers);
+
+ChangeTableStorageParameters:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (fillfactor = 70, parallel_workers = 0);
+  desired: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (fillfactor = 80, autovacuum_enabled = false);
+  up: |
+    ALTER TABLE public.t SET (autovacuum_enabled = false, fillfactor = 80);
+    ALTER TABLE public.t RESET (parallel_workers);
+  down: |
+    ALTER TABLE public.t SET (fillfactor = 70, parallel_workers = 0);
+    ALTER TABLE public.t RESET (autovacuum_enabled);
+
+ChangeToastStorageParameters:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id integer,
+      body text
+    ) WITH (toast.autovacuum_enabled = false);
+  desired: |
+    CREATE TABLE t (
+      id integer,
+      body text
+    ) WITH (toast.autovacuum_vacuum_scale_factor = 0.05);
+  up: |
+    ALTER TABLE public.t SET (toast.autovacuum_vacuum_scale_factor = 0.05);
+    ALTER TABLE public.t RESET (toast.autovacuum_enabled);
+  down: |
+    ALTER TABLE public.t SET (toast.autovacuum_enabled = false);
+    ALTER TABLE public.t RESET (toast.autovacuum_vacuum_scale_factor);
+
+ChangeTableStorageParametersQuotingIdentifiers:
+  legacy_ignore_quotes: true
+  current: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (parallel_workers = 0);
+  desired: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (fillfactor = 70);
+  up: |
+    ALTER TABLE "public"."t" SET (fillfactor = 70);
+    ALTER TABLE "public"."t" RESET (parallel_workers);
+  down: |
+    ALTER TABLE "public"."t" SET (parallel_workers = 0);
+    ALTER TABLE "public"."t" RESET (fillfactor);

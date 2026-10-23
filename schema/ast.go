@@ -206,20 +206,21 @@ type PartitionBound struct {
 }
 
 type Table struct {
-	name        QualifiedName
-	columns     map[string]*Column
-	indexes     []Index
-	checks      []CheckDefinition
-	foreignKeys []ForeignKey
-	exclusions  []Exclusion
-	policies    []Policy
-	privileges  []TablePrivilege
-	options     map[string]string
-	renamedFrom Ident           // Previous table name if renamed via @renamed annotation
-	partition   *TablePartition // Partition definition (MySQL/MariaDB)
-	rlsEnabled  bool            // PostgreSQL ROW LEVEL SECURITY enabled
-	rlsForced   bool            // PostgreSQL ROW LEVEL SECURITY forced
-	owner       string          // PostgreSQL owner role ("" = not tracked/declared)
+	name          QualifiedName
+	columns       map[string]*Column
+	indexes       []Index
+	checks        []CheckDefinition
+	foreignKeys   []ForeignKey
+	exclusions    []Exclusion
+	policies      []Policy
+	privileges    []TablePrivilege
+	options       map[string]string
+	renamedFrom   Ident             // Previous table name if renamed via @renamed annotation
+	partition     *TablePartition   // Partition definition (MySQL/MariaDB)
+	rlsEnabled    bool              // PostgreSQL ROW LEVEL SECURITY enabled
+	rlsForced     bool              // PostgreSQL ROW LEVEL SECURITY forced
+	owner         string            // PostgreSQL owner role ("" = not tracked/declared)
+	storageParams map[string]string // PostgreSQL storage parameters, keyed and valued as in pg_class.reloptions
 }
 
 // TablePartition represents partition information for a table
