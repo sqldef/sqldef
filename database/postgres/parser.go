@@ -322,27 +322,27 @@ func parseStorageParams(options []*pgquery.Node) (map[string]string, error) {
 		if def.Defnamespace != "" {
 			name = def.Defnamespace + "." + name
 		}
-		params[name] = value
+		params[name] = value.Val
 	}
 	return params, nil
 }
 
-func parseStorageParamValue(def *pgquery.DefElem) (string, error) {
+func parseStorageParamValue(def *pgquery.DefElem) (*parser.SQLVal, error) {
 	// A parameter written without a value is set to true.
 	if def.Arg == nil {
-		return "true", nil
+		return parser.NewStrVal("true"), nil
 	}
 	switch arg := def.Arg.Node.(type) {
 	case *pgquery.Node_Integer:
-		return fmt.Sprint(arg.Integer.Ival), nil
+		return parser.NewIntVal(fmt.Sprint(arg.Integer.Ival)), nil
 	case *pgquery.Node_Float:
-		return arg.Float.Fval, nil
+		return parser.NewStrVal(arg.Float.Fval), nil
 	case *pgquery.Node_String_:
-		return arg.String_.Sval, nil
+		return parser.NewStrVal(arg.String_.Sval), nil
 	case *pgquery.Node_TypeName:
-		return lastNameOf(arg.TypeName.Names), nil
+		return parser.NewStrVal(lastNameOf(arg.TypeName.Names)), nil
 	default:
-		return "", fmt.Errorf("unsupported value for storage parameter %s: %#v", def.Defname, arg)
+		return nil, fmt.Errorf("unsupported value for storage parameter %s: %#v", def.Defname, arg)
 	}
 }
 
@@ -383,18 +383,30 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 		included = append(included, NewIdentWithQuoteDetected(node.IndexElem.Name))
 	}
 
+	var options []*parser.IndexOption
+	for _, option := range stmt.Options {
+		def := option.GetDefElem()
+		value, err := parseStorageParamValue(def)
+		if err != nil {
+			return nil, err
+		}
+		options = append(options, &parser.IndexOption{Name: def.Defname, Value: value})
+	}
+
 	return &parser.DDL{
 		Action:  parser.CreateIndex,
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
-			Name:         parser.NewIdent(stmt.Idxname, false),
-			Type:         parser.NewIdent(stmt.AccessMethod, false),
-			Unique:       stmt.Unique,
-			Concurrently: stmt.Concurrent,
-			Async:        false, // pg_query doesn't parse ASYNC
-			Where:        where,
-			Included:     included,
+			Name:             parser.NewIdent(stmt.Idxname, false),
+			Type:             parser.NewIdent(stmt.AccessMethod, false),
+			Unique:           stmt.Unique,
+			Concurrently:     stmt.Concurrent,
+			Async:            false, // pg_query doesn't parse ASYNC
+			NullsNotDistinct: stmt.NullsNotDistinct,
+			Where:            where,
+			Included:         included,
+			Options:          options,
 		},
 		IndexCols: indexCols,
 	}, nil

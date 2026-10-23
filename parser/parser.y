@@ -5511,6 +5511,12 @@ index_option:
     id := strings.Trim(strings.ToLower($1.Name), "`")
     $$ = &IndexOption{Name: id, Value: $3}
   }
+/* PostgreSQL index storage parameters with a word value, e.g. deduplicate_items = off as
+ * pg_get_indexdef exports it */
+| ID '=' reserved_sql_id
+  {
+    $$ = &IndexOption{Name: strings.ToLower($1.Name), Value: NewStrVal(strings.ToLower($3.Name))}
+  }
 
 
 equal_opt:
