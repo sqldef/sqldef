@@ -1,3 +1,7 @@
+## [v3.11.28](https://github.com/sqldef/sqldef/compare/v3.11.27...v3.11.28) - 2026-10-24
+
+- psqldef: keep what belongs to an object the filters leave out by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1405
+
 ## [v3.11.27](https://github.com/sqldef/sqldef/compare/v3.11.26...v3.11.27) - 2026-10-24
 
 - build(deps): bump golang from 1.27.0-alpine to 1.27.1-alpine in the docker group by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1406
