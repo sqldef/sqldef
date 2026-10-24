@@ -1349,6 +1349,204 @@ func TestPsqldefSkipTablesAlsoSkipsExportedOwner(t *testing.T) {
 	assert.Equal(t, nothingModified, apply)
 }
 
+// skip_tables takes the table out of both schemas, so its comments have to go with it. Left
+// behind, they are comments of the current schema that the desired schema can no longer declare,
+// and the obsolete-comment cleanup resets them with COMMENT ... IS NULL: those statements carry no
+// DROP, so enable_drop does not hold them back, and a comment of a table the filter excludes
+// cannot be declared back.
+func TestPsqldefSkipTablesAlsoSkipsComments(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY, name text, CONSTRAINT users_10_name_len CHECK (length(name) > 0));
+        CREATE INDEX idx_users_10_name ON users_10 (name);
+        CREATE FUNCTION users_10_touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+        CREATE TRIGGER trg_users_10 BEFORE UPDATE ON users_10 FOR EACH ROW EXECUTE FUNCTION users_10_touch();
+        COMMENT ON TABLE users IS 'managed';
+        COMMENT ON TABLE users_10 IS 'unmanaged table';
+        COMMENT ON COLUMN users_10.name IS 'unmanaged column';
+        COMMENT ON INDEX idx_users_10_name IS 'unmanaged index';
+        COMMENT ON CONSTRAINT users_10_name_len ON users_10 IS 'unmanaged constraint';
+        COMMENT ON TRIGGER trg_users_10 ON users_10 IS 'unmanaged trigger';
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        COMMENT ON TABLE users IS 'managed';
+        CREATE FUNCTION users_10_touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+    `)
+
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
+// target_tables is the other half of the same filter, and drops the comments of every table it
+// leaves out.
+func TestPsqldefTargetTablesAlsoSkipsComments(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY, name text);
+        COMMENT ON TABLE users IS 'managed';
+        COMMENT ON TABLE users_10 IS 'unmanaged table';
+        COMMENT ON COLUMN users_10.name IS 'unmanaged column';
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        COMMENT ON TABLE users IS 'managed';
+    `)
+
+	tu.WriteFile("config.yml", "target_tables: |\n  public\\.users\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
+// A COMMENT ON INDEX names the index, not its table, so the index has to be resolved before the
+// table filters can judge the comment. Index names are unique per schema, not per database, so the
+// resolution is keyed by schema: an index of the same name in another schema belongs to another
+// table and must keep being managed.
+func TestPsqldefSkipTablesKeepsSameNamedIndexInAnotherSchema(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE SCHEMA other;
+        CREATE TABLE users_10 (id bigint PRIMARY KEY, name text);
+        CREATE INDEX idx_dup ON users_10 (name);
+        COMMENT ON INDEX idx_dup IS 'unmanaged index';
+        CREATE TABLE other.keep (id bigint PRIMARY KEY, name text);
+        CREATE INDEX idx_dup ON other.keep (name);
+        COMMENT ON INDEX other.idx_dup IS 'managed index';
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE other.keep (id bigint PRIMARY KEY, name text);
+        CREATE INDEX idx_dup ON other.keep (name);
+    `)
+
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, tu.StripHeredoc(`
+		-- Apply --
+		BEGIN;
+		COMMENT ON INDEX "other"."idx_dup" IS NULL;
+		COMMIT;
+		`,
+	), apply)
+}
+
+// skip_views leaves out a view the same way, and the comments of a view it excludes are reset
+// just as a table's are.
+func TestPsqldefSkipViewsAlsoSkipsComments(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY, name text);
+        CREATE VIEW v_users AS SELECT id, name FROM users;
+        COMMENT ON VIEW v_users IS 'unmanaged view';
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY, name text);
+    `)
+
+	tu.WriteFile("config.yml", "skip_views: |\n  public\\.v_users\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
+// A trigger belongs to its table, so a filter that leaves the table out has to leave the trigger
+// alone as well. enable_drop only hides this in a plan: a run that enables it drops a trigger of a
+// table the filter was told to skip.
+func TestPsqldefSkipTablesAlsoSkipsTriggers(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY);
+        CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+        CREATE TRIGGER trg_users_10 BEFORE UPDATE ON users_10 FOR EACH ROW EXECUTE FUNCTION touch();
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+    `)
+
+	tu.WriteFile("config.yml", "enable_drop: true\nskip_tables: |\n  public\\.users_10\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
+// The two schemas have to agree about an excluded object even when one of them still carries
+// statements for it: the current schema always declares the table it exports, while a desired
+// schema that declares a trigger or a comment without the table would otherwise keep them and ask
+// for what the current schema no longer offers, recreating a trigger that is already there. This
+// passes before the change as well, since nothing was filtered then; it is here to keep the
+// filtering from telling the two schemas apart.
+func TestPsqldefSkipTablesIgnoresUndeclaredTableStatements(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY);
+        CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+        CREATE TRIGGER trg_users_10 BEFORE UPDATE ON users_10 FOR EACH ROW EXECUTE FUNCTION touch();
+        COMMENT ON TABLE users_10 IS 'unmanaged table';
+    `)
+
+	// The schema leaves users_10 out but still carries its trigger and its comment.
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+        CREATE TRIGGER trg_users_10 BEFORE UPDATE ON users_10 FOR EACH ROW EXECUTE FUNCTION touch();
+        COMMENT ON TABLE users_10 IS 'unmanaged table';
+    `)
+
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
+// The trigger of a table the filters keep is still dropped when the desired schema stops declaring
+// it, so leaving the excluded ones alone does not stop managing the rest.
+func TestPsqldefSkipTablesStillDropsTriggersOfKeptTables(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY);
+        CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+        CREATE TRIGGER trg_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION touch();
+        CREATE TRIGGER trg_users_10 BEFORE UPDATE ON users_10 FOR EACH ROW EXECUTE FUNCTION touch();
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
+    `)
+
+	tu.WriteFile("config.yml", "enable_drop: true\nskip_tables: |\n  public\\.users_10\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, tu.StripHeredoc(`
+		-- Apply --
+		BEGIN;
+		DROP TRIGGER "trg_users" ON "public"."users";
+		COMMIT;
+		`,
+	), apply)
+}
+
 func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 	resetTestDatabase()
 
