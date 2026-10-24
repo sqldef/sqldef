@@ -706,6 +706,12 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
+		// Tables, types, and functions are filtered by TargetSchema. CREATE SCHEMA
+		// was not, so an export listed every schema and a later --enable-drop
+		// could drop schemas the desired file does not own.
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, name) {
+			continue
+		}
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE SCHEMA %s;", d.quoteIdentifierIfNeeded(name),
@@ -1266,6 +1272,15 @@ func normalizeDatePartToExtract(sql string) string {
 	})
 
 	return sql
+}
+
+// exportCheckConstraintDef turns pg_get_constraintdef output into SQL that is
+// legal inside CREATE TABLE. An unvalidated check is returned as
+// "CHECK (...) NOT VALID", and NOT VALID is legal only on
+// ALTER TABLE ADD CONSTRAINT. The exported check is therefore validated.
+// An existing NOT VALID check is left in place when the expression matches.
+func exportCheckConstraintDef(constraintDef string) string {
+	return strings.TrimSuffix(normalizePostgresTypeCasts(constraintDef), " NOT VALID")
 }
 
 // normalizePostgresTypeCasts normalizes PostgreSQL's verbose type cast syntax for generic parser compatibility.
@@ -1998,9 +2013,7 @@ func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (ma
 		if err != nil {
 			return nil, err
 		}
-		// Normalize type casts for generic parser compatibility
-		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
-		constraintDef = normalizePostgresTypeCasts(constraintDef)
+		constraintDef = exportCheckConstraintDef(constraintDef)
 		check := CheckConstraint{
 			Name:       NewIdentWithQuoteDetected(constraintName),
 			Definition: constraintDef,

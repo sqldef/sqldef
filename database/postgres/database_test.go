@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/sqldef/sqldef/v3/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -350,6 +351,60 @@ func setupTestDatabase(t *testing.T) *PostgresDatabase {
 	require.NoError(t, err)
 
 	return db.(*PostgresDatabase)
+}
+
+func TestExportCheckConstraintDef(t *testing.T) {
+	assert.Equal(t, "CHECK (status = 'ready')", exportCheckConstraintDef("CHECK (status = 'ready') NOT VALID"))
+	assert.Equal(t, "CHECK (status = 'ready')", exportCheckConstraintDef("CHECK (status = 'ready')"))
+	assert.Equal(t,
+		"CHECK (start_at > time '09:00:00')",
+		exportCheckConstraintDef("CHECK (start_at > '09:00:00'::time without time zone) NOT VALID"),
+	)
+}
+
+func TestExportOmitsNotValidCheck(t *testing.T) {
+	db := setupTestDatabase(t)
+	defer db.Close()
+
+	_, err := db.DB().Exec(`
+		CREATE TABLE work_orders (scheduling_status text);
+		ALTER TABLE work_orders ADD CONSTRAINT work_orders_scheduling_status_check
+			CHECK (scheduling_status = ANY (ARRAY['ready', 'booked'])) NOT VALID;
+	`)
+	require.NoError(t, err)
+
+	db.SetGeneratorConfig(database.GeneratorConfig{LegacyIgnoreQuotes: true})
+	exported, err := db.ExportDDLs()
+	require.NoError(t, err)
+	assert.NotContains(t, exported, "NOT VALID")
+	assert.Contains(t, exported, "work_orders_scheduling_status_check")
+
+	_, err = database.NewParser(parser.ParserModePostgres).Parse(exported)
+	require.NoError(t, err)
+}
+
+func TestExportTargetSchemaSkipsOtherSchemas(t *testing.T) {
+	db := setupTestDatabase(t)
+	defer db.Close()
+
+	_, err := db.DB().Exec(`
+		CREATE SCHEMA kept;
+		CREATE SCHEMA other;
+		CREATE TABLE kept.widgets (id bigint);
+		CREATE TABLE other.widgets (id bigint);
+	`)
+	require.NoError(t, err)
+
+	db.SetGeneratorConfig(database.GeneratorConfig{
+		LegacyIgnoreQuotes: true,
+		TargetSchema:       []string{"kept"},
+	})
+	exported, err := db.ExportDDLs()
+	require.NoError(t, err)
+	assert.Contains(t, exported, `CREATE SCHEMA "kept";`)
+	assert.NotContains(t, exported, `CREATE SCHEMA "other"`)
+	assert.Contains(t, exported, `CREATE TABLE "kept"."widgets"`)
+	assert.NotContains(t, exported, `"other"."widgets"`)
 }
 
 func TestSplitInlineChecks(t *testing.T) {
