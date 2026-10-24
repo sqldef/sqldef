@@ -1045,6 +1045,7 @@ type TableDDLComponents struct {
 	CheckConstraints   []CheckConstraint
 	UniqueConstraints  map[string]string
 	PrivilegeDefs      []string
+	StorageParams      string
 	DefaultSchema      string
 }
 
@@ -1078,6 +1079,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	components.ExclusionDefs = cache.exclusionDefs[table]
 	components.Comments = cache.comments[table]
 	components.PrivilegeDefs = cache.privilegeDefs[table]
+	components.StorageParams = cache.storageParams[table]
 	return d.buildExportTableDDL(components), nil
 }
 
@@ -1131,7 +1133,11 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 	}
 
-	fmt.Fprintf(&queryBuilder, "\n);\n")
+	fmt.Fprint(&queryBuilder, "\n)")
+	if components.StorageParams != "" {
+		fmt.Fprintf(&queryBuilder, " WITH (%s)", components.StorageParams)
+	}
+	fmt.Fprint(&queryBuilder, ";\n")
 	for _, v := range components.IndexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
@@ -1482,6 +1488,7 @@ type TableDDLComponentsCache struct {
 	exclusionDefs     map[string][]string
 	comments          map[string][]string
 	privilegeDefs     map[string][]string
+	storageParams     map[string]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1552,7 +1559,43 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 	if err != nil {
 		return nil, err
 	}
+	cache.storageParams, err = d.getStorageParamsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
 	return cache, nil
+}
+
+func (d *PostgresDatabase) getStorageParamsForTables(tableNames []string) (map[string]string, error) {
+	// toast.* parameters are stored on the table's TOAST relation.
+	const query = `
+		SELECT
+		  n.nspname || '.' || c.relname AS qualified_table_name,
+		  array_to_string(array_cat(c.reloptions, ARRAY(SELECT 'toast.' || o FROM unnest(t.reloptions) AS o)), ', ')
+		FROM pg_class c
+		INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+		LEFT JOIN pg_class t ON t.oid = c.reltoastrelid
+		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+		  AND (c.reloptions IS NOT NULL OR t.reloptions IS NOT NULL)
+	`
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string, len(tableNames))
+	for rows.Next() {
+		var qualifiedTableName, params string
+		if err := rows.Scan(&qualifiedTableName, &params); err != nil {
+			return nil, err
+		}
+		result[qualifiedTableName] = params
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string][]column, error) {

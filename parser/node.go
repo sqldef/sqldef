@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 // SQLNode defines the interface for all nodes
@@ -728,13 +730,14 @@ func (p *TablePartition) Format(buf *nodeBuffer) {
 
 // TableSpec describes the structure of a table from a CREATE TABLE statement
 type TableSpec struct {
-	Columns     []*ColumnDefinition
-	Indexes     []*IndexDefinition
-	ForeignKeys []*ForeignKeyDefinition
-	Checks      []*CheckDefinition
-	Exclusions  []*ExclusionDefinition // for Postgres
-	Options     map[string]string
-	Partition   *TablePartition // Partition definition (MySQL/MariaDB)
+	Columns       []*ColumnDefinition
+	Indexes       []*IndexDefinition
+	ForeignKeys   []*ForeignKeyDefinition
+	Checks        []*CheckDefinition
+	Exclusions    []*ExclusionDefinition // for Postgres
+	Options       map[string]string
+	Partition     *TablePartition   // Partition definition (MySQL/MariaDB)
+	StorageParams map[string]string // PostgreSQL WITH (...) storage parameters, keyed and valued as in pg_class.reloptions
 }
 
 // Format formats the node.
@@ -778,6 +781,13 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 	if ts.Partition != nil {
 		buf.Printf("\n")
 		ts.Partition.Format(buf)
+	}
+	if len(ts.StorageParams) > 0 {
+		var params []string
+		for key, value := range util.CanonicalMapIter(ts.StorageParams) {
+			params = append(params, key+" = "+value)
+		}
+		buf.Printf(" WITH (%s)", strings.Join(params, ", "))
 	}
 }
 
