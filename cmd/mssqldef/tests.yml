@@ -1284,3 +1284,22 @@ UseStatement:
     CREATE TABLE bigdata (
       data bigint
     );
+ColumnCollateAfterTheDataType:
+  desired: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      name nvarchar(20) COLLATE Latin1_General_CI_AS NOT NULL
+    );
+ColumnCollateAfterOtherConstraints:
+  desired: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      name nvarchar(20) NOT NULL COLLATE Latin1_General_CI_AS
+    );
+  error: |-
+    found syntax error when parsing DDL "CREATE TABLE users (
+      id int PRIMARY KEY,
+      name nvarchar(20) NOT NULL COLLATE Latin1_General_CI_AS
+    )": COLLATE must come right after the data type at line 4, column 1 near 'Latin1_General_CI_AS'
+      )
+      ^

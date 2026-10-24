@@ -241,6 +241,13 @@ CollateOnColumn:
     select u.id as id,
            (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
+ColumnCollateAfterOtherConstraints:
+  desired: |
+    CREATE TABLE users (
+      id int NOT NULL,
+      name varchar(20) NOT NULL COLLATE utf8mb4_bin,
+      code varchar(3) DEFAULT '' COLLATE utf8mb4_bin
+    );
 AutoIncrementNotNull:
   desired: |
     CREATE TABLE users1 (

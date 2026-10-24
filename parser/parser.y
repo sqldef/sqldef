@@ -3868,6 +3868,17 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
+// SQLite3, MySQL and PostgreSQL also accept COLLATE after other column constraints,
+// e.g. "name text NOT NULL COLLATE NOCASE"; SQL Server does not
+| column_definition_type COLLATE ID
+  {
+    if yylex.(*Tokenizer).mode == ParserModeMssql {
+      yylex.Error("COLLATE must come right after the data type")
+      return 1
+    }
+    $1.Collate = $3.Name
+    $$ = $1
+  }
 | column_definition_type default_definition
   {
     $1.Default = &DefaultDefinition{Expression: $2}
