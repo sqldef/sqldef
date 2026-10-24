@@ -58,6 +58,38 @@ ManageFunctionObsoleteDropAllowed:
   down: |
     CREATE FUNCTION app_stale() RETURNS integer AS $$ BEGIN RETURN 9; END; $$ LANGUAGE plpgsql;
 
+ManageFunctionRecreateIsHeldBackWhenDropForbidden:
+  legacy_ignore_quotes: false
+  manage:
+    function:
+      - target: app_.*
+  current: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP FUNCTION public.app_touch();
+    -- Skipped: CREATE FUNCTION app_touch() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  down: ""
+
+ManageFunctionRecreateAllowedWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  manage:
+    function:
+      - target: app_.*
+        drop: true
+  current: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION public.app_touch();
+    CREATE FUNCTION app_touch() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.app_touch();
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
 ManageFunctionOtherSchemaUntouched:
   # manage.function is scoped to the default schema: a same-named function in
   # another schema (s2.app_stale) matches no rule and must not be dropped, even
