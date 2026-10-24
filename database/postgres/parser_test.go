@@ -249,12 +249,12 @@ func TestCreateFunctionAutoModeFallbackRetry(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "")
 	postgresParser := NewParserWithMode(PsqldefParserModeAuto)
 
-	// The table uses a storage parameter the generic parser rejects, forcing a
+	// The table uses an access method the generic parser rejects, forcing a
 	// whole-file fallback to pgquery. The CREATE FUNCTION must survive that
 	// fallback instead of being dropped as an Ignore, otherwise the diff engine
 	// emits a spurious DROP FUNCTION for a function that is in the desired schema.
 	statements, err := postgresParser.Parse(`
-    CREATE TABLE t (id int) WITH (fillfactor = 70);
+    CREATE TABLE t (id int) USING heap;
     CREATE FUNCTION increment(i integer) RETURNS integer
     LANGUAGE plpgsql
     AS $$
@@ -279,6 +279,68 @@ func TestCreateFunctionAutoModeFallbackRetry(t *testing.T) {
 	if !foundFunction {
 		t.Error("CREATE FUNCTION was not preserved across pgquery fallback in Auto mode")
 	}
+}
+
+// parseDDLWithEachParser parses a single DDL statement with the generic parser and with pgquery.
+func parseDDLWithEachParser(t *testing.T, sql string) []*parser.DDL {
+	// An ambient PSQLDEF_PARSER would override both modes.
+	t.Setenv("PSQLDEF_PARSER", "")
+	var ddls []*parser.DDL
+	for _, mode := range []PsqldefParserMode{PsqldefParserModeGeneric, PsqldefParserModePgquery} {
+		statements, err := NewParserWithMode(mode).Parse(sql)
+		require.NoError(t, err)
+		require.Len(t, statements, 1)
+		ddl, ok := statements[0].Statement.(*parser.DDL)
+		require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+		ddls = append(ddls, ddl)
+	}
+	return ddls
+}
+
+func TestTableStorageParamsMatchAcrossParsers(t *testing.T) {
+	ddls := parseDDLWithEachParser(t, `
+CREATE TABLE t (
+  id int
+) WITH (
+  parallel_workers = 0,
+  fillfactor = '70',
+  autovacuum_enabled = FALSE,
+  autovacuum_vacuum_scale_factor = 0.01,
+  vacuum_index_cleanup = auto,
+  vacuum_truncate,
+  log_autovacuum_min_duration = -1,
+  autovacuum_freeze_min_age = 050,
+  toast_tuple_target = +200,
+  toast.autovacuum_enabled = false
+);
+`)
+	want := map[string]string{
+		"parallel_workers":               "0",
+		"fillfactor":                     "70",
+		"autovacuum_enabled":             "false",
+		"autovacuum_vacuum_scale_factor": "0.01",
+		"vacuum_index_cleanup":           "auto",
+		"vacuum_truncate":                "true",
+		"log_autovacuum_min_duration":    "-1",
+		"autovacuum_freeze_min_age":      "50",
+		"toast_tuple_target":             "200",
+		"toast.autovacuum_enabled":       "false",
+	}
+	for _, ddl := range ddls {
+		assert.Equal(t, want, ddl.TableSpec.StorageParams)
+	}
+}
+
+func TestIndexOptionsMatchAcrossParsers(t *testing.T) {
+	ddls := parseDDLWithEachParser(t, `
+CREATE UNIQUE INDEX i ON t USING btree (a)
+  NULLS NOT DISTINCT
+  WITH (fillfactor = 70, deduplicate_items = off);
+`)
+	for _, ddl := range ddls {
+		assert.True(t, ddl.IndexSpec.NullsNotDistinct)
+	}
+	assert.Equal(t, ddls[0].IndexSpec.Options, ddls[1].IndexSpec.Options)
 }
 
 func TestRangeSubselectWithPgquery(t *testing.T) {
@@ -323,7 +385,7 @@ func TestSetOperationAutoFallback(t *testing.T) {
 	postgresParser := NewParserWithMode(PsqldefParserModeAuto)
 
 	statements, err := postgresParser.Parse(`
-CREATE TABLE t (id int) WITH (fillfactor = 70);
+CREATE TABLE t (id int) USING heap;
 CREATE VIEW set_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
 `)
 	require.NoError(t, err)

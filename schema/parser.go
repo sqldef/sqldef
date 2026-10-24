@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -400,6 +401,10 @@ func parsePartitionOf(mode GeneratorMode, stmt *parser.DDL, defaultSchema string
 }
 
 func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawDDL string) (Table, error) {
+	if mode != GeneratorModePostgres && len(stmt.TableSpec.StorageParams) > 0 {
+		return Table{}, fmt.Errorf("WITH (...) table options are only supported for PostgreSQL")
+	}
+
 	var columns = map[string]*Column{}
 	var indexes []Index
 	var checks []CheckDefinition
@@ -744,16 +749,32 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	return Table{
-		name:        normalizeQualifiedName(mode, stmt.NewName, defaultSchema),
-		columns:     columns,
-		indexes:     indexes,
-		checks:      checks,
-		foreignKeys: foreignKeys,
-		exclusions:  exclusions,
-		options:     stmt.TableSpec.Options,
-		renamedFrom: tableRenameFrom,
-		partition:   partition,
+		name:          normalizeQualifiedName(mode, stmt.NewName, defaultSchema),
+		columns:       columns,
+		indexes:       indexes,
+		checks:        checks,
+		foreignKeys:   foreignKeys,
+		exclusions:    exclusions,
+		options:       stmt.TableSpec.Options,
+		renamedFrom:   tableRenameFrom,
+		partition:     partition,
+		storageParams: normalizeStorageParams(stmt.TableSpec.StorageParams),
 	}, nil
+}
+
+// normalizeStorageParams makes declared and exported parameters comparable. pg_class.reloptions
+// keeps values as written though PostgreSQL reads them case-insensitively, and CREATE TABLE
+// accepts oids = false, common in old pg_dump output, without storing it.
+func normalizeStorageParams(params map[string]string) map[string]string {
+	normalized := map[string]string{}
+	for name, value := range params {
+		value = strings.ToLower(value)
+		if name == "oids" && slices.Contains([]string{"false", "off", "no", "f", "n", "0"}, value) {
+			continue
+		}
+		normalized[name] = value
+	}
+	return normalized
 }
 
 // autoIndexName names an index or constraint declared without one after its first column, as

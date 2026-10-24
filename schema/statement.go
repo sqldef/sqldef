@@ -1042,6 +1042,26 @@ func (a tableOptionAction) render(dialect) string {
 	return fmt.Sprintf("%s = %s", a.key, a.value)
 }
 
+type setStorageParamsAction struct {
+	additive
+	params []string
+}
+
+func (a setStorageParamsAction) render(dialect) string {
+	return "SET (" + strings.Join(a.params, ", ") + ")"
+}
+
+// resetStorageParamsAction resets PostgreSQL storage parameters. It is a removal so that
+// parameters set on the database but absent from the schema survive without enable_drop.
+type resetStorageParamsAction struct {
+	removal
+	params []string
+}
+
+func (a resetStorageParamsAction) render(dialect) string {
+	return "RESET (" + strings.Join(a.params, ", ") + ")"
+}
+
 type addPartitionAction struct {
 	partition PartitionDefinition
 }
