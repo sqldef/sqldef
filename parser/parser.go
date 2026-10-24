@@ -10750,6 +10750,10 @@ yydefault:
 	case 445:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
+			if yylex.(*Tokenizer).mode == ParserModeMssql {
+				yylex.Error("COLLATE must come right after the data type")
+				return 1
+			}
 			yyDollar[1].columnType.Collate = yyDollar[3].ident.Name
 			yyVAL.columnType = yyDollar[1].columnType
 		}
