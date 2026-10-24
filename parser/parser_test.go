@@ -2508,3 +2508,44 @@ func TestKeyKeywordAsColumnReference(t *testing.T) {
 		})
 	}
 }
+
+func TestColumnCollateAfterOtherConstraints(t *testing.T) {
+	accepted := []struct {
+		name string
+		mode ParserMode
+		sql  string
+	}{
+		{"mysql", ParserModeMysql, "CREATE TABLE t (name varchar(20) NOT NULL COLLATE utf8mb4_bin)"},
+		{"postgres", ParserModePostgres, `CREATE TABLE t (name text NOT NULL COLLATE "C")`},
+		{"sqlite3", ParserModeSQLite3, "CREATE TABLE t (name text NOT NULL COLLATE NOCASE)"},
+	}
+	for _, tc := range accepted {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, tc.mode)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			col := tree.(*DDL).TableSpec.Columns[0]
+			if col.Type.Collate == "" || !bool(col.Type.NotNull != nil && *col.Type.NotNull) {
+				t.Errorf("expected NOT NULL and a collation, got NotNull=%v Collate=%q", col.Type.NotNull, col.Type.Collate)
+			}
+		})
+	}
+
+	// SQL Server only accepts COLLATE right after the data type.
+	t.Run("mssql rejects it after a constraint", func(t *testing.T) {
+		_, err := ParseDDL("CREATE TABLE t (name nvarchar(20) NOT NULL COLLATE Latin1_General_CI_AS)", ParserModeMssql)
+		if err == nil || !strings.Contains(err.Error(), "COLLATE must come right after the data type") {
+			t.Fatalf("expected the COLLATE position error, got %v", err)
+		}
+	})
+	t.Run("mssql still accepts it after the data type", func(t *testing.T) {
+		tree, err := ParseDDL("CREATE TABLE t (name nvarchar(20) COLLATE Latin1_General_CI_AS NOT NULL)", ParserModeMssql)
+		if err != nil {
+			t.Fatalf("parse error: %v", err)
+		}
+		if got := tree.(*DDL).TableSpec.Columns[0].Type.Collate; got != "Latin1_General_CI_AS" {
+			t.Errorf("expected the collation, got %q", got)
+		}
+	})
+}
