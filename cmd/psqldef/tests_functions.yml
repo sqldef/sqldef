@@ -516,6 +516,20 @@ OverloadedFunctionsBothReplacedInPlace:
     CREATE OR REPLACE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
     CREATE OR REPLACE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
 
+OverloadedFunctionUnmatchedRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP FUNCTION public.ovl;
+    -- Skipped: CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  down: ""
+
 FunctionReferencingATableOfTheSameSchema:
   legacy_ignore_quotes: false
   desired: |
