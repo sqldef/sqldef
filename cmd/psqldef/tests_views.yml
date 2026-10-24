@@ -35,6 +35,23 @@ MaterializedViewWithNoData:
   desired: |
     CREATE TABLE points (id bigint);
     CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points WITH NO DATA;
+DependentMatviewWithDataRecreation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id, name FROM users;
+    CREATE MATERIALIZED VIEW mv_dep AS SELECT id FROM v_base WITH DATA;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);
+    CREATE VIEW v_base AS SELECT id FROM users;
+    CREATE MATERIALIZED VIEW mv_dep AS SELECT id FROM v_base WITH DATA;
+  up: |
+    DROP MATERIALIZED VIEW public.mv_dep;
+    DROP VIEW public.v_base;
+    CREATE VIEW public.v_base AS select id from users;
+    CREATE MATERIALIZED VIEW public.mv_dep AS select id from v_base WITH DATA;
+  down: |
+    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
 
 ViewDDLsAreEmittedLastWithoutChangingDefinition:
   current: |

@@ -14,7 +14,7 @@ import (
 type statement interface {
 	// Render returns the SQL, commented out when the statement is skipped.
 	Render() string
-	// Destructive reports whether enable_drop has to allow the statement.
+	// Destructive reports whether heldBack gates the statement.
 	Destructive() bool
 	// Skipped reports whether the statement is emitted only as a comment.
 	Skipped() bool
@@ -27,8 +27,14 @@ type statementDefaults struct{}
 func (statementDefaults) Destructive() bool { return false }
 func (statementDefaults) Skipped() bool     { return false }
 
-// rawStatement is SQL the generator has not typed yet. The text-based enable_drop gate
-// still runs on it after rendering.
+// destructiveDefaults is what a statement that heldBack gates is: destructive and not
+// skipped.
+type destructiveDefaults struct{}
+
+func (destructiveDefaults) Destructive() bool { return true }
+func (destructiveDefaults) Skipped() bool     { return false }
+
+// rawStatement is SQL the generator has not typed yet. It is never destructive.
 type rawStatement string
 
 func (s rawStatement) Render() string    { return string(s) }
@@ -43,14 +49,23 @@ func renderStatements(statements []statement) []string {
 	return util.TransformSlice(statements, statement.Render)
 }
 
-// skipped is a statement enable_drop holds back. It is still emitted, as a comment, so that
+// skipped is a statement heldBack holds back. It is still emitted, as a comment, so that
 // --dry-run shows what --enable-drop would run.
 type skipped struct {
 	statement
 }
 
-func (s skipped) Render() string { return skippedStatement(s.statement.Render()) }
-func (s skipped) Skipped() bool  { return true }
+// Render comments every line, so that a multi-line statement can never leak executable SQL
+// after the first line.
+func (s skipped) Render() string {
+	return "-- Skipped: " + strings.ReplaceAll(s.statement.Render(), "\n", "\n-- ")
+}
+
+func (s skipped) Skipped() bool { return true }
+
+func skippedStatements(statements []statement) []statement {
+	return util.TransformSlice(statements, func(s statement) statement { return skipped{s} })
+}
 
 // recreate drops an object and brings it back. appendRecreateStatements emits it.
 type recreate struct {
@@ -205,6 +220,237 @@ type inputCreateIndexStatement struct {
 
 func (s inputCreateIndexStatement) Render() string { return s.statement }
 
+// inputStatement is a statement from the desired schema, emitted as written.
+type inputStatement struct {
+	statementDefaults
+	statement string
+}
+
+func (s inputStatement) Render() string { return s.statement }
+
+// createViewStatement creates a view the generator builds from its definition.
+type createViewStatement struct {
+	statementDefaults
+	d         dialect
+	view      View
+	orReplace bool
+}
+
+func (s createViewStatement) Render() string {
+	ddl := "CREATE "
+	if s.orReplace {
+		ddl += "OR REPLACE "
+	}
+	if s.view.viewType == "SQL SECURITY" {
+		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), parser.String(s.view.definition))
+	}
+	ddl += fmt.Sprintf("%s %s AS %s", s.view.viewType, s.d.escapeQualifiedName(s.view.name), parser.String(s.view.definition))
+	if s.view.withNoData {
+		ddl += " WITH NO DATA"
+	} else if s.view.withData {
+		ddl += " WITH DATA"
+	}
+	return ddl
+}
+
+// viewOwnerStatement gives a PostgreSQL view its owner.
+type viewOwnerStatement struct {
+	statementDefaults
+	d        dialect
+	viewType string
+	name     QualifiedName
+	owner    string
+}
+
+func (s viewOwnerStatement) Render() string {
+	return fmt.Sprintf("ALTER %s %s OWNER TO %s", s.viewType, s.d.escapeQualifiedName(s.name), s.d.forceEscapeSQLName(s.owner))
+}
+
+// createTriggerStatement creates a trigger, or alters it with SQL Server's CREATE OR ALTER.
+// SQLite's is emitted as written.
+type createTriggerStatement struct {
+	statementDefaults
+	d       dialect
+	trigger Trigger
+	orAlter bool
+}
+
+func (s createTriggerStatement) Render() string {
+	t := s.trigger
+	name := s.d.escapeQualifiedName(t.name)
+	table := s.d.escapeQualifiedName(t.tableName)
+	body := strings.Join(t.body, "\n")
+	switch s.d.mode {
+	case GeneratorModeMssql:
+		ddl := "CREATE "
+		if s.orAlter {
+			ddl += "OR ALTER "
+		}
+		return ddl + fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", name, table, t.time, s.d.formatTriggerEvents(t.event, ", "), body)
+	case GeneratorModeMysql:
+		return fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s", name, t.time, s.d.formatTriggerEvents(t.event, ", "), table, body)
+	case GeneratorModeSQLite3:
+		return t.statement
+	case GeneratorModePostgres:
+		whenClause := ""
+		if t.whenCondition != "" {
+			whenClause = "WHEN " + t.whenCondition + " "
+		}
+		triggerKeyword := "TRIGGER"
+		deferrableClause := ""
+		if t.constraint {
+			triggerKeyword = "CONSTRAINT TRIGGER"
+			// generateConstraintOptions omits NOT DEFERRABLE, so state it explicitly like pg_get_triggerdef() does
+			deferrableClause = "NOT DEFERRABLE "
+			if t.constraintOptions.deferrable {
+				deferrableClause = strings.TrimPrefix(s.d.generateConstraintOptions(t.constraintOptions), " ") + " "
+			}
+		}
+		return fmt.Sprintf("CREATE %s %s %s %s ON %s %sFOR EACH %s %s%s", triggerKeyword, name, t.time, s.d.formatTriggerEvents(t.event, " OR "), table, deferrableClause, normalizeTriggerForEach(t.forEach), whenClause, body)
+	default:
+		panic(fmt.Sprintf("CREATE TRIGGER is not generated for mode %d", s.d.mode))
+	}
+}
+
+// renameTypeStatement renames a PostgreSQL type.
+type renameTypeStatement struct {
+	statementDefaults
+	d    dialect
+	from QualifiedName
+	to   Ident
+}
+
+func (s renameTypeStatement) Render() string {
+	// The old name must be qualified, and the new one must not.
+	return fmt.Sprintf("ALTER TYPE %s RENAME TO %s", s.d.escapeQualifiedName(s.from), s.d.escapeSQLIdent(s.to))
+}
+
+// renameEnumValueStatement renames a value of a PostgreSQL enum type.
+type renameEnumValueStatement struct {
+	statementDefaults
+	d        dialect
+	typeName QualifiedName
+	from     string
+	to       string
+}
+
+func (s renameEnumValueStatement) Render() string {
+	return fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'", s.d.escapeQualifiedName(s.typeName), s.from, s.to)
+}
+
+// addEnumValueStatement adds a value to a PostgreSQL enum type.
+type addEnumValueStatement struct {
+	statementDefaults
+	d        dialect
+	typeName QualifiedName
+	value    string
+}
+
+func (s addEnumValueStatement) Render() string {
+	return fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", s.d.escapeQualifiedName(s.typeName), s.value)
+}
+
+// alterDomainStatement changes one thing about a PostgreSQL domain.
+type alterDomainStatement struct {
+	statementDefaults
+	d      dialect
+	domain QualifiedName
+	action alterDomainAction
+}
+
+func (s alterDomainStatement) Render() string {
+	return fmt.Sprintf("ALTER DOMAIN %s %s", s.d.escapeQualifiedName(s.domain), s.action.render())
+}
+
+// alterDomainAction is the action of an ALTER DOMAIN. None of them loses data.
+type alterDomainAction interface {
+	render() string
+}
+
+// domainDefaultAction sets the default, or drops it when there is none.
+type domainDefaultAction struct {
+	expr parser.Expr
+}
+
+func (a domainDefaultAction) render() string {
+	if a.expr == nil {
+		return "DROP DEFAULT"
+	}
+	return "SET DEFAULT " + parser.String(a.expr)
+}
+
+type domainNotNullAction struct {
+	notNull bool
+}
+
+func (a domainNotNullAction) render() string {
+	if a.notNull {
+		return "SET NOT NULL"
+	}
+	return "DROP NOT NULL"
+}
+
+// dropDomainConstraintAction drops a constraint by the name the database reports, as is.
+type dropDomainConstraintAction struct {
+	name string
+}
+
+func (a dropDomainConstraintAction) render() string { return "DROP CONSTRAINT " + a.name }
+
+// addDomainCheckAction adds a CHECK. PostgreSQL names an unnamed one itself.
+type addDomainCheckAction struct {
+	name string
+	expr parser.Expr
+}
+
+func (a addDomainCheckAction) render() string {
+	if a.name == "" {
+		return fmt.Sprintf("ADD CHECK (%s)", parser.String(a.expr))
+	}
+	return fmt.Sprintf("ADD CONSTRAINT %s CHECK (%s)", a.name, parser.String(a.expr))
+}
+
+// alterEventStatement is a MySQL ALTER EVENT built from an Event struct.
+// All clauses are always emitted with MySQL defaults for empty values, because
+// ALTER EVENT only modifies the clauses you specify and preserves the rest.
+type alterEventStatement struct {
+	statementDefaults
+	d     dialect
+	event Event
+}
+
+func (s alterEventStatement) Render() string {
+	event := s.event
+	var buf strings.Builder
+	buf.WriteString("ALTER EVENT ")
+	buf.WriteString(s.d.escapeQualifiedName(event.name))
+
+	if event.schedule != "" {
+		buf.WriteString(" ON SCHEDULE ")
+		buf.WriteString(event.schedule)
+	}
+	if event.onCompletion != "" {
+		buf.WriteString(" ON COMPLETION ")
+		buf.WriteString(event.onCompletion)
+	} else {
+		buf.WriteString(" ON COMPLETION NOT PRESERVE")
+	}
+	if event.status != "" {
+		buf.WriteString(" ")
+		buf.WriteString(event.status)
+	} else {
+		buf.WriteString(" ENABLE")
+	}
+	buf.WriteString(" COMMENT '")
+	buf.WriteString(event.comment) // empty string is valid: removes comment
+	buf.WriteString("'")
+	if len(event.body) > 0 {
+		buf.WriteString(" DO ")
+		buf.WriteString(strings.Join(event.body, "\n"))
+	}
+	return buf.String()
+}
+
 // mssqlClusteredOption renders whether a SQL Server index is clustered.
 func mssqlClusteredOption(index Index) string {
 	if index.clustered {
@@ -219,7 +465,7 @@ func (d dialect) indexColumnList(index Index) string {
 
 // dropIndexStatement is a standalone DROP INDEX.
 type dropIndexStatement struct {
-	statementDefaults
+	destructiveDefaults
 	d     dialect
 	table QualifiedName
 	name  Ident
@@ -237,8 +483,6 @@ func (s dropIndexStatement) Render() string {
 		panic(fmt.Sprintf("DROP INDEX is not generated for mode %d", s.d.mode))
 	}
 }
-
-func (s dropIndexStatement) Destructive() bool { return true }
 
 // renameIndexStatement is PostgreSQL's ALTER INDEX ... RENAME TO.
 type renameIndexStatement struct {
@@ -290,6 +534,106 @@ func (s alterSequenceStatement) Render() string {
 	schema := s.d.normalizeDefaultSchema(s.table.Schema)
 	sequence := Ident{Name: fmt.Sprintf("%s_%s_seq", s.table.Name.Name, s.column.Name), Quoted: false}
 	return fmt.Sprintf("ALTER SEQUENCE %s.%s AS %s", s.d.escapeSQLIdent(schema), s.d.escapeSQLIdent(sequence), s.underlyingType)
+}
+
+// dropObjectStatement drops an object that its qualified name alone identifies.
+type dropObjectStatement struct {
+	destructiveDefaults
+	d    dialect
+	kind string // "TABLE", "VIEW", "MATERIALIZED VIEW", "TYPE", "DOMAIN" or "EVENT"
+	name QualifiedName
+}
+
+func (s dropObjectStatement) Render() string {
+	return fmt.Sprintf("DROP %s %s", s.kind, s.d.escapeQualifiedName(s.name))
+}
+
+type dropTriggerStatement struct {
+	destructiveDefaults
+	d     dialect
+	name  QualifiedName
+	table QualifiedName
+}
+
+func (s dropTriggerStatement) Render() string {
+	if s.d.mode == GeneratorModePostgres {
+		return fmt.Sprintf("DROP TRIGGER %s ON %s", s.d.escapeQualifiedName(s.name), s.d.escapeQualifiedName(s.table))
+	}
+	return "DROP TRIGGER " + s.d.escapeQualifiedName(s.name)
+}
+
+type dropPolicyStatement struct {
+	destructiveDefaults
+	d     dialect
+	name  Ident
+	table QualifiedName
+}
+
+func (s dropPolicyStatement) Render() string {
+	return fmt.Sprintf("DROP POLICY %s ON %s", s.d.escapeSQLIdent(s.name), s.d.escapeQualifiedName(s.table))
+}
+
+// dropFunctionStatement drops a function. manage.function decides it by the function's name.
+type dropFunctionStatement struct {
+	destructiveDefaults
+	d    dialect
+	name QualifiedName
+	// withArgs appends argTypes, which tell the function apart from its overloads, even when
+	// there are none. Without it the function is dropped by its name alone.
+	withArgs bool
+	argTypes []string
+}
+
+func (s dropFunctionStatement) Render() string {
+	ddl := "DROP FUNCTION " + s.d.escapeQualifiedName(s.name)
+	if s.withArgs {
+		ddl += "(" + strings.Join(s.argTypes, ", ") + ")"
+	}
+	return ddl
+}
+
+// dropExtensionStatement drops an extension. manage.extension decides it by the extension's
+// name, and enable_drop still has to allow it.
+type dropExtensionStatement struct {
+	destructiveDefaults
+	d    dialect
+	name Ident
+}
+
+func (s dropExtensionStatement) Render() string {
+	return "DROP EXTENSION " + s.d.escapeSQLIdent(s.name)
+}
+
+// revokeStatement revokes privileges, or only their grant option, from a grantee.
+// manage.privilege decides it by the grantee.
+type revokeStatement struct {
+	destructiveDefaults
+	d          dialect
+	privileges []Privilege
+	// spellAll spells the full set of table privileges as ALL PRIVILEGES.
+	spellAll    bool
+	grantOption bool
+	objectType  string
+	object      QualifiedName
+	// grantee has passed validateGrantee.
+	grantee string
+	cascade bool
+}
+
+func (s revokeStatement) Render() string {
+	privileges := formatPrivilegeList(s.privileges)
+	if s.spellAll {
+		privileges = formatPrivilegesForGrant(s.privileges)
+	}
+	ddl := "REVOKE "
+	if s.grantOption {
+		ddl += "GRANT OPTION FOR "
+	}
+	ddl += fmt.Sprintf("%s ON %s %s FROM %s", privileges, grantObjectKeyword(s.objectType), s.d.escapeQualifiedName(s.object), s.d.escapeGrantee(s.grantee))
+	if s.cascade {
+		ddl += " CASCADE"
+	}
+	return ddl
 }
 
 // alterTableAction is one action of an ALTER TABLE.

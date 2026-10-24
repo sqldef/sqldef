@@ -1248,24 +1248,6 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	assert.Equal(t, strUser, strDB, "CHECK constraints should normalize to the same format")
 }
 
-func TestIsDropStatement(t *testing.T) {
-	// Destructive statements are detected by their leading keyword.
-	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`))
-	assert.True(t, isDropStatement("DROP FUNCTION public.add_one"))
-	assert.True(t, isDropStatement("DROP EVENT `cleanup`"))
-	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`))
-
-	// Additive statements are never destructive, even when their payload
-	// mentions destructive keywords (function bodies, comment text, literals).
-	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"))
-	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"))
-	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`))
-	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'"))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nALTER TABLE logs DROP PARTITION p2024"))
-	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
-}
-
 func TestDestructiveStatements(t *testing.T) {
 	users := QualifiedName{Name: Ident{Name: "users"}}
 	mysql := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
@@ -1280,6 +1262,14 @@ func TestDestructiveStatements(t *testing.T) {
 	assert.True(t, postgres.generateDropIndex(users, Ident{Name: "idx_name"}, false).Destructive())
 	assert.True(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: false}).Destructive())
 
+	// Dropping an object or revoking a privilege is destructive.
+	assert.True(t, dropObjectStatement{d: postgres.dialect, kind: "TABLE", name: users}.Destructive())
+	assert.True(t, dropTriggerStatement{d: postgres.dialect, name: QualifiedName{Name: Ident{Name: "t"}}, table: users}.Destructive())
+	assert.True(t, dropPolicyStatement{d: postgres.dialect, name: Ident{Name: "p"}, table: users}.Destructive())
+	assert.True(t, dropFunctionStatement{d: postgres.dialect, name: QualifiedName{Name: Ident{Name: "f"}}}.Destructive())
+	assert.True(t, dropExtensionStatement{d: postgres.dialect, name: Ident{Name: "pgcrypto"}}.Destructive())
+	assert.True(t, revokeStatement{d: postgres.dialect, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user"}.Destructive())
+
 	// One destructive action makes the whole statement destructive.
 	assert.True(t, mysql.alterTable(users,
 		addColumnAction{column: Column{name: Ident{Name: "a"}, typeName: "int"}},
@@ -1293,66 +1283,76 @@ func TestDestructiveStatements(t *testing.T) {
 	assert.False(t, mysql.alterTable(users, dropForeignKeyAction{name: Ident{Name: "fk_users"}}).Destructive())
 	assert.False(t, mysql.alterTable(users, dropPrimaryKeyAction{}).Destructive())
 	assert.False(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: true}).Destructive())
+
+	// Creating or changing an object is not destructive, even when its body, comment or
+	// literal spells a destructive statement.
+	assert.False(t, inputStatement{statement: "CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"}.Destructive())
+	assert.False(t, inputStatement{statement: "CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"}.Destructive())
+	assert.False(t, rawStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`).Destructive())
+	assert.False(t, alterEventStatement{d: mysql.dialect, event: Event{name: QualifiedName{Name: Ident{Name: "cleanup"}}, schedule: "EVERY 1 DAY", body: []string{"ALTER TABLE logs DROP PARTITION p2024"}}}.Destructive())
+	assert.False(t, alterDomainStatement{d: postgres.dialect, domain: users, action: dropDomainConstraintAction{name: "users_check"}}.Destructive())
 }
 
-func TestCommentOutDropStatements(t *testing.T) {
-	none := database.GeneratorConfig{}
-	withPrivileges := database.GeneratorConfig{ManagePrivileges: &[]database.ManageObjectRule{}}
-	withFunctions := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{}}
+func TestSkippedRender(t *testing.T) {
+	d := dialect{mode: GeneratorModePostgres, defaultSchema: "public", legacyIgnoreQuotes: true}
+	users := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "users"}}
 
-	// Single-line drops keep the existing format.
+	assert.Equal(t, `-- Skipped: DROP TABLE "public"."users"`, skipped{dropObjectStatement{d: d, kind: "TABLE", name: users}}.Render())
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, spellAll: true, objectType: "TABLE", object: users, grantee: "PUBLIC", cascade: true}
+	assert.Equal(t, `-- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM PUBLIC CASCADE`, skipped{revoke}.Render())
+
+	// Every line is commented, so that no executable SQL can leak after the first one.
 	assert.Equal(t,
-		[]string{`-- Skipped: DROP TABLE "public"."users"`},
-		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none),
-	)
-	// Non-drop statements pass through unchanged.
-	assert.Equal(t,
-		[]string{"CREATE TABLE users (id bigint)"},
-		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none),
-	)
-	// manage.privilege keeps REVOKE statements executable (revoke gating is
-	// already decided per grantee at emission time).
-	assert.Equal(t,
-		[]string{`REVOKE SELECT ON TABLE users FROM app_user`},
-		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges),
-	)
-	// manage.function keeps DROP FUNCTION executable (drop gating is already
-	// decided per function; a forbidden one already carries "-- Skipped: ").
-	assert.Equal(t,
-		[]string{`DROP FUNCTION "public"."managed_fn"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions),
-	)
-	// Without manage.function, DROP FUNCTION is still gated by enable_drop.
-	assert.Equal(t,
-		[]string{`-- Skipped: DROP FUNCTION "public"."f"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none),
-	)
-	// Every line of a multi-line statement is commented out so no executable
-	// SQL can leak after the first line.
-	assert.Equal(t,
-		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
-		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none),
+		"-- Skipped: CREATE TRIGGER t\n-- BEGIN\n-- DELETE FROM users;\n-- END",
+		skipped{inputStatement{statement: "CREATE TRIGGER t\nBEGIN\nDELETE FROM users;\nEND"}}.Render(),
 	)
 }
 
-func TestGateFunctionDropDDL(t *testing.T) {
-	drop := `DROP FUNCTION "public"."f"`
+func TestHeldBack(t *testing.T) {
+	d := dialect{mode: GeneratorModePostgres, defaultSchema: "public"}
+	users := QualifiedName{Name: Ident{Name: "users"}}
+	dropTable := dropObjectStatement{d: d, kind: "TABLE", name: users}
+	dropEvent := dropObjectStatement{d: d, kind: "EVENT", name: QualifiedName{Name: Ident{Name: "cleanup"}}}
+	dropFunction := dropFunctionStatement{d: d, name: QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "f"}}}
+	dropExtension := dropExtensionStatement{d: d, name: Ident{Name: "pgcrypto"}}
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user"}
+	rules := func(rules ...database.ManageObjectRule) *[]database.ManageObjectRule { return &rules }
 
-	// Legacy mode (manage.function unset): unchanged; the global enable_drop
-	// pass handles it.
-	assert.Equal(t, drop, gateFunctionDropDDL(database.GeneratorConfig{}, "f", drop))
+	tests := []struct {
+		name     string
+		config   database.GeneratorConfig
+		s        statement
+		heldBack bool
+	}{
+		{"DropTableWithEnableDrop", database.GeneratorConfig{EnableDrop: true}, dropTable, false},
+		{"DropTableWithoutEnableDrop", database.GeneratorConfig{}, dropTable, true},
+		{"DropEventWithoutEnableDrop", database.GeneratorConfig{}, dropEvent, true},
+		{"CreateWithoutEnableDrop", database.GeneratorConfig{}, inputStatement{statement: "CREATE TABLE users (id bigint)"}, false},
+		{"AlreadySkipped", database.GeneratorConfig{}, skipped{dropTable}, false},
 
-	// Matched rule with drop:true → allowed (bare DDL).
-	allow := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f", Drop: true}}}
-	assert.Equal(t, drop, gateFunctionDropDDL(allow, "f", drop))
+		{"RevokeWithoutEnableDrop", database.GeneratorConfig{}, revoke, true},
+		{"RevokeManagedRolesWithoutEnableDrop", database.GeneratorConfig{ManagedRoles: []string{"app_user"}}, revoke, true},
+		{"RevokeManagedRolesWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManagedRoles: []string{"app_user"}}, revoke, false},
+		{"RevokeManagePrivilegeDropWithoutEnableDrop", database.GeneratorConfig{ManagePrivileges: rules(database.ManageObjectRule{Target: "app_user", Drop: true})}, revoke, false},
+		{"RevokeManagePrivilegeNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManagePrivileges: rules(database.ManageObjectRule{Target: "app_user"})}, revoke, true},
+		{"RevokeManagePrivilegeUnmatched", database.GeneratorConfig{EnableDrop: true, ManagePrivileges: rules(database.ManageObjectRule{Target: "other", Drop: true})}, revoke, true},
 
-	// Matched rule with drop:false → skipped.
-	forbid := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f"}}}
-	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(forbid, "f", drop))
+		{"DropFunctionWithoutEnableDrop", database.GeneratorConfig{}, dropFunction, true},
+		{"DropFunctionManageFunctionDropWithoutEnableDrop", database.GeneratorConfig{ManageFunctions: rules(database.ManageObjectRule{Target: "f", Drop: true})}, dropFunction, false},
+		{"DropFunctionManageFunctionNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageFunctions: rules(database.ManageObjectRule{Target: "f"})}, dropFunction, true},
+		{"DropFunctionManageFunctionUnmatched", database.GeneratorConfig{EnableDrop: true, ManageFunctions: rules(database.ManageObjectRule{Target: "other", Drop: true})}, dropFunction, true},
 
-	// No rule matches → skipped (unmanaged functions are never dropped).
-	other := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "other", Drop: true}}}
-	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(other, "f", drop))
+		{"DropExtensionManageExtensionDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto", Drop: true})}, dropExtension, false},
+		{"DropExtensionManageExtensionDropWithoutEnableDrop", database.GeneratorConfig{ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto", Drop: true})}, dropExtension, true},
+		{"DropExtensionManageExtensionNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto"})}, dropExtension, true},
+		{"DropExtensionManageExtensionUnmatched", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "other", Drop: true})}, dropExtension, true},
+		{"DropExtensionWithEnableDrop", database.GeneratorConfig{EnableDrop: true}, dropExtension, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.heldBack, heldBack(tt.config, tt.s))
+		})
+	}
 }
 
 func TestIsManagedFunction(t *testing.T) {
@@ -1514,7 +1514,7 @@ func TestNormalizePGFunctionType(t *testing.T) {
 	assert.Equal(t, "setof", normalizePGFunctionType("setof"))
 }
 
-func TestDropFunctionDDL(t *testing.T) {
+func TestDropFunction(t *testing.T) {
 	g := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
 	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
 
@@ -1523,14 +1523,14 @@ func TestDropFunctionDDL(t *testing.T) {
 		{name: parser.NewIdent("x", false), typ: "integer"},
 		{mode: "VARIADIC", name: parser.NewIdent("rest", false), typ: "text[]"},
 	}}
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunctionDDL(fn))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunction(fn).Render())
 
 	// Zero arguments.
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunctionDDL(&Function{name: name}))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunction(&Function{name: name}).Render())
 
 	// OUT parameters are not part of the identity: keep the bare form.
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunction(outFn).Render())
 }
 
 func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
