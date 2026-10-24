@@ -927,7 +927,7 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND p.prokind = 'f'
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_proc') AND d.deptype = 'e')
-		ORDER BY n.nspname, p.proname;
+		ORDER BY n.nspname, p.proname, pg_get_function_identity_arguments(p.oid);
 	`)
 	if err != nil {
 		return nil, err
