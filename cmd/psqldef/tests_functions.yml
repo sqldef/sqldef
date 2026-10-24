@@ -427,6 +427,30 @@ FunctionReturnTypeChangeDropsAndRecreates:
     DROP FUNCTION public.get_val();
     CREATE FUNCTION get_val() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
 
+FunctionReturnTypeChangeRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION get_val() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION get_val() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP FUNCTION public.get_val();
+    -- Skipped: CREATE FUNCTION get_val() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  down: ""
+
+FunctionArgTypeChangeRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION twice(x integer) RETURNS integer AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION twice(x bigint) RETURNS bigint AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP FUNCTION public.twice(integer);
+    -- Skipped: CREATE FUNCTION twice(x bigint) RETURNS bigint AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+  down: ""
+
 # Changing an argument type cannot go through CREATE OR REPLACE (it would
 # create an overload instead of replacing), so drop and recreate.
 FunctionArgTypeChangeDropsAndRecreates:
@@ -491,6 +515,20 @@ OverloadedFunctionsBothReplacedInPlace:
   down: |
     CREATE OR REPLACE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
     CREATE OR REPLACE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+
+OverloadedFunctionUnmatchedRecreateIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP FUNCTION public.ovl;
+    -- Skipped: CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  down: ""
 
 FunctionReferencingATableOfTheSameSchema:
   legacy_ignore_quotes: false
