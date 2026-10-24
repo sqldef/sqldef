@@ -212,14 +212,6 @@ func (s createIndexStatement) Render() string {
 	}
 }
 
-// inputCreateIndexStatement is a CREATE INDEX from the desired schema, emitted as written.
-type inputCreateIndexStatement struct {
-	statementDefaults
-	statement string
-}
-
-func (s inputCreateIndexStatement) Render() string { return s.statement }
-
 // inputStatement is a statement from the desired schema, emitted as written.
 type inputStatement struct {
 	statementDefaults

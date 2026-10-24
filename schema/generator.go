@@ -1939,7 +1939,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				desiredIndex.concurrently = true
 			}
 			// Otherwise: use the original statement as-is
-			indexDDL = inputCreateIndexStatement{statement: createIndex}
+			indexDDL = inputStatement{statement: createIndex}
 		}
 	default:
 		indexDDL = g.inputAlterTable(input)
