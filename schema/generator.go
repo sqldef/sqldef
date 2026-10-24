@@ -805,10 +805,15 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted functions
 	for _, currentFunction := range g.currentFunctions {
-		if g.findFunctionByName(g.desiredFunctions, currentFunction.name) != nil {
+		if g.findFunctionIdentity(g.desiredFunctions, currentFunction) != nil || g.pairedFunction(g.currentFunctions, g.desiredFunctions, currentFunction) != nil {
 			continue
 		}
-		ddls = append(ddls, dropFunctionStatement{d: g.dialect, name: currentFunction.name})
+		// The argument list is needed only to tell overloads apart.
+		if len(g.functionsNamed(g.currentFunctions, currentFunction.name)) > 1 {
+			ddls = append(ddls, g.dropFunction(currentFunction))
+		} else {
+			ddls = append(ddls, dropFunctionStatement{d: g.dialect, name: currentFunction.name})
+		}
 	}
 
 	// Clean up obsoleted types
@@ -2558,7 +2563,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]statement, error) {
 	var ddls []statement
 
-	currentFunction, unmatchedOverloads := g.findReplaceTargetFunction(desired)
+	currentFunction := g.findReplaceTargetFunction(desired)
 	if currentFunction == nil {
 		// Function does not exist, create it
 		ddls = append(ddls, inputStatement{statement: desired.statement})
@@ -2569,9 +2574,8 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]statemen
 		// argument types would create an overload instead of replacing. So:
 		// same signature -> CREATE OR REPLACE (no drop, dependent objects
 		// survive); changed signature -> DROP + CREATE, the only way PostgreSQL
-		// allows it. When overloads make the pairing ambiguous, or on other
-		// dialects, the previous behavior is kept.
-		if g.mode == GeneratorModePostgres && !unmatchedOverloads {
+		// allows it. Other dialects keep the previous behavior.
+		if g.mode == GeneratorModePostgres {
 			if replacement, ok := g.functionReplacementDDL(currentFunction, desired); ok {
 				ddls = append(ddls, inputStatement{statement: replacement})
 			} else {
@@ -2609,29 +2613,72 @@ func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName
 }
 
 // findReplaceTargetFunction picks the current function that desired should be
-// compared against. With PostgreSQL overloads (same name, different argument
-// types) it prefers the one matching the desired signature; when several
-// same-named functions exist and none matches, unmatchedOverloads is true and
-// the caller keeps the legacy behavior instead of guessing.
-func (g *Generator) findReplaceTargetFunction(desired *Function) (current *Function, unmatchedOverloads bool) {
-	var sameNamed []*Function
-	for _, f := range g.currentFunctions {
-		if qualifiedNamesEqual(f.name, desired.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
-			sameNamed = append(sameNamed, f)
+// compared against, or nil when desired is a new function (or a new overload).
+func (g *Generator) findReplaceTargetFunction(desired *Function) *Function {
+	if current := g.findFunctionIdentity(g.currentFunctions, desired); current != nil {
+		return current
+	}
+	return g.pairedFunction(g.desiredFunctions, g.currentFunctions, desired)
+}
+
+// findFunctionIdentity returns the function in functions that f would replace
+// rather than overload: in PostgreSQL the same name and input argument types,
+// elsewhere just the same name.
+func (g *Generator) findFunctionIdentity(functions []*Function, f *Function) *Function {
+	for _, other := range functions {
+		if !qualifiedNamesEqual(other.name, f.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+			continue
+		}
+		if g.mode != GeneratorModePostgres || slices.Equal(g.functionIdentityArgTypes(other), g.functionIdentityArgTypes(f)) {
+			return other
 		}
 	}
-	switch len(sameNamed) {
-	case 0:
-		return nil, false
-	case 1:
-		return sameNamed[0], false
+	return nil
+}
+
+// pairedFunction returns the function in others that f (from own) changes the
+// input argument types of. A change can only be told apart from adding one
+// overload and removing another when f and the paired function are the only
+// ones of their name without an identity match on the other side.
+func (g *Generator) pairedFunction(own, others []*Function, f *Function) *Function {
+	unmatchedOwn := g.functionsWithoutIdentity(own, others, f.name)
+	unmatchedOthers := g.functionsWithoutIdentity(others, own, f.name)
+	if len(unmatchedOwn) == 1 && unmatchedOwn[0] == f && len(unmatchedOthers) == 1 {
+		return unmatchedOthers[0]
 	}
-	for _, f := range sameNamed {
-		if g.areSameFunctionSignature(f, desired) {
-			return f, false
+	return nil
+}
+
+func (g *Generator) functionsWithoutIdentity(functions, others []*Function, name QualifiedName) []*Function {
+	var result []*Function
+	for _, f := range g.functionsNamed(functions, name) {
+		if g.findFunctionIdentity(others, f) == nil {
+			result = append(result, f)
 		}
 	}
-	return sameNamed[0], true
+	return result
+}
+
+func (g *Generator) functionsNamed(functions []*Function, name QualifiedName) []*Function {
+	var result []*Function
+	for _, f := range functions {
+		if qualifiedNamesEqual(f.name, name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// functionIdentityArgTypes returns the argument types PostgreSQL identifies a
+// function by. OUT arguments are not part of it.
+func (g *Generator) functionIdentityArgTypes(f *Function) []string {
+	var types []string
+	for _, arg := range f.args {
+		if functionArgMode(arg.mode) != "OUT" {
+			types = append(types, normalizePGFunctionType(arg.typ))
+		}
+	}
+	return types
 }
 
 // functionReplacementDDL returns the single in-place replacement statement for
