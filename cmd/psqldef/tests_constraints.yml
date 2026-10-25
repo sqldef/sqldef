@@ -2787,6 +2787,14 @@ UnnamedUniqueConstraintWithMultibyteNames:
   down: |
     ALTER TABLE public."テーブルテーブルテーブルテーブルテーブル" DROP CONSTRAINT "テーブルテーブルテ_カラムカラムカラム_key";
 
+PrimaryKeyAndChecksWithMultibyteNames:
+  desired: |
+    CREATE TABLE "テーブル" (
+      "カラム" integer PRIMARY KEY CHECK ("カラム" > 0),
+      "カラム2" integer,
+      CHECK ("カラム" < "カラム2")
+    );
+
 AddUnnamedUniqueConstraintNullsNotDistinct:
   legacy_ignore_quotes: false
   current: |
