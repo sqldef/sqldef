@@ -242,6 +242,8 @@ CollateOnColumn:
            (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
 ColumnCollateAfterOtherConstraints:
+  # utf8mb4_bin is TiDB's default utf8mb4 collation, which its SHOW CREATE TABLE leaves out
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id int NOT NULL,
