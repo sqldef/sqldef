@@ -35,6 +35,16 @@ func setDDL(yylex any, ddl *DDL) {
   yylex.(*Tokenizer).partialDDL = ddl
 }
 
+// canonicalStorageParamInteger formats an integer storage parameter the way pg_class.reloptions
+// stores it (070 as 70). Values outside int32 are not integers to PostgreSQL and stay as written.
+func canonicalStorageParamInteger(s string) string {
+  n, err := strconv.ParseInt(s, 10, 32)
+  if err != nil {
+    return s
+  }
+  return strconv.FormatInt(n, 10)
+}
+
 %}
 
 %union {
@@ -226,6 +236,12 @@ func setDDL(yylex any, ddl *DDL) {
 %nonassoc LOWER_THAN_WITH
 %left <str> WITH WITHOUT STRICT
 /* ---------------- End of Optional Timezone Resolution ------------------------ */
+/* ---------------- PostgreSQL WITH (...) Resolution ---------------------------
+ * After "CREATE TABLE t (...)", WITH could also start a table_opt_name.
+ * HIGHER_THAN_WITH on the empty table_partition_by_opt makes the parser reduce it and
+ * read WITH as the PostgreSQL storage parameter clause instead.                    */
+%nonassoc HIGHER_THAN_WITH
+/* ---------------- End of PostgreSQL Table Suffix Resolution ------------------ */
 /* ---------------- Optional IF NOT EXISTS Resolution ---------------------------
  * LOWER_THAN_IF is used to resolve shift/reduce conflicts in optional
  * if_not_exists_opt contexts. It has lower precedence than IF, causing the
@@ -473,7 +489,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
 %type <str> table_opt_name table_opt_value sqlite3_table_opt
-%type <tableOptions> table_option_list
+%type <tableOptions> table_option_list table_storage_param_list table_storage_param table_storage_param_opt
+%type <str> table_storage_param_name table_storage_param_value
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <str> operator_class
@@ -3484,23 +3501,100 @@ create_table_prefix:
   }
 
 table_spec:
-  '(' table_column_list ')' table_option_list table_partition_by_opt
+  '(' table_column_list ')' table_option_list table_partition_by_opt table_storage_param_opt
   {
     $$ = $2
     $$.Options = $4
     $$.Partition = $5
+    $$.StorageParams = $6
   }
-| '(' table_column_list ',' error ')' table_option_list table_partition_by_opt
+| '(' table_column_list ',' error ')' table_option_list table_partition_by_opt table_storage_param_opt
   {
     yylex.Error("trailing comma is not allowed in column definitions")
     $$ = $2
     $$.Options = $6
     $$.Partition = $7
+    $$.StorageParams = $8
+  }
+
+// PostgreSQL storage parameters
+table_storage_param_opt:
+  {
+    $$ = nil
+  }
+| WITH '(' table_storage_param_list ')'
+  {
+    $$ = $3
+  }
+
+table_storage_param_list:
+  table_storage_param
+| table_storage_param_list ',' table_storage_param
+  {
+    $$ = $1
+    for name, value := range $3 {
+      $$[name] = value
+    }
+  }
+
+// Names and unquoted values are lowercased the way PostgreSQL stores them in pg_class.reloptions.
+table_storage_param:
+  table_storage_param_name '=' table_storage_param_value
+  {
+    $$ = map[string]string{$1: $3}
+  }
+/* A parameter without a value is set to true */
+| table_storage_param_name
+  {
+    $$ = map[string]string{$1: "true"}
+  }
+
+table_storage_param_name:
+  reserved_sql_id
+  {
+    $$ = strings.ToLower($1.Name)
+  }
+| FILLFACTOR
+  {
+    $$ = strings.ToLower($1)
+  }
+| reserved_sql_id '.' reserved_sql_id
+  {
+    $$ = strings.ToLower($1.Name) + "." + strings.ToLower($3.Name)
+  }
+
+table_storage_param_value:
+  reserved_sql_id
+  {
+    $$ = strings.ToLower($1.Name)
+  }
+| STRING
+| INTEGRAL
+  {
+    $$ = canonicalStorageParamInteger($1)
+  }
+| '+' INTEGRAL
+  {
+    $$ = canonicalStorageParamInteger($2)
+  }
+| '-' INTEGRAL
+  {
+    $$ = canonicalStorageParamInteger("-" + $2)
+  }
+| FLOAT
+| '+' FLOAT
+  {
+    $$ = $2
+  }
+| '-' FLOAT
+  {
+    $$ = "-" + $2
   }
 
 // PostgreSQL PARTITION BY clause for partitioned tables
 // Also supports MySQL partition syntax
 table_partition_by_opt:
+  %prec HIGHER_THAN_WITH
   {
     $$ = nil
   }
@@ -5416,6 +5510,12 @@ index_option:
   {
     id := strings.Trim(strings.ToLower($1.Name), "`")
     $$ = &IndexOption{Name: id, Value: $3}
+  }
+/* PostgreSQL index storage parameters with a word value, e.g. deduplicate_items = off as
+ * pg_get_indexdef exports it */
+| ID '=' reserved_sql_id
+  {
+    $$ = &IndexOption{Name: strings.ToLower($1.Name), Value: NewStrVal(strings.ToLower($3.Name))}
   }
 
 

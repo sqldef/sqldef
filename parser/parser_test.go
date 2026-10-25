@@ -1078,6 +1078,31 @@ func TestSQLiteTableOptions(t *testing.T) {
 	}
 }
 
+func TestPostgresStorageParamsRoundTrip(t *testing.T) {
+	sql := `
+CREATE TABLE t (
+  id integer
+) PARTITION BY RANGE (id) WITH (fillfactor = 070, parallel_workers = +2, log_autovacuum_min_duration = -1, vacuum_truncate)`
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := String(statement)
+	want := "create table t (\n\tid integer\n)\npartition by range (id) WITH (fillfactor = 70, log_autovacuum_min_duration = -1, parallel_workers = 2, vacuum_truncate = true)"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+
+	reparsed, err := ParseDDL(got, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("formatted SQL does not parse: %v", err)
+	}
+	if String(reparsed) != got {
+		t.Fatalf("round trip changed the SQL:\n%s", String(reparsed))
+	}
+}
+
 // TestPragmaAndDeleteStatements covers the non-DDL statements that some schema
 // exports (e.g. Cloudflare D1) interleave with the DDL. They parse instead of
 // erroring; the schema layer drops them.
