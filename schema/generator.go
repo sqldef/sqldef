@@ -1833,6 +1833,25 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Examine PostgreSQL storage parameters (parseTable rejects them for other databases)
+	var setParams, resetParams []string
+	for key, value := range util.CanonicalMapIter(desired.table.storageParams) {
+		if currentTable.storageParams[key] != value {
+			setParams = append(setParams, key+" = "+value)
+		}
+	}
+	for key := range util.CanonicalMapIter(currentTable.storageParams) {
+		if _, ok := desired.table.storageParams[key]; !ok {
+			resetParams = append(resetParams, key)
+		}
+	}
+	if len(setParams) > 0 {
+		ddls = append(ddls, g.alterTable(desired.table.name, setStorageParamsAction{params: setParams}))
+	}
+	if len(resetParams) > 0 {
+		ddls = append(ddls, g.alterTable(desired.table.name, resetStorageParamsAction{params: resetParams}))
+	}
+
 	// Compare partitions (MySQL/MariaDB only)
 	if g.mode == GeneratorModeMysql {
 		partitionDDLs := g.generatePartitionDDLs(currentTable, desired.table)
