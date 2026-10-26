@@ -3152,7 +3152,7 @@ trigger_referencing_kw:
   ID
   {
     if $1.Quoted || !strings.EqualFold($1.Name, "referencing") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $1.Name))
+      return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $1.Name))
     }
     $$ = struct{}{}
   }
@@ -3163,7 +3163,7 @@ trigger_old_kw:
   ID
   {
     if $1.Quoted || !strings.EqualFold($1.Name, "old") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $1.Name))
+      return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $1.Name))
     }
     $$ = struct{}{}
   }

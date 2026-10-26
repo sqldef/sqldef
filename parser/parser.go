@@ -10042,7 +10042,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
 			if yyDollar[1].ident.Quoted || !strings.EqualFold(yyDollar[1].ident.Name, "referencing") {
-				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
+				return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
 			}
 			yyVAL.empty = struct{}{}
 		}
@@ -10050,7 +10050,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
 			if yyDollar[1].ident.Quoted || !strings.EqualFold(yyDollar[1].ident.Name, "old") {
-				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
+				return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
 			}
 			yyVAL.empty = struct{}{}
 		}

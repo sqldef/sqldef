@@ -110,6 +110,22 @@ CREATE TABLEE posts (id INT)": syntax error at line 2, column 8 near 'create'
   CREATE TABLE test (geom geometry(Point,4326), id INT)
                                                ^`,
 		},
+		{
+			name: "Misspelled REFERENCING in CREATE TRIGGER",
+			sql:  "CREATE TRIGGER trg AFTER INSERT ON t REFERENCE NEW TABLE AS n FOR EACH STATEMENT EXECUTE FUNCTION f()",
+			mode: ParserModePostgres,
+			expectedErr: `found syntax error when parsing DDL "CREATE TRIGGER trg AFTER INSERT ON t REFERENCE NEW TABLE AS n FOR EACH STATEMENT EXECUTE FUNCTION f()": syntax error around 'REFERENCE' at line 1, column 48 near 'REFERENCE'
+  CREATE TRIGGER trg AFTER INSERT ON t REFERENCE NEW TABLE AS n FOR EACH STATEMENT EXECUTE FUNCTION f()
+                                                 ^`,
+		},
+		{
+			name: "Misspelled OLD in CREATE TRIGGER",
+			sql:  "CREATE TRIGGER trg AFTER UPDATE ON t REFERENCING NEW TABLE AS n OLDER TABLE AS o FOR EACH STATEMENT EXECUTE FUNCTION f()",
+			mode: ParserModePostgres,
+			expectedErr: `found syntax error when parsing DDL "CREATE TRIGGER trg AFTER UPDATE ON t REFERENCING NEW TABLE AS n OLDER TABLE AS o FOR EACH STATEMENT EXECUTE FUNCTION f()": syntax error around 'OLDER' at line 1, column 71 near 'OLDER'
+  CREATE TRIGGER trg AFTER UPDATE ON t REFERENCING NEW TABLE AS n OLDER TABLE AS o FOR EACH STATEMENT EXECUTE FUNCTION f()
+                                                                        ^`,
+		},
 	}
 
 	for _, tc := range testCases {
