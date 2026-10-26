@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1248,24 +1249,6 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	assert.Equal(t, strUser, strDB, "CHECK constraints should normalize to the same format")
 }
 
-func TestIsDropStatement(t *testing.T) {
-	// Destructive statements are detected by their leading keyword.
-	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`))
-	assert.True(t, isDropStatement("DROP FUNCTION public.add_one"))
-	assert.True(t, isDropStatement("DROP EVENT `cleanup`"))
-	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`))
-
-	// Additive statements are never destructive, even when their payload
-	// mentions destructive keywords (function bodies, comment text, literals).
-	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"))
-	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"))
-	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`))
-	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'"))
-	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nALTER TABLE logs DROP PARTITION p2024"))
-	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
-}
-
 func TestDestructiveStatements(t *testing.T) {
 	users := QualifiedName{Name: Ident{Name: "users"}}
 	mysql := &Generator{dialect: dialect{mode: GeneratorModeMysql}}
@@ -1280,6 +1263,14 @@ func TestDestructiveStatements(t *testing.T) {
 	assert.True(t, postgres.generateDropIndex(users, Ident{Name: "idx_name"}, false).Destructive())
 	assert.True(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: false}).Destructive())
 
+	// Dropping an object or revoking a privilege is destructive.
+	assert.True(t, dropObjectStatement{d: postgres.dialect, kind: "TABLE", name: users}.Destructive())
+	assert.True(t, dropTriggerStatement{d: postgres.dialect, name: QualifiedName{Name: Ident{Name: "t"}}, table: users}.Destructive())
+	assert.True(t, dropPolicyStatement{d: postgres.dialect, name: Ident{Name: "p"}, table: users}.Destructive())
+	assert.True(t, dropFunctionStatement{d: postgres.dialect, name: QualifiedName{Name: Ident{Name: "f"}}}.Destructive())
+	assert.True(t, dropExtensionStatement{d: postgres.dialect, name: Ident{Name: "pgcrypto"}}.Destructive())
+	assert.True(t, revokeStatement{d: postgres.dialect, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user"}.Destructive())
+
 	// One destructive action makes the whole statement destructive.
 	assert.True(t, mysql.alterTable(users,
 		addColumnAction{column: Column{name: Ident{Name: "a"}, typeName: "int"}},
@@ -1293,66 +1284,76 @@ func TestDestructiveStatements(t *testing.T) {
 	assert.False(t, mysql.alterTable(users, dropForeignKeyAction{name: Ident{Name: "fk_users"}}).Destructive())
 	assert.False(t, mysql.alterTable(users, dropPrimaryKeyAction{}).Destructive())
 	assert.False(t, postgres.inputAlterTable(&SetRowLevelSecurity{tableName: users, value: true}).Destructive())
+
+	// Creating or changing an object is not destructive, even when its body, comment or
+	// literal spells a destructive statement.
+	assert.False(t, inputStatement{statement: "CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"}.Destructive())
+	assert.False(t, inputStatement{statement: "CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"}.Destructive())
+	assert.False(t, rawStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`).Destructive())
+	assert.False(t, alterEventStatement{d: mysql.dialect, event: Event{name: QualifiedName{Name: Ident{Name: "cleanup"}}, schedule: "EVERY 1 DAY", body: []string{"ALTER TABLE logs DROP PARTITION p2024"}}}.Destructive())
+	assert.False(t, alterDomainStatement{d: postgres.dialect, domain: users, action: dropDomainConstraintAction{name: "users_check"}}.Destructive())
 }
 
-func TestCommentOutDropStatements(t *testing.T) {
-	none := database.GeneratorConfig{}
-	withPrivileges := database.GeneratorConfig{ManagePrivileges: &[]database.ManageObjectRule{}}
-	withFunctions := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{}}
+func TestSkippedRender(t *testing.T) {
+	d := dialect{mode: GeneratorModePostgres, defaultSchema: "public", legacyIgnoreQuotes: true}
+	users := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "users"}}
 
-	// Single-line drops keep the existing format.
+	assert.Equal(t, `-- Skipped: DROP TABLE "public"."users"`, skipped{dropObjectStatement{d: d, kind: "TABLE", name: users}}.Render())
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, spellAll: true, objectType: "TABLE", object: users, grantee: "PUBLIC", cascade: true}
+	assert.Equal(t, `-- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM PUBLIC CASCADE`, skipped{revoke}.Render())
+
+	// Every line is commented, so that no executable SQL can leak after the first one.
 	assert.Equal(t,
-		[]string{`-- Skipped: DROP TABLE "public"."users"`},
-		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none),
-	)
-	// Non-drop statements pass through unchanged.
-	assert.Equal(t,
-		[]string{"CREATE TABLE users (id bigint)"},
-		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none),
-	)
-	// manage.privilege keeps REVOKE statements executable (revoke gating is
-	// already decided per grantee at emission time).
-	assert.Equal(t,
-		[]string{`REVOKE SELECT ON TABLE users FROM app_user`},
-		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges),
-	)
-	// manage.function keeps DROP FUNCTION executable (drop gating is already
-	// decided per function; a forbidden one already carries "-- Skipped: ").
-	assert.Equal(t,
-		[]string{`DROP FUNCTION "public"."managed_fn"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions),
-	)
-	// Without manage.function, DROP FUNCTION is still gated by enable_drop.
-	assert.Equal(t,
-		[]string{`-- Skipped: DROP FUNCTION "public"."f"`},
-		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none),
-	)
-	// Every line of a multi-line statement is commented out so no executable
-	// SQL can leak after the first line.
-	assert.Equal(t,
-		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
-		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none),
+		"-- Skipped: CREATE TRIGGER t\n-- BEGIN\n-- DELETE FROM users;\n-- END",
+		skipped{inputStatement{statement: "CREATE TRIGGER t\nBEGIN\nDELETE FROM users;\nEND"}}.Render(),
 	)
 }
 
-func TestGateFunctionDropDDL(t *testing.T) {
-	drop := `DROP FUNCTION "public"."f"`
+func TestHeldBack(t *testing.T) {
+	d := dialect{mode: GeneratorModePostgres, defaultSchema: "public"}
+	users := QualifiedName{Name: Ident{Name: "users"}}
+	dropTable := dropObjectStatement{d: d, kind: "TABLE", name: users}
+	dropEvent := dropObjectStatement{d: d, kind: "EVENT", name: QualifiedName{Name: Ident{Name: "cleanup"}}}
+	dropFunction := dropFunctionStatement{d: d, name: QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "f"}}}
+	dropExtension := dropExtensionStatement{d: d, name: Ident{Name: "pgcrypto"}}
+	revoke := revokeStatement{d: d, privileges: []Privilege{{Name: "SELECT"}}, object: users, grantee: "app_user"}
+	rules := func(rules ...database.ManageObjectRule) *[]database.ManageObjectRule { return &rules }
 
-	// Legacy mode (manage.function unset): unchanged; the global enable_drop
-	// pass handles it.
-	assert.Equal(t, drop, gateFunctionDropDDL(database.GeneratorConfig{}, "f", drop))
+	tests := []struct {
+		name     string
+		config   database.GeneratorConfig
+		s        statement
+		heldBack bool
+	}{
+		{"DropTableWithEnableDrop", database.GeneratorConfig{EnableDrop: true}, dropTable, false},
+		{"DropTableWithoutEnableDrop", database.GeneratorConfig{}, dropTable, true},
+		{"DropEventWithoutEnableDrop", database.GeneratorConfig{}, dropEvent, true},
+		{"CreateWithoutEnableDrop", database.GeneratorConfig{}, inputStatement{statement: "CREATE TABLE users (id bigint)"}, false},
+		{"AlreadySkipped", database.GeneratorConfig{}, skipped{dropTable}, false},
 
-	// Matched rule with drop:true → allowed (bare DDL).
-	allow := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f", Drop: true}}}
-	assert.Equal(t, drop, gateFunctionDropDDL(allow, "f", drop))
+		{"RevokeWithoutEnableDrop", database.GeneratorConfig{}, revoke, true},
+		{"RevokeManagedRolesWithoutEnableDrop", database.GeneratorConfig{ManagedRoles: []string{"app_user"}}, revoke, true},
+		{"RevokeManagedRolesWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManagedRoles: []string{"app_user"}}, revoke, false},
+		{"RevokeManagePrivilegeDropWithoutEnableDrop", database.GeneratorConfig{ManagePrivileges: rules(database.ManageObjectRule{Target: "app_user", Drop: true})}, revoke, false},
+		{"RevokeManagePrivilegeNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManagePrivileges: rules(database.ManageObjectRule{Target: "app_user"})}, revoke, true},
+		{"RevokeManagePrivilegeUnmatched", database.GeneratorConfig{EnableDrop: true, ManagePrivileges: rules(database.ManageObjectRule{Target: "other", Drop: true})}, revoke, true},
 
-	// Matched rule with drop:false → skipped.
-	forbid := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f"}}}
-	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(forbid, "f", drop))
+		{"DropFunctionWithoutEnableDrop", database.GeneratorConfig{}, dropFunction, true},
+		{"DropFunctionManageFunctionDropWithoutEnableDrop", database.GeneratorConfig{ManageFunctions: rules(database.ManageObjectRule{Target: "f", Drop: true})}, dropFunction, false},
+		{"DropFunctionManageFunctionNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageFunctions: rules(database.ManageObjectRule{Target: "f"})}, dropFunction, true},
+		{"DropFunctionManageFunctionUnmatched", database.GeneratorConfig{EnableDrop: true, ManageFunctions: rules(database.ManageObjectRule{Target: "other", Drop: true})}, dropFunction, true},
 
-	// No rule matches → skipped (unmanaged functions are never dropped).
-	other := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "other", Drop: true}}}
-	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(other, "f", drop))
+		{"DropExtensionManageExtensionDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto", Drop: true})}, dropExtension, false},
+		{"DropExtensionManageExtensionDropWithoutEnableDrop", database.GeneratorConfig{ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto", Drop: true})}, dropExtension, true},
+		{"DropExtensionManageExtensionNoDropWithEnableDrop", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "pgcrypto"})}, dropExtension, true},
+		{"DropExtensionManageExtensionUnmatched", database.GeneratorConfig{EnableDrop: true, ManageExtensions: rules(database.ManageObjectRule{Target: "other", Drop: true})}, dropExtension, true},
+		{"DropExtensionWithEnableDrop", database.GeneratorConfig{EnableDrop: true}, dropExtension, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.heldBack, heldBack(tt.config, tt.s))
+		})
+	}
 }
 
 func TestIsManagedFunction(t *testing.T) {
@@ -1514,7 +1515,7 @@ func TestNormalizePGFunctionType(t *testing.T) {
 	assert.Equal(t, "setof", normalizePGFunctionType("setof"))
 }
 
-func TestDropFunctionDDL(t *testing.T) {
+func TestDropFunction(t *testing.T) {
 	g := &Generator{dialect: dialect{mode: GeneratorModePostgres, defaultSchema: "public"}}
 	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
 
@@ -1523,14 +1524,14 @@ func TestDropFunctionDDL(t *testing.T) {
 		{name: parser.NewIdent("x", false), typ: "integer"},
 		{mode: "VARIADIC", name: parser.NewIdent("rest", false), typ: "text[]"},
 	}}
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunctionDDL(fn))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunction(fn).Render())
 
 	// Zero arguments.
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunctionDDL(&Function{name: name}))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunction(&Function{name: name}).Render())
 
 	// OUT parameters are not part of the identity: keep the bare form.
 	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
-	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunction(outFn).Render())
 }
 
 func TestGenerateIndexColumnDefinitionOperatorClassPrecedesDirection(t *testing.T) {
@@ -1724,19 +1725,19 @@ func TestFilterObjectsOwnerStatements(t *testing.T) {
 	}
 
 	// target_tables is about tables and does not filter views, so neither owner goes away.
-	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}})
+	filtered := FilterObjects(parse(t), database.GeneratorConfig{TargetTables: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
 
 	// skip_views is about views, so a regexp that happens to match a table name must not reach
 	// the table's owner.
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users", "public.v_users"}, owners(filtered))
 
 	// The owner of a filtered object goes with it.
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipTables: []string{"public.users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.v_users"}, owners(filtered))
 
-	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}})
+	filtered = FilterObjects(parse(t), database.GeneratorConfig{SkipViews: []string{"public.v_users"}}, GeneratorModePostgres, "public")
 	assert.Equal(t, []string{"public.users"}, owners(filtered))
 }
 
@@ -1773,7 +1774,7 @@ func TestFilterObjectsOwnerIdentity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), test.sql, "public")
 			assert.NoError(t, err)
-			assert.Empty(t, FilterObjects(ddls, test.config))
+			assert.Empty(t, FilterObjects(ddls, test.config, GeneratorModePostgres, "public"))
 		})
 	}
 }
@@ -1916,4 +1917,224 @@ func TestRenameColumnOfGrantOnMultipleTables(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ALTER TABLE public.t1 RENAME COLUMN a TO b"}, ddls)
+}
+
+// A comment and a trigger belong to an object, so the filters have to take them along with it.
+func TestFilterObjectsDependentStatements(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint, name text, CONSTRAINT users_name_len CHECK (length(name) > 0));
+		CREATE TABLE logs (id bigint, note text, CONSTRAINT logs_note_len CHECK (length(note) > 0));
+		CREATE VIEW v_users AS SELECT id FROM users;
+		CREATE INDEX idx_users_name ON users (name);
+		CREATE INDEX idx_logs_note ON logs (note);
+		CREATE TRIGGER trg_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION touch();
+		CREATE TRIGGER trg_logs BEFORE UPDATE ON logs FOR EACH ROW EXECUTE FUNCTION touch();
+		COMMENT ON TABLE users IS 'users';
+		COMMENT ON TABLE logs IS 'logs';
+		COMMENT ON COLUMN users.name IS 'users.name';
+		COMMENT ON COLUMN logs.note IS 'logs.note';
+		COMMENT ON INDEX idx_users_name IS 'idx_users_name';
+		COMMENT ON INDEX idx_logs_note IS 'idx_logs_note';
+		COMMENT ON CONSTRAINT users_name_len ON users IS 'users_name_len';
+		COMMENT ON CONSTRAINT logs_note_len ON logs IS 'logs_note_len';
+		COMMENT ON TRIGGER trg_users ON users IS 'trg_users';
+		COMMENT ON TRIGGER trg_logs ON logs IS 'trg_logs';
+		COMMENT ON VIEW v_users IS 'v_users';
+		COMMENT ON TYPE status IS 'status';
+		COMMENT ON FUNCTION touch() IS 'touch';
+	`
+	parse := func(t *testing.T) []DDL {
+		t.Helper()
+		ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+		require.NoError(t, err)
+		return ddls
+	}
+	kept := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			switch stmt := ddl.(type) {
+			case *Comment:
+				names = append(names, "comment:"+stmt.comment.Comment)
+			case *Trigger:
+				names = append(names, "trigger:"+stmt.name.RawString())
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	for _, test := range []struct {
+		name   string
+		config database.GeneratorConfig
+		want   []string
+	}{
+		{
+			// Without a filter nothing is left out, so every statement stays.
+			name:   "no filter",
+			config: database.GeneratorConfig{},
+			want: []string{
+				"comment:idx_logs_note", "comment:idx_users_name", "comment:logs", "comment:logs.note", "comment:logs_note_len", "comment:status", "comment:touch", "comment:trg_logs", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "comment:v_users", "trigger:trg_logs", "trigger:trg_users",
+			},
+		},
+		{
+			// skip_tables leaves logs out, so its comments and its trigger go with it. The
+			// comments of a type and of a function belong to neither a table nor a view and stay.
+			name:   "skip_tables",
+			config: database.GeneratorConfig{SkipTables: []string{`public\.logs`}},
+			want: []string{
+				"comment:idx_users_name", "comment:status", "comment:touch", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "comment:v_users", "trigger:trg_users",
+			},
+		},
+		{
+			// target_tables leaves out every table it does not name, and a view is not a table,
+			// so v_users keeps its comment.
+			name:   "target_tables",
+			config: database.GeneratorConfig{TargetTables: []string{`public\.users`}},
+			want: []string{
+				"comment:idx_users_name", "comment:status", "comment:touch", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "comment:v_users", "trigger:trg_users",
+			},
+		},
+		{
+			// skip_views leaves the view out, and only its comment goes.
+			name:   "skip_views",
+			config: database.GeneratorConfig{SkipViews: []string{`public\.v_users`}},
+			want: []string{
+				"comment:idx_logs_note", "comment:idx_users_name", "comment:logs", "comment:logs.note", "comment:logs_note_len", "comment:status", "comment:touch", "comment:trg_logs", "comment:trg_users", "comment:users", "comment:users.name", "comment:users_name_len", "trigger:trg_logs", "trigger:trg_users",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, kept(FilterObjects(parse(t), test.config, GeneratorModePostgres, "public")))
+		})
+	}
+}
+
+// The schema that leaves an object out is the one that cannot declare it, so its statements for
+// that object have to go by name: nothing in it says whether the object is a table or a view.
+func TestFilterObjectsDependentStatementsOfUndeclaredObject(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint);
+		CREATE TRIGGER trg_logs BEFORE UPDATE ON logs FOR EACH ROW EXECUTE FUNCTION touch();
+		COMMENT ON TABLE logs IS 'logs';
+		COMMENT ON TABLE users IS 'users';
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+
+	remaining := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			switch stmt := ddl.(type) {
+			case *Comment:
+				names = append(names, stmt.comment.Comment)
+			case *Trigger:
+				names = append(names, stmt.name.RawString())
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	// Nothing declares logs here, and skip_tables names it, so its trigger and its comment go.
+	filtered := FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.logs`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"users"}, remaining(filtered))
+
+	// skip_views names it instead, which cannot be told apart once the object is undeclared.
+	filtered = FilterObjects(ddls, database.GeneratorConfig{SkipViews: []string{`public\.logs`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"users"}, remaining(filtered))
+
+	// A filter that does not name it leaves it alone.
+	filtered = FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.other`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"logs", "trg_logs", "users"}, remaining(filtered))
+}
+
+// An index comment names the index, and index names are unique per schema rather than per
+// database, so the schema of the table decides which index a comment describes.
+func TestFilterObjectsIndexCommentIsResolvedPerSchema(t *testing.T) {
+	const sql = `
+		CREATE TABLE public.users (id bigint, name text);
+		CREATE TABLE other.users (id bigint, name text);
+		CREATE INDEX idx_dup ON public.users (name);
+		CREATE INDEX idx_dup ON other.users (name);
+		COMMENT ON INDEX public.idx_dup IS 'public';
+		COMMENT ON INDEX other.idx_dup IS 'other';
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+
+	comments := func(ddls []DDL) []string {
+		var names []string
+		for _, ddl := range ddls {
+			if stmt, ok := ddl.(*Comment); ok {
+				names = append(names, stmt.comment.Comment)
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	filtered := FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.users`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"other"}, comments(filtered))
+
+	filtered = FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`other\.users`}}, GeneratorModePostgres, "public")
+	assert.Equal(t, []string{"public"}, comments(filtered))
+}
+
+// commentObjectName has to say "not an object I know" rather than guess, so that a comment it
+// cannot place is left where it is instead of being filtered by the wrong name.
+func TestCommentObjectName(t *testing.T) {
+	ident := func(name string) parser.Ident { return parser.NewIdent(name, false) }
+	indexTables := map[string]database.QualifiedName{
+		indexSchemaKey(ident("public"), ident("idx_users")): {Schema: ident("public"), Name: ident("users")},
+	}
+
+	for _, test := range []struct {
+		name    string
+		comment parser.Comment
+		want    string
+		wantOK  bool
+	}{
+		{"table", parser.Comment{ObjectType: "OBJECT_TABLE", Object: []parser.Ident{ident("public"), ident("users")}}, "public.users", true},
+		{"view", parser.Comment{ObjectType: "OBJECT_VIEW", Object: []parser.Ident{ident("public"), ident("v_users")}}, "public.v_users", true},
+		{"column", parser.Comment{ObjectType: "OBJECT_COLUMN", Object: []parser.Ident{ident("public"), ident("users"), ident("name")}}, "public.users", true},
+		{"constraint", parser.Comment{ObjectType: "OBJECT_CONSTRAINT", Object: []parser.Ident{ident("c"), ident("public"), ident("users")}}, "public.users", true},
+		{"trigger", parser.Comment{ObjectType: "OBJECT_TRIGGER", Object: []parser.Ident{ident("t"), ident("public"), ident("users")}}, "public.users", true},
+		{"index", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("public"), ident("idx_users")}}, "public.users", true},
+
+		{"index of another schema", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("other"), ident("idx_users")}}, "", false},
+		{"index that no DDL creates", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("public"), ident("idx_missing")}}, "", false},
+		{"type", parser.Comment{ObjectType: "OBJECT_TYPE", Object: []parser.Ident{ident("public"), ident("status")}}, "", false},
+		{"function", parser.Comment{ObjectType: "OBJECT_FUNCTION", Object: []parser.Ident{ident("public"), ident("touch")}}, "", false},
+
+		{"table without a name", parser.Comment{ObjectType: "OBJECT_TABLE"}, "", false},
+		{"table of too many parts", parser.Comment{ObjectType: "OBJECT_TABLE", Object: []parser.Ident{ident("a"), ident("b"), ident("c")}}, "", false},
+		{"column without a table", parser.Comment{ObjectType: "OBJECT_COLUMN", Object: []parser.Ident{ident("name")}}, "", false},
+		{"constraint without a table", parser.Comment{ObjectType: "OBJECT_CONSTRAINT", Object: []parser.Ident{ident("c")}}, "", false},
+		{"index without a name", parser.Comment{ObjectType: "OBJECT_INDEX"}, "", false},
+		{"index of too many parts", parser.Comment{ObjectType: "OBJECT_INDEX", Object: []parser.Ident{ident("a"), ident("b"), ident("c")}}, "", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// The default schema is left empty so that the object paths are taken as written.
+			name, ok := commentObjectName(test.comment, indexTables, GeneratorModePostgres, "")
+			assert.Equal(t, test.wantOK, ok)
+			if test.wantOK {
+				assert.Equal(t, test.want, name.RawString())
+			}
+		})
+	}
+}
+
+// An index added through ALTER TABLE belongs to its table the same way one created on its own does.
+func TestIndexToTableNamesCoversAddIndex(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint, name text);
+		ALTER TABLE users ADD INDEX idx_users_name (name);
+	`
+	ddls, err := ParseDDLs(GeneratorModeMysql, database.NewParser(parser.ParserModeMysql), sql, "")
+	require.NoError(t, err)
+
+	indexTables := indexToTableNames(ddls)
+	table, ok := indexTables[indexSchemaKey(parser.Ident{}, parser.NewIdent("idx_users_name", false))]
+	require.True(t, ok)
+	assert.Equal(t, "users", table.RawString())
 }
