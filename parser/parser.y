@@ -452,7 +452,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
-%type <str> charset_opt collate_opt
+%type <str> charset_opt collate_opt type_collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt cast_array_opt time_zone_opt
 %type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
@@ -3936,8 +3936,11 @@ column_type:
   }
 
 column_definition_type:
-  column_type array_opt
+  column_type array_opt type_collate_opt
   {
+    if $3 != "" {
+      $1.Collate = $3
+    }
     $1.NotNull = nil
     $1.Default = nil
     $1.Srid = nil
@@ -5399,6 +5402,17 @@ collate_opt:
 | BINARY
   {
     $$ = $1 // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
+  }
+| COLLATE ID
+  {
+    $$ = $2.Name
+  }
+
+// COLLATE right after a type that has no collate_opt of its own, e.g. SQL Server's sysname and ntext
+type_collate_opt:
+  /* empty */ %prec LOWER_THAN_COLLATE
+  {
+    $$ = ""
   }
 | COLLATE ID
   {

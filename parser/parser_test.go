@@ -2511,13 +2511,24 @@ func TestKeyKeywordAsColumnReference(t *testing.T) {
 
 func TestColumnCollateAfterOtherConstraints(t *testing.T) {
 	accepted := []struct {
-		name string
-		mode ParserMode
-		sql  string
+		name        string
+		mode        ParserMode
+		sql         string
+		collate     string
+		notNull     bool
+		defaultExpr string
+		check       bool
 	}{
-		{"mysql", ParserModeMysql, "CREATE TABLE t (name varchar(20) NOT NULL COLLATE utf8mb4_bin)"},
-		{"postgres", ParserModePostgres, `CREATE TABLE t (name text NOT NULL COLLATE "C")`},
-		{"sqlite3", ParserModeSQLite3, "CREATE TABLE t (name text NOT NULL COLLATE NOCASE)"},
+		{"mysql after NOT NULL", ParserModeMysql, "CREATE TABLE t (c varchar(20) NOT NULL COLLATE utf8mb4_bin)", "utf8mb4_bin", true, "", false},
+		{"mysql after DEFAULT", ParserModeMysql, "CREATE TABLE t (c varchar(20) DEFAULT '' COLLATE utf8mb4_bin)", "utf8mb4_bin", false, "''", false},
+		{"postgres after NOT NULL", ParserModePostgres, `CREATE TABLE t (c text NOT NULL COLLATE "C")`, "C", true, "", false},
+		{"postgres after DEFAULT", ParserModePostgres, `CREATE TABLE t (c text DEFAULT '' COLLATE "C")`, "C", false, "''", false},
+		{"sqlite3 after NOT NULL", ParserModeSQLite3, "CREATE TABLE t (c text NOT NULL COLLATE NOCASE UNIQUE)", "NOCASE", true, "", false},
+		{"sqlite3 after DEFAULT", ParserModeSQLite3, "CREATE TABLE t (c text DEFAULT '' COLLATE NOCASE NOT NULL)", "NOCASE", true, "''", false},
+		{"sqlite3 after CHECK", ParserModeSQLite3, "CREATE TABLE t (c text CHECK (length(c) = 3) COLLATE RTRIM)", "RTRIM", false, "", true},
+		{"mssql after the data type", ParserModeMssql, "CREATE TABLE t (c nvarchar(20) COLLATE Latin1_General_CI_AS NOT NULL)", "Latin1_General_CI_AS", true, "", false},
+		{"mssql after sysname", ParserModeMssql, "CREATE TABLE t (c sysname COLLATE Latin1_General_CI_AS NOT NULL)", "Latin1_General_CI_AS", true, "", false},
+		{"mssql after ntext", ParserModeMssql, "CREATE TABLE t (c ntext COLLATE Latin1_General_CI_AS)", "Latin1_General_CI_AS", false, "", false},
 	}
 	for _, tc := range accepted {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2525,27 +2536,30 @@ func TestColumnCollateAfterOtherConstraints(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse error: %v", err)
 			}
-			col := tree.(*DDL).TableSpec.Columns[0]
-			if col.Type.Collate == "" || !bool(col.Type.NotNull != nil && *col.Type.NotNull) {
-				t.Errorf("expected NOT NULL and a collation, got NotNull=%v Collate=%q", col.Type.NotNull, col.Type.Collate)
+			ct := tree.(*DDL).TableSpec.Columns[0].Type
+			if ct.Collate != tc.collate {
+				t.Errorf("Collate = %q, want %q", ct.Collate, tc.collate)
+			}
+			if notNull := ct.NotNull != nil && bool(*ct.NotNull); notNull != tc.notNull {
+				t.Errorf("NotNull = %v, want %v", notNull, tc.notNull)
+			}
+			defaultExpr := ""
+			if ct.Default != nil {
+				defaultExpr = String(ct.Default.Expression.Expr)
+			}
+			if defaultExpr != tc.defaultExpr {
+				t.Errorf("Default = %q, want %q", defaultExpr, tc.defaultExpr)
+			}
+			if (ct.Check != nil) != tc.check {
+				t.Errorf("Check = %v, want present: %v", ct.Check, tc.check)
 			}
 		})
 	}
 
-	// SQL Server only accepts COLLATE right after the data type.
 	t.Run("mssql rejects it after a constraint", func(t *testing.T) {
-		_, err := ParseDDL("CREATE TABLE t (name nvarchar(20) NOT NULL COLLATE Latin1_General_CI_AS)", ParserModeMssql)
+		_, err := ParseDDL("CREATE TABLE t (c nvarchar(20) NOT NULL COLLATE Latin1_General_CI_AS)", ParserModeMssql)
 		if err == nil || !strings.Contains(err.Error(), "COLLATE must come right after the data type") {
 			t.Fatalf("expected the COLLATE position error, got %v", err)
-		}
-	})
-	t.Run("mssql still accepts it after the data type", func(t *testing.T) {
-		tree, err := ParseDDL("CREATE TABLE t (name nvarchar(20) COLLATE Latin1_General_CI_AS NOT NULL)", ParserModeMssql)
-		if err != nil {
-			t.Fatalf("parse error: %v", err)
-		}
-		if got := tree.(*DDL).TableSpec.Columns[0].Type.Collate; got != "Latin1_General_CI_AS" {
-			t.Errorf("expected the collation, got %q", got)
 		}
 	})
 }

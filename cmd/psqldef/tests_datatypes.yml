@@ -677,6 +677,7 @@ CollateOnColumn:
     from users;
 
 ColumnCollateAfterOtherConstraints:
+  legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id integer NOT NULL,

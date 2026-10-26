@@ -1287,12 +1287,14 @@ UseStatement:
 # FIXME: mssqldef does not export column collations, so a column with COLLATE is never
 # idempotent: re-applying the desired schema always emits ALTER COLUMN ... COLLATE.
 #ColumnCollateAfterTheDataType:
+#  legacy_ignore_quotes: false
 #  desired: |
 #    CREATE TABLE users (
 #      id int PRIMARY KEY,
 #      name nvarchar(20) COLLATE Latin1_General_CI_AS NOT NULL
 #    );
 ColumnCollateAfterOtherConstraints:
+  legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id int PRIMARY KEY,
