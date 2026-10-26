@@ -203,11 +203,19 @@ https://github.com/sqldef/sqldef-preview-action
 
 ## Development
 
+`parser/parser.go` is generated from `parser/parser.y`, and it has a single writer: it is
+regenerated on the default branch after every merge. **Do not commit it.** A pull request must
+contain only `parser/parser.y`, and CI rejects a diff that touches `parser/parser.go`.
+
 If you update `parser/parser.y`, run:
 
 ```shell
 $ make parser
 ```
+
+That leaves `parser/parser.go` modified in your working tree, which is expected; leave it out of
+your commits. `make build`, `make test*` and `make lint` regenerate it for you when `parser.y` is
+newer, but running `go test` directly does not.
 
 Use the following commands to prepare command line tools and DB servers for running tests.
 
