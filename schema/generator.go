@@ -2616,14 +2616,18 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]statemen
 				ddls = append(ddls, inputStatement{statement: replacement})
 			} else {
 				// Signature changed: PostgreSQL requires DROP + CREATE.
-				ddls = append(ddls, g.dropFunction(currentFunction))
-				ddls = append(ddls, inputStatement{statement: desired.statement})
+				ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
+					g.dropFunction(currentFunction),
+					inputStatement{statement: desired.statement},
+				}})
 			}
 		} else if desired.orReplace {
 			ddls = append(ddls, inputStatement{statement: desired.statement})
 		} else {
-			ddls = append(ddls, dropFunctionStatement{d: g.dialect, name: currentFunction.name})
-			ddls = append(ddls, inputStatement{statement: desired.statement})
+			ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
+				dropFunctionStatement{d: g.dialect, name: currentFunction.name},
+				inputStatement{statement: desired.statement},
+			}})
 		}
 	}
 
