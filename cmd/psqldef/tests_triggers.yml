@@ -1061,3 +1061,36 @@ ModifyConstraintTriggerWhenCondition:
   down: |
     DROP TRIGGER ensure_processed ON public.events;
     CREATE CONSTRAINT TRIGGER ensure_processed after update ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION assert_processed();
+CreateTriggerBeforeTruncate:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+    CREATE FUNCTION enforce_immutability()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER audit_guard
+      BEFORE TRUNCATE ON events
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION enforce_immutability();
+  up: |
+    CREATE FUNCTION enforce_immutability()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+    CREATE TRIGGER audit_guard before truncate ON public.events FOR EACH STATEMENT EXECUTE FUNCTION enforce_immutability();
+  down: |
+    DROP TRIGGER audit_guard ON public.events;
+    DROP TABLE public.events;
+    DROP FUNCTION public.enforce_immutability;

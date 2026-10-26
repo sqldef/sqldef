@@ -15,6 +15,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGenericParserAcceptsTruncateTrigger(t *testing.T) {
+	sql := `CREATE TRIGGER audit_guard BEFORE TRUNCATE ON events FOR EACH STATEMENT EXECUTE FUNCTION enforce_immutability();`
+	sqlParser := database.NewParser(parser.ParserModePostgres)
+	parsed, err := sqlParser.Parse(sql)
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	ddl, ok := parsed[0].Statement.(*parser.DDL)
+	require.True(t, ok)
+	require.NotNil(t, ddl.Trigger)
+	require.Equal(t, []parser.TriggerEvent{{Type: "truncate"}}, ddl.Trigger.Event)
+
+	generated, err := schema.GenerateIdempotentDDLs(schema.GeneratorModePostgres, sqlParser, sql, "", database.GeneratorConfig{LegacyIgnoreQuotes: false}, "public")
+	require.NoError(t, err)
+	assert.Contains(t, strings.ToLower(strings.Join(generated, "\n")), "before truncate")
+}
+
 func TestParse(t *testing.T) {
 	tests, err := readTests("tests.yml")
 	if err != nil {

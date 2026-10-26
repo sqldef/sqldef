@@ -549,7 +549,7 @@ $ psqldef -U postgres dbname --apply \
 | `target_tables` | string | Regular expression patterns (one per line) to specify which tables to manage. Only tables matching these patterns will be processed. |
 | `skip_tables` | string | Regular expression patterns (one per line) to specify which tables to skip. Tables matching these patterns will be ignored. |
 | `skip_views` | string | Regular expression patterns (one per line) to specify which views/materialized views to skip. |
-| `target_schema` | string | Schema names (one per line) to specify which schemas to manage. Only objects in these schemas will be processed. |
+| `target_schema` | string | Schema names (one per line) to specify which schemas to manage. Only objects in these schemas will be processed, and `CREATE SCHEMA` is exported only for these names. |
 | `managed_roles` | array | List of role names whose privileges (GRANT/REVOKE) should be managed. Only privileges for these roles will be applied. If not specified or empty, no privileges are managed. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
 | `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements. Default is false. |
