@@ -1496,11 +1496,19 @@ type TriggerEvent struct {
 	Columns Columns // For UPDATE OF col1, col2 - nil for INSERT/DELETE/plain UPDATE
 }
 
+// TriggerTransitionTables holds the names of PostgreSQL's REFERENCING OLD TABLE / NEW TABLE clause.
+// An empty Ident means the transition table is not declared.
+type TriggerTransitionTables struct {
+	Old Ident
+	New Ident
+}
+
 type Trigger struct {
 	Name              *ColName
 	TableName         TableName
 	Time              string
 	Event             []TriggerEvent
+	TransitionTables  TriggerTransitionTables
 	ForEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted (PostgreSQL defaults to STATEMENT)
 	When              Expr
 	Body              []Statement

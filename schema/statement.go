@@ -306,7 +306,17 @@ func (s createTriggerStatement) Render() string {
 				deferrableClause = strings.TrimPrefix(s.d.generateConstraintOptions(t.constraintOptions), " ") + " "
 			}
 		}
-		return fmt.Sprintf("CREATE %s %s %s %s ON %s %sFOR EACH %s %s%s", triggerKeyword, name, t.time, s.d.formatTriggerEvents(t.event, " OR "), table, deferrableClause, normalizeTriggerForEach(t.forEach), whenClause, body)
+		referencingClause := ""
+		if !t.oldTable.IsEmpty() {
+			referencingClause += " OLD TABLE AS " + escapeTransitionTableName(t.oldTable)
+		}
+		if !t.newTable.IsEmpty() {
+			referencingClause += " NEW TABLE AS " + escapeTransitionTableName(t.newTable)
+		}
+		if referencingClause != "" {
+			referencingClause = "REFERENCING" + referencingClause + " "
+		}
+		return fmt.Sprintf("CREATE %s %s %s %s ON %s %s%sFOR EACH %s %s%s", triggerKeyword, name, t.time, s.d.formatTriggerEvents(t.event, " OR "), table, deferrableClause, referencingClause, normalizeTriggerForEach(t.forEach), whenClause, body)
 	default:
 		panic(fmt.Sprintf("CREATE TRIGGER is not generated for mode %d", s.d.mode))
 	}

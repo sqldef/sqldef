@@ -1061,3 +1061,630 @@ ModifyConstraintTriggerWhenCondition:
   down: |
     DROP TRIGGER ensure_processed ON public.events;
     CREATE CONSTRAINT TRIGGER ensure_processed after update ON public.events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION assert_processed();
+
+CreateTriggerReferencingOldTable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER DELETE ON orders
+      REFERENCING OLD TABLE AS deleted_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after delete ON public.orders REFERENCING OLD TABLE AS deleted_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingNewTable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER INSERT ON orders
+      REFERENCING NEW TABLE AS inserted_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after insert ON public.orders REFERENCING NEW TABLE AS inserted_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingOldAndNewTables:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingNewTableFirstWithoutAs:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE new_rows OLD TABLE old_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingQuotedTableName:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER DELETE ON orders
+      REFERENCING OLD TABLE AS "Deleted Rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after delete ON public.orders REFERENCING OLD TABLE AS "Deleted Rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingForEachRowWithWhenAndProcedure:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING OLD TABLE AS old_rows
+      FOR EACH ROW WHEN (OLD.amount IS DISTINCT FROM NEW.amount)
+      EXECUTE PROCEDURE record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING OLD TABLE AS old_rows FOR EACH ROW WHEN (OLD.amount is distinct from NEW.amount) EXECUTE PROCEDURE record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingWithoutForEachDefaultsToRow:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER INSERT ON orders
+      REFERENCING NEW TABLE AS inserted_rows
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER record_changes after insert ON public.orders REFERENCING NEW TABLE AS inserted_rows FOR EACH ROW EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    DROP TABLE public.orders;
+    DROP FUNCTION public.record_changes;
+
+CreateTriggerReferencingLegacyIgnoreQuotes:
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER DELETE ON orders
+      REFERENCING OLD TABLE AS deleted_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER "record_changes" after delete ON "public"."orders" REFERENCING OLD TABLE AS deleted_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    DROP TABLE "public"."orders";
+    DROP FUNCTION "public"."record_changes";
+
+# The function body refers to the transition table as new_rows, so an unquoted New_Rows
+# has to stay unquoted (folded to new_rows) even when legacy_ignore_quotes quotes other names.
+CreateTriggerReferencingUnquotedMixedCaseNameLegacyIgnoreQuotes:
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      PERFORM count(*) FROM new_rows;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER INSERT ON orders
+      REFERENCING NEW TABLE AS New_Rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      PERFORM count(*) FROM new_rows;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE TRIGGER "record_changes" after insert ON "public"."orders" REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    DROP TABLE "public"."orders";
+    DROP FUNCTION "public"."record_changes";
+
+# "rows" and "Rows" are different relations to the function body, so legacy_ignore_quotes
+# must not compare transition table names case-insensitively.
+ChangeTriggerReferencingQuotedTableNameCaseLegacyIgnoreQuotes:
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS "rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS "Rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    CREATE TRIGGER "record_changes" after update ON "public"."orders" REFERENCING NEW TABLE AS "Rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER "record_changes" ON "public"."orders";
+    CREATE TRIGGER "record_changes" after update ON "public"."orders" REFERENCING NEW TABLE AS "rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+
+TriggerReferencingTableOrderIsNotAChange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: ""
+  down: ""
+
+TriggerReferencingUnquotedTableNameCaseIsNotAChange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS new_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS New_Rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: ""
+  down: ""
+
+ChangeTriggerReferencingTableName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS before_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS after_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING NEW TABLE AS after_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING NEW TABLE AS before_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+
+ChangeTriggerReferencingQuotedTableNameCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS "rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS "Rows"
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING NEW TABLE AS "Rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING NEW TABLE AS "rows" FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+
+ChangeTriggerReferencingOldTableToNewTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING OLD TABLE AS changed_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS changed_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING NEW TABLE AS changed_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING OLD TABLE AS changed_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+
+AddTriggerReferencingClause:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  desired: |
+    CREATE TABLE orders (
+      id serial PRIMARY KEY,
+      amount integer
+    );
+    CREATE FUNCTION record_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER record_changes
+      AFTER UPDATE ON orders
+      REFERENCING NEW TABLE AS new_rows
+      FOR EACH STATEMENT
+      EXECUTE FUNCTION record_changes();
+  up: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION record_changes();
+  down: |
+    DROP TRIGGER record_changes ON public.orders;
+    CREATE TRIGGER record_changes after update ON public.orders FOR EACH STATEMENT EXECUTE FUNCTION record_changes();

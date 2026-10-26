@@ -244,6 +244,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName:         normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:              stmt.Trigger.Time,
 				event:             events,
+				oldTable:          stmt.Trigger.TransitionTables.Old,
+				newTable:          stmt.Trigger.TransitionTables.New,
 				forEach:           stmt.Trigger.ForEach,
 				whenCondition:     whenCondition,
 				constraint:        stmt.Trigger.Constraint,
