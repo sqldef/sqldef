@@ -7222,6 +7222,10 @@ func indexToTableNames(ddls []DDL) map[string]database.QualifiedName {
 	indexTables := map[string]database.QualifiedName{}
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
+		case *CreateTable:
+			for _, index := range stmt.table.indexes {
+				indexTables[indexSchemaKey(stmt.table.name.Schema, index.name)] = stmt.table.name
+			}
 		case *CreateIndex:
 			indexTables[indexSchemaKey(stmt.tableName.Schema, stmt.index.name)] = stmt.tableName
 		case *AddIndex:

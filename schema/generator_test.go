@@ -2080,6 +2080,27 @@ func TestFilterObjectsIndexCommentIsResolvedPerSchema(t *testing.T) {
 	assert.Equal(t, []string{"public"}, comments(filtered))
 }
 
+// The index of a primary key is declared by CREATE TABLE, so a comment on it is resolved to the
+// table through CREATE TABLE as well.
+func TestFilterObjectsPrimaryKeyIndexComment(t *testing.T) {
+	const sql = `
+		CREATE TABLE users (id bigint, CONSTRAINT users_pkey PRIMARY KEY (id));
+		CREATE TABLE logs (id bigint, CONSTRAINT logs_pkey PRIMARY KEY (id));
+		COMMENT ON INDEX users_pkey IS 'users_pkey';
+		COMMENT ON INDEX logs_pkey IS 'logs_pkey';
+	`
+	ddls, err := ParseDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres), sql, "public")
+	require.NoError(t, err)
+
+	var comments []string
+	for _, ddl := range FilterObjects(ddls, database.GeneratorConfig{SkipTables: []string{`public\.logs`}}, GeneratorModePostgres, "public") {
+		if stmt, ok := ddl.(*Comment); ok {
+			comments = append(comments, stmt.comment.Comment)
+		}
+	}
+	assert.Equal(t, []string{"users_pkey"}, comments)
+}
+
 // commentObjectName has to say "not an object I know" rather than guess, so that a comment it
 // cannot place is left where it is instead of being filtered by the wrong name.
 func TestCommentObjectName(t *testing.T) {

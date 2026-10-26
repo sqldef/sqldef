@@ -1459,6 +1459,30 @@ func TestPsqldefSkipTablesKeepsSameNamedIndexInAnotherSchema(t *testing.T) {
 	), apply)
 }
 
+// The index of a primary key is declared by CREATE TABLE rather than CREATE INDEX, and a comment
+// on it belongs to the table all the same.
+func TestPsqldefSkipTablesAlsoSkipsPrimaryKeyIndexComments(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_10 (id bigint PRIMARY KEY);
+        COMMENT ON INDEX users_10_pkey IS 'unmanaged primary key index';
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+    `)
+
+	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
+
+	export := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config", "config.yml")...)
+	assert.NotContains(t, export, "users_10")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
 // skip_views leaves out a view the same way, and the comments of a view it excludes are reset
 // just as a table's are.
 func TestPsqldefSkipViewsAlsoSkipsComments(t *testing.T) {
