@@ -7324,6 +7324,11 @@ function_call_keyword:
   {
     $$ = &FuncExpr{Name: NewIdent("timestamp", false), Exprs: $3}
   }
+// SQLite3: datetime(time-value, modifier, ...), where every argument is optional
+| DATETIME '(' select_expression_list_opt ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent("datetime", false), Exprs: $3}
+  }
 | YEAR '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewIdent("year", false), Exprs: $3}
