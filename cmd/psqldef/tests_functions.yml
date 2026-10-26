@@ -526,9 +526,51 @@ OverloadedFunctionUnmatchedRecreateIsHeldBackWithoutEnableDrop:
     CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
     CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
   up: |
-    -- Skipped: DROP FUNCTION public.ovl;
+    -- Skipped: DROP FUNCTION public.ovl(integer);
     -- Skipped: CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
   down: ""
+
+OverloadedFunctionAddedKeepsExistingOverload:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  up: |
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.ovl(text);
+
+OverloadedFunctionArgTypeChangeDropsAndRecreatesOnlyThatOverload:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION public.ovl(integer);
+    CREATE FUNCTION ovl(a bigint) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.ovl(bigint);
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
+OverloadedFunctionReturnTypeChangeDropsAndRecreatesOnlyThatOverload:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION ovl(a integer) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION public.ovl(integer);
+    CREATE FUNCTION ovl(a integer) RETURNS bigint AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.ovl(integer);
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
 
 FunctionReferencingATableOfTheSameSchema:
   legacy_ignore_quotes: false
