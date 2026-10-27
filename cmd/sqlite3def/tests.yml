@@ -148,6 +148,30 @@ Index:
       data integer
     );
     CREATE INDEX index_bigdata ON bigdata(data);
+ColumnCollateAfterOtherConstraints:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY,
+      email text NOT NULL COLLATE NOCASE UNIQUE,
+      name text DEFAULT '' COLLATE NOCASE,
+      code text CHECK (length(code) = 3) COLLATE RTRIM
+    );
+AddColumnWithCollateAfterNotNullAndDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY,
+      name text NOT NULL DEFAULT '' COLLATE NOCASE
+    );
+  up: |
+    ALTER TABLE users ADD COLUMN name text COLLATE NOCASE NOT NULL DEFAULT '';
+  down: |
+    ALTER TABLE users DROP COLUMN name;
 TableOptions:
   desired: |
     CREATE TABLE bigdata(

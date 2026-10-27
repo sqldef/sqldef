@@ -676,6 +676,14 @@ CollateOnColumn:
           (users.name collate "ja-JP-x-icu") as name
     from users;
 
+ColumnCollateAfterOtherConstraints:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text NOT NULL COLLATE "C",
+      code text DEFAULT '' COLLATE "C"
+    );
 CreateTableWithCurrentTimestamp:
   desired: |
     CREATE TABLE timestamps (
