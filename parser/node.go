@@ -2026,7 +2026,7 @@ const (
 	PrecNot
 	PrecIs
 	PrecCmp
-	precPrimary
+	PrecPrimary
 )
 
 func exprPrec(expr Expr) int {
@@ -2042,7 +2042,7 @@ func exprPrec(expr Expr) int {
 	case *ComparisonExpr:
 		return PrecCmp
 	default:
-		return precPrimary
+		return PrecPrimary
 	}
 }
 
@@ -2050,9 +2050,6 @@ func exprPrec(expr Expr) int {
 // operand of an operator at parentPrec. PostgreSQL rebinds a looser operand,
 // and it rejects chained comparisons and IS tests.
 func NeedsChildParen(expr Expr, parentPrec int) bool {
-	if expr == nil {
-		return false
-	}
 	childPrec := exprPrec(expr)
 	if childPrec < parentPrec {
 		return true
