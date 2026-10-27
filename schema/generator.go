@@ -6032,7 +6032,7 @@ func (d dialect) normalizeCheckExprString(expr parser.Expr) string {
 		if !d.legacyIgnoreQuotes {
 			return d.formatExprQuoteAware(normalized)
 		}
-		return parser.String(normalized)
+		return parser.StringPostgres(normalized)
 	}
 	return parser.String(expr)
 }
@@ -6116,7 +6116,10 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		result += " END"
 		return result
 	default:
-		// For other expression types, fall back to parser.String
+		// Leaves such as string literals. PostgreSQL keeps a backslash literal.
+		if d.mode == GeneratorModePostgres {
+			return parser.StringPostgres(expr)
+		}
 		return parser.String(expr)
 	}
 }
