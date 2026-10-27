@@ -1,3 +1,16 @@
+## [v3.11.28](https://github.com/sqldef/sqldef/compare/v3.11.27...v3.11.28) - 2026-10-27
+
+- psqldef: keep what belongs to an object the filters leave out by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1405
+- psqldef: quote PRIMARY KEY and CHECK constraint names in export by @178inaba in https://github.com/sqldef/sqldef/pull/1410
+- psqldef: name the argument types when dropping an overloaded function by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1404
+- psqldef: support REFERENCING transition tables in CREATE TRIGGER by @TakehiroT in https://github.com/sqldef/sqldef/pull/1421
+- schema: emit a desired CREATE INDEX as an inputStatement by @moznion in https://github.com/sqldef/sqldef/pull/1425
+- schema: hold back a function's CREATE when its DROP is held back by @moznion in https://github.com/sqldef/sqldef/pull/1426
+- psqldef: skip comments on the primary key index of a filtered table by @moznion in https://github.com/sqldef/sqldef/pull/1428
+- psqldef: match overloaded functions by their argument types by @moznion in https://github.com/sqldef/sqldef/pull/1429
+- parser: accept COLLATE after other column constraints by @moznion in https://github.com/sqldef/sqldef/pull/1431
+- parser: stop parsing when a grammar action reports an error by @moznion in https://github.com/sqldef/sqldef/pull/1430
+
 ## [v3.11.27](https://github.com/sqldef/sqldef/compare/v3.11.26...v3.11.27) - 2026-10-24
 
 - build(deps): bump golang from 1.27.0-alpine to 1.27.1-alpine in the docker group by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1406
