@@ -3006,3 +3006,31 @@ UnnamedUniqueConstraintDeclaredTwiceInCreateTableAndWithAlterTable:
     ALTER TABLE t ADD UNIQUE (a);
   down: |
     DROP TABLE public.t;
+
+CheckBooleanEqualityAndNestedOr:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE tickets (
+      archived_at timestamp,
+      archived_by_email text,
+      growth_status boolean,
+      growth_status_reason text
+    );
+  desired: |
+    CREATE TABLE tickets (
+      archived_at timestamp,
+      archived_by_email text,
+      growth_status boolean,
+      growth_status_reason text,
+      CONSTRAINT both_or_neither CHECK ((archived_at IS NULL) = (archived_by_email IS NULL)),
+      CONSTRAINT growth_status_reason_valid CHECK (
+        (growth_status = TRUE AND (growth_status_reason IS NULL OR growth_status_reason = 'WAITLIST'))
+        OR (growth_status = FALSE AND growth_status_reason IS NULL)
+      )
+    );
+  up: |
+    ALTER TABLE public.tickets ADD CONSTRAINT both_or_neither CHECK ((archived_at is null) = (archived_by_email is null));
+    ALTER TABLE public.tickets ADD CONSTRAINT growth_status_reason_valid CHECK (growth_status = true AND (growth_status_reason is null OR growth_status_reason = 'WAITLIST') OR growth_status = false AND growth_status_reason is null);
+  down: |
+    ALTER TABLE public.tickets DROP CONSTRAINT both_or_neither;
+    ALTER TABLE public.tickets DROP CONSTRAINT growth_status_reason_valid;

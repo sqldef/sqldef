@@ -2026,6 +2026,53 @@ func (node Exprs) Format(buf *nodeBuffer) {
 	}
 }
 
+// Printing precedences. A larger value binds tighter. These match PostgreSQL:
+// comparison, then IS, then NOT, then AND, then OR.
+const (
+	PrecOr int = iota
+	PrecAnd
+	PrecNot
+	PrecIs
+	PrecCmp
+	PrecPrimary
+)
+
+func exprPrec(expr Expr) int {
+	switch expr.(type) {
+	case *OrExpr:
+		return PrecOr
+	case *AndExpr:
+		return PrecAnd
+	case *NotExpr:
+		return PrecNot
+	case *IsExpr:
+		return PrecIs
+	case *ComparisonExpr:
+		return PrecCmp
+	default:
+		return PrecPrimary
+	}
+}
+
+// NeedsChildParen reports whether expr must be wrapped when printed as an
+// operand of an operator at parentPrec. PostgreSQL rebinds a looser operand,
+// and it rejects chained comparisons and IS tests.
+func NeedsChildParen(expr Expr, parentPrec int) bool {
+	childPrec := exprPrec(expr)
+	if childPrec < parentPrec {
+		return true
+	}
+	return childPrec == parentPrec && (childPrec == PrecCmp || childPrec == PrecIs)
+}
+
+func formatChild(expr Expr, parentPrec int) string {
+	rendered := String(expr)
+	if NeedsChildParen(expr, parentPrec) {
+		return "(" + rendered + ")"
+	}
+	return rendered
+}
+
 // AndExpr represents an AND expression.
 type AndExpr struct {
 	Left, Right Expr
@@ -2033,7 +2080,9 @@ type AndExpr struct {
 
 // Format formats the node.
 func (node *AndExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v and %v", node.Left, node.Right)
+	buf.WriteString(formatChild(node.Left, PrecAnd))
+	buf.WriteString(" and ")
+	buf.WriteString(formatChild(node.Right, PrecAnd))
 }
 
 // OrExpr represents an OR expression.
@@ -2043,7 +2092,9 @@ type OrExpr struct {
 
 // Format formats the node.
 func (node *OrExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v or %v", node.Left, node.Right)
+	buf.WriteString(formatChild(node.Left, PrecOr))
+	buf.WriteString(" or ")
+	buf.WriteString(formatChild(node.Right, PrecOr))
 }
 
 // ConcatExpr represents a PostgreSQL string concatenation: A || B.
@@ -2063,7 +2114,8 @@ type NotExpr struct {
 
 // Format formats the node.
 func (node *NotExpr) Format(buf *nodeBuffer) {
-	buf.Printf("not %v", node.Expr)
+	buf.WriteString("not ")
+	buf.WriteString(formatChild(node.Expr, PrecNot))
 }
 
 // ParenExpr represents a parenthesized boolean expression.
@@ -2124,21 +2176,27 @@ func NeedsAnyAllParens(right Expr) bool {
 
 // Format formats the node.
 func (node *ComparisonExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v %s ", node.Left, node.Operator)
+	buf.WriteString(formatChild(node.Left, PrecCmp))
+	buf.WriteString(" ")
+	buf.WriteString(node.Operator)
+	buf.WriteString(" ")
 	if node.All {
-		buf.Printf("ALL ")
+		buf.WriteString("ALL ")
 	} else if node.Any {
-		buf.Printf("ANY ")
+		buf.WriteString("ANY ")
 	}
 
 	if (node.All || node.Any) && NeedsAnyAllParens(node.Right) {
-		buf.Printf("(%v)", node.Right)
+		buf.WriteString("(")
+		buf.WriteString(String(node.Right))
+		buf.WriteString(")")
 	} else {
-		buf.Printf("%v", node.Right)
+		buf.WriteString(formatChild(node.Right, PrecCmp))
 	}
 
 	if node.Escape != nil {
-		buf.Printf(" escape %v", node.Escape)
+		buf.WriteString(" escape ")
+		buf.WriteString(String(node.Escape))
 	}
 }
 
@@ -2180,7 +2238,9 @@ const (
 
 // Format formats the node.
 func (node *IsExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v %s", node.Expr, node.Operator)
+	buf.WriteString(formatChild(node.Expr, PrecIs))
+	buf.WriteString(" ")
+	buf.WriteString(node.Operator)
 }
 
 // ExistsExpr represents an EXISTS expression.
