@@ -1267,6 +1267,26 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	assert.Equal(t, nothingModified, apply)
 }
 
+func TestPsqldefConfigTargetSchemaKeepsOtherCreateSchema(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+        CREATE SCHEMA kept;
+        CREATE SCHEMA other;
+        CREATE TABLE kept.widgets (id bigint);
+    `)
+
+	tu.WriteFile("schema.sql", `
+        CREATE SCHEMA kept;
+        CREATE SCHEMA other;
+        CREATE TABLE kept.widgets (id bigint);
+    `)
+	tu.WriteFile("config.yml", "target_schema: kept\n")
+
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
 func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 	resetTestDatabase()
 

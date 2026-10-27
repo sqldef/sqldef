@@ -706,9 +706,7 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		// Tables, types, and functions are filtered by TargetSchema. CREATE SCHEMA
-		// was not, so an export listed every schema and a later --enable-drop
-		// could drop schemas the desired file does not own.
+		// Apply the same TargetSchema filter as the other export helpers.
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, name) {
 			continue
 		}
@@ -871,7 +869,7 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 			continue
 		}
 		key := domainSchema + "." + domainName
-		constraintsMap[key] = append(constraintsMap[key], constraintDef)
+		constraintsMap[key] = append(constraintsMap[key], exportCheckConstraintDef(constraintDef))
 	}
 	if err := constraintRows.Err(); err != nil {
 		return nil, err
@@ -1275,10 +1273,11 @@ func normalizeDatePartToExtract(sql string) string {
 }
 
 // exportCheckConstraintDef turns pg_get_constraintdef output into SQL that is
-// legal inside CREATE TABLE. An unvalidated check is returned as
-// "CHECK (...) NOT VALID", and NOT VALID is legal only on
-// ALTER TABLE ADD CONSTRAINT. The exported check is therefore validated.
-// An existing NOT VALID check is left in place when the expression matches.
+// legal inside CREATE TABLE and CREATE DOMAIN. pg_get_constraintdef appends
+// " NOT VALID" to an unvalidated check, and that suffix is legal only on
+// ALTER TABLE and ALTER DOMAIN. Stripping it makes the exported check
+// validated. An existing NOT VALID check is left in place when the expression
+// matches.
 func exportCheckConstraintDef(constraintDef string) string {
 	return strings.TrimSuffix(normalizePostgresTypeCasts(constraintDef), " NOT VALID")
 }

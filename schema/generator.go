@@ -174,6 +174,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		return nil, err
 	}
 	desiredDDLs = FilterObjects(desiredDDLs, config)
+	desiredDDLs = FilterSchemas(desiredDDLs, config)
 	desiredDDLs = filterDesiredOwners(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 	desiredDDLs = FilterExtensions(desiredDDLs, config)
@@ -186,6 +187,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		return nil, err
 	}
 	currentDDLs = FilterObjects(currentDDLs, config)
+	currentDDLs = FilterSchemas(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 	currentDDLs = FilterExtensions(currentDDLs, config)
 	currentDDLs = FilterFunctions(currentDDLs, config, defaultSchema)
@@ -7276,6 +7278,24 @@ func FilterOwners(ddls []DDL, config database.GeneratorConfig) []DDL {
 		owner, ok := ddl.(*SetTableOwner)
 		return ok && !config.IsManagedOwner(owner.owner)
 	})
+}
+
+// FilterSchemas drops CREATE SCHEMA for names outside TargetSchema.
+// Export already omits those schemas. A desired file that still declares one
+// would try to create a schema that already exists.
+func FilterSchemas(ddls []DDL, config database.GeneratorConfig) []DDL {
+	if config.TargetSchema == nil {
+		return ddls
+	}
+	filtered := make([]DDL, 0, len(ddls))
+	for _, ddl := range ddls {
+		schema, ok := ddl.(*Schema)
+		if ok && !slices.Contains(config.TargetSchema, schema.schema.Name) {
+			continue
+		}
+		filtered = append(filtered, ddl)
+	}
+	return filtered
 }
 
 // FilterObjects applies the table and view filters, then drops the ALTER ... OWNER TO statements

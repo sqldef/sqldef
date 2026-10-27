@@ -383,6 +383,25 @@ func TestExportOmitsNotValidCheck(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExportOmitsNotValidDomainCheck(t *testing.T) {
+	db := setupTestDatabase(t)
+	defer db.Close()
+
+	_, err := db.DB().Exec(`
+		CREATE DOMAIN positive_int AS integer;
+		ALTER DOMAIN positive_int ADD CONSTRAINT positive_int_check CHECK (VALUE > 0) NOT VALID;
+	`)
+	require.NoError(t, err)
+
+	db.SetGeneratorConfig(database.GeneratorConfig{LegacyIgnoreQuotes: true})
+	exported, err := db.ExportDDLs()
+	require.NoError(t, err)
+	assert.NotContains(t, exported, "NOT VALID")
+
+	_, err = database.NewParser(parser.ParserModePostgres).Parse(exported)
+	require.NoError(t, err)
+}
+
 func TestExportTargetSchemaSkipsOtherSchemas(t *testing.T) {
 	db := setupTestDatabase(t)
 	defer db.Close()
