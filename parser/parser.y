@@ -35,6 +35,14 @@ func setDDL(yylex any, ddl *DDL) {
   yylex.(*Tokenizer).partialDDL = ddl
 }
 
+// abortParse reports err and stops parsing; an action calls it as `return abortParse(...)`.
+// Tokenizer.Error skips to the end of the statement, so an action that went on would make
+// goyacc report its own "syntax error" there, overwriting err.
+func abortParse(yylex yyLexer, err string) int {
+  yylex.Error(err)
+  return 1
+}
+
 %}
 
 %union {
@@ -3144,7 +3152,7 @@ trigger_referencing_kw:
   ID
   {
     if $1.Quoted || !strings.EqualFold($1.Name, "referencing") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $1.Name))
+      return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $1.Name))
     }
     $$ = struct{}{}
   }
@@ -3155,7 +3163,7 @@ trigger_old_kw:
   ID
   {
     if $1.Quoted || !strings.EqualFold($1.Name, "old") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $1.Name))
+      return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $1.Name))
     }
     $$ = struct{}{}
   }
@@ -3583,10 +3591,7 @@ table_spec:
   }
 | '(' table_column_list ',' error ')' table_option_list table_partition_by_opt
   {
-    yylex.Error("trailing comma is not allowed in column definitions")
-    $$ = $2
-    $$.Options = $6
-    $$.Partition = $7
+    return abortParse(yylex, "trailing comma is not allowed in column definitions")
   }
 
 // PostgreSQL PARTITION BY clause for partitioned tables
@@ -3903,7 +3908,11 @@ column_type:
     // empty one on one side as a different type. Until this PR every one of these statements
     // failed here and went to pgquery, so setting it would make a column that never changed
     // come out altered whenever the two schemas were read by different parsers.
-    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name}, $3)
+    columnType, err := typeWithModifier(yylex, ColumnType{Type: $1.Name}, $3)
+    if err != nil {
+      return abortParse(yylex, err.Error())
+    }
+    $$ = columnType
   }
 | ANY
   {
@@ -3922,13 +3931,21 @@ column_type:
     // A schema-qualified type with a modifier, which is how PostgreSQL spells
     // the type when the extension's schema is not on the search_path:
     // public.geometry(Point,4326).
-    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3.Name}, $5)
+    columnType, err := typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3.Name}, $5)
+    if err != nil {
+      return abortParse(yylex, err.Error())
+    }
+    $$ = columnType
   }
 | ID '.' GEOMETRY '(' type_modifier_list ')'
   {
     // GEOMETRY is a keyword of this grammar, so the rule above does not cover
     // public.geometry(Point,4326).
-    $$ = typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3}, $5)
+    columnType, err := typeWithModifier(yylex, ColumnType{Type: $1.Name + "." + $3}, $5)
+    if err != nil {
+      return abortParse(yylex, err.Error())
+    }
+    $$ = columnType
   }
 | ID '.' GEOMETRY
   {
@@ -5181,7 +5198,11 @@ spatial_type:
   {
     // PostGIS constrains a geometry column with a modifier that names a shape
     // and, optionally, an SRID: geometry(Point,4326).
-    $$ = typeWithModifier(yylex, ColumnType{Type: $1}, $3)
+    columnType, err := typeWithModifier(yylex, ColumnType{Type: $1}, $3)
+    if err != nil {
+      return abortParse(yylex, err.Error())
+    }
+    $$ = columnType
   }
 | POINT
   {
@@ -5294,7 +5315,7 @@ max_length_opt:
 | '(' ID ')'
   {
     if !strings.EqualFold($2.Name, "max") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2.Name))
+      return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $2.Name))
     }
     $$ = NewStrVal($2.Name)
   }
@@ -7453,8 +7474,7 @@ trim_direction:
     case "both", "leading", "trailing":
       $$ = direction
     default:
-      yylex.Error(fmt.Sprintf("invalid TRIM direction %q", $1))
-      $$ = direction
+      return abortParse(yylex, fmt.Sprintf("invalid TRIM direction %q", $1))
     }
   }
 

@@ -64,6 +64,7 @@ make parser  # regenerate parser/parser.go from parser/parser.y
 - The generic parser builds ASTs that the generator uses for normalization and comparison. Do not parse SQL with regular expressions
 - pgquery is no longer maintained; any fallback to it is a bug. Fix the gap in the generic parser (`parser/parser.y`), never with regexes or workarounds. Auto mode routes the whole file to pgquery when the generic parser fails on any statement — detect it via the `WARN Generic parser failed ... using pgquery fallback` log line, and verify fixes with `PSQLDEF_PARSER=generic`
 - Map iteration order is non-deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order
+- In a grammar action, report an error with `return abortParse(yylex, ...)`, never a bare `yylex.Error(...)`. `Tokenizer.Error` skips to the end of the statement, so an action that continues lets goyacc overwrite the message with its own `syntax error`. Helpers called from actions return an `error` instead of reporting it themselves
 
 ## Local Development
 

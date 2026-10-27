@@ -2255,11 +2255,9 @@ func NewIntVal(in string) *SQLVal {
 // Only PostgreSQL spells a modifier this way. MySQL, SQL Server and SQLite reject it, and a
 // grammar shared between them would accept a statement their server does not, so the other modes
 // report the syntax error they reported before this rule existed.
-func typeWithModifier(yylex any, columnType ColumnType, modifier string) ColumnType {
-	tkn := yylex.(*Tokenizer)
-	if tkn.mode != ParserModePostgres {
-		tkn.Error(fmt.Sprintf("a type modifier is not supported here: '%s'", modifier))
-		return columnType
+func typeWithModifier(yylex any, columnType ColumnType, modifier string) (ColumnType, error) {
+	if yylex.(*Tokenizer).mode != ParserModePostgres {
+		return columnType, fmt.Errorf("a type modifier is not supported here: '%s'", modifier)
 	}
 
 	parts := strings.Split(modifier, ",")
@@ -2283,7 +2281,7 @@ func typeWithModifier(yylex any, columnType ColumnType, modifier string) ColumnT
 		// modifier of three numbers or more, which no type takes, would lose the declaration.
 		columnType.TypeModifier = modifier
 	}
-	return columnType
+	return columnType, nil
 }
 
 // isAllDigits reports whether s is a non-empty run of ASCII digits.

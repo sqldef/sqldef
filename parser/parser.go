@@ -21,6 +21,14 @@ func setDDL(yylex any, ddl *DDL) {
 	yylex.(*Tokenizer).partialDDL = ddl
 }
 
+// abortParse reports err and stops parsing; an action calls it as `return abortParse(...)`.
+// Tokenizer.Error skips to the end of the statement, so an action that went on would make
+// goyacc report its own "syntax error" there, overwriting err.
+func abortParse(yylex yyLexer, err string) int {
+	yylex.Error(err)
+	return 1
+}
+
 type yySymType struct {
 	yys                      int
 	empty                    struct{}
@@ -9974,7 +9982,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
 			if yyDollar[1].ident.Quoted || !strings.EqualFold(yyDollar[1].ident.Name, "referencing") {
-				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
+				return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
 			}
 			yyVAL.empty = struct{}{}
 		}
@@ -9982,7 +9990,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
 			if yyDollar[1].ident.Quoted || !strings.EqualFold(yyDollar[1].ident.Name, "old") {
-				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
+				return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", yyDollar[1].ident.Name))
 			}
 			yyVAL.empty = struct{}{}
 		}
@@ -10432,10 +10440,7 @@ yydefault:
 	case 386:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
-			yylex.Error("trailing comma is not allowed in column definitions")
-			yyVAL.TableSpec = yyDollar[2].TableSpec
-			yyVAL.TableSpec.Options = yyDollar[6].tableOptions
-			yyVAL.TableSpec.Partition = yyDollar[7].tablePartition
+			return abortParse(yylex, "trailing comma is not allowed in column definitions")
 		}
 	case 387:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -10763,7 +10768,11 @@ yydefault:
 			// empty one on one side as a different type. Until this PR every one of these statements
 			// failed here and went to pgquery, so setting it would make a column that never changed
 			// come out altered whenever the two schemas were read by different parsers.
-			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name}, yyDollar[3].str)
+			columnType, err := typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name}, yyDollar[3].str)
+			if err != nil {
+				return abortParse(yylex, err.Error())
+			}
+			yyVAL.columnType = columnType
 		}
 	case 448:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -10786,14 +10795,22 @@ yydefault:
 			// A schema-qualified type with a modifier, which is how PostgreSQL spells
 			// the type when the extension's schema is not on the search_path:
 			// public.geometry(Point,4326).
-			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].ident.Name}, yyDollar[5].str)
+			columnType, err := typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].ident.Name}, yyDollar[5].str)
+			if err != nil {
+				return abortParse(yylex, err.Error())
+			}
+			yyVAL.columnType = columnType
 		}
 	case 452:
 		yyDollar = yyS[yypt-6 : yypt+1]
 		{
 			// GEOMETRY is a keyword of this grammar, so the rule above does not cover
 			// public.geometry(Point,4326).
-			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].str}, yyDollar[5].str)
+			columnType, err := typeWithModifier(yylex, ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].str}, yyDollar[5].str)
+			if err != nil {
+				return abortParse(yylex, err.Error())
+			}
+			yyVAL.columnType = columnType
 		}
 	case 453:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -12134,7 +12151,11 @@ yydefault:
 		{
 			// PostGIS constrains a geometry column with a modifier that names a shape
 			// and, optionally, an SRID: geometry(Point,4326).
-			yyVAL.columnType = typeWithModifier(yylex, ColumnType{Type: yyDollar[1].str}, yyDollar[3].str)
+			columnType, err := typeWithModifier(yylex, ColumnType{Type: yyDollar[1].str}, yyDollar[3].str)
+			if err != nil {
+				return abortParse(yylex, err.Error())
+			}
+			yyVAL.columnType = columnType
 		}
 	case 697:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -12250,7 +12271,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
 			if !strings.EqualFold(yyDollar[2].ident.Name, "max") {
-				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[2].ident.Name))
+				return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", yyDollar[2].ident.Name))
 			}
 			yyVAL.optVal = NewStrVal(yyDollar[2].ident.Name)
 		}
@@ -14620,8 +14641,7 @@ yydefault:
 			case "both", "leading", "trailing":
 				yyVAL.str = direction
 			default:
-				yylex.Error(fmt.Sprintf("invalid TRIM direction %q", yyDollar[1].str))
-				yyVAL.str = direction
+				return abortParse(yylex, fmt.Sprintf("invalid TRIM direction %q", yyDollar[1].str))
 			}
 		}
 	case 1179:
