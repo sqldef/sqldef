@@ -1214,21 +1214,22 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 				Select: normalizeViewDefinition(tableExpr.Select, mode, tableLookup),
 			}
 		}
+		as := e.As
 		lateral := e.Lateral
 		columns := e.Columns
-		if _, ok := e.Expr.(*parser.FuncExpr); ok && mode == GeneratorModePostgres {
-			// LATERAL is a noise word for a function in FROM, and PostgreSQL adds it whenever the
-			// function references an earlier FROM item. PostgreSQL also names the only output
-			// column of a scalar function after its alias: "unnest(x) t" becomes "unnest(x) t(t)".
-			lateral = false
-			if len(columns) == 1 && columns[0].Name == e.As.Name {
-				columns = nil
+		if mode == GeneratorModePostgres {
+			switch tableExpr := e.Expr.(type) {
+			case *parser.FuncExpr:
+				normalizedExpr = normalizeExpr(tableExpr, mode).(*parser.FuncExpr)
+				columns, as, lateral = normalizeTableFunctionAliases(tableExpr, e.WithOrdinality, as, columns)
+			case *parser.Subquery:
+				columns = trimDefaultSubqueryColumnAliases(tableExpr, columns)
 			}
 		}
 		return &parser.AliasedTableExpr{
 			Expr:           normalizedExpr,
 			Partitions:     e.Partitions,
-			As:             e.As,
+			As:             as,
 			Columns:        columns,
 			TableHints:     e.TableHints,
 			IndexHints:     e.IndexHints,
@@ -1258,6 +1259,59 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 	default:
 		return expr
 	}
+}
+
+// normalizeTableFunctionAliases undoes how PostgreSQL stores a function in FROM. LATERAL is a
+// noise word for a function, and PostgreSQL adds it whenever the function references an earlier
+// FROM item. A function without an alias is aliased by its name, and the only output column of a
+// scalar function is named after the alias, plus "ordinality" for WITH ORDINALITY:
+// "unnest(x)" becomes "unnest(x) unnest(unnest)". A function returning a composite type gets all
+// its column names instead, which needs the function's signature to undo.
+func normalizeTableFunctionAliases(funcExpr *parser.FuncExpr, withOrdinality bool, as Ident, columns parser.Columns) (parser.Columns, Ident, bool) {
+	if as.IsEmpty() {
+		as = parser.NewIdent(strings.ToLower(funcExpr.Name.Name), false)
+	}
+	defaults := []string{as.Name}
+	if withOrdinality {
+		defaults = append(defaults, "ordinality")
+	}
+	if len(columns) == len(defaults) && slices.EqualFunc(columns, defaults, func(c Ident, d string) bool { return c.Name == d }) {
+		columns = nil
+	}
+	return columns, as, false
+}
+
+// trimDefaultSubqueryColumnAliases drops trailing column aliases that repeat the subquery's own
+// output names, since PostgreSQL fills a partial list with them: "(SELECT 1, 2) s(x)" becomes
+// "(SELECT 1 AS "?column?", 2 AS "?column?") s(x, "?column?")".
+func trimDefaultSubqueryColumnAliases(subquery *parser.Subquery, columns parser.Columns) parser.Columns {
+	sel, ok := subquery.Select.(*parser.Select)
+	if !ok || len(columns) > len(sel.SelectExprs) {
+		return columns
+	}
+	for len(columns) > 0 {
+		i := len(columns) - 1
+		aliased, ok := sel.SelectExprs[i].(*parser.AliasedExpr)
+		if !ok || columns[i].Name != selectExprOutputName(aliased) {
+			break
+		}
+		columns = columns[:i]
+	}
+	return columns
+}
+
+// selectExprOutputName returns the column name PostgreSQL gives a select expression without an alias
+func selectExprOutputName(expr *parser.AliasedExpr) string {
+	if !expr.As.IsEmpty() {
+		return expr.As.Name
+	}
+	switch e := expr.Expr.(type) {
+	case *parser.ColName:
+		return e.Name.Name
+	case *parser.FuncExpr:
+		return strings.ToLower(e.Name.Name)
+	}
+	return "?column?"
 }
 
 // normalizeJoinCondition normalizes the JOIN ON/USING condition

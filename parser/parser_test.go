@@ -865,6 +865,41 @@ func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
 	}
 }
 
+// Only PostgreSQL reserves lateral.
+func TestLateralAsUnquotedIdentifier(t *testing.T) {
+	for _, m := range []struct {
+		name string
+		mode ParserMode
+	}{
+		{"MySQL", ParserModeMysql},
+		{"SQLite3", ParserModeSQLite3},
+		{"SQL Server", ParserModeMssql},
+	} {
+		for _, sql := range []string{
+			`CREATE TABLE lateral (lateral int)`,
+			`CREATE INDEX lateral ON t (lateral)`,
+			`CREATE VIEW v AS SELECT lateral FROM lateral`,
+		} {
+			if _, err := ParseDDL(sql, m.mode); err != nil {
+				t.Errorf("unquoted lateral should parse in %s mode: %q: %v", m.name, sql, err)
+			}
+		}
+	}
+}
+
+func TestWithOrdinalityAndCTENamedOrdinality(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY`,
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY t`,
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY AS t(a, n)`,
+		`CREATE VIEW v AS WITH ordinality AS (SELECT 1) SELECT * FROM ordinality`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+			t.Errorf("ParseDDL(%q) failed: %v", sql, err)
+		}
+	}
+}
+
 // No supported database reserves stream, and pg_get_indexdef writes it unquoted.
 func TestStreamAsUnquotedIdentifier(t *testing.T) {
 	sqls := []string{

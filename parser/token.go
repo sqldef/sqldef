@@ -993,10 +993,13 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			if nextID == DATA || nextID == NO {
 				return WITH_DATA_OPTION, loweredStr
 			}
-			// ORDINALITY is not a keyword, so "WITH ORDINALITY" after a function in FROM
-			// would otherwise be indistinguishable from a table hint or a CTE
+			// ORDINALITY is not a keyword, so "WITH ORDINALITY" after a function in FROM would
+			// otherwise be indistinguishable from a table hint. A CTE named ordinality is
+			// followed by "AS (" or a column list instead.
 			if nextID == ID && strings.EqualFold(nextStr, "ordinality") {
-				return WITH_ORDINALITY, loweredStr
+				if ids := tkn.peekTokenIDs(3); ids[1] != '(' && (ids[1] != AS || ids[2] != '(') {
+					return WITH_ORDINALITY, loweredStr
+				}
 			}
 		}
 
@@ -1015,6 +1018,12 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			if id1, _ := tkn.peekToken(); id1 != ON {
 				return PG_COMMENT, loweredStr
 			}
+		}
+
+		// Only PostgreSQL reserves LATERAL, so other dialects keep it usable as an identifier
+		if keywordID == LATERAL && tkn.mode != ParserModePostgres {
+			tkn.lastIdentifierQuoted = false
+			return ID, loweredStr
 		}
 
 		// UNUSED words are MySQL keywords that PostgreSQL does not reserve (e.g. year_month),
@@ -1488,6 +1497,28 @@ func (tkn *Tokenizer) peekToken() (int, string) {
 	// Set peeking flag to prevent infinite recursion
 	tkn.peeking = true
 	return tkn.scanSkippingComments()
+}
+
+// peekTokenIDs returns the IDs of the next n tokens without consuming input.
+func (tkn *Tokenizer) peekTokenIDs(n int) []int {
+	savedLastChar := tkn.lastChar
+	savedPosition := tkn.Position
+	savedBufPos := tkn.bufPos
+	savedPeeking := tkn.peeking
+
+	defer func() {
+		tkn.peeking = savedPeeking
+		tkn.lastChar = savedLastChar
+		tkn.Position = savedPosition
+		tkn.bufPos = savedBufPos
+	}()
+
+	tkn.peeking = true
+	ids := make([]int, n)
+	for i := range ids {
+		ids[i], _ = tkn.scanSkippingComments()
+	}
+	return ids
 }
 
 // peekTwoTokens returns the IDs of the next two tokens without consuming input.

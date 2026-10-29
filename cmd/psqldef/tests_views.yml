@@ -985,8 +985,18 @@ ViewWithFunctionsInFrom:
       SELECT g FROM pg_catalog.generate_series(1, 3) g;
     CREATE VIEW subquery_column_aliases AS
       SELECT s.x FROM (SELECT 1) AS s(x);
+    CREATE VIEW subquery_partial_column_aliases AS
+      SELECT s.x FROM (SELECT 1, 2) AS s(x);
+    CREATE VIEW function_without_alias AS
+      SELECT u.id, unnest FROM users u, unnest(u.tags);
+    CREATE VIEW with_ordinality_without_column_aliases AS
+      SELECT u.id, t, ordinality FROM users u, unnest(u.tags) WITH ORDINALITY t;
+    CREATE VIEW function_arguments_with_casts AS
+      SELECT g FROM generate_series(now(), now() + interval '1 day', interval '1 hour') g;
+    CREATE VIEW function_arguments_with_operators AS
+      SELECT u.id, k FROM users u, jsonb_object_keys(u.attrs -> 'a') k;
 
-# FIXME: PostgreSQL expands the column aliases of a function returning a composite type, so this view is replaced on every run
+# FIXME: PostgreSQL expands the column aliases of a function returning a composite type (j becomes j(key, value), and j(j) becomes j(j, value)), so this view is replaced on every run
 # ViewWithCompositeFunctionWithoutColumnAliases:
 #   legacy_ignore_quotes: false
 #   desired: |
