@@ -995,6 +995,8 @@ ViewWithFunctionsInFrom:
       SELECT g FROM generate_series(now(), now() + interval '1 day', interval '1 hour') g;
     CREATE VIEW function_arguments_with_operators AS
       SELECT u.id, k FROM users u, jsonb_object_keys(u.attrs -> 'a') k;
+    CREATE VIEW timezone_function AS
+      SELECT t FROM timezone('UTC', now()) t;
 
 # FIXME: PostgreSQL expands the column aliases of a function returning a composite type (j becomes j(key, value), and j(j) becomes j(j, value)), so this view is replaced on every run
 # ViewWithCompositeFunctionWithoutColumnAliases:
@@ -1003,6 +1005,32 @@ ViewWithFunctionsInFrom:
 #     CREATE TABLE users (id bigint PRIMARY KEY, attrs jsonb);
 #     CREATE VIEW user_attr_keys AS
 #       SELECT u.id, j.key FROM users u, jsonb_each(u.attrs) j;
+
+# FIXME: SELECT * is not expanded for a function in FROM, so this view is replaced on every run
+# ViewWithStarOverFunction:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE VIEW series AS SELECT * FROM generate_series(1, 3) g;
+
+# FIXME: SELECT * expands to the partial column alias list only, so this view is replaced on every run
+# ViewWithStarOverSubqueryWithPartialColumnAliases:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE VIEW v AS SELECT * FROM (SELECT 1, 2) s(x);
+
+# FIXME: PostgreSQL appends ordinality to a partial column alias list, so this view is replaced on every run
+# ViewWithOrdinalityAndPartialColumnAliases:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
+#     CREATE VIEW v AS SELECT u.id, t.tag FROM users u, unnest(u.tags) WITH ORDINALITY AS t(tag);
+
+# FIXME: The default output name of a cast is the inner column's name, so this view is replaced on every run
+# ViewWithSubqueryColumnAliasesOverCast:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE t (a text);
+#     CREATE VIEW v AS SELECT s.x FROM (SELECT 1, a::int FROM t) s(x, a);
 
 MaterializedViewWithCrossJoinLateral:
   legacy_ignore_quotes: false

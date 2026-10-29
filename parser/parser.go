@@ -13708,11 +13708,17 @@ yydefault:
 	case 965:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
+			if yyDollar[3].ident.IsEmpty() && yyDollar[4].columns != nil {
+				return abortParse(yylex, "a column alias list requires a table alias")
+			}
 			yyVAL.tableExpr = &AliasedTableExpr{Expr: yyDollar[1].funcExpr, WithOrdinality: bool(yyDollar[2].boolVal), As: yyDollar[3].ident, Columns: yyDollar[4].columns}
 		}
 	case 966:
 		yyDollar = yyS[yypt-5 : yypt+1]
 		{
+			if yyDollar[4].ident.IsEmpty() && yyDollar[5].columns != nil {
+				return abortParse(yylex, "a column alias list requires a table alias")
+			}
 			yyVAL.tableExpr = &AliasedTableExpr{Expr: yyDollar[2].funcExpr, WithOrdinality: bool(yyDollar[3].boolVal), As: yyDollar[4].ident, Columns: yyDollar[5].columns, Lateral: true}
 		}
 	case 967:

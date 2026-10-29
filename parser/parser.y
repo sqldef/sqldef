@@ -6528,10 +6528,16 @@ table_factor:
   }
 | table_function with_ordinality_opt as_opt_id table_column_list_opt
   {
+    if $3.IsEmpty() && $4 != nil {
+      return abortParse(yylex, "a column alias list requires a table alias")
+    }
     $$ = &AliasedTableExpr{Expr:$1, WithOrdinality: bool($2), As: $3, Columns: $4}
   }
 | LATERAL table_function with_ordinality_opt as_opt_id table_column_list_opt
   {
+    if $4.IsEmpty() && $5 != nil {
+      return abortParse(yylex, "a column alias list requires a table alias")
+    }
     $$ = &AliasedTableExpr{Expr:$2, WithOrdinality: bool($3), As: $4, Columns: $5, Lateral: true}
   }
 | '(' table_references ')'

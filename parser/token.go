@@ -1020,7 +1020,7 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			}
 		}
 
-		// Only PostgreSQL reserves LATERAL, so other dialects keep it usable as an identifier
+		// LATERAL is only supported for PostgreSQL, so other dialects keep it usable as an identifier
 		if keywordID == LATERAL && tkn.mode != ParserModePostgres {
 			tkn.lastIdentifierQuoted = false
 			return ID, loweredStr
@@ -1523,22 +1523,8 @@ func (tkn *Tokenizer) peekTokenIDs(n int) []int {
 
 // peekTwoTokens returns the IDs of the next two tokens without consuming input.
 func (tkn *Tokenizer) peekTwoTokens() (int, int) {
-	savedLastChar := tkn.lastChar
-	savedPosition := tkn.Position
-	savedBufPos := tkn.bufPos
-	savedPeeking := tkn.peeking
-
-	defer func() {
-		tkn.peeking = savedPeeking
-		tkn.lastChar = savedLastChar
-		tkn.Position = savedPosition
-		tkn.bufPos = savedBufPos
-	}()
-
-	tkn.peeking = true
-	id1, _ := tkn.scanSkippingComments()
-	id2, _ := tkn.scanSkippingComments()
-	return id1, id2
+	ids := tkn.peekTokenIDs(2)
+	return ids[0], ids[1]
 }
 
 // extractMysqlComment extracts the version and SQL from a comment-only query

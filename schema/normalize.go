@@ -775,48 +775,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				return parser.NewValArg(funcName)
 			}
 		}
-		normalizedExprs := parser.SelectExprs{}
-		for _, arg := range e.Exprs {
-			// For Postgres, check for ARRAY constructors BEFORE normalizing
-			// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
-			// but users may write them expanded as 'a', 'b', so we expand for comparison
-			// e.g., jsonb_extract_path_text(payload, ARRAY['amount']) -> jsonb_extract_path_text(payload, 'amount')
-			// e.g., jsonb_extract_path_text(payload, ARRAY['a', 'b']) -> jsonb_extract_path_text(payload, 'a', 'b')
-			// However, do NOT expand for ANY/ALL/SOME functions as they require the ARRAY constructor
-			if mode == GeneratorModePostgres && funcName != "any" && funcName != "all" && funcName != "some" {
-				if aliased, ok := arg.(*parser.AliasedExpr); ok {
-					if arrayConstr, ok := aliased.Expr.(*parser.ArrayConstructor); ok && len(arrayConstr.Elements) > 0 {
-						// Expand ARRAY elements into separate normalized arguments
-						for _, elem := range arrayConstr.Elements {
-							normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{
-								Expr: normalizeExpr(elem, mode),
-							})
-						}
-						continue
-					}
-				}
-			}
-
-			// Not an ARRAY, normalize normally
-			normalized := normalizeSelectExpr(arg, mode)
-			normalizedExprs = append(normalizedExprs, normalized)
-		}
-		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, funcName, normalizedExprs); ok {
+		normalized := normalizeFuncExpr(e, mode)
+		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, funcName, normalized.Exprs); ok {
 			return atz
 		}
-		// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
-		// For MySQL, preserve the original case as MySQL preserves case for function names
-		normalizedName := e.Name
-		if mode == GeneratorModePostgres {
-			normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
-		}
-		return &parser.FuncExpr{
-			Qualifier: e.Qualifier,
-			Name:      normalizedName,
-			Distinct:  e.Distinct,
-			Exprs:     normalizedExprs,
-			Over:      e.Over,
-		}
+		return normalized
 	case *parser.CastExpr:
 		normalizedExpr := normalizeExpr(e.Expr, mode)
 		// For PostgreSQL, unwrap unnecessary parentheses around simple expressions in casts
@@ -1143,6 +1106,50 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 }
 
 // normalizeSelectExprs normalizes SELECT expressions for comparison
+// normalizeFuncExpr normalizes a function call's name and arguments, keeping it a function call
+func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode) *parser.FuncExpr {
+	funcName := strings.ToLower(e.Name.Name)
+	normalizedExprs := parser.SelectExprs{}
+	for _, arg := range e.Exprs {
+		// For Postgres, check for ARRAY constructors BEFORE normalizing
+		// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
+		// but users may write them expanded as 'a', 'b', so we expand for comparison
+		// e.g., jsonb_extract_path_text(payload, ARRAY['amount']) -> jsonb_extract_path_text(payload, 'amount')
+		// e.g., jsonb_extract_path_text(payload, ARRAY['a', 'b']) -> jsonb_extract_path_text(payload, 'a', 'b')
+		// However, do NOT expand for ANY/ALL/SOME functions as they require the ARRAY constructor
+		if mode == GeneratorModePostgres && funcName != "any" && funcName != "all" && funcName != "some" {
+			if aliased, ok := arg.(*parser.AliasedExpr); ok {
+				if arrayConstr, ok := aliased.Expr.(*parser.ArrayConstructor); ok && len(arrayConstr.Elements) > 0 {
+					// Expand ARRAY elements into separate normalized arguments
+					for _, elem := range arrayConstr.Elements {
+						normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{
+							Expr: normalizeExpr(elem, mode),
+						})
+					}
+					continue
+				}
+			}
+		}
+
+		// Not an ARRAY, normalize normally
+		normalized := normalizeSelectExpr(arg, mode)
+		normalizedExprs = append(normalizedExprs, normalized)
+	}
+	// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
+	// For MySQL, preserve the original case as MySQL preserves case for function names
+	normalizedName := e.Name
+	if mode == GeneratorModePostgres {
+		normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
+	}
+	return &parser.FuncExpr{
+		Qualifier: e.Qualifier,
+		Name:      normalizedName,
+		Distinct:  e.Distinct,
+		Exprs:     normalizedExprs,
+		Over:      e.Over,
+	}
+}
+
 func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.SelectExprs {
 	normalized := make(parser.SelectExprs, len(exprs))
 	for i, expr := range exprs {
@@ -1220,8 +1227,11 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 		if mode == GeneratorModePostgres {
 			switch tableExpr := e.Expr.(type) {
 			case *parser.FuncExpr:
-				normalizedExpr = normalizeExpr(tableExpr, mode).(*parser.FuncExpr)
-				columns, as, lateral = normalizeTableFunctionAliases(tableExpr, e.WithOrdinality, as, columns)
+				normalizedExpr = normalizeFuncExpr(tableExpr, mode)
+				// LATERAL is a noise word for a function, and PostgreSQL adds it whenever the function
+				// references an earlier FROM item
+				lateral = false
+				columns, as = normalizeTableFunctionAliases(tableExpr, e.WithOrdinality, as, columns)
 			case *parser.Subquery:
 				columns = trimDefaultSubqueryColumnAliases(tableExpr, columns)
 			}
@@ -1261,13 +1271,12 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 	}
 }
 
-// normalizeTableFunctionAliases undoes how PostgreSQL stores a function in FROM. LATERAL is a
-// noise word for a function, and PostgreSQL adds it whenever the function references an earlier
-// FROM item. A function without an alias is aliased by its name, and the only output column of a
-// scalar function is named after the alias, plus "ordinality" for WITH ORDINALITY:
+// normalizeTableFunctionAliases undoes the aliases PostgreSQL gives a function in FROM. A function
+// without an alias is aliased by its name, and the only output column of a scalar function is
+// named after the alias, plus "ordinality" for WITH ORDINALITY:
 // "unnest(x)" becomes "unnest(x) unnest(unnest)". A function returning a composite type gets all
 // its column names instead, which needs the function's signature to undo.
-func normalizeTableFunctionAliases(funcExpr *parser.FuncExpr, withOrdinality bool, as Ident, columns parser.Columns) (parser.Columns, Ident, bool) {
+func normalizeTableFunctionAliases(funcExpr *parser.FuncExpr, withOrdinality bool, as Ident, columns parser.Columns) (parser.Columns, Ident) {
 	if as.IsEmpty() {
 		as = parser.NewIdent(strings.ToLower(funcExpr.Name.Name), false)
 	}
@@ -1278,7 +1287,7 @@ func normalizeTableFunctionAliases(funcExpr *parser.FuncExpr, withOrdinality boo
 	if len(columns) == len(defaults) && slices.EqualFunc(columns, defaults, func(c Ident, d string) bool { return c.Name == d }) {
 		columns = nil
 	}
-	return columns, as, false
+	return columns, as
 }
 
 // trimDefaultSubqueryColumnAliases drops trailing column aliases that repeat the subquery's own

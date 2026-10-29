@@ -865,7 +865,7 @@ func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
 	}
 }
 
-// Only PostgreSQL reserves lateral.
+// LATERAL is only supported for PostgreSQL, so other dialects keep lateral usable as an identifier.
 func TestLateralAsUnquotedIdentifier(t *testing.T) {
 	for _, m := range []struct {
 		name string
@@ -883,6 +883,17 @@ func TestLateralAsUnquotedIdentifier(t *testing.T) {
 			if _, err := ParseDDL(sql, m.mode); err != nil {
 				t.Errorf("unquoted lateral should parse in %s mode: %q: %v", m.name, sql, err)
 			}
+		}
+	}
+}
+
+func TestTableFunctionColumnAliasesRequireAlias(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) (a)`,
+		`CREATE VIEW v AS SELECT * FROM t, LATERAL unnest(ARRAY[1]) (a)`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err == nil || !strings.Contains(err.Error(), "a column alias list requires a table alias") {
+			t.Errorf("ParseDDL(%q) should fail for a column alias list without an alias, got %v", sql, err)
 		}
 	}
 }
