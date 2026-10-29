@@ -917,9 +917,16 @@ func TestExtractSelectOutputColumns(t *testing.T) {
 			stmt: &parser.Select{SelectExprs: parser.SelectExprs{&parser.StarExpr{}}},
 		},
 		{
-			name: "anonymous non-column expression",
+			name: "anonymous literal",
 			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
 				&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+			}},
+			expected: parser.Columns{parser.NewIdent("?column?", false)},
+		},
+		{
+			name: "anonymous expression with an unknown name",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.BinaryExpr{Operator: "+", Left: parser.NewIntVal("1"), Right: parser.NewIntVal("2")}},
 			}},
 		},
 		{

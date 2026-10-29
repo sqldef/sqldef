@@ -987,19 +987,18 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 		// Context-aware handling for "with" keyword
 		// Only peek if we're not already in a peek operation (prevents infinite recursion)
 		if keywordID == WITH && !tkn.peeking {
-			nextID, nextStr := tkn.peekToken()
+			ids, strs := tkn.peekTokens(3)
 
 			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
-			if nextID == DATA || nextID == NO {
+			if ids[0] == DATA || ids[0] == NO {
 				return WITH_DATA_OPTION, loweredStr
 			}
 			// ORDINALITY is not a keyword, so "WITH ORDINALITY" after a function in FROM would
 			// otherwise be indistinguishable from a table hint. A CTE named ordinality is
 			// followed by "AS (" or a column list instead.
-			if nextID == ID && strings.EqualFold(nextStr, "ordinality") {
-				if ids := tkn.peekTokenIDs(3); ids[1] != '(' && (ids[1] != AS || ids[2] != '(') {
-					return WITH_ORDINALITY, loweredStr
-				}
+			if tkn.mode == ParserModePostgres && ids[0] == ID && strings.EqualFold(strs[0], "ordinality") &&
+				ids[1] != '(' && (ids[1] != AS || ids[2] != '(') {
+				return WITH_ORDINALITY, loweredStr
 			}
 		}
 
@@ -1499,8 +1498,8 @@ func (tkn *Tokenizer) peekToken() (int, string) {
 	return tkn.scanSkippingComments()
 }
 
-// peekTokenIDs returns the IDs of the next n tokens without consuming input.
-func (tkn *Tokenizer) peekTokenIDs(n int) []int {
+// peekTokens returns the IDs and values of the next n tokens without consuming input.
+func (tkn *Tokenizer) peekTokens(n int) ([]int, []string) {
 	savedLastChar := tkn.lastChar
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
@@ -1515,15 +1514,16 @@ func (tkn *Tokenizer) peekTokenIDs(n int) []int {
 
 	tkn.peeking = true
 	ids := make([]int, n)
+	strs := make([]string, n)
 	for i := range ids {
-		ids[i], _ = tkn.scanSkippingComments()
+		ids[i], strs[i] = tkn.scanSkippingComments()
 	}
-	return ids
+	return ids, strs
 }
 
 // peekTwoTokens returns the IDs of the next two tokens without consuming input.
 func (tkn *Tokenizer) peekTwoTokens() (int, int) {
-	ids := tkn.peekTokenIDs(2)
+	ids, _ := tkn.peekTokens(2)
 	return ids[0], ids[1]
 }
 

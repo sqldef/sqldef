@@ -1006,26 +1006,23 @@ ViewWithFunctionsInFrom:
 #     CREATE VIEW user_attr_keys AS
 #       SELECT u.id, j.key FROM users u, jsonb_each(u.attrs) j;
 
-# FIXME: SELECT * is not expanded for a function in FROM, so this view is replaced on every run
-# ViewWithStarOverFunction:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE VIEW series AS SELECT * FROM generate_series(1, 3) g;
+ViewWithStarOverFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW series AS SELECT * FROM generate_series(1, 3) g;
 
-# FIXME: SELECT * expands to the partial column alias list only, so this view is replaced on every run
-# ViewWithStarOverSubqueryWithPartialColumnAliases:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE VIEW v AS SELECT * FROM (SELECT 1, 2) s(x);
+ViewWithStarOverSubqueryWithPartialColumnAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW v AS SELECT * FROM (SELECT 1, 2) s(x);
 
-# FIXME: PostgreSQL appends ordinality to a partial column alias list, so this view is replaced on every run
-# ViewWithOrdinalityAndPartialColumnAliases:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
-#     CREATE VIEW v AS SELECT u.id, t.tag FROM users u, unnest(u.tags) WITH ORDINALITY AS t(tag);
+ViewWithOrdinalityAndPartialColumnAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
+    CREATE VIEW v AS SELECT u.id, t.tag FROM users u, unnest(u.tags) WITH ORDINALITY AS t(tag);
 
-# FIXME: The default output name of a cast is the inner column's name, so this view is replaced on every run
+# FIXME: PostgreSQL adds an alias to an unaliased cast (a::int becomes (a)::integer AS a), so this view is replaced on every run. A top-level SELECT a::int has the same problem.
 # ViewWithSubqueryColumnAliasesOverCast:
 #   legacy_ignore_quotes: false
 #   desired: |
@@ -1038,3 +1035,43 @@ MaterializedViewWithCrossJoinLateral:
     CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
     CREATE MATERIALIZED VIEW user_tags AS
       SELECT u.id, t.tag FROM users u CROSS JOIN LATERAL unnest(u.tags) WITH ORDINALITY AS t(tag, n);
+
+ViewWithStarOverSubqueryWithColumnAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT * FROM (SELECT a, b FROM t) s(x, b);
+
+ViewWithUppercaseFunctionAlias:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW v AS SELECT x FROM unnest(ARRAY[1]) T(x);
+    CREATE VIEW w AS SELECT t FROM unnest(ARRAY[1]) T;
+
+ChangeUnnestOfArrayToUnnestOfMultipleArrays:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE x (tags text[], tags2 text[]);
+    CREATE VIEW v AS SELECT t.a FROM x, unnest(ARRAY[x.tags, x.tags2]) AS t(a);
+  desired: |
+    CREATE TABLE x (tags text[], tags2 text[]);
+    CREATE VIEW v AS SELECT t.a FROM x, unnest(x.tags, x.tags2) AS t(a, b);
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(x.tags, x.tags2) as t(a, b);
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(ARRAY[x.tags, x.tags2]) as t(a);
+
+
+# FIXME: WITHIN GROUP is dropped by the normalization, so this change is not detected. Comparing it needs the casts PostgreSQL adds to its ORDER BY (ORDER BY ((a)::double precision)).
+# ChangeWithinGroupOrderInView:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (a int, b int);
+#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
+#   desired: |
+#     CREATE TABLE t (a int, b int);
+#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
+#   up: |
+#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by b) as p from t;
+#   down: |
+#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a) as p from t;
