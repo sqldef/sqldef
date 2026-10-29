@@ -7596,9 +7596,10 @@ func matchManageObjectRule(rules []database.ManageObjectRule, name string) (data
 // is unset, all functions are managed (unchanged behavior).
 //
 // A rule's target matches against the function name only; manage.function is
-// scoped to the default schema (matching the manage: RFC, where a rule with no
-// schema field defaults to the default schema). Functions in other schemas are
-// left untouched. Schema-qualified rules are not implemented yet.
+// scoped to the schemas target_schema names, or to the default schema when
+// target_schema is unset (matching the manage: RFC, where a rule with no schema
+// field defaults to the default schema). Functions in other schemas are left
+// untouched. Schema-qualified rules are not implemented yet.
 func FilterFunctions(ddls []DDL, config database.GeneratorConfig, defaultSchema string) []DDL {
 	if config.ManageFunctions == nil {
 		return ddls
@@ -7630,10 +7631,25 @@ func FilterFunctions(ddls []DDL, config database.GeneratorConfig, defaultSchema 
 }
 
 // isManagedFunction reports whether a function is managed by manage.function: it
-// must live in the default schema (an empty schema means the default) and its
-// name must match a rule.
+// must live in a schema the rules reach (an empty schema means the default) and
+// its name must match a rule.
+//
+// The rules reach the schemas target_schema names when it is set, and the default
+// schema otherwise. The default schema is current_schema(), which comes from the
+// connection's search_path, so without this a config that names the schema it
+// manages would still have its functions selected by the session: on a database
+// whose functions live in the schema target_schema names, turning on
+// manage.function at all stops every function being diffed, and the apply still
+// succeeds.
 func isManagedFunction(config database.GeneratorConfig, defaultSchema, schema, name string) bool {
-	if schema != "" && schema != defaultSchema {
+	if schema == "" {
+		schema = defaultSchema
+	}
+	if len(config.TargetSchema) > 0 {
+		if !slices.Contains(config.TargetSchema, schema) {
+			return false
+		}
+	} else if schema != defaultSchema {
 		return false
 	}
 	_, matched := matchManageObjectRule(*config.ManageFunctions, name)
