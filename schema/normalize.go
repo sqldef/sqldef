@@ -1214,13 +1214,26 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 				Select: normalizeViewDefinition(tableExpr.Select, mode, tableLookup),
 			}
 		}
+		lateral := e.Lateral
+		columns := e.Columns
+		if _, ok := e.Expr.(*parser.FuncExpr); ok && mode == GeneratorModePostgres {
+			// LATERAL is a noise word for a function in FROM, and PostgreSQL adds it whenever the
+			// function references an earlier FROM item. PostgreSQL also names the only output
+			// column of a scalar function after its alias: "unnest(x) t" becomes "unnest(x) t(t)".
+			lateral = false
+			if len(columns) == 1 && columns[0].Name == e.As.Name {
+				columns = nil
+			}
+		}
 		return &parser.AliasedTableExpr{
-			Expr:       normalizedExpr,
-			Partitions: e.Partitions,
-			As:         e.As,
-			Columns:    e.Columns,
-			TableHints: e.TableHints,
-			IndexHints: e.IndexHints,
+			Expr:           normalizedExpr,
+			Partitions:     e.Partitions,
+			As:             e.As,
+			Columns:        columns,
+			TableHints:     e.TableHints,
+			IndexHints:     e.IndexHints,
+			Lateral:        lateral,
+			WithOrdinality: e.WithOrdinality,
 		}
 	case *parser.JoinTableExpr:
 		return &parser.JoinTableExpr{

@@ -299,6 +299,7 @@ var keywords = map[string]int{
 	"language":               LANGUAGE,
 	"leakproof":              LEAKPROOF,
 	"last":                   LAST,
+	"lateral":                LATERAL,
 	"last_insert_id":         LAST_INSERT_ID,
 	"leading":                UNUSED,
 	"leave":                  UNUSED,
@@ -986,11 +987,16 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 		// Context-aware handling for "with" keyword
 		// Only peek if we're not already in a peek operation (prevents infinite recursion)
 		if keywordID == WITH && !tkn.peeking {
-			nextID, _ := tkn.peekToken()
+			nextID, nextStr := tkn.peekToken()
 
 			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
 			if nextID == DATA || nextID == NO {
 				return WITH_DATA_OPTION, loweredStr
+			}
+			// ORDINALITY is not a keyword, so "WITH ORDINALITY" after a function in FROM
+			// would otherwise be indistinguishable from a table hint or a CTE
+			if nextID == ID && strings.EqualFold(nextStr, "ordinality") {
+				return WITH_ORDINALITY, loweredStr
 			}
 		}
 

@@ -92,6 +92,7 @@ func abortParse(yylex yyLexer, err string) int {
   setExpr                  *SetExpr
   convertType              *ConvertType
   aliasedTableName         *AliasedTableExpr
+  funcExpr                 *FuncExpr
   TableSpec                *TableSpec
   columnType               ColumnType
   colKeyOpt                ColumnKeyOption
@@ -341,8 +342,8 @@ func abortParse(yylex yyLexer, err string) int {
 %token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION PARTIAL SIMPLE
 
 // Context-aware WITH tokens
-%token <str> WITH_DATA_OPTION
-%token <str> APPLY
+%token <str> WITH_DATA_OPTION WITH_ORDINALITY
+%token <str> APPLY LATERAL
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <str> UNUSED
@@ -415,6 +416,9 @@ func abortParse(yylex yyLexer, err string) int {
 %type <valTuple> row_tuple tuple_or_empty
 %type <expr> tuple_expression
 %type <subquery> subquery
+%type <funcExpr> table_function
+%type <columns> table_column_list_opt
+%type <boolVal> with_ordinality_opt
 %type <colName> column_name
 %type <whens> when_expression_list
 %type <when> when_expression
@@ -6514,13 +6518,53 @@ table_factor:
   {
     $$ = &AliasedTableExpr{Expr: $3, As: $6, Columns: $8}
   }
-| subquery as_opt table_id
+| subquery as_opt table_id table_column_list_opt
   {
-    $$ = &AliasedTableExpr{Expr:$1, As: $3}
+    $$ = &AliasedTableExpr{Expr:$1, As: $3, Columns: $4}
+  }
+| LATERAL subquery as_opt table_id table_column_list_opt
+  {
+    $$ = &AliasedTableExpr{Expr:$2, As: $4, Columns: $5, Lateral: true}
+  }
+| table_function with_ordinality_opt as_opt_id table_column_list_opt
+  {
+    $$ = &AliasedTableExpr{Expr:$1, WithOrdinality: bool($2), As: $3, Columns: $4}
+  }
+| LATERAL table_function with_ordinality_opt as_opt_id table_column_list_opt
+  {
+    $$ = &AliasedTableExpr{Expr:$2, WithOrdinality: bool($3), As: $4, Columns: $5, Lateral: true}
   }
 | '(' table_references ')'
   {
     $$ = &ParenTableExpr{Exprs: $2}
+  }
+
+with_ordinality_opt:
+  {
+    $$ = false
+  }
+| WITH_ORDINALITY ID
+  {
+    $$ = true
+  }
+
+table_column_list_opt:
+  {
+    $$ = nil
+  }
+| '(' column_list ')'
+  {
+    $$ = $2
+  }
+
+table_function:
+  ID '(' select_expression_list_opt ')'
+  {
+    $$ = &FuncExpr{Name: $1, Exprs: $3}
+  }
+| table_id '.' reserved_table_id '(' select_expression_list_opt ')'
+  {
+    $$ = &FuncExpr{Qualifier: $1, Name: $3, Exprs: $5}
   }
 
 openjson_with_opt:
@@ -8684,6 +8728,7 @@ reserved_keyword:
 | JOIN
 | KEY
 | LAST
+| LATERAL
 | LEFT
 | LIKE
 | LIMIT
