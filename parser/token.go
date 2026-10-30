@@ -299,6 +299,7 @@ var keywords = map[string]int{
 	"language":               LANGUAGE,
 	"leakproof":              LEAKPROOF,
 	"last":                   LAST,
+	"lateral":                LATERAL,
 	"last_insert_id":         LAST_INSERT_ID,
 	"leading":                UNUSED,
 	"leave":                  UNUSED,
@@ -986,11 +987,20 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 		// Context-aware handling for "with" keyword
 		// Only peek if we're not already in a peek operation (prevents infinite recursion)
 		if keywordID == WITH && !tkn.peeking {
-			nextID, _ := tkn.peekToken()
+			nextID, nextStr := tkn.peekToken()
 
 			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
 			if nextID == DATA || nextID == NO {
 				return WITH_DATA_OPTION, loweredStr
+			}
+			// ORDINALITY is not a keyword, so "WITH ORDINALITY" after a function in FROM would
+			// otherwise be indistinguishable from a table hint. A CTE named ordinality is
+			// followed by "AS (" or a column list instead.
+			if tkn.mode == ParserModePostgres && nextID == ID && strings.EqualFold(nextStr, "ordinality") {
+				next := tkn.peekTokens(3)
+				if !next[0].quoted && next[1].id != '(' && (next[1].id != AS || next[2].id != '(') {
+					return WITH_ORDINALITY, loweredStr
+				}
 			}
 		}
 
@@ -1009,6 +1019,12 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			if id1, _ := tkn.peekToken(); id1 != ON {
 				return PG_COMMENT, loweredStr
 			}
+		}
+
+		// LATERAL is only supported for PostgreSQL, so other dialects keep it usable as an identifier
+		if keywordID == LATERAL && tkn.mode != ParserModePostgres {
+			tkn.lastIdentifierQuoted = false
+			return ID, loweredStr
 		}
 
 		// UNUSED words are MySQL keywords that PostgreSQL does not reserve (e.g. year_month),
@@ -1484,24 +1500,40 @@ func (tkn *Tokenizer) peekToken() (int, string) {
 	return tkn.scanSkippingComments()
 }
 
-// peekTwoTokens returns the IDs of the next two tokens without consuming input.
-func (tkn *Tokenizer) peekTwoTokens() (int, int) {
+type peekedToken struct {
+	id     int
+	quoted bool
+}
+
+// peekTokens returns the next n tokens without consuming input.
+func (tkn *Tokenizer) peekTokens(n int) []peekedToken {
 	savedLastChar := tkn.lastChar
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
 	savedPeeking := tkn.peeking
+	savedQuoted := tkn.lastIdentifierQuoted
 
 	defer func() {
 		tkn.peeking = savedPeeking
 		tkn.lastChar = savedLastChar
 		tkn.Position = savedPosition
 		tkn.bufPos = savedBufPos
+		tkn.lastIdentifierQuoted = savedQuoted
 	}()
 
 	tkn.peeking = true
-	id1, _ := tkn.scanSkippingComments()
-	id2, _ := tkn.scanSkippingComments()
-	return id1, id2
+	tokens := make([]peekedToken, n)
+	for i := range tokens {
+		tokens[i].id, _ = tkn.scanSkippingComments()
+		tokens[i].quoted = tkn.lastIdentifierQuoted
+	}
+	return tokens
+}
+
+// peekTwoTokens returns the IDs of the next two tokens without consuming input.
+func (tkn *Tokenizer) peekTwoTokens() (int, int) {
+	next := tkn.peekTokens(2)
+	return next[0].id, next[1].id
 }
 
 // extractMysqlComment extracts the version and SQL from a comment-only query

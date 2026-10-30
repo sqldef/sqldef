@@ -719,6 +719,30 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
 			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
 		},
+		{
+			name:     "PostgreSQL: strip an alias equal to the default output name",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT (t.a)::integer AS a, upper(t.b) AS upper, 1 AS "?column?" FROM t`,
+			expected: `select a::integer, upper(b), 1 from t`,
+		},
+		{
+			name:     "PostgreSQL: keep a quoted alias that differs in case from the default output name",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT a AS "A" FROM t`,
+			expected: `select a as a from t`,
+		},
+		{
+			name:     "PostgreSQL: strip the default alias of timezone() and AT TIME ZONE",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT timezone('UTC', now()) AS timezone, (now() AT TIME ZONE 'UTC') AS "timezone"`,
+			expected: `select (now() at time zone 'utc'), (now() at time zone 'utc')`,
+		},
+		{
+			name:     "PostgreSQL: strip the default alias of a quoted function",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT "MyFunc"(a) AS "MyFunc" FROM t`,
+			expected: `select myfunc(a) from t`,
+		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
 			name:     "MySQL: normalize table qualifiers in SELECT",
@@ -917,9 +941,16 @@ func TestExtractSelectOutputColumns(t *testing.T) {
 			stmt: &parser.Select{SelectExprs: parser.SelectExprs{&parser.StarExpr{}}},
 		},
 		{
-			name: "anonymous non-column expression",
+			name: "anonymous literal",
 			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
 				&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+			}},
+			expected: parser.Columns{parser.NewIdent("?column?", false)},
+		},
+		{
+			name: "anonymous expression with an unknown name",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.BinaryExpr{Operator: "+", Left: parser.NewIntVal("1"), Right: parser.NewIntVal("2")}},
 			}},
 		},
 		{

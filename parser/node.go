@@ -1716,11 +1716,20 @@ type AliasedTableExpr struct {
 	Columns    Columns
 	TableHints []string
 	IndexHints *IndexHints
+	Lateral    bool
+	// WithOrdinality is PostgreSQL's WITH ORDINALITY on a function in FROM
+	WithOrdinality bool
 }
 
 // Format formats the node.
 func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
+	if node.Lateral {
+		buf.Printf("lateral ")
+	}
 	buf.Printf("%v%v", node.Expr, node.Partitions)
+	if node.WithOrdinality {
+		buf.Printf(" with ordinality")
+	}
 	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 		if len(node.Columns) > 0 {

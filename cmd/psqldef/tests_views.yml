@@ -911,3 +911,202 @@ DropIndexOnMaterializedView:
     DROP INDEX public.mv_a_idx;
   down: |
     CREATE INDEX mv_a_idx ON public.mv USING btree (a);
+
+CreateViewWithCrossJoinLateralSubquery:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (id bigint PRIMARY KEY, user_id bigint, created_at timestamp);
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (id bigint PRIMARY KEY, user_id bigint, created_at timestamp);
+    CREATE VIEW latest_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u
+      CROSS JOIN LATERAL (
+        SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 1
+      ) p;
+  up: |
+    CREATE VIEW latest_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u
+      CROSS JOIN LATERAL (
+        SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 1
+      ) p;
+  down: |
+    DROP VIEW public.latest_posts;
+
+ChangeViewWithCrossJoinLateralSubquery:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (id bigint PRIMARY KEY, user_id bigint, created_at timestamp);
+    CREATE VIEW latest_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u
+      CROSS JOIN LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 1) p;
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (id bigint PRIMARY KEY, user_id bigint, created_at timestamp);
+    CREATE VIEW latest_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u
+      CROSS JOIN LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 2) p;
+  up: |
+    CREATE OR REPLACE VIEW public.latest_posts AS select u.id, p.id as post_id from users as u cross join lateral (select id from posts where posts.user_id = u.id order by created_at desc limit 2) as p;
+  down: |
+    CREATE OR REPLACE VIEW public.latest_posts AS select u.id, p.id as post_id from users as u cross join lateral (select id from posts where posts.user_id = u.id order by created_at desc limit 1) as p;
+
+ViewWithLeftJoinLateralAndCommaLateral:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (id bigint PRIMARY KEY, user_id bigint);
+    CREATE VIEW first_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u LEFT JOIN LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id LIMIT 1) p ON true;
+    CREATE VIEW first_posts_inner AS
+      SELECT u.id, p.id AS post_id
+      FROM users u, LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id LIMIT 1) AS p;
+
+ViewWithFunctionsInFrom:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY, tags text[], attrs jsonb);
+    CREATE VIEW user_tags AS
+      SELECT u.id, t.tag FROM users u CROSS JOIN LATERAL unnest(u.tags) AS t(tag);
+    CREATE VIEW user_tags_implicit_lateral AS
+      SELECT u.id, t FROM users u, unnest(u.tags) t;
+    CREATE VIEW user_tags_with_ordinality AS
+      SELECT u.id, t.tag, t.n FROM users u CROSS JOIN LATERAL unnest(u.tags) WITH ORDINALITY AS t(tag, n);
+    CREATE VIEW user_attr_keys AS
+      SELECT u.id, j.key FROM users u CROSS JOIN LATERAL jsonb_each(u.attrs) AS j(key, value);
+    CREATE VIEW series AS
+      SELECT g FROM pg_catalog.generate_series(1, 3) g;
+    CREATE VIEW subquery_column_aliases AS
+      SELECT s.x FROM (SELECT 1) AS s(x);
+    CREATE VIEW subquery_partial_column_aliases AS
+      SELECT s.x FROM (SELECT 1, 2) AS s(x);
+    CREATE VIEW function_without_alias AS
+      SELECT u.id, unnest FROM users u, unnest(u.tags);
+    CREATE VIEW with_ordinality_without_column_aliases AS
+      SELECT u.id, t, ordinality FROM users u, unnest(u.tags) WITH ORDINALITY t;
+    CREATE VIEW function_arguments_with_casts AS
+      SELECT g FROM generate_series(now(), now() + interval '1 day', interval '1 hour') g;
+    CREATE VIEW function_arguments_with_operators AS
+      SELECT u.id, k FROM users u, jsonb_object_keys(u.attrs -> 'a') k;
+    CREATE VIEW timezone_function AS
+      SELECT t FROM timezone('UTC', now()) t;
+
+# FIXME: The column aliases of a function in FROM are completed assuming one output column named after the alias. Completing them correctly needs the function's signature: PostgreSQL names the column after a single OUT parameter (jsonb_array_elements(x) e becomes e(value)) and lists every column of a composite or multi-argument unnest (j becomes j(key, value), and j(j) becomes j(j, value)), so these views are replaced on every run
+# ViewWithCompositeFunctionWithoutColumnAliases:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE users (id bigint PRIMARY KEY, attrs jsonb);
+#     CREATE VIEW user_attr_keys AS
+#       SELECT u.id, j.key FROM users u, jsonb_each(u.attrs) j;
+#     CREATE VIEW user_attr_elements AS
+#       SELECT u.id, e FROM users u, jsonb_array_elements(u.attrs) e;
+#     CREATE VIEW zipped AS
+#       SELECT t.a FROM users u, unnest(ARRAY[1], ARRAY[2]) t(a);
+
+ViewWithStarOverFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW series AS SELECT * FROM generate_series(1, 3) g;
+
+ViewWithStarOverSubqueryWithPartialColumnAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW v AS SELECT * FROM (SELECT 1, 2) s(x);
+
+ViewWithOrdinalityAndPartialColumnAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
+    CREATE VIEW v AS SELECT u.id, t.tag FROM users u, unnest(u.tags) WITH ORDINALITY AS t(tag);
+
+ViewWithSubqueryColumnAliasesOverCast:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT s.x FROM (SELECT 1, a::int FROM t) s(x, a);
+    CREATE VIEW w AS SELECT a::int FROM t;
+    CREATE VIEW n AS SELECT * FROM (SELECT upper(a) FROM t) s;
+
+ViewWithFunctionInFromInsideExists:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id bigint PRIMARY KEY, a int[]);
+    CREATE VIEW v AS SELECT t.id FROM t WHERE EXISTS (SELECT 1 FROM unnest(t.a) WITH ORDINALITY);
+
+MaterializedViewWithCrossJoinLateral:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
+    CREATE MATERIALIZED VIEW user_tags AS
+      SELECT u.id, t.tag FROM users u CROSS JOIN LATERAL unnest(u.tags) WITH ORDINALITY AS t(tag, n);
+
+ViewWithStarOverSubqueryWithColumnAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT * FROM (SELECT a, b FROM t) s(x, b);
+
+ViewWithUppercaseFunctionAlias:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW v AS SELECT x FROM unnest(ARRAY[1]) T(x);
+    CREATE VIEW w AS SELECT t FROM unnest(ARRAY[1]) T;
+
+ChangeUnnestOfArrayToUnnestOfMultipleArrays:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE x (tags text[], tags2 text[]);
+    CREATE VIEW v AS SELECT t.a FROM x, unnest(ARRAY[x.tags, x.tags2]) AS t(a);
+  desired: |
+    CREATE TABLE x (tags text[], tags2 text[]);
+    CREATE VIEW v AS SELECT t.a FROM x, unnest(x.tags, x.tags2) AS t(a, b);
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(x.tags, x.tags2) as t(a, b);
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(ARRAY[x.tags, x.tags2]) as t(a);
+
+
+# FIXME: WITHIN GROUP is dropped by the normalization, so this change is not detected. Comparing it needs the casts PostgreSQL adds to its ORDER BY (ORDER BY ((a)::double precision)).
+# ChangeWithinGroupOrderInView:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (a int, b int);
+#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
+#   desired: |
+#     CREATE TABLE t (a int, b int);
+#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
+#   up: |
+#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by b) as p from t;
+#   down: |
+#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a) as p from t;
+
+ViewWithTimezoneDefaultAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW v AS SELECT * FROM (SELECT timezone('UTC', now()) AS timezone) s;
+    CREATE VIEW w AS SELECT timezone('UTC', now());
+    CREATE VIEW x AS SELECT now() AT TIME ZONE 'UTC';
+    CREATE VIEW y AS SELECT * FROM (SELECT now() AT TIME ZONE 'UTC') s;
+
+# FIXME: The change is detected, but the generated CREATE VIEW drops the quotes of the alias (a AS A), which is also the case on master
+# RenameViewOutputColumnByQuotedCase:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (a int);
+#     CREATE VIEW v AS SELECT a FROM t;
+#   desired: |
+#     CREATE TABLE t (a int);
+#     CREATE VIEW v AS SELECT a AS "A" FROM t;
+#   up: |
+#     DROP VIEW public.v;
+#     CREATE VIEW v AS SELECT a AS "A" FROM t;
+#   down: |
+#     DROP VIEW public.v;
+#     CREATE VIEW v AS SELECT a FROM t;

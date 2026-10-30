@@ -865,6 +865,59 @@ func TestSQLServerKeywordsAsUnquotedIdentifiers(t *testing.T) {
 	}
 }
 
+// LATERAL is only supported for PostgreSQL, so other dialects keep lateral usable as an identifier.
+func TestLateralAsUnquotedIdentifier(t *testing.T) {
+	for _, m := range []struct {
+		name string
+		mode ParserMode
+	}{
+		{"MySQL", ParserModeMysql},
+		{"SQLite3", ParserModeSQLite3},
+		{"SQL Server", ParserModeMssql},
+	} {
+		for _, sql := range []string{
+			`CREATE TABLE lateral (lateral int)`,
+			`CREATE INDEX lateral ON t (lateral)`,
+			`CREATE VIEW v AS SELECT lateral FROM lateral`,
+		} {
+			if _, err := ParseDDL(sql, m.mode); err != nil {
+				t.Errorf("unquoted lateral should parse in %s mode: %q: %v", m.name, sql, err)
+			}
+		}
+	}
+}
+
+func TestTableFunctionColumnAliasesRequireAlias(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) (a)`,
+		`CREATE VIEW v AS SELECT * FROM t, LATERAL unnest(ARRAY[1]) (a)`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err == nil || !strings.Contains(err.Error(), "a column alias list requires a table alias") {
+			t.Errorf("ParseDDL(%q) should fail for a column alias list without an alias, got %v", sql, err)
+		}
+	}
+}
+
+func TestWithOrdinalityAndCTENamedOrdinality(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY`,
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY t`,
+		`CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH ORDINALITY AS t(a, n)`,
+		`CREATE VIEW v AS WITH ordinality AS (SELECT 1) SELECT * FROM ordinality`,
+	} {
+		if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+			t.Errorf("ParseDDL(%q) failed: %v", sql, err)
+		}
+	}
+}
+
+func TestQuotedOrdinalityIsNotWithOrdinality(t *testing.T) {
+	sql := `CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH "ordinality"`
+	if _, err := ParseDDL(sql, ParserModePostgres); err == nil {
+		t.Errorf("ParseDDL(%q) should fail", sql)
+	}
+}
+
 // No supported database reserves stream, and pg_get_indexdef writes it unquoted.
 func TestStreamAsUnquotedIdentifier(t *testing.T) {
 	sqls := []string{
