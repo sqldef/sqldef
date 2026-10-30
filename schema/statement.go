@@ -233,10 +233,14 @@ func (s createViewStatement) Render() string {
 	if s.orReplace {
 		ddl += "OR REPLACE "
 	}
-	if s.view.viewType == "SQL SECURITY" {
-		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), parser.String(s.view.definition))
+	definition := parser.String(s.view.definition)
+	if s.d.mode == GeneratorModePostgres {
+		definition = parser.PostgresString(s.view.definition)
 	}
-	ddl += fmt.Sprintf("%s %s AS %s", s.view.viewType, s.d.escapeQualifiedName(s.view.name), parser.String(s.view.definition))
+	if s.view.viewType == "SQL SECURITY" {
+		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)
+	}
+	ddl += fmt.Sprintf("%s %s AS %s", s.view.viewType, s.d.escapeQualifiedName(s.view.name), definition)
 	if s.view.withNoData {
 		ddl += " WITH NO DATA"
 	} else if s.view.withData {

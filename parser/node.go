@@ -31,6 +31,8 @@ type SQLNode interface {
 // nodeBuffer extends strings.Builder to format SQLNode easily.
 type nodeBuffer struct {
 	strings.Builder
+	// postgresQuotes double-quotes the quoted identifiers that PostgreSQL would fold otherwise
+	postgresQuotes bool
 }
 
 // Printf mimics fmt.Fprintf(buf, ...), but limited to %s for string and %v for Node.
@@ -77,6 +79,14 @@ func String(node SQLNode) string {
 	}
 
 	var buf nodeBuffer
+	node.Format(&buf)
+	return buf.String()
+}
+
+// PostgresString is String for SQL run on PostgreSQL, keeping the quotes of identifiers such as
+// "UserId" whose case PostgreSQL would fold otherwise
+func PostgresString(node SQLNode) string {
+	buf := nodeBuffer{postgresQuotes: true}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -2600,8 +2610,13 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	// name as is.
 	buf.Printf("%s(%s%v)", node.Name.Name, distinct, node.Exprs)
 	if len(node.WithinGroup) > 0 {
-		buf.Printf(" within group(")
-		node.WithinGroup.Format(buf)
+		buf.Printf(" within group (order by ")
+		for i, order := range node.WithinGroup {
+			if i > 0 {
+				buf.Printf(", ")
+			}
+			buf.Printf("%v", order)
+		}
 		buf.Printf(")")
 	}
 	buf.Printf("%v", node.Over)
@@ -3387,6 +3402,10 @@ func (n Ident) IsEmpty() bool {
 
 // Format formats the node for SQL generation.
 func (n Ident) Format(buf *nodeBuffer) {
+	if buf.postgresQuotes && n.Quoted && !isSimpleLowerIdent(n.Name) {
+		buf.WriteString(`"` + strings.ReplaceAll(n.Name, `"`, `""`) + `"`)
+		return
+	}
 	formatID(buf, n.Name)
 }
 

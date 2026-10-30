@@ -848,8 +848,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
-					if typeStr == "text" || typeStr == "character varying" {
+				// A length is kept since it truncates the value: b::varchar(3) is not b
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName && e.Type.Length == nil {
+					if normalizedTypeStr := normalizeTypeName(typeStr, mode); normalizedTypeStr == "text" || normalizedTypeStr == "character varying" {
 						return normalizedExpr
 					}
 				}
@@ -1143,12 +1144,36 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 		normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
 	}
 	return &parser.FuncExpr{
-		Qualifier: e.Qualifier,
-		Name:      normalizedName,
-		Distinct:  e.Distinct,
-		Exprs:     normalizedExprs,
-		Over:      e.Over,
+		Qualifier:   e.Qualifier,
+		Name:        normalizedName,
+		Distinct:    e.Distinct,
+		Exprs:       normalizedExprs,
+		WithinGroup: normalizeWithinGroup(e.WithinGroup, mode),
+		Over:        e.Over,
 	}
+}
+
+// normalizeWithinGroup normalizes the ORDER BY of WITHIN GROUP. PostgreSQL casts its expressions to
+// the aggregate's argument types (ORDER BY a becomes ORDER BY ((a)::double precision) for
+// percentile_cont), which is unknown without the signature, so casts there are ignored.
+func normalizeWithinGroup(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
+	if orderBy == nil {
+		return nil
+	}
+	normalized := normalizeOrderBy(orderBy, mode)
+	if mode == GeneratorModePostgres {
+		for _, order := range normalized {
+			for {
+				cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr)
+				if !ok {
+					break
+				}
+				order.Expr = cast.Expr
+			}
+			order.Expr = unwrapParenExpr(order.Expr)
+		}
+	}
+	return normalized
 }
 
 // normalizeSelectExprs normalizes SELECT expressions for comparison
@@ -1584,26 +1609,100 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 // selectExprOutputName returns the column name PostgreSQL gives an unaliased select expression,
 // when it is known without looking up types
 func selectExprOutputName(expr parser.Expr) (Ident, bool) {
+	name, strength := figureColname(expr)
+	if strength == colnameUnknown {
+		return Ident{}, false
+	}
+	return name, true
+}
+
+// Strengths of a default output name, following FigureColnameInternal() in PostgreSQL:
+// a cast keeps its operand's name unless the name is weak, in which case the cast names the
+// column after the type ("1::text" is text, "(x AT TIME ZONE z)::date" is timezone)
+const (
+	colnameUnknown = iota - 1 // not derivable without looking up types
+	colnameNone               // ?column?
+	colnameWeak
+	colnameStrong
+)
+
+func figureColname(expr parser.Expr) (Ident, int) {
 	switch e := unwrapParenExpr(expr).(type) {
 	case *parser.ColName:
-		return e.Name, true
+		return e.Name, colnameStrong
 	case *parser.FuncExpr:
-		return e.Name, true
-	case *parser.CastExpr:
-		switch inner := unwrapParenExpr(e.Expr); inner.(type) {
-		case *parser.ColName, *parser.FuncExpr:
-			return selectExprOutputName(inner)
-		}
+		return e.Name, colnameStrong
 	case *parser.AtTimeZoneExpr:
 		// timezone(zone, ts) is normalized into AT TIME ZONE, and PostgreSQL names both forms timezone
-		return parser.NewIdent("timezone", false), true
+		return parser.NewIdent("timezone", false), colnameStrong
+	case *parser.ArrayConstructor:
+		return parser.NewIdent("array", false), colnameStrong
+	case *parser.ExistsExpr:
+		return parser.NewIdent("exists", false), colnameStrong
+	case *parser.CaseExpr:
+		return parser.NewIdent("case", false), colnameWeak
+	case *parser.CastExpr:
+		return figureCastColname(e.Expr, e.Type)
+	case *parser.ConvertExpr:
+		if e.Action == parser.CastStr {
+			return figureCastColname(e.Expr, e.Type)
+		}
 	case *parser.SQLVal:
 		// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
 		if e.Type == parser.IntVal || e.Type == parser.FloatVal {
-			return parser.NewIdent("?column?", false), true
+			return parser.NewIdent("?column?", false), colnameNone
 		}
+	case *parser.NullVal, parser.BoolVal, *parser.BinaryExpr, *parser.UnaryExpr, *parser.ComparisonExpr,
+		*parser.AndExpr, *parser.OrExpr, *parser.NotExpr, *parser.IsExpr, *parser.RangeCond:
+		return parser.NewIdent("?column?", false), colnameNone
 	}
-	return Ident{}, false
+	return Ident{}, colnameUnknown
+}
+
+func figureCastColname(expr parser.Expr, typ *parser.ConvertType) (Ident, int) {
+	name, strength := figureColname(expr)
+	if strength != colnameNone && strength != colnameWeak {
+		return name, strength
+	}
+	return parser.NewIdent(castTypeColname(typ), false), colnameWeak
+}
+
+// castTypeColname returns the name PostgreSQL gives a column after a cast's type, which is the
+// type's internal name ("integer" is int4, "character varying" is varchar)
+func castTypeColname(typ *parser.ConvertType) string {
+	name := strings.TrimSuffix(strings.ToLower(typ.Type), "[]")
+	if typ.TimeZone != "" {
+		name += typ.TimeZone
+	}
+	switch name {
+	case "int", "integer":
+		return "int4"
+	case "smallint":
+		return "int2"
+	case "bigint":
+		return "int8"
+	case "real":
+		return "float4"
+	case "double precision":
+		return "float8"
+	case "decimal", "dec":
+		return "numeric"
+	case "boolean":
+		return "bool"
+	case "char", "character":
+		return "bpchar"
+	case "character varying":
+		return "varchar"
+	case "timestamp without time zone":
+		return "timestamp"
+	case "timestamp with time zone":
+		return "timestamptz"
+	case "time without time zone":
+		return "time"
+	case "time with time zone":
+		return "timetz"
+	}
+	return name
 }
 
 // getSortedColumns converts a column map to a slice sorted by position.

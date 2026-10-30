@@ -1073,19 +1073,20 @@ ChangeUnnestOfArrayToUnnestOfMultipleArrays:
     CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(ARRAY[x.tags, x.tags2]) as t(a);
 
 
-# FIXME: WITHIN GROUP is dropped by the normalization, so this change is not detected. Comparing it needs the casts PostgreSQL adds to its ORDER BY (ORDER BY ((a)::double precision)).
-# ChangeWithinGroupOrderInView:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int, b int);
-#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
-#   desired: |
-#     CREATE TABLE t (a int, b int);
-#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
-#   up: |
-#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by b) as p from t;
-#   down: |
-#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a) as p from t;
+ChangeWithinGroupOrderInView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by b asc) as p from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
 
 ViewWithTimezoneDefaultAliases:
   legacy_ignore_quotes: false
@@ -1095,18 +1096,72 @@ ViewWithTimezoneDefaultAliases:
     CREATE VIEW x AS SELECT now() AT TIME ZONE 'UTC';
     CREATE VIEW y AS SELECT * FROM (SELECT now() AT TIME ZONE 'UTC') s;
 
-# FIXME: The change is detected, but the generated CREATE VIEW drops the quotes of the alias (a AS A), which is also the case on master
-# RenameViewOutputColumnByQuotedCase:
+ViewWithNestedCastDefaultAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b text, ts timestamptz);
+    CREATE VIEW v AS SELECT b::int::text, (ts AT TIME ZONE 'UTC')::date, now()::date FROM t;
+    CREATE VIEW w AS SELECT a::bigint::numeric(10, 2), (b::text)::varchar FROM t;
+    CREATE VIEW x AS SELECT b::varchar(3) FROM t;
+
+ViewWithCastOfUnnamedExpressionDefaultAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT 1::text, a::double precision FROM t;
+    CREATE VIEW w AS SELECT (a + 1)::text FROM t;
+    CREATE VIEW x AS SELECT CASE WHEN a > 0 THEN 1 END::text FROM t;
+    CREATE VIEW y AS SELECT CASE WHEN a > 0 THEN 1 END FROM t;
+    CREATE VIEW z AS SELECT true::text FROM t;
+    CREATE VIEW n AS SELECT null::text FROM t;
+    CREATE VIEW i AS SELECT 1::int::text FROM t;
+
+# FIXME: The parser drops a cast on a string literal, and PostgreSQL drops a cast to the column's own type, so the default names of these casts are unknown and the views are replaced on every run
+# ViewWithCastOfStringLiteralOrSameTypeDefaultAliases:
 #   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT a FROM t;
 #   desired: |
 #     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT a AS "A" FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW v AS SELECT a AS "A" FROM t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW v AS SELECT a FROM t;
+#     CREATE VIEW v AS SELECT 'x'::text FROM t;
+#     CREATE VIEW w AS SELECT a::int::text FROM t;
+
+ViewWithOrderedSetAggregates:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b text);
+    CREATE VIEW v AS SELECT
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY a DESC) AS p,
+      percentile_disc(0.5) WITHIN GROUP (ORDER BY b),
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY a::numeric) AS q,
+      mode() WITHIN GROUP (ORDER BY b),
+      rank(1) WITHIN GROUP (ORDER BY a)
+    FROM t;
+
+RecreateViewWithQuotedIdentifiers:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" ("UserId" int, name text);
+    CREATE VIEW v AS SELECT "UserId", name FROM "Users";
+  desired: |
+    CREATE TABLE "Users" ("UserId" int, name text);
+    CREATE VIEW v AS SELECT "UserId" AS "Id" FROM "Users";
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select "UserId" as "Id" from "Users";
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select "UserId", name from "Users";
+
+RenameViewOutputColumnByQuotedCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT a FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT a AS "A" FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select a as "A" from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select a from t;

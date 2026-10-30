@@ -1021,6 +1021,15 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			}
 		}
 
+		// mode() is PostgreSQL's ordered-set aggregate. Lexing it as an identifier lets the grammar
+		// parse it as a function call without a conflict with MODE as a column name.
+		if keywordID == MODE && tkn.mode == ParserModePostgres && !tkn.peeking {
+			if id1, _ := tkn.peekToken(); id1 == '(' {
+				tkn.lastIdentifierQuoted = false
+				return ID, loweredStr
+			}
+		}
+
 		// LATERAL is only supported for PostgreSQL, so other dialects keep it usable as an identifier
 		if keywordID == LATERAL && tkn.mode != ParserModePostgres {
 			tkn.lastIdentifierQuoted = false
