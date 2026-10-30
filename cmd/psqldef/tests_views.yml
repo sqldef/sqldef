@@ -998,13 +998,17 @@ ViewWithFunctionsInFrom:
     CREATE VIEW timezone_function AS
       SELECT t FROM timezone('UTC', now()) t;
 
-# FIXME: PostgreSQL expands the column aliases of a function returning a composite type (j becomes j(key, value), and j(j) becomes j(j, value)), so this view is replaced on every run
+# FIXME: The column aliases of a function in FROM are completed assuming one output column named after the alias. Completing them correctly needs the function's signature: PostgreSQL names the column after a single OUT parameter (jsonb_array_elements(x) e becomes e(value)) and lists every column of a composite or multi-argument unnest (j becomes j(key, value), and j(j) becomes j(j, value)), so these views are replaced on every run
 # ViewWithCompositeFunctionWithoutColumnAliases:
 #   legacy_ignore_quotes: false
 #   desired: |
 #     CREATE TABLE users (id bigint PRIMARY KEY, attrs jsonb);
 #     CREATE VIEW user_attr_keys AS
 #       SELECT u.id, j.key FROM users u, jsonb_each(u.attrs) j;
+#     CREATE VIEW user_attr_elements AS
+#       SELECT u.id, e FROM users u, jsonb_array_elements(u.attrs) e;
+#     CREATE VIEW zipped AS
+#       SELECT t.a FROM users u, unnest(ARRAY[1], ARRAY[2]) t(a);
 
 ViewWithStarOverFunction:
   legacy_ignore_quotes: false
@@ -1022,12 +1026,19 @@ ViewWithOrdinalityAndPartialColumnAliases:
     CREATE TABLE users (id bigint PRIMARY KEY, tags text[]);
     CREATE VIEW v AS SELECT u.id, t.tag FROM users u, unnest(u.tags) WITH ORDINALITY AS t(tag);
 
-# FIXME: PostgreSQL adds an alias to an unaliased cast (a::int becomes (a)::integer AS a), so this view is replaced on every run. A top-level SELECT a::int has the same problem.
-# ViewWithSubqueryColumnAliasesOverCast:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (a text);
-#     CREATE VIEW v AS SELECT s.x FROM (SELECT 1, a::int FROM t) s(x, a);
+ViewWithSubqueryColumnAliasesOverCast:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT s.x FROM (SELECT 1, a::int FROM t) s(x, a);
+    CREATE VIEW w AS SELECT a::int FROM t;
+    CREATE VIEW n AS SELECT * FROM (SELECT upper(a) FROM t) s;
+
+ViewWithFunctionInFromInsideExists:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id bigint PRIMARY KEY, a int[]);
+    CREATE VIEW v AS SELECT t.id FROM t WHERE EXISTS (SELECT 1 FROM unnest(t.a) WITH ORDINALITY);
 
 MaterializedViewWithCrossJoinLateral:
   legacy_ignore_quotes: false

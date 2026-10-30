@@ -29,6 +29,13 @@ func abortParse(yylex yyLexer, err string) int {
 	return 1
 }
 
+func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, columns Columns, lateral bool) (*AliasedTableExpr, error) {
+	if as.IsEmpty() && columns != nil {
+		return nil, fmt.Errorf("a column alias list requires a table alias")
+	}
+	return &AliasedTableExpr{Expr: expr, WithOrdinality: bool(withOrdinality), As: as, Columns: columns, Lateral: lateral}, nil
+}
+
 type yySymType struct {
 	yys                      int
 	empty                    struct{}
@@ -13708,18 +13715,20 @@ yydefault:
 	case 965:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
-			if yyDollar[3].ident.IsEmpty() && yyDollar[4].columns != nil {
-				return abortParse(yylex, "a column alias list requires a table alias")
+			expr, err := newTableFunctionExpr(yyDollar[1].funcExpr, yyDollar[2].boolVal, yyDollar[3].ident, yyDollar[4].columns, false)
+			if err != nil {
+				return abortParse(yylex, err.Error())
 			}
-			yyVAL.tableExpr = &AliasedTableExpr{Expr: yyDollar[1].funcExpr, WithOrdinality: bool(yyDollar[2].boolVal), As: yyDollar[3].ident, Columns: yyDollar[4].columns}
+			yyVAL.tableExpr = expr
 		}
 	case 966:
 		yyDollar = yyS[yypt-5 : yypt+1]
 		{
-			if yyDollar[4].ident.IsEmpty() && yyDollar[5].columns != nil {
-				return abortParse(yylex, "a column alias list requires a table alias")
+			expr, err := newTableFunctionExpr(yyDollar[2].funcExpr, yyDollar[3].boolVal, yyDollar[4].ident, yyDollar[5].columns, true)
+			if err != nil {
+				return abortParse(yylex, err.Error())
 			}
-			yyVAL.tableExpr = &AliasedTableExpr{Expr: yyDollar[2].funcExpr, WithOrdinality: bool(yyDollar[3].boolVal), As: yyDollar[4].ident, Columns: yyDollar[5].columns, Lateral: true}
+			yyVAL.tableExpr = expr
 		}
 	case 967:
 		yyDollar = yyS[yypt-3 : yypt+1]

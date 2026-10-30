@@ -1005,6 +1005,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return &parser.Subquery{
 			Select: normalizeViewDefinition(e.Select, mode, nil),
 		}
+	case *parser.ExistsExpr:
+		return &parser.ExistsExpr{Subquery: normalizeExpr(e.Subquery, mode).(*parser.Subquery)}
 	case *parser.ConvertExpr:
 		// Normalize CAST(expr AS type) to expr::type (CastExpr) for consistency
 		// PostgreSQL represents both forms identically in its internal representation
@@ -1163,9 +1165,12 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
 		as := e.As
-		// For PostgreSQL, strip automatic aliases like ?column?
-		if mode == GeneratorModePostgres && as.Name == "?column?" {
-			as = parser.NewIdent("", false)
+		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
+		// "(a)::integer AS a" and "1 AS "?column?""
+		if mode == GeneratorModePostgres && !as.IsEmpty() {
+			if name, ok := selectExprOutputName(e.Expr); (ok && strings.EqualFold(name.Name, as.Name)) || as.Name == "?column?" {
+				as = parser.NewIdent("", false)
+			}
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
 		// MySQL adds "column_name as column_name" which is redundant
@@ -1585,12 +1590,23 @@ func selectExprOutputName(expr parser.Expr) (Ident, bool) {
 	case *parser.FuncExpr:
 		return e.Name, true
 	case *parser.CastExpr:
-		switch e.Expr.(type) {
+		inner := e.Expr
+		for {
+			paren, ok := inner.(*parser.ParenExpr)
+			if !ok {
+				break
+			}
+			inner = paren.Expr
+		}
+		switch inner.(type) {
 		case *parser.ColName, *parser.FuncExpr:
-			return selectExprOutputName(e.Expr)
+			return selectExprOutputName(inner)
 		}
 	case *parser.SQLVal:
-		return parser.NewIdent("?column?", false), true
+		// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
+		if e.Type == parser.IntVal || e.Type == parser.FloatVal {
+			return parser.NewIdent("?column?", false), true
+		}
 	}
 	return Ident{}, false
 }

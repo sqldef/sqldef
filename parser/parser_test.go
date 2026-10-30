@@ -911,6 +911,13 @@ func TestWithOrdinalityAndCTENamedOrdinality(t *testing.T) {
 	}
 }
 
+func TestQuotedOrdinalityIsNotWithOrdinality(t *testing.T) {
+	sql := `CREATE VIEW v AS SELECT * FROM unnest(ARRAY[1]) WITH "ordinality"`
+	if _, err := ParseDDL(sql, ParserModePostgres); err == nil {
+		t.Errorf("ParseDDL(%q) should fail", sql)
+	}
+}
+
 // No supported database reserves stream, and pg_get_indexdef writes it unquoted.
 func TestStreamAsUnquotedIdentifier(t *testing.T) {
 	sqls := []string{

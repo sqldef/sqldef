@@ -43,6 +43,13 @@ func abortParse(yylex yyLexer, err string) int {
   return 1
 }
 
+func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, columns Columns, lateral bool) (*AliasedTableExpr, error) {
+  if as.IsEmpty() && columns != nil {
+    return nil, fmt.Errorf("a column alias list requires a table alias")
+  }
+  return &AliasedTableExpr{Expr: expr, WithOrdinality: bool(withOrdinality), As: as, Columns: columns, Lateral: lateral}, nil
+}
+
 %}
 
 %union {
@@ -6528,17 +6535,19 @@ table_factor:
   }
 | table_function with_ordinality_opt as_opt_id table_column_list_opt
   {
-    if $3.IsEmpty() && $4 != nil {
-      return abortParse(yylex, "a column alias list requires a table alias")
+    expr, err := newTableFunctionExpr($1, $2, $3, $4, false)
+    if err != nil {
+      return abortParse(yylex, err.Error())
     }
-    $$ = &AliasedTableExpr{Expr:$1, WithOrdinality: bool($2), As: $3, Columns: $4}
+    $$ = expr
   }
 | LATERAL table_function with_ordinality_opt as_opt_id table_column_list_opt
   {
-    if $4.IsEmpty() && $5 != nil {
-      return abortParse(yylex, "a column alias list requires a table alias")
+    expr, err := newTableFunctionExpr($2, $3, $4, $5, true)
+    if err != nil {
+      return abortParse(yylex, err.Error())
     }
-    $$ = &AliasedTableExpr{Expr:$2, WithOrdinality: bool($3), As: $4, Columns: $5, Lateral: true}
+    $$ = expr
   }
 | '(' table_references ')'
   {

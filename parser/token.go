@@ -987,18 +987,20 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 		// Context-aware handling for "with" keyword
 		// Only peek if we're not already in a peek operation (prevents infinite recursion)
 		if keywordID == WITH && !tkn.peeking {
-			ids, strs := tkn.peekTokens(3)
+			nextID, nextStr := tkn.peekToken()
 
 			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
-			if ids[0] == DATA || ids[0] == NO {
+			if nextID == DATA || nextID == NO {
 				return WITH_DATA_OPTION, loweredStr
 			}
 			// ORDINALITY is not a keyword, so "WITH ORDINALITY" after a function in FROM would
 			// otherwise be indistinguishable from a table hint. A CTE named ordinality is
 			// followed by "AS (" or a column list instead.
-			if tkn.mode == ParserModePostgres && ids[0] == ID && strings.EqualFold(strs[0], "ordinality") &&
-				ids[1] != '(' && (ids[1] != AS || ids[2] != '(') {
-				return WITH_ORDINALITY, loweredStr
+			if tkn.mode == ParserModePostgres && nextID == ID && strings.EqualFold(nextStr, "ordinality") {
+				next := tkn.peekTokens(3)
+				if !next[0].quoted && next[1].id != '(' && (next[1].id != AS || next[2].id != '(') {
+					return WITH_ORDINALITY, loweredStr
+				}
 			}
 		}
 
@@ -1498,33 +1500,40 @@ func (tkn *Tokenizer) peekToken() (int, string) {
 	return tkn.scanSkippingComments()
 }
 
-// peekTokens returns the IDs and values of the next n tokens without consuming input.
-func (tkn *Tokenizer) peekTokens(n int) ([]int, []string) {
+type peekedToken struct {
+	id     int
+	quoted bool
+}
+
+// peekTokens returns the next n tokens without consuming input.
+func (tkn *Tokenizer) peekTokens(n int) []peekedToken {
 	savedLastChar := tkn.lastChar
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
 	savedPeeking := tkn.peeking
+	savedQuoted := tkn.lastIdentifierQuoted
 
 	defer func() {
 		tkn.peeking = savedPeeking
 		tkn.lastChar = savedLastChar
 		tkn.Position = savedPosition
 		tkn.bufPos = savedBufPos
+		tkn.lastIdentifierQuoted = savedQuoted
 	}()
 
 	tkn.peeking = true
-	ids := make([]int, n)
-	strs := make([]string, n)
-	for i := range ids {
-		ids[i], strs[i] = tkn.scanSkippingComments()
+	tokens := make([]peekedToken, n)
+	for i := range tokens {
+		tokens[i].id, _ = tkn.scanSkippingComments()
+		tokens[i].quoted = tkn.lastIdentifierQuoted
 	}
-	return ids, strs
+	return tokens
 }
 
 // peekTwoTokens returns the IDs of the next two tokens without consuming input.
 func (tkn *Tokenizer) peekTwoTokens() (int, int) {
-	ids, _ := tkn.peekTokens(2)
-	return ids[0], ids[1]
+	next := tkn.peekTokens(2)
+	return next[0].id, next[1].id
 }
 
 // extractMysqlComment extracts the version and SQL from a comment-only query

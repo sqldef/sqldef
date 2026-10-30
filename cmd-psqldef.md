@@ -342,6 +342,18 @@ Remove the `ENABLE ROW LEVEL SECURITY` line to DISABLE ROW LEVEL SECURITY, and t
 
 Remove the line to DROP VIEW.
 
+#### Functions in FROM
+
+A view can use functions in FROM, such as `unnest(...)`, with `LATERAL` and `WITH ORDINALITY`. psqldef assumes such a function returns one column named after its alias. For a function that returns a composite type, several columns, or a column with its own name, write the column alias list in full, as PostgreSQL stores it. Otherwise the view is replaced on every run:
+
+```sql
+CREATE VIEW user_attrs AS
+  SELECT u.id, j.key, e.value
+  FROM users u
+  CROSS JOIN LATERAL jsonb_each(u.attrs) AS j(key, value)
+  CROSS JOIN LATERAL jsonb_array_elements(u.items) AS e(value);
+```
+
 ## Column, Table, and Index Renaming
 
 ### Column Renaming
