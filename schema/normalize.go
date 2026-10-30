@@ -1165,10 +1165,13 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
 		as := e.As
+		normalizedExpr := normalizeExpr(e.Expr, mode)
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
-		// "(a)::integer AS a" and "1 AS "?column?""
+		// "(a)::integer AS a" and "1 AS "?column?"". The name is derived from the normalized
+		// expression, so an alias is kept when normalization changes the name, as it does by
+		// turning timezone(...) into AT TIME ZONE.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
-			if name, ok := selectExprOutputName(e.Expr); (ok && strings.EqualFold(name.Name, as.Name)) || as.Name == "?column?" {
+			if name, ok := selectExprOutputName(normalizedExpr); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
 			}
 		}
@@ -1183,7 +1186,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 			}
 		}
 		return &parser.AliasedExpr{
-			Expr: normalizeExpr(e.Expr, mode),
+			Expr: normalizedExpr,
 			As:   as,
 		}
 	case *parser.StarExpr:

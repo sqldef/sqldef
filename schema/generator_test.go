@@ -719,6 +719,24 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
 			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
 		},
+		{
+			name:     "PostgreSQL: strip an alias equal to the default output name",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT (t.a)::integer AS a, upper(t.b) AS upper, 1 AS "?column?" FROM t`,
+			expected: `select a::integer, upper(b), 1 from t`,
+		},
+		{
+			name:     "PostgreSQL: keep a quoted alias that differs in case from the default output name",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT a AS "A" FROM t`,
+			expected: `select a as a from t`,
+		},
+		{
+			name:     "PostgreSQL: keep an alias whose expression normalization renames",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT timezone('UTC', now()) AS timezone`,
+			expected: `select (now() at time zone 'utc') as timezone`,
+		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
 			name:     "MySQL: normalize table qualifiers in SELECT",
