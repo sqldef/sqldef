@@ -732,10 +732,16 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			expected: `select a as a from t`,
 		},
 		{
-			name:     "PostgreSQL: keep an alias whose expression normalization renames",
+			name:     "PostgreSQL: strip the default alias of timezone() and AT TIME ZONE",
 			mode:     GeneratorModePostgres,
-			input:    `SELECT timezone('UTC', now()) AS timezone`,
-			expected: `select (now() at time zone 'utc') as timezone`,
+			input:    `SELECT timezone('UTC', now()) AS timezone, (now() AT TIME ZONE 'UTC') AS "timezone"`,
+			expected: `select (now() at time zone 'utc'), (now() at time zone 'utc')`,
+		},
+		{
+			name:     "PostgreSQL: strip the default alias of a quoted function",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT "MyFunc"(a) AS "MyFunc" FROM t`,
+			expected: `select myfunc(a) from t`,
 		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{

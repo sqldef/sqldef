@@ -1087,10 +1087,13 @@ ChangeUnnestOfArrayToUnnestOfMultipleArrays:
 #   down: |
 #     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a) as p from t;
 
-ViewWithStarOverSubqueryWithTimezoneAlias:
+ViewWithTimezoneDefaultAliases:
   legacy_ignore_quotes: false
   desired: |
     CREATE VIEW v AS SELECT * FROM (SELECT timezone('UTC', now()) AS timezone) s;
+    CREATE VIEW w AS SELECT timezone('UTC', now());
+    CREATE VIEW x AS SELECT now() AT TIME ZONE 'UTC';
+    CREATE VIEW y AS SELECT * FROM (SELECT now() AT TIME ZONE 'UTC') s;
 
 # FIXME: The change is detected, but the generated CREATE VIEW drops the quotes of the alias (a AS A), which is also the case on master
 # RenameViewOutputColumnByQuotedCase:

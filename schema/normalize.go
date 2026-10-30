@@ -1165,13 +1165,10 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
 		as := e.As
-		normalizedExpr := normalizeExpr(e.Expr, mode)
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
-		// "(a)::integer AS a" and "1 AS "?column?"". The name is derived from the normalized
-		// expression, so an alias is kept when normalization changes the name, as it does by
-		// turning timezone(...) into AT TIME ZONE.
+		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
-			if name, ok := selectExprOutputName(normalizedExpr); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
+			if name, ok := selectExprOutputName(e.Expr); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
 			}
 		}
@@ -1186,7 +1183,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 			}
 		}
 		return &parser.AliasedExpr{
-			Expr: normalizedExpr,
+			Expr: normalizeExpr(e.Expr, mode),
 			As:   as,
 		}
 	case *parser.StarExpr:
@@ -1587,24 +1584,19 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 // selectExprOutputName returns the column name PostgreSQL gives an unaliased select expression,
 // when it is known without looking up types
 func selectExprOutputName(expr parser.Expr) (Ident, bool) {
-	switch e := expr.(type) {
+	switch e := unwrapParenExpr(expr).(type) {
 	case *parser.ColName:
 		return e.Name, true
 	case *parser.FuncExpr:
 		return e.Name, true
 	case *parser.CastExpr:
-		inner := e.Expr
-		for {
-			paren, ok := inner.(*parser.ParenExpr)
-			if !ok {
-				break
-			}
-			inner = paren.Expr
-		}
-		switch inner.(type) {
+		switch inner := unwrapParenExpr(e.Expr); inner.(type) {
 		case *parser.ColName, *parser.FuncExpr:
 			return selectExprOutputName(inner)
 		}
+	case *parser.AtTimeZoneExpr:
+		// timezone(zone, ts) is normalized into AT TIME ZONE, and PostgreSQL names both forms timezone
+		return parser.NewIdent("timezone", false), true
 	case *parser.SQLVal:
 		// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
 		if e.Type == parser.IntVal || e.Type == parser.FloatVal {
