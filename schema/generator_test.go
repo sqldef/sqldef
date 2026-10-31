@@ -1399,6 +1399,27 @@ func TestIsManagedFunction(t *testing.T) {
 
 	// Default schema but no rule matches → not managed.
 	assert.False(t, isManagedFunction(config, "public", "public", "other_fn"))
+
+	// target_schema moves the scope to the schemas it names, so current_schema()
+	// no longer decides which functions the rules reach.
+	scoped := config
+	scoped.TargetSchema = []string{"s2"}
+	assert.True(t, isManagedFunction(scoped, "public", "s2", "app_touch"))
+	assert.False(t, isManagedFunction(scoped, "public", "public", "app_touch"))
+
+	// An unqualified function belongs to the default schema, which target_schema
+	// does not name here -- and does name in the second case.
+	assert.False(t, isManagedFunction(scoped, "public", "", "app_touch"))
+	assert.True(t, isManagedFunction(scoped, "s2", "", "app_touch"))
+
+	// Every schema target_schema names is reached; others are not.
+	multi := config
+	multi.TargetSchema = []string{"s2", "s3"}
+	assert.True(t, isManagedFunction(multi, "public", "s3", "app_touch"))
+	assert.False(t, isManagedFunction(multi, "public", "s4", "app_touch"))
+
+	// A rule still has to match the name inside target_schema.
+	assert.False(t, isManagedFunction(scoped, "public", "s2", "other_fn"))
 }
 
 func TestInsertOrReplaceIntoCreateFunction(t *testing.T) {
