@@ -87,6 +87,9 @@ type GeneratorConfig struct {
 	// Every copy of the config shares one map that ExportDDLs() refills, so read it only after
 	// exporting: the schema being applied may install an extension that registers operator classes.
 	PostgresDefaultOperatorClasses map[string]bool
+
+	// PostgreSQL-specific: the server's major version, or 0 in offline mode
+	PostgresMajorVersion int
 }
 
 type ManageObjectRule struct {

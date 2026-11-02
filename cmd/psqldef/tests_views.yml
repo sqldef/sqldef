@@ -1117,6 +1117,7 @@ ViewWithNestedCastDefaultAliases:
     CREATE VIEW v AS SELECT b::int::text, (ts AT TIME ZONE 'UTC')::date, now()::date FROM t;
     CREATE VIEW w AS SELECT a::bigint::numeric(10, 2) FROM t;
     CREATE VIEW x AS SELECT b::varchar(3) FROM t;
+    CREATE VIEW y AS SELECT a FROM t WHERE a::varchar = 'x';
 
 ViewWithCastOfUnnamedExpressionDefaultAliases:
   legacy_ignore_quotes: false
@@ -1153,6 +1154,13 @@ ViewWithOrderedSetAggregates:
       mode() WITHIN GROUP (ORDER BY b),
       rank(1) WITHIN GROUP (ORDER BY a)
     FROM t;
+    CREATE VIEW w AS SELECT
+      rank(1.5) WITHIN GROUP (ORDER BY a) AS r1,
+      rank(1) WITHIN GROUP (ORDER BY a::bigint) AS r2,
+      dense_rank(1::bigint) WITHIN GROUP (ORDER BY a) AS r3,
+      percent_rank(1.5) WITHIN GROUP (ORDER BY a::bigint) AS r4,
+      cume_dist(1, 'x') WITHIN GROUP (ORDER BY a, b) AS r5
+    FROM t;
 
 ChangeViewColumnCastToVarchar:
   legacy_ignore_quotes: false
@@ -1183,6 +1191,21 @@ ChangeUserCastInWithinGroup:
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select mode() within group (order by a::bigint asc) as m from t;
+
+ChangeUserCastInHypotheticalSetAggregate:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a::bigint) AS r FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a) AS r FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select rank(1) within group (order by a asc) as r from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select rank(1) within group (order by a::bigint asc) as r from t;
 
 RecreateViewWithQuotedReservedWordsAndFunction:
   legacy_ignore_quotes: false

@@ -2197,3 +2197,28 @@ func TestIndexToTableNamesCoversAddIndex(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "users", table.RawString())
 }
+
+func TestBoolLiteralDefaultAliasDependsOnServerVersion(t *testing.T) {
+	tests := []struct {
+		name         string
+		majorVersion int
+		current      string
+		desired      string
+		changed      bool
+	}{
+		{name: "PostgreSQL 14 names TRUE bool", majorVersion: 14, current: "SELECT true AS bool", desired: "SELECT true"},
+		{name: "PostgreSQL 14 with the alias written out", majorVersion: 14, current: "SELECT true AS bool", desired: "SELECT true AS bool"},
+		{name: "PostgreSQL 15 names TRUE ?column?", majorVersion: 15, current: `SELECT true AS "?column?"`, desired: "SELECT true"},
+		{name: "PostgreSQL 15 keeps a bool alias", majorVersion: 15, current: "SELECT true AS bool", desired: "SELECT true", changed: true},
+		{name: "offline keeps a bool alias", current: "SELECT true AS bool", desired: "SELECT true", changed: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
+				"CREATE VIEW v AS "+tt.desired+";", "CREATE VIEW v AS "+tt.current+";",
+				database.GeneratorConfig{EnableDrop: true, PostgresMajorVersion: tt.majorVersion}, "public")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.changed, len(ddls) > 0, ddls)
+		})
+	}
+}

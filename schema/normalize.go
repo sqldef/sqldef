@@ -867,6 +867,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				if _, isColName := normalizedExpr.(*parser.ColName); isColName && typeStr == "text" {
 					return normalizedExpr
 				}
+				// The same relabel follows a cast to varchar: a::varchar = 'x' becomes
+				// ((a)::character varying)::text = 'x'::text
+				if inner, ok := unwrapParenExpr(normalizedExpr).(*parser.CastExpr); ok && typeStr == "text" && inner.Type.Type == "character varying" {
+					return inner
+				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase
 				// PostgreSQL stores DEFAULT NULL as NULL::type, but we normalize to just null
@@ -1146,6 +1151,20 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 			}
 		}
 
+		// The cast of a hypothetical-set aggregate's direct argument decides the type of its
+		// WITHIN GROUP, so it is kept even on a literal: rank(1::bigint) is not rank(1)
+		if mode == GeneratorModePostgres && len(e.WithinGroup) > 0 && isHypotheticalSetAggregate(funcName) {
+			if aliased, ok := arg.(*parser.AliasedExpr); ok {
+				if cast, ok := unwrapParenExpr(aliased.Expr).(*parser.CastExpr); ok {
+					normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{Expr: &parser.CastExpr{
+						Expr: normalizeExpr(cast.Expr, mode),
+						Type: normalizeConvertType(cast.Type, mode),
+					}})
+					continue
+				}
+			}
+		}
+
 		// Not an ARRAY, normalize normally
 		normalized := normalizeSelectExpr(arg, mode)
 		normalizedExprs = append(normalizedExprs, normalized)
@@ -1156,46 +1175,111 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	if mode == GeneratorModePostgres {
 		normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
 	}
+	withinGroup := normalizeWithinGroup(funcName, e.WithinGroup, mode)
+	if mode == GeneratorModePostgres && isHypotheticalSetAggregate(funcName) {
+		unifyHypotheticalSetArgs(normalizedExprs, withinGroup, mode)
+	}
 	return &parser.FuncExpr{
 		Qualifier:   e.Qualifier,
 		Name:        normalizedName,
 		Distinct:    e.Distinct,
 		Exprs:       normalizedExprs,
-		WithinGroup: normalizeWithinGroup(funcName, e.WithinGroup, mode),
+		WithinGroup: withinGroup,
 		Over:        e.Over,
 	}
 }
 
 // normalizeWithinGroup normalizes the ORDER BY of WITHIN GROUP, removing the cast PostgreSQL adds
 // to convert it to the aggregate's argument type: percentile_cont(0.5) WITHIN GROUP (ORDER BY a)
-// is stored as ORDER BY ((a)::double precision). A hypothetical-set aggregate such as rank(1.5)
-// casts it to the type of its direct arguments, which is unknown without type lookups, so its
-// outermost cast is ignored.
+// is stored as ORDER BY ((a)::double precision)
 func normalizeWithinGroup(funcName string, orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
-	if orderBy == nil {
-		return nil
-	}
 	normalized := normalizeOrderBy(orderBy, mode)
-	if mode != GeneratorModePostgres {
+	if mode != GeneratorModePostgres || funcName != "percentile_cont" {
 		return normalized
 	}
 	for _, order := range normalized {
+		if cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr); ok {
+			if typ := normalizeTypeName(cast.Type.Type, mode); typ == "double precision" || typ == "interval" {
+				order.Expr = unwrapParenExpr(cast.Expr)
+			}
+		}
+	}
+	return normalized
+}
+
+// unifyHypotheticalSetArgs normalizes the casts PostgreSQL adds to give each direct argument of a
+// hypothetical-set aggregate the type of its WITHIN GROUP expression. A cast on the expression
+// that matches the direct argument's type is the one PostgreSQL adds (rank(1.5) WITHIN GROUP
+// (ORDER BY a) is stored as ORDER BY ((a)::numeric)), and a literal promoted to the expression's
+// cast is moved onto the literal (rank(1) WITHIN GROUP (ORDER BY a::bigint) is stored as
+// rank((1)::bigint) WITHIN GROUP (ORDER BY ((a)::bigint))).
+func unifyHypotheticalSetArgs(directArgs parser.SelectExprs, orderBy parser.OrderBy, mode GeneratorMode) {
+	for i, order := range orderBy {
+		if i >= len(directArgs) {
+			return
+		}
 		cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr)
 		if !ok {
 			continue
 		}
-		switch funcName {
-		case "percentile_cont":
-			if typ := normalizeTypeName(cast.Type.Type, mode); typ != "double precision" && typ != "interval" {
+		aliased, ok := directArgs[i].(*parser.AliasedExpr)
+		if !ok {
+			continue
+		}
+		typ := normalizeTypeName(cast.Type.Type, mode)
+		switch arg := unwrapParenExpr(aliased.Expr).(type) {
+		case *parser.CastExpr:
+			if normalizeTypeName(arg.Type.Type, mode) != typ {
 				continue
 			}
-		case "rank", "dense_rank", "percent_rank", "cume_dist":
+		case *parser.SQLVal:
+			if !slices.Contains(literalPromotions(arg, mode), typ) {
+				continue
+			}
+			if literalType(arg, mode) != typ {
+				aliased.Expr = &parser.CastExpr{Expr: arg, Type: cast.Type}
+			}
 		default:
 			continue
 		}
 		order.Expr = unwrapParenExpr(cast.Expr)
 	}
-	return normalized
+}
+
+// literalType returns the type PostgreSQL gives a literal
+func literalType(val *parser.SQLVal, mode GeneratorMode) string {
+	switch val.Type {
+	case parser.IntVal:
+		return normalizeTypeName("integer", mode)
+	case parser.FloatVal:
+		return normalizeTypeName("numeric", mode)
+	case parser.StrVal:
+		return normalizeTypeName("text", mode)
+	}
+	return ""
+}
+
+// literalPromotions returns the literal's type and the types it is implicitly cast to when
+// resolving a common type with another expression
+func literalPromotions(val *parser.SQLVal, mode GeneratorMode) []string {
+	var types []string
+	switch val.Type {
+	case parser.IntVal:
+		types = []string{"integer", "bigint", "numeric", "real", "double precision"}
+	case parser.FloatVal:
+		types = []string{"numeric", "real", "double precision"}
+	case parser.StrVal:
+		types = []string{"text"}
+	}
+	return util.TransformSlice(types, func(t string) string { return normalizeTypeName(t, mode) })
+}
+
+func isHypotheticalSetAggregate(funcName string) bool {
+	switch funcName {
+	case "rank", "dense_rank", "percent_rank", "cume_dist":
+		return true
+	}
+	return false
 }
 
 // normalizeSelectExprs normalizes SELECT expressions for comparison
@@ -1216,7 +1300,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
 			name, ok := selectExprOutputName(e.Expr)
-			if (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" || isPostgres14BoolLiteralAlias(e.Expr, as) {
+			if (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
 			}
 		}
@@ -1629,11 +1713,23 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 	}
 }
 
-// isPostgres14BoolLiteralAlias reports whether the alias is the one PostgreSQL 14 and earlier give
-// TRUE and FALSE, which they parse as casts of 't' and 'f' to bool
-func isPostgres14BoolLiteralAlias(expr parser.Expr, as Ident) bool {
-	_, isBool := unwrapParenExpr(expr).(parser.BoolVal)
-	return isBool && NewNormalizedIdent(as) == NewNormalizedIdent(parser.NewIdent("bool", false))
+// stripPostgres14BoolLiteralAliases removes the alias PostgreSQL 14 and earlier give an unaliased
+// TRUE or FALSE, which they parse as a cast of 't' or 'f' to bool and name bool. PostgreSQL 15 and
+// later name it ?column?, which is stripped along with the other default names.
+func stripPostgres14BoolLiteralAliases(stmt parser.SelectStatement) {
+	sel, ok := stmt.(*parser.Select)
+	if !ok {
+		return
+	}
+	for _, expr := range sel.SelectExprs {
+		aliased, ok := expr.(*parser.AliasedExpr)
+		if !ok {
+			continue
+		}
+		if _, isBool := unwrapParenExpr(aliased.Expr).(parser.BoolVal); isBool && NewNormalizedIdent(aliased.As) == NewNormalizedIdent(parser.NewIdent("bool", false)) {
+			aliased.As = parser.NewIdent("", false)
+		}
+	}
 }
 
 // selectExprOutputName returns the column name PostgreSQL gives an unaliased select expression,

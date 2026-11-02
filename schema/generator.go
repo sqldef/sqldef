@@ -208,6 +208,11 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
+	if mode == GeneratorModePostgres && config.PostgresMajorVersion > 0 && config.PostgresMajorVersion < 15 {
+		for _, view := range slices.Concat(aggregated.Views, desiredAggregated.Views) {
+			stripPostgres14BoolLiteralAliases(view.definition)
+		}
+	}
 
 	generator := Generator{
 		dialect:             newDialect(mode, config, defaultSchema),
