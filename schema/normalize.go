@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/parser"
@@ -168,6 +169,12 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		}
 	}
 
+	length := convertType.Length
+	if mode == GeneratorModePostgres && strings.EqualFold(strings.TrimSuffix(typeStr, "[]"), "float") && length != nil {
+		typeStr = strings.Replace(strings.ToLower(typeStr), "float", postgresFloatType(length), 1)
+		length = nil
+	}
+
 	// For array types, normalize the base type and then re-append the []
 	if isArray {
 		baseType := strings.TrimSuffix(typeStr, "[]")
@@ -179,13 +186,22 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 
 	return &parser.ConvertType{
 		Type:     typeStr,
-		Length:   convertType.Length,
+		Length:   length,
 		Scale:    convertType.Scale,
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
 		TimeZone: timeZone,
 	}
+}
+
+// postgresFloatType returns the type PostgreSQL makes of float(p): real up to 24 bits of
+// precision, and double precision above
+func postgresFloatType(precision *parser.SQLVal) string {
+	if p, err := strconv.Atoi(precision.Val); err == nil && p <= 24 {
+		return "real"
+	}
+	return "double precision"
 }
 
 // normalizeMysqlConvertType normalizes the target type of CAST/CONVERT to the form MySQL stores.
@@ -845,14 +861,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						}
 					}
 				}
-				// Strip redundant text/character varying casts on column names
+				// Strip redundant text casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				// A length is kept since it truncates the value: b::varchar(3) is not b
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName && e.Type.Length == nil {
-					if normalizedTypeStr := normalizeTypeName(typeStr, mode); normalizedTypeStr == "text" || normalizedTypeStr == "character varying" {
-						return normalizedExpr
-					}
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName && typeStr == "text" {
+					return normalizedExpr
 				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase
@@ -1148,30 +1161,39 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 		Name:        normalizedName,
 		Distinct:    e.Distinct,
 		Exprs:       normalizedExprs,
-		WithinGroup: normalizeWithinGroup(e.WithinGroup, mode),
+		WithinGroup: normalizeWithinGroup(funcName, e.WithinGroup, mode),
 		Over:        e.Over,
 	}
 }
 
-// normalizeWithinGroup normalizes the ORDER BY of WITHIN GROUP. PostgreSQL casts its expressions to
-// the aggregate's argument types (ORDER BY a becomes ORDER BY ((a)::double precision) for
-// percentile_cont), which is unknown without the signature, so casts there are ignored.
-func normalizeWithinGroup(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
+// normalizeWithinGroup normalizes the ORDER BY of WITHIN GROUP, removing the cast PostgreSQL adds
+// to convert it to the aggregate's argument type: percentile_cont(0.5) WITHIN GROUP (ORDER BY a)
+// is stored as ORDER BY ((a)::double precision). A hypothetical-set aggregate such as rank(1.5)
+// casts it to the type of its direct arguments, which is unknown without type lookups, so its
+// outermost cast is ignored.
+func normalizeWithinGroup(funcName string, orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
 	if orderBy == nil {
 		return nil
 	}
 	normalized := normalizeOrderBy(orderBy, mode)
-	if mode == GeneratorModePostgres {
-		for _, order := range normalized {
-			for {
-				cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr)
-				if !ok {
-					break
-				}
-				order.Expr = cast.Expr
-			}
-			order.Expr = unwrapParenExpr(order.Expr)
+	if mode != GeneratorModePostgres {
+		return normalized
+	}
+	for _, order := range normalized {
+		cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr)
+		if !ok {
+			continue
 		}
+		switch funcName {
+		case "percentile_cont":
+			if typ := normalizeTypeName(cast.Type.Type, mode); typ != "double precision" && typ != "interval" {
+				continue
+			}
+		case "rank", "dense_rank", "percent_rank", "cume_dist":
+		default:
+			continue
+		}
+		order.Expr = unwrapParenExpr(cast.Expr)
 	}
 	return normalized
 }
@@ -1193,7 +1215,8 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
-			if name, ok := selectExprOutputName(e.Expr); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
+			name, ok := selectExprOutputName(e.Expr)
+			if (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" || isPostgres14BoolLiteralAlias(e.Expr, as) {
 				as = parser.NewIdent("", false)
 			}
 		}
@@ -1606,6 +1629,13 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 	}
 }
 
+// isPostgres14BoolLiteralAlias reports whether the alias is the one PostgreSQL 14 and earlier give
+// TRUE and FALSE, which they parse as casts of 't' and 'f' to bool
+func isPostgres14BoolLiteralAlias(expr parser.Expr, as Ident) bool {
+	_, isBool := unwrapParenExpr(expr).(parser.BoolVal)
+	return isBool && NewNormalizedIdent(as) == NewNormalizedIdent(parser.NewIdent("bool", false))
+}
+
 // selectExprOutputName returns the column name PostgreSQL gives an unaliased select expression,
 // when it is known without looking up types
 func selectExprOutputName(expr parser.Expr) (Ident, bool) {
@@ -1640,6 +1670,11 @@ func figureColname(expr parser.Expr) (Ident, int) {
 	case *parser.ExistsExpr:
 		return parser.NewIdent("exists", false), colnameStrong
 	case *parser.CaseExpr:
+		if e.Else != nil {
+			if name, strength := figureColname(e.Else); strength == colnameStrong || strength == colnameUnknown {
+				return name, strength
+			}
+		}
 		return parser.NewIdent("case", false), colnameWeak
 	case *parser.CastExpr:
 		return figureCastColname(e.Expr, e.Type)
@@ -1675,6 +1710,11 @@ func castTypeColname(typ *parser.ConvertType) string {
 		name += typ.TimeZone
 	}
 	switch name {
+	case "float":
+		if typ.Length != nil && postgresFloatType(typ.Length) == "real" {
+			return "float4"
+		}
+		return "float8"
 	case "int", "integer":
 		return "int4"
 	case "smallint":

@@ -7751,6 +7751,10 @@ convert_type:
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
+| float_type_keyword '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+  }
 | money_type_keyword
   {
     $$ = &ConvertType{Type: $1}
@@ -7946,6 +7950,14 @@ simple_convert_type:
 | REAL
   {
     $$ = &ConvertType{Type: $1}
+  }
+| FLOAT_TYPE
+  {
+    $$ = &ConvertType{Type: $1}
+  }
+| FLOAT_TYPE '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | VECTOR '(' INTEGRAL ')'
   {

@@ -31,7 +31,8 @@ type SQLNode interface {
 // nodeBuffer extends strings.Builder to format SQLNode easily.
 type nodeBuffer struct {
 	strings.Builder
-	// postgresQuotes double-quotes the quoted identifiers that PostgreSQL would fold otherwise
+	// postgresQuotes keeps the double quotes of quoted identifiers, which PostgreSQL would
+	// otherwise fold to lowercase or reject as reserved words
 	postgresQuotes bool
 }
 
@@ -83,8 +84,8 @@ func String(node SQLNode) string {
 	return buf.String()
 }
 
-// PostgresString is String for SQL run on PostgreSQL, keeping the quotes of identifiers such as
-// "UserId" whose case PostgreSQL would fold otherwise
+// PostgresString is String for SQL run on PostgreSQL, keeping the quotes of quoted identifiers
+// such as "UserId" and "order"
 func PostgresString(node SQLNode) string {
 	buf := nodeBuffer{postgresQuotes: true}
 	node.Format(&buf)
@@ -2605,10 +2606,8 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if !node.Qualifier.IsEmpty() {
 		buf.Printf("%v.", node.Qualifier)
 	}
-	// Function names should not be back-quoted even
-	// if they match a reserved word. So, print the
-	// name as is.
-	buf.Printf("%s(%s%v)", node.Name.Name, distinct, node.Exprs)
+	formatFuncName(buf, node.Name)
+	buf.Printf("(%s%v)", distinct, node.Exprs)
 	if len(node.WithinGroup) > 0 {
 		buf.Printf(" within group (order by ")
 		for i, order := range node.WithinGroup {
@@ -2629,10 +2628,8 @@ type FuncCallExpr struct {
 }
 
 func (node *FuncCallExpr) Format(buf *nodeBuffer) {
-	// Function names should not be back-quoted even
-	// if they match a reserved word. So, print the
-	// name as is.
-	buf.Printf("%s(%v)", node.Name.Name, node.Exprs)
+	formatFuncName(buf, node.Name)
+	buf.Printf("(%v)", node.Exprs)
 }
 
 // GroupConcatExpr represents a call to GROUP_CONCAT
@@ -2735,7 +2732,9 @@ type MethodCallExpr struct {
 }
 
 func (node *MethodCallExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v.%s(%v)", node.Receiver, node.Name.Name, node.Exprs)
+	buf.Printf("%v.", node.Receiver)
+	formatFuncName(buf, node.Name)
+	buf.Printf("(%v)", node.Exprs)
 }
 
 // ExtractExpr represents EXTRACT(field FROM source)
@@ -3402,11 +3401,25 @@ func (n Ident) IsEmpty() bool {
 
 // Format formats the node for SQL generation.
 func (n Ident) Format(buf *nodeBuffer) {
-	if buf.postgresQuotes && n.Quoted && !isSimpleLowerIdent(n.Name) {
-		buf.WriteString(`"` + strings.ReplaceAll(n.Name, `"`, `""`) + `"`)
+	if buf.postgresQuotes && n.Quoted {
+		buf.writePostgresQuoted(n.Name)
 		return
 	}
 	formatID(buf, n.Name)
+}
+
+// formatFuncName formats a function name, which is never back-quoted even if it matches a
+// reserved word
+func formatFuncName(buf *nodeBuffer, name Ident) {
+	if buf.postgresQuotes && name.Quoted {
+		buf.writePostgresQuoted(name.Name)
+		return
+	}
+	buf.WriteString(name.Name)
+}
+
+func (buf *nodeBuffer) writePostgresQuoted(name string) {
+	buf.WriteString(`"` + strings.ReplaceAll(name, `"`, `""`) + `"`)
 }
 
 // equalString performs a case-insensitive compare with str.
