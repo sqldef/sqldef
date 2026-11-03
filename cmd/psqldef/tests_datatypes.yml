@@ -21,6 +21,21 @@ CreateTableWithDefault:
       joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
       created_at timestamp with time zone DEFAULT now()
     );
+CreateTableWithDefaultCurrentUser:
+  current: |
+    CREATE TABLE test (
+      id int PRIMARY KEY,
+      created_by text NOT NULL
+    );
+  desired: |
+    CREATE TABLE test (
+      id int PRIMARY KEY,
+      created_by text NOT NULL DEFAULT current_user
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "created_by" SET DEFAULT current_user;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "created_by" DROP DEFAULT;
 CreateTableWithDefaultContainingQuote:
   current: |
     CREATE TABLE test ();
