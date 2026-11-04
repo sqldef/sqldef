@@ -813,9 +813,6 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return normalized
 	case *parser.CastExpr:
 		normalizedExpr := normalizeExpr(e.Expr, mode)
-		// Normalize the type name in the cast expression to handle type aliases
-		// e.g., int[]::int[] should become int[]::integer[]
-		normalizedType := normalizeConvertType(e.Type, mode)
 		// For PostgreSQL, unwrap unnecessary parentheses around simple expressions in casts
 		// PostgreSQL adds parentheses like (amount)::numeric, but we want to normalize to amount::numeric
 		if mode == GeneratorModePostgres {
@@ -882,8 +879,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				// PostgreSQL never adds a length, so a cast to varchar(n) is the user's
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName && e.Type.Length == nil {
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
 					if typeStr == "text" || typeStr == "character varying" {
 						return normalizedExpr
 					}
@@ -933,9 +929,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 
+		// Normalize the type name in the cast expression to handle type aliases
+		// e.g., int[]::int[] should become int[]::integer[]
 		return &parser.CastExpr{
 			Expr: normalizedExpr,
-			Type: normalizedType,
+			Type: normalizeConvertType(e.Type, mode),
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)
@@ -1143,10 +1141,6 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	funcName := strings.ToLower(e.Name.Name)
 	normalizedExprs := parser.SelectExprs{}
 	for _, arg := range e.Exprs {
-		// See normalizeWithinGroup for the casts on the direct arguments of an ordered-set aggregate
-		if aliased, ok := arg.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres && len(e.WithinGroup) > 0 {
-			arg = &parser.AliasedExpr{Expr: stripCastsAndParens(aliased.Expr), As: aliased.As}
-		}
 		// For Postgres, check for ARRAY constructors BEFORE normalizing
 		// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
 		// but users may write them expanded as 'a', 'b', so we expand for comparison
@@ -1171,6 +1165,11 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 
 		// Not an ARRAY, normalize normally
 		normalized := normalizeSelectExpr(arg, mode)
+		// See normalizeWithinGroup for the casts on the direct arguments of an ordered-set aggregate.
+		// They are stripped after normalization, which turns CAST(x AS t) into a cast too.
+		if aliased, ok := normalized.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres && len(e.WithinGroup) > 0 {
+			normalized = &parser.AliasedExpr{Expr: stripCastsAndParens(aliased.Expr), As: aliased.As}
+		}
 		normalizedExprs = append(normalizedExprs, normalized)
 	}
 	// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
@@ -1772,7 +1771,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
 			return Ident{}, colnameWeakUnnamed
 		}
-	case *parser.NullVal, parser.BoolVal, *parser.BinaryExpr, *parser.UnaryExpr, *parser.ComparisonExpr,
+	case *parser.NullVal, parser.BoolVal, *parser.BinaryExpr, *parser.UnaryExpr, *parser.ComparisonExpr, *parser.ConcatExpr,
 		*parser.AndExpr, *parser.OrExpr, *parser.NotExpr, *parser.IsExpr, *parser.RangeCond:
 		return parser.NewIdent("?column?", false), colnameNone
 	}

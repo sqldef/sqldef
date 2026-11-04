@@ -469,8 +469,6 @@ AddColumnWithIsNotDistinctFromDefault:
   down: |
     ALTER TABLE public.settings DROP COLUMN enabled;
 
-# GiST index with tstzrange type
-
 ColumnExpressionsWithFloatCasts:
   legacy_ignore_quotes: false
   desired: |
@@ -492,3 +490,5 @@ ColumnExpressionsWithFloatCasts:
 #       c text CHECK (c::varchar(3) = 'x')
 #     );
 #     CREATE INDEX t_b ON t ((b::varchar));
+
+# GiST index with tstzrange type
