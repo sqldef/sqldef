@@ -963,6 +963,15 @@ func TestExtractSelectOutputColumns(t *testing.T) {
 			expected: parser.Columns{parser.NewIdent("?column?", false)},
 		},
 		{
+			name: "case with an else of an unknown name",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.CaseExpr{
+					Whens: []*parser.When{{Cond: parser.BoolVal(true), Val: parser.NewIntVal("1")}},
+					Else:  &parser.Subquery{Select: &parser.Select{}},
+				}},
+			}},
+		},
+		{
 			name: "anonymous expression with an unknown name",
 			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
 				&parser.AliasedExpr{Expr: &parser.Subquery{Select: &parser.Select{}}},

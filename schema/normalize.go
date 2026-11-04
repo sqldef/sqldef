@@ -1753,7 +1753,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		return parser.NewIdent("exists", false), colnameStrong
 	case *parser.CaseExpr:
 		if e.Else != nil {
-			if name, strength := figureColname(e.Else); !isWeakColname(strength) {
+			if name, strength := figureColname(e.Else); strength == colnameUnknown || !isWeakColname(strength) {
 				return name, strength
 			}
 		}
