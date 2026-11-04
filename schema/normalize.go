@@ -812,7 +812,10 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// We strip these redundant casts to generate cleaner DDL
 			// However, we preserve necessary casts like ::interval, ::bpchar, ::json, ::jsonb, and numeric casts
 			if e.Type != nil {
-				typeStr := strings.ToLower(e.Type.Type)
+				// Compare the canonical type name, so that every spelling of a type ("varchar",
+				// "character varying", "float(53)", "double precision") gets the same treatment
+				canonicalType := normalizeConvertType(e.Type, mode)
+				typeStr := canonicalType.Type + canonicalType.TimeZone
 				// Only strip casts on simple string literals (not in expressions)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
 					// Handle string literals
