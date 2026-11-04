@@ -219,6 +219,14 @@ func normalizeMysqlConvertType(convertType *parser.ConvertType) *parser.ConvertT
 		if strings.EqualFold(normalized.Charset, "utf8mb4") {
 			normalized.Charset = ""
 		}
+	case "float":
+		// MySQL stores FLOAT(p) as FLOAT for p <= 24 and as DOUBLE otherwise
+		if normalized.Length != nil {
+			if postgresFloatType(normalized.Length) == "double precision" {
+				normalized.Type = "double"
+			}
+			normalized.Length = nil
+		}
 	}
 	return &normalized
 }
@@ -867,7 +875,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
+				// PostgreSQL never adds a length, so a cast to varchar(n) is the user's
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName && canonicalType.Length == nil {
 					if typeStr == "text" || typeStr == "character varying" {
 						return normalizedExpr
 					}
@@ -904,7 +913,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// HOWEVER: Empty arrays (ARRAY[]) NEED the typecast or PostgreSQL can't determine the type
 				if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
 					// Check if this is an array type cast (type string ends with [])
-					if strings.HasSuffix(typeStr, "[]") {
+					if strings.HasSuffix(canonicalType.Type, "[]") {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {
@@ -919,11 +928,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 		// Normalize the type name in the cast expression to handle type aliases
 		// e.g., int[]::int[] should become int[]::integer[]
-		normalizedType := normalizeConvertType(e.Type, mode)
-
 		return &parser.CastExpr{
 			Expr: normalizedExpr,
-			Type: normalizedType,
+			Type: normalizeConvertType(e.Type, mode),
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)
@@ -1211,11 +1218,20 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
 		as := e.As
+		normalizedExpr := normalizeExpr(e.Expr, mode)
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
-		if mode == GeneratorModePostgres && !as.IsEmpty() {
-			if name, ok := selectExprOutputName(e.Expr, mode); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
+		// When normalization changes the default name, such as by folding "1::integer" (int4) into
+		// "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
+		if mode == GeneratorModePostgres {
+			name, ok := selectExprOutputName(e.Expr, mode)
+			if (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
+			}
+			if as.IsEmpty() && ok && name.Name != "?column?" {
+				if normalizedName, ok := selectExprOutputName(normalizedExpr, mode); !ok || !strings.EqualFold(normalizedName.Name, name.Name) {
+					as = name
+				}
 			}
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
@@ -1229,7 +1245,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 			}
 		}
 		return &parser.AliasedExpr{
-			Expr: normalizeExpr(e.Expr, mode),
+			Expr: normalizedExpr,
 			As:   as,
 		}
 	case *parser.StarExpr:
@@ -1611,11 +1627,7 @@ func extractSelectOutputColumns(stmt parser.SelectStatement, normalized parser.S
 	case *parser.Select:
 		exprs := s.SelectExprs
 		if hasStarExpr(exprs) {
-			normalizedSelect, ok := normalized.(*parser.Select)
-			if !ok {
-				return nil
-			}
-			exprs = expandStarExprWithNormalized(exprs, normalizedSelect.SelectExprs)
+			exprs = expandStarExprWithNormalized(exprs, normalized.(*parser.Select).SelectExprs)
 			if exprs == nil {
 				return nil
 			}
@@ -1638,11 +1650,7 @@ func extractSelectOutputColumns(stmt parser.SelectStatement, normalized parser.S
 		}
 		return columns
 	case *parser.Union:
-		var normalizedLeft parser.SelectStatement
-		if normalizedUnion, ok := normalized.(*parser.Union); ok {
-			normalizedLeft = normalizedUnion.Left
-		}
-		return extractSelectOutputColumns(s.Left, normalizedLeft, mode)
+		return extractSelectOutputColumns(s.Left, normalized.(*parser.Union).Left, mode)
 	default:
 		return nil
 	}

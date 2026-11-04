@@ -1147,6 +1147,42 @@ ViewWithCastOfUnnamedExpressionDefaultAliases:
 #     CREATE TABLE t (a int);
 #     CREATE VIEW v AS SELECT true FROM t;
 
+ViewWithFoldedConstantCastDefaultNames:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT 1::integer, 1.5::numeric, NULL::text FROM t;
+    CREATE VIEW x AS SELECT 1::integer AS int4 FROM t;
+    CREATE VIEW w AS SELECT * FROM (SELECT 1::integer, 1.5::numeric FROM t) s;
+
+ChangeViewColumnFromFoldedConstantCastToAlias:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE VIEW v AS SELECT 1::integer;
+  desired: |
+    CREATE VIEW v AS SELECT 1 AS x;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select 1 as x;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select 1::integer;
+
+ChangeViewColumnVarcharCastLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(3) AS r FROM t;
+  desired: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select b::varchar(10) as r from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select b::varchar(3) as r from t;
+
 ViewWithVarcharCastOnColumn:
   legacy_ignore_quotes: false
   desired: |
