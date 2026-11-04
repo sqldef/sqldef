@@ -1161,6 +1161,29 @@ ViewWithStarOverSubqueryWithCastDefaultNames:
     CREATE VIEW v AS SELECT * FROM (SELECT 1::bigint AS int8) s;
     CREATE VIEW w AS SELECT * FROM (SELECT 1::bigint) s;
 
+ViewWithStarOverSubqueryWithStar:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b text);
+    CREATE VIEW v AS SELECT * FROM (SELECT * FROM t) s;
+    CREATE VIEW w AS SELECT * FROM (SELECT * FROM t) s(x);
+    CREATE VIEW x AS SELECT * FROM (SELECT *, 1::bigint FROM t) s;
+
+ChangeOrderedSetAggregateDirectArgumentToArray:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT percentile_cont(ARRAY[0.5]) WITHIN GROUP (ORDER BY a) AS p FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select percentile_cont(ARRAY[0.5]) within group (order by a asc) as p from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
+
 ViewWithCaseOverStringLiteralsDefaultAlias:
   legacy_ignore_quotes: false
   desired: |

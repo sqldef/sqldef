@@ -1130,7 +1130,7 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	for _, arg := range e.Exprs {
 		// See normalizeWithinGroup for the casts on the direct arguments of an ordered-set aggregate
 		if aliased, ok := arg.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres && len(e.WithinGroup) > 0 {
-			arg = &parser.AliasedExpr{Expr: stripCasts(aliased.Expr), As: aliased.As}
+			arg = &parser.AliasedExpr{Expr: stripCastsAndParens(aliased.Expr), As: aliased.As}
 		}
 		// For Postgres, check for ARRAY constructors BEFORE normalizing
 		// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
@@ -1138,7 +1138,9 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 		// e.g., jsonb_extract_path_text(payload, ARRAY['amount']) -> jsonb_extract_path_text(payload, 'amount')
 		// e.g., jsonb_extract_path_text(payload, ARRAY['a', 'b']) -> jsonb_extract_path_text(payload, 'a', 'b')
 		// However, do NOT expand for ANY/ALL/SOME functions as they require the ARRAY constructor
-		if flattenArrays && mode == GeneratorModePostgres && funcName != "any" && funcName != "all" && funcName != "some" {
+		// The direct arguments of an ordered-set aggregate are not flattened either:
+		// percentile_cont(ARRAY[0.5]) returns an array and percentile_cont(0.5) a scalar
+		if flattenArrays && len(e.WithinGroup) == 0 && mode == GeneratorModePostgres && funcName != "any" && funcName != "all" && funcName != "some" {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
 				if arrayConstr, ok := aliased.Expr.(*parser.ArrayConstructor); ok && len(arrayConstr.Elements) > 0 {
 					// Expand ARRAY elements into separate normalized arguments
@@ -1186,24 +1188,10 @@ func normalizeWithinGroup(orderBy parser.OrderBy, mode GeneratorMode) parser.Ord
 	normalized := normalizeOrderBy(orderBy, mode)
 	if mode == GeneratorModePostgres {
 		for _, order := range normalized {
-			order.Expr = stripCasts(order.Expr)
+			order.Expr = stripCastsAndParens(order.Expr)
 		}
 	}
 	return normalized
-}
-
-// stripCasts removes the casts and parentheses around an expression
-func stripCasts(expr parser.Expr) parser.Expr {
-	for {
-		switch e := expr.(type) {
-		case *parser.CastExpr:
-			expr = e.Expr
-		case *parser.ParenExpr:
-			expr = e.Expr
-		default:
-			return expr
-		}
-	}
 }
 
 // normalizeSelectExprs normalizes SELECT expressions for comparison
@@ -1223,7 +1211,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
-			if name, ok := selectExprOutputName(e.Expr); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
+			if name, ok := selectExprOutputName(e.Expr, mode); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
 			}
 		}
@@ -1294,7 +1282,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 				lateral = false
 				columns, as = completeTableFunctionAliases(tableExpr, e.WithOrdinality, as, columns)
 			case *parser.Subquery:
-				columns = completeSubqueryColumnAliases(tableExpr, columns)
+				columns = completeSubqueryColumnAliases(tableExpr, normalizedExpr.(*parser.Subquery), columns)
 			}
 			if columns != nil {
 				columns = util.TransformSlice(columns, NewNormalizedIdent)
@@ -1357,11 +1345,11 @@ func completeTableFunctionAliases(funcExpr *parser.FuncExpr, withOrdinality bool
 // completeSubqueryColumnAliases fills a partial column alias list with the subquery's own output
 // names, as PostgreSQL does: "(SELECT 1, 2) s(x)" becomes
 // "(SELECT 1 AS "?column?", 2 AS "?column?") s(x, "?column?")".
-func completeSubqueryColumnAliases(subquery *parser.Subquery, columns parser.Columns) parser.Columns {
+func completeSubqueryColumnAliases(subquery *parser.Subquery, normalized *parser.Subquery, columns parser.Columns) parser.Columns {
 	if len(columns) == 0 {
 		return columns
 	}
-	outputs := extractSelectOutputColumns(subquery.Select)
+	outputs := extractSelectOutputColumns(subquery.Select, normalized.Select, GeneratorModePostgres)
 	if len(columns) >= len(outputs) {
 		return columns
 	}
@@ -1515,7 +1503,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 				if table := tableLookup(tableName); table != nil {
 					selectExprs = expandStarExpr(selectExprs, table)
 				}
-			} else if columns := extractSubqueryColumnsFromFrom(s.From, normalizedFrom); len(columns) > 0 {
+			} else if columns := extractSubqueryColumnsFromFrom(s.From, normalizedFrom, mode); len(columns) > 0 {
 				selectExprs = expandStarExprWithColumns(selectExprs, columns)
 			}
 		}
@@ -1586,11 +1574,8 @@ func extractTableNameFromFrom(from parser.TableExprs) QualifiedName {
 }
 
 // extractSubqueryColumnsFromFrom returns the output columns of the only FROM item. The column
-// alias lists come from the normalized FROM, where normalizeTableExpr has completed them, but the
-// names of a subquery's own outputs come from the original one: normalization strips the aliases
-// PostgreSQL adds and folds the casts its default names derive from ("(SELECT 1::bigint) s" has
-// an int8 column).
-func extractSubqueryColumnsFromFrom(from parser.TableExprs, normalizedFrom parser.TableExprs) parser.Columns {
+// alias lists come from the normalized FROM, where normalizeTableExpr has completed them.
+func extractSubqueryColumnsFromFrom(from parser.TableExprs, normalizedFrom parser.TableExprs, mode GeneratorMode) parser.Columns {
 	if len(from) != 1 {
 		return nil
 	}
@@ -1605,18 +1590,33 @@ func extractSubqueryColumnsFromFrom(from parser.TableExprs, normalizedFrom parse
 		if len(normalizedAliased.Columns) > 0 {
 			return normalizedAliased.Columns
 		}
-		return extractSelectOutputColumns(tableExpr.Select)
+		return extractSelectOutputColumns(tableExpr.Select, normalizedAliased.Expr.(*parser.Subquery).Select, mode)
 	case *parser.FuncExpr:
 		return normalizedAliased.Columns
 	}
 	return nil
 }
 
-func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
+// extractSelectOutputColumns returns the output column names of a select. Names come from the
+// original select, because normalization strips the aliases PostgreSQL adds and folds the casts
+// its default names derive from ("SELECT 1::bigint" has an int8 column). The columns of a star
+// come from the normalized select, where it is expanded.
+func extractSelectOutputColumns(stmt parser.SelectStatement, normalized parser.SelectStatement, mode GeneratorMode) parser.Columns {
 	switch s := stmt.(type) {
 	case *parser.Select:
-		columns := make(parser.Columns, 0, len(s.SelectExprs))
-		for _, selectExpr := range s.SelectExprs {
+		exprs := s.SelectExprs
+		if hasStarExpr(exprs) {
+			normalizedSelect, ok := normalized.(*parser.Select)
+			if !ok {
+				return nil
+			}
+			exprs = expandStarExprWithNormalized(exprs, normalizedSelect.SelectExprs)
+			if exprs == nil {
+				return nil
+			}
+		}
+		columns := make(parser.Columns, 0, len(exprs))
+		for _, selectExpr := range exprs {
 			aliased, ok := selectExpr.(*parser.AliasedExpr)
 			if !ok {
 				return nil
@@ -1625,7 +1625,7 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 				columns = append(columns, aliased.As)
 				continue
 			}
-			column, ok := selectExprOutputName(aliased.Expr)
+			column, ok := selectExprOutputName(aliased.Expr, mode)
 			if !ok {
 				return nil
 			}
@@ -1633,17 +1633,52 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 		}
 		return columns
 	case *parser.Union:
-		return extractSelectOutputColumns(s.Left)
+		normalizedUnion, _ := normalized.(*parser.Union)
+		if normalizedUnion == nil {
+			return extractSelectOutputColumns(s.Left, nil, mode)
+		}
+		return extractSelectOutputColumns(s.Left, normalizedUnion.Left, mode)
 	case *parser.ParenSelect:
-		return extractSelectOutputColumns(s.Select)
+		normalizedParen, _ := normalized.(*parser.ParenSelect)
+		if normalizedParen == nil {
+			return extractSelectOutputColumns(s.Select, nil, mode)
+		}
+		return extractSelectOutputColumns(s.Select, normalizedParen.Select, mode)
 	default:
 		return nil
 	}
 }
 
-// selectExprOutputName returns the column name PostgreSQL gives an unaliased select expression,
+// expandStarExprWithNormalized replaces the only star of exprs with the columns it expands to in
+// the normalized select exprs, which correspond to exprs one to one apart from the star
+func expandStarExprWithNormalized(exprs parser.SelectExprs, normalized parser.SelectExprs) parser.SelectExprs {
+	star := -1
+	for i, expr := range exprs {
+		if _, ok := expr.(*parser.StarExpr); ok {
+			if star >= 0 {
+				return nil
+			}
+			star = i
+		}
+	}
+	after := len(exprs) - star - 1
+	if hasStarExpr(normalized) || len(normalized) < star+after {
+		return nil
+	}
+	expanded := slices.Clone(exprs[:star])
+	expanded = append(expanded, normalized[star:len(normalized)-after]...)
+	return append(expanded, exprs[star+1:]...)
+}
+
+// selectExprOutputName returns the column name the database gives an unaliased select expression,
 // when it is known without looking up types
-func selectExprOutputName(expr parser.Expr) (Ident, bool) {
+func selectExprOutputName(expr parser.Expr, mode GeneratorMode) (Ident, bool) {
+	if mode != GeneratorModePostgres {
+		if colName, ok := expr.(*parser.ColName); ok {
+			return colName.Name, true
+		}
+		return Ident{}, false
+	}
 	name, strength := figureColname(expr)
 	if strength == colnameUnknown || strength == colnameWeakUnnamed {
 		return Ident{}, false

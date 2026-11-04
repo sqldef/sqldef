@@ -912,7 +912,7 @@ func TestExtractSubqueryColumnsFromFrom(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from, tt.from))
+			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from, tt.from, GeneratorModePostgres))
 		})
 	}
 }
@@ -922,7 +922,7 @@ func TestExtractSubqueryColumnsFromFromNamesOutputsBeforeNormalization(t *testin
 		&parser.AliasedExpr{Expr: &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "bigint"}}, As: parser.NewIdent("int8", false)},
 	}}}}}
 	normalizedFrom := normalizeTableExprs(from, GeneratorModePostgres, nil)
-	assert.Equal(t, parser.Columns{parser.NewIdent("int8", false)}, extractSubqueryColumnsFromFrom(from, normalizedFrom))
+	assert.Equal(t, parser.Columns{parser.NewIdent("int8", false)}, extractSubqueryColumnsFromFrom(from, normalizedFrom, GeneratorModePostgres))
 }
 
 func TestExtractSelectOutputColumns(t *testing.T) {
@@ -985,9 +985,30 @@ func TestExtractSelectOutputColumns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractSelectOutputColumns(tt.stmt))
+			assert.Equal(t, tt.expected, extractSelectOutputColumns(tt.stmt, tt.stmt, GeneratorModePostgres))
 		})
 	}
+}
+
+func TestExtractSelectOutputColumnsExpandsStarFromNormalized(t *testing.T) {
+	a := parser.NewIdent("a", false)
+	b := parser.NewIdent("b", false)
+	cast := &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "bigint"}}
+	stmt := &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.StarExpr{},
+		&parser.AliasedExpr{Expr: cast},
+	}}
+	normalized := &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: &parser.ColName{Name: a}},
+		&parser.AliasedExpr{Expr: &parser.ColName{Name: b}},
+		&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+	}}
+	assert.Equal(t, parser.Columns{a, b, parser.NewIdent("int8", false)}, extractSelectOutputColumns(stmt, normalized, GeneratorModePostgres))
+}
+
+func TestExtractSelectOutputColumnsNamesOnlyColumnsOutsidePostgres(t *testing.T) {
+	stmt := &parser.Select{SelectExprs: parser.SelectExprs{&parser.AliasedExpr{Expr: parser.NewIntVal("1")}}}
+	assert.Nil(t, extractSelectOutputColumns(stmt, stmt, GeneratorModeMysql))
 }
 
 func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {

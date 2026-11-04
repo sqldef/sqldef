@@ -6223,19 +6223,23 @@ func unwrapCast(expr parser.Expr) parser.Expr {
 	return castExpr.Expr
 }
 
+// stripCastsAndParens repeatedly strips type casts and parentheses, in either order or nesting
+func stripCastsAndParens(expr parser.Expr) parser.Expr {
+	for {
+		next := unwrapParenExpr(unwrapCast(expr))
+		if next == expr {
+			return expr
+		}
+		expr = next
+	}
+}
+
 // unwrapLiteralCastAndParens repeatedly strips type casts and parentheses (in either
 // order/nesting, e.g. `('pending'::order_status)` or `('foo')::text`) down to
 // a literal, for equality comparison purposes. Casts on anything else are kept:
 // they change the value (e.g. now()::timestamp vs now()::timestamptz).
 func unwrapLiteralCastAndParens(expr parser.Expr) parser.Expr {
-	inner := expr
-	for {
-		next := unwrapParenExpr(unwrapCast(inner))
-		if next == inner {
-			break
-		}
-		inner = next
-	}
+	inner := stripCastsAndParens(expr)
 	if _, ok := inner.(*parser.SQLVal); ok {
 		return inner
 	}
