@@ -1153,6 +1153,7 @@ ViewWithFoldedConstantCastDefaultNames:
     CREATE TABLE t (a int);
     CREATE VIEW v AS SELECT 1::integer, 1.5::numeric, NULL::text FROM t;
     CREATE VIEW x AS SELECT 1::integer AS int4 FROM t;
+    CREATE VIEW y AS SELECT 1::integer AS "?column?", 1::integer AS x FROM t;
     CREATE VIEW w AS SELECT * FROM (SELECT 1::integer, 1.5::numeric FROM t) s;
 
 ViewWithCharacterVaryingLengthCastInComparison:

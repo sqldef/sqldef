@@ -1230,8 +1230,14 @@ func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parse
 	if !normalizedAliased.As.IsEmpty() {
 		return normalized
 	}
-	name, ok := selectExprOutputName(aliased.Expr, mode)
-	if !ok || name.Name == "?column?" {
+	// The name is the alias normalizeSelectExpr stripped as a default name, or the default name
+	name := aliased.As
+	if name.IsEmpty() {
+		if name, ok = selectExprOutputName(aliased.Expr, mode); !ok {
+			return normalized
+		}
+	}
+	if name.Name == "?column?" {
 		return normalized
 	}
 	if normalizedName, ok := selectExprOutputName(normalizedAliased.Expr, mode); ok && strings.EqualFold(normalizedName.Name, name.Name) {
@@ -1752,7 +1758,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		return parser.NewIdent("exists", false), colnameStrong
 	case *parser.CaseExpr:
 		if e.Else != nil {
-			if name, strength := figureColname(e.Else); strength == colnameUnknown || !isWeakColname(strength) {
+			if name, strength := figureColname(e.Else); !isWeakColname(strength) {
 				return name, strength
 			}
 		}
@@ -1795,7 +1801,7 @@ func castTypeColname(typ *parser.ConvertType) string {
 	}
 	switch name {
 	case "float":
-		if typ.Length != nil && postgresFloatType(typ.Length) == "real" {
+		if typ.Length != nil && isSinglePrecisionFloat(typ.Length) {
 			return "float4"
 		}
 		return "float8"
@@ -1813,7 +1819,7 @@ func castTypeColname(typ *parser.ConvertType) string {
 		return "numeric"
 	case "boolean":
 		return "bool"
-	case "char", "character":
+	case "char", "character", "nchar":
 		return "bpchar"
 	case "character varying":
 		return "varchar"
