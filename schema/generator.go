@@ -2285,19 +2285,6 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
-// normalizeViewDefinition normalizes a view definition for comparison with the database's version
-func (g *Generator) normalizeViewDefinition(def parser.SelectStatement, tableLookup TableLookupFunc) parser.SelectStatement {
-	normalized := normalizeViewDefinition(def, g.mode, tableLookup)
-	if g.isPostgres14OrEarlier() {
-		stripPostgres14BoolLiteralAliases(normalized)
-	}
-	return normalized
-}
-
-func (g *Generator) isPostgres14OrEarlier() bool {
-	return g.mode == GeneratorModePostgres && g.config.PostgresMajorVersion > 0 && g.config.PostgresMajorVersion < 15
-}
-
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
 	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 		return true
@@ -2313,8 +2300,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, g.isPostgres14OrEarlier())
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, g.isPostgres14OrEarlier())
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2372,8 +2359,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := g.normalizeViewDefinition(currentView.definition, tableLookup)
-		desiredNormalizedAST := g.normalizeViewDefinition(desiredView.definition, tableLookup)
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 

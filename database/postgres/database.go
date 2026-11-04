@@ -36,7 +36,6 @@ type PostgresDatabase struct {
 	hasConperiod     *bool           // cached: whether pg_constraint has conperiod column (PG18+)
 	hasIndnkeyatts   *bool           // cached: whether pg_index has indnkeyatts column (PG11+)
 	defaultOpclasses map[string]bool // cached: see defaultOperatorClasses()
-	majorVersion     *int            // cached: see serverMajorVersion()
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -57,7 +56,6 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 		d.defaultOpclasses = map[string]bool{}
 	}
 	config.PostgresDefaultOperatorClasses = d.defaultOpclasses
-	config.PostgresMajorVersion = d.serverMajorVersion()
 	d.generatorConfig = config
 	// Sync TargetSchema to d.config for backward compatibility
 	// (other methods read from d.config.TargetSchema)
@@ -122,23 +120,6 @@ func (d *PostgresDatabase) supportsConperiod() bool {
 	}
 	d.hasConperiod = &exists
 	return exists
-}
-
-// serverMajorVersion returns the server's major version, or 0 when it can't be read. The result
-// is cached after the first call.
-func (d *PostgresDatabase) serverMajorVersion() int {
-	if d.majorVersion != nil {
-		return *d.majorVersion
-	}
-	var version int
-	if err := d.db.QueryRow(`SELECT current_setting('server_version_num')::int / 10000`).Scan(&version); err != nil {
-		// Comparing as for the latest version only misses version-specific differences, and the
-		// connection error itself is reported by the export that follows
-		slog.Warn("Failed to read the PostgreSQL server version; comparing as for the latest version", "error", err)
-		version = 0
-	}
-	d.majorVersion = &version
-	return version
 }
 
 // supportsIndexIncluding returns true if pg_index has the indnkeyatts column (PG11+), which is

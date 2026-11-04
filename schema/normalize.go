@@ -861,16 +861,13 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						}
 					}
 				}
-				// Strip redundant text casts on column names
+				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName && typeStr == "text" {
-					return normalizedExpr
-				}
-				// The same relabel follows a cast to varchar: a::varchar = 'x' becomes
-				// ((a)::character varying)::text = 'x'::text
-				if inner, ok := unwrapParenExpr(normalizedExpr).(*parser.CastExpr); ok && typeStr == "text" && inner.Type.Type == "character varying" {
-					return inner
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
+					if typeStr == "text" || typeStr == "character varying" {
+						return normalizedExpr
+					}
 				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase
@@ -1131,6 +1128,10 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	funcName := strings.ToLower(e.Name.Name)
 	normalizedExprs := parser.SelectExprs{}
 	for _, arg := range e.Exprs {
+		// See normalizeWithinGroup for the casts on the direct arguments of an ordered-set aggregate
+		if aliased, ok := arg.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres && len(e.WithinGroup) > 0 {
+			arg = &parser.AliasedExpr{Expr: stripCasts(aliased.Expr), As: aliased.As}
+		}
 		// For Postgres, check for ARRAY constructors BEFORE normalizing
 		// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
 		// but users may write them expanded as 'a', 'b', so we expand for comparison
@@ -1163,7 +1164,7 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	}
 	var withinGroup parser.OrderBy
 	if len(e.WithinGroup) > 0 {
-		withinGroup = normalizeWithinGroup(funcName, e.WithinGroup, mode)
+		withinGroup = normalizeWithinGroup(e.WithinGroup, mode)
 	}
 	return &parser.FuncExpr{
 		Qualifier:   e.Qualifier,
@@ -1175,63 +1176,41 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	}
 }
 
-// normalizeWithinGroup normalizes the ORDER BY of WITHIN GROUP, removing the casts PostgreSQL adds
-// to convert it to the aggregate's argument type. percentile_cont(0.5) WITHIN GROUP (ORDER BY a)
-// is stored as ORDER BY ((a)::double precision). A hypothetical-set aggregate such as rank()
-// resolves a common type with its direct arguments and puts the casts on either side, which is
-// unknown without type lookups, so all casts on its WITHIN GROUP expressions are ignored.
-func normalizeWithinGroup(funcName string, orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
+// normalizeWithinGroup normalizes the ORDER BY of WITHIN GROUP. PostgreSQL casts the arguments of
+// an ordered-set aggregate to its signature and, for a hypothetical-set aggregate such as rank(),
+// to the common type of the direct arguments and the ordering, putting the casts on either side:
+// percentile_cont(0.5) WITHIN GROUP (ORDER BY a) is stored as
+// percentile_cont((0.5)::double precision) WITHIN GROUP (ORDER BY ((a)::double precision)).
+// Which casts it adds is unknown without type lookups, so the casts on both are ignored.
+func normalizeWithinGroup(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
 	normalized := normalizeOrderBy(orderBy, mode)
-	if mode != GeneratorModePostgres {
-		return normalized
-	}
-	for _, order := range normalized {
-		switch funcName {
-		case "percentile_cont":
-			if cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr); ok {
-				if typ := normalizeTypeName(cast.Type.Type, mode); typ == "double precision" || typ == "interval" {
-					order.Expr = unwrapParenExpr(cast.Expr)
-				}
-			}
-		case "rank", "dense_rank", "percent_rank", "cume_dist":
-			for {
-				cast, ok := unwrapParenExpr(order.Expr).(*parser.CastExpr)
-				if !ok {
-					break
-				}
-				order.Expr = cast.Expr
-			}
-			order.Expr = unwrapParenExpr(order.Expr)
+	if mode == GeneratorModePostgres {
+		for _, order := range normalized {
+			order.Expr = stripCasts(order.Expr)
 		}
 	}
 	return normalized
 }
 
-// normalizeOutputSelectExpr normalizes an output column of a SELECT. The ::text that
-// normalizeExpr strips after a cast to varchar is a relabel inside an expression, but it gives an
-// output column the text type, so it is kept there: a::varchar::text is not a::varchar.
-func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
-	normalized := normalizeSelectExpr(expr, mode)
-	aliased, ok := expr.(*parser.AliasedExpr)
-	if !ok || mode != GeneratorModePostgres {
-		return normalized
+// stripCasts removes the casts and parentheses around an expression
+func stripCasts(expr parser.Expr) parser.Expr {
+	for {
+		switch e := expr.(type) {
+		case *parser.CastExpr:
+			expr = e.Expr
+		case *parser.ParenExpr:
+			expr = e.Expr
+		default:
+			return expr
+		}
 	}
-	outer, ok := unwrapParenExpr(aliased.Expr).(*parser.CastExpr)
-	if !ok || normalizeTypeName(outer.Type.Type, mode) != "text" {
-		return normalized
-	}
-	if inner, ok := unwrapParenExpr(outer.Expr).(*parser.CastExpr); ok && normalizeTypeName(inner.Type.Type, mode) == "character varying" {
-		normalizedAliased := normalized.(*parser.AliasedExpr)
-		normalizedAliased.Expr = &parser.CastExpr{Expr: normalizedAliased.Expr, Type: &parser.ConvertType{Type: "text"}}
-	}
-	return normalized
 }
 
-// normalizeSelectExprs normalizes the output columns of a SELECT for comparison
+// normalizeSelectExprs normalizes SELECT expressions for comparison
 func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.SelectExprs {
 	normalized := make(parser.SelectExprs, len(exprs))
 	for i, expr := range exprs {
-		normalized[i] = normalizeOutputSelectExpr(expr, mode)
+		normalized[i] = normalizeSelectExpr(expr, mode)
 	}
 	return normalized
 }
@@ -1244,8 +1223,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
-			name, ok := selectExprOutputName(e.Expr)
-			if (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
+			if name, ok := selectExprOutputName(e.Expr); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
 			}
 		}
@@ -1537,7 +1515,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 				if table := tableLookup(tableName); table != nil {
 					selectExprs = expandStarExpr(selectExprs, table)
 				}
-			} else if columns := extractSubqueryColumnsFromFrom(normalizedFrom); len(columns) > 0 {
+			} else if columns := extractSubqueryColumnsFromFrom(s.From, normalizedFrom); len(columns) > 0 {
 				selectExprs = expandStarExprWithColumns(selectExprs, columns)
 			}
 		}
@@ -1607,7 +1585,12 @@ func extractTableNameFromFrom(from parser.TableExprs) QualifiedName {
 	return QualifiedName{}
 }
 
-func extractSubqueryColumnsFromFrom(from parser.TableExprs) parser.Columns {
+// extractSubqueryColumnsFromFrom returns the output columns of the only FROM item. The column
+// alias lists come from the normalized FROM, where normalizeTableExpr has completed them, but the
+// names of a subquery's own outputs come from the original one: normalization strips the aliases
+// PostgreSQL adds and folds the casts its default names derive from ("(SELECT 1::bigint) s" has
+// an int8 column).
+func extractSubqueryColumnsFromFrom(from parser.TableExprs, normalizedFrom parser.TableExprs) parser.Columns {
 	if len(from) != 1 {
 		return nil
 	}
@@ -1616,15 +1599,15 @@ func extractSubqueryColumnsFromFrom(from parser.TableExprs) parser.Columns {
 	if !ok {
 		return nil
 	}
+	normalizedAliased := normalizedFrom[0].(*parser.AliasedTableExpr)
 	switch tableExpr := aliased.Expr.(type) {
 	case *parser.Subquery:
-		if len(aliased.Columns) > 0 {
-			return aliased.Columns
+		if len(normalizedAliased.Columns) > 0 {
+			return normalizedAliased.Columns
 		}
 		return extractSelectOutputColumns(tableExpr.Select)
 	case *parser.FuncExpr:
-		// The column aliases of a function in FROM have been completed by normalizeTableExpr
-		return aliased.Columns
+		return normalizedAliased.Columns
 	}
 	return nil
 }
@@ -1658,64 +1641,11 @@ func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
 	}
 }
 
-// stripPostgres14BoolLiteralAliases removes the alias PostgreSQL 14 and earlier give an unaliased
-// TRUE or FALSE in every SELECT of a normalized view definition. They parse it as a cast of 't'
-// or 'f' to bool and name it bool, while PostgreSQL 15 and later name it ?column?, which
-// normalizeSelectExpr already strips.
-func stripPostgres14BoolLiteralAliases(stmt parser.SelectStatement) {
-	switch s := stmt.(type) {
-	case *parser.Select:
-		for _, expr := range s.SelectExprs {
-			stripPostgres14BoolLiteralAlias(expr)
-		}
-		stripPostgres14BoolLiteralAliasesInTableExprs(s.From)
-		stripPostgres14BoolLiteralAliasesInWith(s.With)
-	case *parser.Union:
-		stripPostgres14BoolLiteralAliases(s.Left)
-		stripPostgres14BoolLiteralAliases(s.Right)
-		stripPostgres14BoolLiteralAliasesInWith(s.With)
-	case *parser.ParenSelect:
-		stripPostgres14BoolLiteralAliases(s.Select)
-	}
-}
-
-func stripPostgres14BoolLiteralAlias(expr parser.SelectExpr) {
-	if aliased, ok := expr.(*parser.AliasedExpr); ok {
-		if _, isBool := unwrapParenExpr(aliased.Expr).(parser.BoolVal); isBool && NewNormalizedIdent(aliased.As) == NewNormalizedIdent(parser.NewIdent("bool", false)) {
-			aliased.As = parser.NewIdent("", false)
-		}
-	}
-}
-
-func stripPostgres14BoolLiteralAliasesInTableExprs(exprs parser.TableExprs) {
-	for _, expr := range exprs {
-		switch e := expr.(type) {
-		case *parser.AliasedTableExpr:
-			if subquery, ok := e.Expr.(*parser.Subquery); ok {
-				stripPostgres14BoolLiteralAliases(subquery.Select)
-			}
-		case *parser.JoinTableExpr:
-			stripPostgres14BoolLiteralAliasesInTableExprs(parser.TableExprs{e.LeftExpr, e.RightExpr})
-		case *parser.ParenTableExpr:
-			stripPostgres14BoolLiteralAliasesInTableExprs(e.Exprs)
-		}
-	}
-}
-
-func stripPostgres14BoolLiteralAliasesInWith(with *parser.With) {
-	if with == nil {
-		return
-	}
-	for _, cte := range with.CTEs {
-		stripPostgres14BoolLiteralAliases(cte.Definition)
-	}
-}
-
 // selectExprOutputName returns the column name PostgreSQL gives an unaliased select expression,
 // when it is known without looking up types
 func selectExprOutputName(expr parser.Expr) (Ident, bool) {
 	name, strength := figureColname(expr)
-	if strength == colnameUnknown {
+	if strength == colnameUnknown || strength == colnameWeakUnnamed {
 		return Ident{}, false
 	}
 	return name, true
@@ -1725,11 +1655,16 @@ func selectExprOutputName(expr parser.Expr) (Ident, bool) {
 // a cast keeps its operand's name unless the name is weak, in which case the cast names the
 // column after the type ("1::text" is text, "(x AT TIME ZONE z)::date" is timezone)
 const (
-	colnameUnknown = iota - 1 // not derivable without looking up types
+	colnameUnknown     = iota // not derivable without looking up types
+	colnameWeakUnnamed        // weak, but the name is unknown: a string literal whose cast the parser drops
 	colnameNone               // ?column?
 	colnameWeak
 	colnameStrong
 )
+
+func isWeakColname(strength int) bool {
+	return strength == colnameWeakUnnamed || strength == colnameNone || strength == colnameWeak
+}
 
 func figureColname(expr parser.Expr) (Ident, int) {
 	switch e := unwrapParenExpr(expr).(type) {
@@ -1746,7 +1681,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		return parser.NewIdent("exists", false), colnameStrong
 	case *parser.CaseExpr:
 		if e.Else != nil {
-			if name, strength := figureColname(e.Else); strength == colnameStrong || strength == colnameUnknown {
+			if name, strength := figureColname(e.Else); !isWeakColname(strength) {
 				return name, strength
 			}
 		}
@@ -1758,9 +1693,12 @@ func figureColname(expr parser.Expr) (Ident, int) {
 			return figureCastColname(e.Expr, e.Type)
 		}
 	case *parser.SQLVal:
-		// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
-		if e.Type == parser.IntVal || e.Type == parser.FloatVal {
+		switch e.Type {
+		case parser.IntVal, parser.FloatVal:
 			return parser.NewIdent("?column?", false), colnameNone
+		case parser.StrVal:
+			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
+			return Ident{}, colnameWeakUnnamed
 		}
 	case *parser.NullVal, parser.BoolVal, *parser.BinaryExpr, *parser.UnaryExpr, *parser.ComparisonExpr,
 		*parser.AndExpr, *parser.OrExpr, *parser.NotExpr, *parser.IsExpr, *parser.RangeCond:
@@ -1771,7 +1709,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 
 func figureCastColname(expr parser.Expr, typ *parser.ConvertType) (Ident, int) {
 	name, strength := figureColname(expr)
-	if strength != colnameNone && strength != colnameWeak {
+	if !isWeakColname(strength) {
 		return name, strength
 	}
 	return parser.NewIdent(castTypeColname(typ), false), colnameWeak
@@ -1867,7 +1805,7 @@ func expandStarExprWithColumns(exprs parser.SelectExprs, columns parser.Columns)
 // This handles differences in how PostgreSQL versions format column names:
 // - PostgreSQL 13-15: includes table qualifiers (e.g., "users.id")
 // - PostgreSQL 16+: omits unnecessary qualifiers (e.g., "id")
-func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode, postgres14 bool) []string {
+func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode) []string {
 	if def == nil {
 		return nil
 	}
@@ -1882,10 +1820,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 	}
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
-		normalized := normalizeOutputSelectExpr(expr, mode)
-		if postgres14 {
-			stripPostgres14BoolLiteralAlias(normalized)
-		}
+		normalized := normalizeSelectExpr(expr, mode)
 		return strings.ToLower(parser.String(normalized))
 	})
 }

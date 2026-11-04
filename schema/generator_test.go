@@ -912,9 +912,17 @@ func TestExtractSubqueryColumnsFromFrom(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from))
+			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from, tt.from))
 		})
 	}
+}
+
+func TestExtractSubqueryColumnsFromFromNamesOutputsBeforeNormalization(t *testing.T) {
+	from := parser.TableExprs{&parser.AliasedTableExpr{Expr: &parser.Subquery{Select: &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "bigint"}}, As: parser.NewIdent("int8", false)},
+	}}}}}
+	normalizedFrom := normalizeTableExprs(from, GeneratorModePostgres, nil)
+	assert.Equal(t, parser.Columns{parser.NewIdent("int8", false)}, extractSubqueryColumnsFromFrom(from, normalizedFrom))
 }
 
 func TestExtractSelectOutputColumns(t *testing.T) {
@@ -2196,32 +2204,4 @@ func TestIndexToTableNamesCoversAddIndex(t *testing.T) {
 	table, ok := indexTables[indexSchemaKey(parser.Ident{}, parser.NewIdent("idx_users_name", false))]
 	require.True(t, ok)
 	assert.Equal(t, "users", table.RawString())
-}
-
-func TestBoolLiteralDefaultAliasDependsOnServerVersion(t *testing.T) {
-	tests := []struct {
-		name         string
-		majorVersion int
-		current      string
-		desired      string
-		changed      bool
-	}{
-		{name: "PostgreSQL 14 names TRUE bool", majorVersion: 14, current: "SELECT true AS bool", desired: "SELECT true"},
-		{name: "PostgreSQL 14 with the alias written out", majorVersion: 14, current: "SELECT true AS bool", desired: "SELECT true AS bool"},
-		{name: "PostgreSQL 15 names TRUE ?column?", majorVersion: 15, current: `SELECT true AS "?column?"`, desired: "SELECT true"},
-		{name: "PostgreSQL 15 keeps a bool alias", majorVersion: 15, current: "SELECT true AS bool", desired: "SELECT true", changed: true},
-		{name: "offline keeps a bool alias", current: "SELECT true AS bool", desired: "SELECT true", changed: true},
-		{name: "PostgreSQL 14 in UNION", majorVersion: 14, current: "SELECT true AS bool UNION ALL SELECT false AS bool", desired: "SELECT true UNION ALL SELECT false"},
-		{name: "PostgreSQL 14 in a subquery", majorVersion: 14, current: "SELECT 1 AS x FROM (SELECT true AS bool) s", desired: "SELECT 1 AS x FROM (SELECT true) s"},
-		{name: "PostgreSQL 14 in a CTE", majorVersion: 14, current: "WITH c AS (SELECT true AS bool) SELECT 1 AS x FROM c", desired: "WITH c AS (SELECT true) SELECT 1 AS x FROM c"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ddls, err := GenerateIdempotentDDLs(GeneratorModePostgres, database.NewParser(parser.ParserModePostgres),
-				"CREATE VIEW v AS "+tt.desired+";", "CREATE VIEW v AS "+tt.current+";",
-				database.GeneratorConfig{EnableDrop: true, PostgresMajorVersion: tt.majorVersion}, "public")
-			assert.NoError(t, err)
-			assert.Equal(t, tt.changed, len(ddls) > 0, ddls)
-		})
-	}
 }
