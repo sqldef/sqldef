@@ -19,6 +19,7 @@ package parser
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -2242,6 +2243,15 @@ type SQLVal struct {
 // NewStrVal builds a new StrVal.
 func NewStrVal(in string) *SQLVal {
 	return &SQLVal{Type: StrVal, Val: in}
+}
+
+// postgresFloatTypeName returns the type PostgreSQL makes of float(p): real up to 24 bits of
+// precision, and double precision above
+func postgresFloatTypeName(precision string) string {
+	if p, err := strconv.Atoi(precision); err == nil && p <= 24 {
+		return "real"
+	}
+	return "double precision"
 }
 
 // isFoldableValueCast reports whether a value-context string cast should be kept

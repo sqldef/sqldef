@@ -7759,10 +7759,6 @@ convert_type:
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
-| float_type_keyword '(' INTEGRAL ')'
-  {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
-  }
 | money_type_keyword
   {
     $$ = &ConvertType{Type: $1}
@@ -7897,7 +7893,8 @@ simple_convert_type:
   }
 | VARCHAR
   {
-    $$ = &ConvertType{Type: $1}
+    // Named as PostgreSQL stores it, so that it is compared like "character varying"
+    $$ = &ConvertType{Type: "character varying"}
   }
 | VARCHAR '(' INTEGRAL ')'
   {
@@ -7961,11 +7958,12 @@ simple_convert_type:
   }
 | FLOAT_TYPE
   {
-    $$ = &ConvertType{Type: $1}
+    // Named as PostgreSQL stores it, so that it is compared like "double precision"
+    $$ = &ConvertType{Type: "double precision"}
   }
 | FLOAT_TYPE '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: postgresFloatTypeName($3)}
   }
 | VECTOR '(' INTEGRAL ')'
   {

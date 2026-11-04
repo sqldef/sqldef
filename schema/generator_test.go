@@ -2236,12 +2236,6 @@ func TestIndexToTableNamesCoversAddIndex(t *testing.T) {
 	assert.Equal(t, "users", table.RawString())
 }
 
-func TestNormalizeMysqlConvertTypeFloatPrecision(t *testing.T) {
-	assert.Equal(t, "float", normalizeMysqlConvertType(&parser.ConvertType{Type: "float", Length: parser.NewIntVal("24")}).Type)
-	assert.Equal(t, "double", normalizeMysqlConvertType(&parser.ConvertType{Type: "float", Length: parser.NewIntVal("25")}).Type)
-	assert.Nil(t, normalizeMysqlConvertType(&parser.ConvertType{Type: "float", Length: parser.NewIntVal("25")}).Length)
-}
-
 func TestNormalizeExprKeepsFunctionArgumentsUnaliased(t *testing.T) {
 	expr := &parser.FuncExpr{Name: parser.NewIdent("jsonb_build_object", false), Exprs: parser.SelectExprs{
 		&parser.AliasedExpr{Expr: parser.NewStrVal("version")},

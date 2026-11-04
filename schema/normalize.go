@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/parser"
@@ -169,12 +168,6 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		}
 	}
 
-	length := convertType.Length
-	if mode == GeneratorModePostgres && strings.EqualFold(strings.TrimSuffix(typeStr, "[]"), "float") && length != nil {
-		typeStr = strings.Replace(strings.ToLower(typeStr), "float", postgresFloatType(length), 1)
-		length = nil
-	}
-
 	// For array types, normalize the base type and then re-append the []
 	if isArray {
 		baseType := strings.TrimSuffix(typeStr, "[]")
@@ -186,29 +179,13 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 
 	return &parser.ConvertType{
 		Type:     typeStr,
-		Length:   length,
+		Length:   convertType.Length,
 		Scale:    convertType.Scale,
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
 		TimeZone: timeZone,
 	}
-}
-
-// postgresFloatType returns the type PostgreSQL makes of float(p): real up to 24 bits of
-// precision, and double precision above
-func postgresFloatType(precision *parser.SQLVal) string {
-	if isSinglePrecisionFloat(precision) {
-		return "real"
-	}
-	return "double precision"
-}
-
-// isSinglePrecisionFloat reports whether float(p) is single precision, which is up to 24 bits
-// of precision in both PostgreSQL and MySQL
-func isSinglePrecisionFloat(precision *parser.SQLVal) bool {
-	p, err := strconv.Atoi(precision.Val)
-	return err == nil && p <= 24
 }
 
 // normalizeMysqlConvertType normalizes the target type of CAST/CONVERT to the form MySQL stores.
@@ -225,14 +202,6 @@ func normalizeMysqlConvertType(convertType *parser.ConvertType) *parser.ConvertT
 	case "char":
 		if strings.EqualFold(normalized.Charset, "utf8mb4") {
 			normalized.Charset = ""
-		}
-	case "float":
-		// MySQL stores FLOAT(p) as FLOAT for p <= 24 and as DOUBLE otherwise
-		if normalized.Length != nil {
-			if !isSinglePrecisionFloat(normalized.Length) {
-				normalized.Type = "double"
-			}
-			normalized.Length = nil
 		}
 	}
 	return &normalized
@@ -1801,9 +1770,6 @@ func castTypeColname(typ *parser.ConvertType) string {
 	}
 	switch name {
 	case "float":
-		if typ.Length != nil && isSinglePrecisionFloat(typ.Length) {
-			return "float4"
-		}
 		return "float8"
 	case "int", "integer":
 		return "int4"

@@ -481,14 +481,16 @@ ColumnExpressionsWithFloatCasts:
       h double precision GENERATED ALWAYS AS (a::float) STORED
     );
 
-# FIXME: Casts are compared by the type as written, and PostgreSQL stores ::varchar as ::character varying, whose casts on columns are stripped as implicit, so these expressions are replaced on every run
-# ColumnExpressionsWithVarcharCasts:
+ColumnExpressionsWithVarcharCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (b text CHECK (length(b::varchar) > 1));
+    CREATE INDEX t_b ON t ((b::varchar));
+
+# FIXME: A cast to character varying(n) on a column is stripped with its length, as PostgreSQL adds character varying casts implicitly, but ::varchar(n) is not, so the constraint is replaced on every run
+# ColumnExpressionsWithVarcharLengthCast:
 #   legacy_ignore_quotes: false
 #   desired: |
-#     CREATE TABLE t (
-#       b text CHECK (length(b::varchar) > 1),
-#       c text CHECK (c::varchar(3) = 'x')
-#     );
-#     CREATE INDEX t_b ON t ((b::varchar));
+#     CREATE TABLE t (c text CHECK (c::varchar(3) = 'x'));
 
 # GiST index with tstzrange type

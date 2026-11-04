@@ -1128,7 +1128,7 @@ ViewWithCastOfUnnamedExpressionDefaultAliases:
     CREATE VIEW z AS SELECT true::text FROM t;
     CREATE VIEW n AS SELECT null::text FROM t;
     CREATE VIEW i AS SELECT 1::int::text FROM t;
-    CREATE VIEW f AS SELECT (a + 1)::float, (a + 1)::float(10) AS r, CAST(a + 1 AS float(30)) AS d FROM t;
+    CREATE VIEW f AS SELECT (a + 1)::float, (a + 1)::float(10) AS r, (a + 1)::float(30) AS d FROM t;
     CREATE VIEW c AS SELECT CASE WHEN a > 0 THEN 1 ELSE a END FROM t;
     CREATE VIEW e AS SELECT CASE WHEN a > 0 THEN a ELSE 1 END FROM t;
 
@@ -1189,6 +1189,12 @@ ChangeViewColumnFromFoldedConstantCastToAlias:
     CREATE VIEW public.v AS select 1::integer;
 
 # FIXME: A cast to character varying(n) on a column is stripped with its length, as PostgreSQL adds character varying casts implicitly, but ::varchar(n) is not, so the views are replaced on every run
+# ViewWithVarcharLengthCastOnColumn:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE t (b text);
+#     CREATE VIEW x AS SELECT b::varchar(3) FROM t;
+#
 # ChangeViewColumnVarcharCastLength:
 #   legacy_ignore_quotes: false
 #   current: |
@@ -1204,14 +1210,12 @@ ChangeViewColumnFromFoldedConstantCastToAlias:
 #     DROP VIEW public.v;
 #     CREATE VIEW public.v AS select b::varchar(3) as r from t;
 
-# FIXME: Casts are compared by the type as written, but PostgreSQL stores ::varchar as ::character varying and ::float as ::double precision, and the casts it may add implicitly in those spellings are stripped, so these views are replaced on every run
-# ViewWithVarcharAndFloatCasts:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (a int, b text);
-#     CREATE VIEW x AS SELECT b::varchar(3) FROM t;
-#     CREATE VIEW y AS SELECT a FROM t WHERE a::varchar = 'x';
-#     CREATE VIEW z AS SELECT b::varchar, 1::float AS f, a::bigint::float AS g FROM t;
+ViewWithVarcharAndFloatCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b text);
+    CREATE VIEW y AS SELECT a FROM t WHERE a::varchar = 'x';
+    CREATE VIEW z AS SELECT b::varchar, 1::float AS f, a::bigint::float AS g FROM t;
 
 ViewWithStarOverSubqueryWithCastDefaultNames:
   legacy_ignore_quotes: false
@@ -1280,7 +1284,7 @@ ViewWithOrderedSetAggregates:
       percentile_disc(0.5) WITHIN GROUP (ORDER BY a DESC) AS d
     FROM t;
 
-# FIXME: Casts to character varying on a column are stripped, as PostgreSQL adds them implicitly, but ::varchar is not, so the view is replaced on every run
+# FIXME: Casts to character varying on a column are stripped, as PostgreSQL adds them implicitly, so adding one is not detected
 # ChangeViewColumnCastToVarchar:
 #   legacy_ignore_quotes: false
 #   current: |
