@@ -1168,6 +1168,7 @@ ViewWithStarOverSubqueryWithStar:
     CREATE VIEW v AS SELECT * FROM (SELECT * FROM t) s;
     CREATE VIEW w AS SELECT * FROM (SELECT * FROM t) s(x);
     CREATE VIEW x AS SELECT * FROM (SELECT *, 1::bigint FROM t) s;
+    CREATE VIEW y AS SELECT * FROM ((SELECT * FROM t) UNION (SELECT * FROM t)) s;
 
 ChangeOrderedSetAggregateDirectArgumentToArray:
   legacy_ignore_quotes: false

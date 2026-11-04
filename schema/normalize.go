@@ -1602,6 +1602,8 @@ func extractSubqueryColumnsFromFrom(from parser.TableExprs, normalizedFrom parse
 // its default names derive from ("SELECT 1::bigint" has an int8 column). The columns of a star
 // come from the normalized select, where it is expanded.
 func extractSelectOutputColumns(stmt parser.SelectStatement, normalized parser.SelectStatement, mode GeneratorMode) parser.Columns {
+	// Normalization unwraps parenthesized selects, so the two sides are matched without them
+	stmt, normalized = unwrapParenSelect(stmt), unwrapParenSelect(normalized)
 	switch s := stmt.(type) {
 	case *parser.Select:
 		exprs := s.SelectExprs
@@ -1633,19 +1635,23 @@ func extractSelectOutputColumns(stmt parser.SelectStatement, normalized parser.S
 		}
 		return columns
 	case *parser.Union:
-		normalizedUnion, _ := normalized.(*parser.Union)
-		if normalizedUnion == nil {
-			return extractSelectOutputColumns(s.Left, nil, mode)
+		var normalizedLeft parser.SelectStatement
+		if normalizedUnion, ok := normalized.(*parser.Union); ok {
+			normalizedLeft = normalizedUnion.Left
 		}
-		return extractSelectOutputColumns(s.Left, normalizedUnion.Left, mode)
-	case *parser.ParenSelect:
-		normalizedParen, _ := normalized.(*parser.ParenSelect)
-		if normalizedParen == nil {
-			return extractSelectOutputColumns(s.Select, nil, mode)
-		}
-		return extractSelectOutputColumns(s.Select, normalizedParen.Select, mode)
+		return extractSelectOutputColumns(s.Left, normalizedLeft, mode)
 	default:
 		return nil
+	}
+}
+
+func unwrapParenSelect(stmt parser.SelectStatement) parser.SelectStatement {
+	for {
+		paren, ok := stmt.(*parser.ParenSelect)
+		if !ok {
+			return stmt
+		}
+		stmt = paren.Select
 	}
 }
 
@@ -1698,7 +1704,7 @@ const (
 )
 
 func isWeakColname(strength int) bool {
-	return strength == colnameWeakUnnamed || strength == colnameNone || strength == colnameWeak
+	return strength >= colnameWeakUnnamed && strength <= colnameWeak
 }
 
 func figureColname(expr parser.Expr) (Ident, int) {
