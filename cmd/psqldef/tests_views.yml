@@ -1247,6 +1247,15 @@ ChangeOrderedSetAggregateDirectArgumentToArray:
     DROP VIEW public.v;
     CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
 
+ViewWithCollateAndScalarSubqueryDefaultAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, b text);
+    CREATE TABLE u (c int);
+    CREATE VIEW w AS SELECT (b COLLATE "C") FROM t;
+    CREATE VIEW x AS SELECT (SELECT max(c) FROM u) FROM t;
+    CREATE VIEW y AS SELECT (SELECT 1) FROM t;
+
 ViewWithCaseOverStringLiteralsDefaultAlias:
   legacy_ignore_quotes: false
   desired: |
@@ -1379,6 +1388,26 @@ RecreateViewWithQuotedIdentifiers:
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select "UserId", name from "Users";
+
+RenameViewOutputColumnAliasByQuotedCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT a AS x, b FROM t;
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT a AS "X", b, 1 AS c FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select a as "X", b, 1 as c from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select a as x, b from t;
+
+ViewWithQuotedOutputAliasesInLegacyMode:
+  desired: |
+    CREATE TABLE t (a int, b int);
+    CREATE VIEW v AS SELECT a AS "X", b AS "y", a AS z FROM t;
 
 RenameViewOutputColumnByQuotedCase:
   legacy_ignore_quotes: false

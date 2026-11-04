@@ -2285,6 +2285,24 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
+// quotedOutputAliases returns the output column aliases of a select, with the case of quoted ones
+func quotedOutputAliases(stmt parser.SelectStatement) []string {
+	sel, ok := stmt.(*parser.Select)
+	if !ok {
+		return nil
+	}
+	return util.TransformSlice(sel.SelectExprs, func(expr parser.SelectExpr) string {
+		aliased, ok := expr.(*parser.AliasedExpr)
+		if !ok {
+			return ""
+		}
+		if aliased.As.Quoted {
+			return aliased.As.Name
+		}
+		return strings.ToLower(aliased.As.Name)
+	})
+}
+
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
 	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 		return true
@@ -2377,7 +2395,9 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 			"desired_after_norm", desiredNormalized,
 		)
 
-		if currentNormalized != desiredNormalized {
+		// The definitions are compared in lowercase, so a quoted output column renamed only in case
+		// is found by comparing the output columns
+		if currentNormalized != desiredNormalized || !slices.Equal(quotedOutputAliases(currentNormalizedAST), quotedOutputAliases(desiredNormalizedAST)) {
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				var recreateDDLs []statement
 				var dependents []*View

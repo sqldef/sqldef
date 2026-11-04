@@ -405,7 +405,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			// For time types, keep the cast but use normalized type name
 			return &parser.CastExpr{
 				Expr: normalizedExpr,
-				Type: &parser.ConvertType{Type: normalizedTypeStr},
+				Type: &parser.ConvertType{Type: normalizedTypeStr, Length: e.Type.Length, Scale: e.Type.Scale},
 			}
 		}
 		return &parser.CastExpr{
@@ -1725,6 +1725,13 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		return parser.NewIdent("array", false), colnameStrong
 	case *parser.ExistsExpr:
 		return parser.NewIdent("exists", false), colnameStrong
+	case *parser.CollateExpr:
+		return figureColname(e.Expr)
+	case *parser.Subquery:
+		// A scalar subquery is named after its output column
+		if columns := extractSelectOutputColumns(e.Select, e.Select, GeneratorModePostgres); len(columns) > 0 {
+			return columns[0], colnameStrong
+		}
 	case *parser.CaseExpr:
 		if e.Else != nil {
 			if name, strength := figureColname(e.Else); !isWeakColname(strength) {
@@ -1864,7 +1871,12 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		return strings.ToLower(parser.String(normalized))
+		aliased, ok := normalized.(*parser.AliasedExpr)
+		if !ok || aliased.As.IsEmpty() || !aliased.As.Quoted {
+			return strings.ToLower(parser.String(normalized))
+		}
+		// A quoted alias keeps its case, which names a different column
+		return strings.ToLower(parser.String(aliased.Expr)) + " as " + aliased.As.Name
 	})
 }
 
