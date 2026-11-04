@@ -4375,6 +4375,14 @@ default_value_expression:
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
+| default_value_expression TYPECAST DOUBLE PRECISION array_opt
+  {
+    t := "double precision"
+    if $5 {
+      t += "[]"
+    }
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
+  }
 | default_value_expression '+' default_value_expression
   {
     $$ = &BinaryExpr{Left: $1, Operator: PlusStr, Right: $3}
@@ -8661,6 +8669,14 @@ array_element:
       t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| tuple_expression TYPECAST DOUBLE PRECISION array_opt
+  {
+    t := "double precision"
+    if $5 {
+      t += "[]"
+    }
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
   }
 | variadic_opt array_constructor
   {

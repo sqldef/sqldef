@@ -198,10 +198,17 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 // postgresFloatType returns the type PostgreSQL makes of float(p): real up to 24 bits of
 // precision, and double precision above
 func postgresFloatType(precision *parser.SQLVal) string {
-	if p, err := strconv.Atoi(precision.Val); err == nil && p <= 24 {
+	if isSinglePrecisionFloat(precision) {
 		return "real"
 	}
 	return "double precision"
+}
+
+// isSinglePrecisionFloat reports whether float(p) is single precision, which is up to 24 bits
+// of precision in both PostgreSQL and MySQL
+func isSinglePrecisionFloat(precision *parser.SQLVal) bool {
+	p, err := strconv.Atoi(precision.Val)
+	return err == nil && p <= 24
 }
 
 // normalizeMysqlConvertType normalizes the target type of CAST/CONVERT to the form MySQL stores.
@@ -222,7 +229,7 @@ func normalizeMysqlConvertType(convertType *parser.ConvertType) *parser.ConvertT
 	case "float":
 		// MySQL stores FLOAT(p) as FLOAT for p <= 24 and as DOUBLE otherwise
 		if normalized.Length != nil {
-			if postgresFloatType(normalized.Length) == "double precision" {
+			if !isSinglePrecisionFloat(normalized.Length) {
 				normalized.Type = "double"
 			}
 			normalized.Length = nil
@@ -306,6 +313,21 @@ func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
 
 // isFoldableValueCastTypeName matches the scalar types whose typed-literal and
 // read-back cast spellings converge. Array ("numeric[]") and time types are excluded.
+// canonicalCastTypeName returns the canonical name of a cast's type, so that every spelling of a
+// type ("varchar" and "character varying", "float(53)" and "double precision") is treated the same
+func canonicalCastTypeName(convertType *parser.ConvertType, mode GeneratorMode) string {
+	normalized := normalizeConvertType(convertType, mode)
+	return normalized.Type + normalized.TimeZone
+}
+
+// isTextRelabelCast reports whether a cast is to text or character varying without a length, which
+// PostgreSQL adds implicitly, such as on varchar columns compared with text. It never adds a length,
+// so a cast to varchar(n) is the user's.
+func isTextRelabelCast(convertType *parser.ConvertType, mode GeneratorMode) bool {
+	typeStr := canonicalCastTypeName(convertType, mode)
+	return convertType.Length == nil && (typeStr == "text" || typeStr == "character varying")
+}
+
 func isFoldableValueCastTypeName(typeStr string) bool {
 	switch typeStr {
 	case "numeric", "decimal", "real", "double precision",
@@ -388,7 +410,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 	case *parser.CastExpr:
 		// Numeric/money/interval casts fold to a value-independent form, so reuse the
 		// value-context path; otherwise CHECK keeps its own cast simplification below.
-		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
+		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(canonicalCastTypeName(e.Type, mode)) {
 			return normalizeExpr(e, mode)
 		}
 		// Remove certain casts that PostgreSQL simplifies
@@ -399,7 +421,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			typeStr := strings.ToLower(e.Type.Type)
 
 			// Always remove text casts
-			if typeStr == "text" || typeStr == "character varying" {
+			if isTextRelabelCast(e.Type, mode) {
 				return recur(e.Expr, mode)
 			}
 
@@ -692,11 +714,8 @@ func stripFuncResultTextCasts(expr parser.Expr) parser.Expr {
 		if paren, ok := inner.(*parser.ParenExpr); ok {
 			inner = paren.Expr
 		}
-		if _, isFunc := inner.(*parser.FuncExpr); isFunc && e.Type != nil {
-			typeStr := strings.ToLower(e.Type.Type)
-			if typeStr == "text" || typeStr == "character varying" {
-				return stripFuncResultTextCasts(inner)
-			}
+		if _, isFunc := inner.(*parser.FuncExpr); isFunc && e.Type != nil && isTextRelabelCast(e.Type, GeneratorModePostgres) {
+			return stripFuncResultTextCasts(inner)
 		}
 		return &parser.CastExpr{Expr: stripFuncResultTextCasts(e.Expr), Type: e.Type}
 	case *parser.ParenExpr:
@@ -806,6 +825,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return normalized
 	case *parser.CastExpr:
 		normalizedExpr := normalizeExpr(e.Expr, mode)
+		// Normalize the type name in the cast expression to handle type aliases
+		// e.g., int[]::int[] should become int[]::integer[]
+		normalizedType := normalizeConvertType(e.Type, mode)
 		// For PostgreSQL, unwrap unnecessary parentheses around simple expressions in casts
 		// PostgreSQL adds parentheses like (amount)::numeric, but we want to normalize to amount::numeric
 		if mode == GeneratorModePostgres {
@@ -820,10 +842,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// We strip these redundant casts to generate cleaner DDL
 			// However, we preserve necessary casts like ::interval, ::bpchar, ::json, ::jsonb, and numeric casts
 			if e.Type != nil {
-				// Compare the canonical type name, so that every spelling of a type ("varchar",
-				// "character varying", "float(53)", "double precision") gets the same treatment
-				canonicalType := normalizeConvertType(e.Type, mode)
-				typeStr := canonicalType.Type + canonicalType.TimeZone
+				typeStr := canonicalCastTypeName(e.Type, mode)
 				// Only strip casts on simple string literals (not in expressions)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
 					// Handle string literals
@@ -875,11 +894,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				// PostgreSQL never adds a length, so a cast to varchar(n) is the user's
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName && canonicalType.Length == nil {
-					if typeStr == "text" || typeStr == "character varying" {
-						return normalizedExpr
-					}
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName && isTextRelabelCast(e.Type, mode) {
+					return normalizedExpr
 				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase
@@ -913,7 +929,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// HOWEVER: Empty arrays (ARRAY[]) NEED the typecast or PostgreSQL can't determine the type
 				if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
 					// Check if this is an array type cast (type string ends with [])
-					if strings.HasSuffix(canonicalType.Type, "[]") {
+					if strings.HasSuffix(normalizedType.Type, "[]") {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {
@@ -926,11 +942,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 
-		// Normalize the type name in the cast expression to handle type aliases
-		// e.g., int[]::int[] should become int[]::integer[]
 		return &parser.CastExpr{
 			Expr: normalizedExpr,
-			Type: normalizeConvertType(e.Type, mode),
+			Type: normalizedType,
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)
@@ -1208,9 +1222,32 @@ func normalizeWithinGroup(orderBy parser.OrderBy, mode GeneratorMode) parser.Ord
 func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.SelectExprs {
 	normalized := make(parser.SelectExprs, len(exprs))
 	for i, expr := range exprs {
-		normalized[i] = normalizeSelectExpr(expr, mode)
+		normalized[i] = normalizeOutputSelectExpr(expr, mode)
 	}
 	return normalized
+}
+
+// normalizeOutputSelectExpr normalizes an output column of a view's select list. When
+// normalization changes its default name in PostgreSQL, such as by folding "1::integer" (int4)
+// into "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
+func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
+	normalized := normalizeSelectExpr(expr, mode)
+	aliased, ok := expr.(*parser.AliasedExpr)
+	if !ok || mode != GeneratorModePostgres {
+		return normalized
+	}
+	normalizedAliased := normalized.(*parser.AliasedExpr)
+	if !normalizedAliased.As.IsEmpty() {
+		return normalized
+	}
+	name, ok := selectExprOutputName(aliased.Expr, mode)
+	if !ok || name.Name == "?column?" {
+		return normalized
+	}
+	if normalizedName, ok := selectExprOutputName(normalizedAliased.Expr, mode); ok && strings.EqualFold(normalizedName.Name, name.Name) {
+		return normalized
+	}
+	return &parser.AliasedExpr{Expr: normalizedAliased.Expr, As: name}
 }
 
 // normalizeSelectExpr normalizes a single SELECT expression for views
@@ -1221,17 +1258,9 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		normalizedExpr := normalizeExpr(e.Expr, mode)
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
-		// When normalization changes the default name, such as by folding "1::integer" (int4) into
-		// "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
-		if mode == GeneratorModePostgres {
-			name, ok := selectExprOutputName(e.Expr, mode)
-			if (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
+		if mode == GeneratorModePostgres && !as.IsEmpty() {
+			if name, ok := selectExprOutputName(e.Expr, mode); (ok && NewNormalizedIdent(name) == NewNormalizedIdent(as)) || as.Name == "?column?" {
 				as = parser.NewIdent("", false)
-			}
-			if as.IsEmpty() && ok && name.Name != "?column?" {
-				if normalizedName, ok := selectExprOutputName(normalizedExpr, mode); !ok || !strings.EqualFold(normalizedName.Name, name.Name) {
-					as = name
-				}
 			}
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
@@ -1872,7 +1901,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 	}
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
-		normalized := normalizeSelectExpr(expr, mode)
+		normalized := normalizeOutputSelectExpr(expr, mode)
 		return strings.ToLower(parser.String(normalized))
 	})
 }

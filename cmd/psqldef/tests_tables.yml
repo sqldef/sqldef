@@ -470,3 +470,19 @@ AddColumnWithIsNotDistinctFromDefault:
     ALTER TABLE public.settings DROP COLUMN enabled;
 
 # GiST index with tstzrange type
+
+ColumnExpressionsWithCastTypeSpellings:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a int CHECK (a::float > 0),
+      b text CHECK (length(b::varchar) > 1),
+      bb text CHECK (upper(bb)::varchar <> ''),
+      c text CHECK (c::varchar(3) = 'x'),
+      d double precision DEFAULT 1::float,
+      e double precision[] DEFAULT ARRAY[1]::double precision[],
+      f real DEFAULT 1.5::float(10),
+      g jsonb DEFAULT jsonb_build_object('version', 1::integer),
+      h double precision GENERATED ALWAYS AS (a::float) STORED
+    );
+    CREATE INDEX t_b ON t ((b::varchar));

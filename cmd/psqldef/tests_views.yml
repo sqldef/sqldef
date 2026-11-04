@@ -1155,6 +1155,12 @@ ViewWithFoldedConstantCastDefaultNames:
     CREATE VIEW x AS SELECT 1::integer AS int4 FROM t;
     CREATE VIEW w AS SELECT * FROM (SELECT 1::integer, 1.5::numeric FROM t) s;
 
+ViewWithFoldedConstantCastInFunctionArgument:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int, m jsonb DEFAULT jsonb_build_object('version', 1::integer));
+    CREATE VIEW v AS SELECT coalesce(a, 0::integer) AS c FROM t;
+
 ChangeViewColumnFromFoldedConstantCastToAlias:
   legacy_ignore_quotes: false
   current: |

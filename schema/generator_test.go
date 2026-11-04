@@ -2232,3 +2232,11 @@ func TestNormalizeMysqlConvertTypeFloatPrecision(t *testing.T) {
 	assert.Equal(t, "double", normalizeMysqlConvertType(&parser.ConvertType{Type: "float", Length: parser.NewIntVal("25")}).Type)
 	assert.Nil(t, normalizeMysqlConvertType(&parser.ConvertType{Type: "float", Length: parser.NewIntVal("25")}).Length)
 }
+
+func TestNormalizeExprKeepsFunctionArgumentsUnaliased(t *testing.T) {
+	expr := &parser.FuncExpr{Name: parser.NewIdent("jsonb_build_object", false), Exprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: parser.NewStrVal("version")},
+		&parser.AliasedExpr{Expr: &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "integer"}}},
+	}}
+	assert.Equal(t, "jsonb_build_object('version', 1)", parser.String(normalizeExpr(expr, GeneratorModePostgres)))
+}
