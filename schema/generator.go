@@ -2288,11 +2288,9 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 // quotedOutputAliases returns the output column aliases of a normalized view definition, with the
 // case of quoted ones, since the definitions are compared in lowercase
 func quotedOutputAliases(stmt parser.SelectStatement) []string {
-	switch s := stmt.(type) {
-	case *parser.Union:
-		return quotedOutputAliases(s.Left)
-	case *parser.ParenSelect:
-		return quotedOutputAliases(s.Select)
+	stmt = unwrapParenSelect(stmt)
+	if union, ok := stmt.(*parser.Union); ok {
+		return quotedOutputAliases(union.Left)
 	}
 	sel, ok := stmt.(*parser.Select)
 	if !ok {

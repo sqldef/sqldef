@@ -1710,7 +1710,7 @@ func selectExprOutputName(expr parser.Expr, mode GeneratorMode) (Ident, bool) {
 // column after the type ("1::text" is text, "(x AT TIME ZONE z)::date" is timezone)
 const (
 	colnameUnknown     = iota // not derivable without looking up types
-	colnameWeakUnnamed        // weak, but the name is unknown: a string literal whose cast the parser drops
+	colnameWeakUnnamed        // weak, but the name is unknown, such as a string literal whose cast the parser drops
 	colnameNone               // ?column?
 	colnameWeak
 	colnameStrong
@@ -1761,7 +1761,10 @@ func figureColname(expr parser.Expr) (Ident, int) {
 			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
 			return Ident{}, colnameWeakUnnamed
 		}
-	case *parser.NullVal, parser.BoolVal, *parser.BinaryExpr, *parser.UnaryExpr, *parser.ComparisonExpr, *parser.ConcatExpr,
+	case parser.BoolVal:
+		// PostgreSQL 14 and earlier name a boolean constant bool, and later versions ?column?
+		return Ident{}, colnameWeakUnnamed
+	case *parser.NullVal, *parser.BinaryExpr, *parser.UnaryExpr, *parser.ComparisonExpr, *parser.ConcatExpr,
 		*parser.AndExpr, *parser.OrExpr, *parser.NotExpr, *parser.IsExpr, *parser.RangeCond:
 		return parser.NewIdent("?column?", false), colnameNone
 	}
