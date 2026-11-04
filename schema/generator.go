@@ -2345,11 +2345,13 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		}
 
 		// A quoted output column renamed only in case is a renamed column
-		tableLookup := g.createTableLookup()
-		currentAliases := g.quoteAwareOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
-		desiredAliases := g.quoteAwareOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
-		if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
-			return true
+		if !g.legacyIgnoreQuotes {
+			tableLookup := g.createTableLookup()
+			currentAliases := quotedOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
+			desiredAliases := quotedOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
+			if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
+				return true
+			}
 		}
 
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
