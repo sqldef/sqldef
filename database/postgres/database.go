@@ -132,6 +132,9 @@ func (d *PostgresDatabase) serverMajorVersion() int {
 	}
 	var version int
 	if err := d.db.QueryRow(`SELECT current_setting('server_version_num')::int / 10000`).Scan(&version); err != nil {
+		// Comparing as for the latest version only misses version-specific differences, and the
+		// connection error itself is reported by the export that follows
+		slog.Warn("Failed to read the PostgreSQL server version; comparing as for the latest version", "error", err)
 		version = 0
 	}
 	d.majorVersion = &version

@@ -2211,6 +2211,9 @@ func TestBoolLiteralDefaultAliasDependsOnServerVersion(t *testing.T) {
 		{name: "PostgreSQL 15 names TRUE ?column?", majorVersion: 15, current: `SELECT true AS "?column?"`, desired: "SELECT true"},
 		{name: "PostgreSQL 15 keeps a bool alias", majorVersion: 15, current: "SELECT true AS bool", desired: "SELECT true", changed: true},
 		{name: "offline keeps a bool alias", current: "SELECT true AS bool", desired: "SELECT true", changed: true},
+		{name: "PostgreSQL 14 in UNION", majorVersion: 14, current: "SELECT true AS bool UNION ALL SELECT false AS bool", desired: "SELECT true UNION ALL SELECT false"},
+		{name: "PostgreSQL 14 in a subquery", majorVersion: 14, current: "SELECT 1 AS x FROM (SELECT true AS bool) s", desired: "SELECT 1 AS x FROM (SELECT true) s"},
+		{name: "PostgreSQL 14 in a CTE", majorVersion: 14, current: "WITH c AS (SELECT true AS bool) SELECT 1 AS x FROM c", desired: "WITH c AS (SELECT true) SELECT 1 AS x FROM c"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

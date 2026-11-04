@@ -88,7 +88,8 @@ type GeneratorConfig struct {
 	// exporting: the schema being applied may install an extension that registers operator classes.
 	PostgresDefaultOperatorClasses map[string]bool
 
-	// PostgreSQL-specific: the server's major version, or 0 in offline mode
+	// PostgreSQL-specific: the server's major version, or 0 when it's unknown (offline mode, or
+	// the version couldn't be read), in which case the latest version is assumed
 	PostgresMajorVersion int
 }
 
