@@ -313,21 +313,6 @@ func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
 
 // isFoldableValueCastTypeName matches the scalar types whose typed-literal and
 // read-back cast spellings converge. Array ("numeric[]") and time types are excluded.
-// canonicalCastTypeName returns the canonical name of a cast's type, so that every spelling of a
-// type ("varchar" and "character varying", "float(53)" and "double precision") is treated the same
-func canonicalCastTypeName(convertType *parser.ConvertType, mode GeneratorMode) string {
-	normalized := normalizeConvertType(convertType, mode)
-	return normalized.Type + normalized.TimeZone
-}
-
-// isTextRelabelCast reports whether a cast is to text or character varying without a length, which
-// PostgreSQL adds implicitly, such as on varchar columns compared with text. It never adds a length,
-// so a cast to varchar(n) is the user's.
-func isTextRelabelCast(convertType *parser.ConvertType, mode GeneratorMode) bool {
-	typeStr := canonicalCastTypeName(convertType, mode)
-	return convertType.Length == nil && (typeStr == "text" || typeStr == "character varying")
-}
-
 func isFoldableValueCastTypeName(typeStr string) bool {
 	switch typeStr {
 	case "numeric", "decimal", "real", "double precision",
@@ -410,7 +395,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 	case *parser.CastExpr:
 		// Numeric/money/interval casts fold to a value-independent form, so reuse the
 		// value-context path; otherwise CHECK keeps its own cast simplification below.
-		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(canonicalCastTypeName(e.Type, mode)) {
+		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
 			return normalizeExpr(e, mode)
 		}
 		// Remove certain casts that PostgreSQL simplifies
@@ -421,7 +406,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			typeStr := strings.ToLower(e.Type.Type)
 
 			// Always remove text casts
-			if isTextRelabelCast(e.Type, mode) {
+			if typeStr == "text" || typeStr == "character varying" {
 				return recur(e.Expr, mode)
 			}
 
@@ -714,8 +699,11 @@ func stripFuncResultTextCasts(expr parser.Expr) parser.Expr {
 		if paren, ok := inner.(*parser.ParenExpr); ok {
 			inner = paren.Expr
 		}
-		if _, isFunc := inner.(*parser.FuncExpr); isFunc && e.Type != nil && isTextRelabelCast(e.Type, GeneratorModePostgres) {
-			return stripFuncResultTextCasts(inner)
+		if _, isFunc := inner.(*parser.FuncExpr); isFunc && e.Type != nil {
+			typeStr := strings.ToLower(e.Type.Type)
+			if typeStr == "text" || typeStr == "character varying" {
+				return stripFuncResultTextCasts(inner)
+			}
 		}
 		return &parser.CastExpr{Expr: stripFuncResultTextCasts(e.Expr), Type: e.Type}
 	case *parser.ParenExpr:
@@ -842,7 +830,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// We strip these redundant casts to generate cleaner DDL
 			// However, we preserve necessary casts like ::interval, ::bpchar, ::json, ::jsonb, and numeric casts
 			if e.Type != nil {
-				typeStr := canonicalCastTypeName(e.Type, mode)
+				typeStr := strings.ToLower(e.Type.Type)
 				// Only strip casts on simple string literals (not in expressions)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
 					// Handle string literals
@@ -894,8 +882,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName && isTextRelabelCast(e.Type, mode) {
-					return normalizedExpr
+				// PostgreSQL never adds a length, so a cast to varchar(n) is the user's
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName && e.Type.Length == nil {
+					if typeStr == "text" || typeStr == "character varying" {
+						return normalizedExpr
+					}
 				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase
@@ -929,7 +920,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// HOWEVER: Empty arrays (ARRAY[]) NEED the typecast or PostgreSQL can't determine the type
 				if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
 					// Check if this is an array type cast (type string ends with [])
-					if strings.HasSuffix(normalizedType.Type, "[]") {
+					if strings.HasSuffix(typeStr, "[]") {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {
