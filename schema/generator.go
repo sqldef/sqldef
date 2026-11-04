@@ -2285,8 +2285,15 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
-// quotedOutputAliases returns the output column aliases of a select, with the case of quoted ones
+// quotedOutputAliases returns the output column aliases of a normalized view definition, with the
+// case of quoted ones, since the definitions are compared in lowercase
 func quotedOutputAliases(stmt parser.SelectStatement) []string {
+	switch s := stmt.(type) {
+	case *parser.Union:
+		return quotedOutputAliases(s.Left)
+	case *parser.ParenSelect:
+		return quotedOutputAliases(s.Select)
+	}
 	sel, ok := stmt.(*parser.Select)
 	if !ok {
 		return nil
@@ -2301,6 +2308,14 @@ func quotedOutputAliases(stmt parser.SelectStatement) []string {
 		}
 		return strings.ToLower(aliased.As.Name)
 	})
+}
+
+// quoteAwareOutputAliases returns quotedOutputAliases when quotes are significant
+func (g *Generator) quoteAwareOutputAliases(stmt parser.SelectStatement) []string {
+	if g.mode != GeneratorModePostgres || g.legacyIgnoreQuotes {
+		return nil
+	}
+	return quotedOutputAliases(stmt)
 }
 
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
@@ -2328,6 +2343,14 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 
 		// If columns are removed, we need to DROP and CREATE.
 		if len(currentNormalized) > len(desiredNormalized) {
+			return true
+		}
+
+		// A quoted output column renamed only in case is a renamed column
+		tableLookup := g.createTableLookup()
+		currentAliases := g.quoteAwareOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
+		desiredAliases := g.quoteAwareOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
+		if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
 			return true
 		}
 
@@ -2395,9 +2418,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 			"desired_after_norm", desiredNormalized,
 		)
 
-		// The definitions are compared in lowercase, so a quoted output column renamed only in case
-		// is found by comparing the output columns
-		if currentNormalized != desiredNormalized || !slices.Equal(quotedOutputAliases(currentNormalizedAST), quotedOutputAliases(desiredNormalizedAST)) {
+		currentAliases, desiredAliases := g.quoteAwareOutputAliases(currentNormalizedAST), g.quoteAwareOutputAliases(desiredNormalizedAST)
+		if currentNormalized != desiredNormalized || !slices.Equal(currentAliases, desiredAliases) {
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				var recreateDDLs []statement
 				var dependents []*View

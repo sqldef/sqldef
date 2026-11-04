@@ -292,6 +292,14 @@ func isFoldableValueCastTypeName(typeStr string) bool {
 	return false
 }
 
+// normalizedCheckCastType names a cast type kept in a CHECK, with its length and scale in PostgreSQL
+func normalizedCheckCastType(convertType *parser.ConvertType, normalizedTypeStr string, mode GeneratorMode) *parser.ConvertType {
+	if mode != GeneratorModePostgres {
+		return &parser.ConvertType{Type: normalizedTypeStr}
+	}
+	return &parser.ConvertType{Type: normalizedTypeStr, Length: convertType.Length, Scale: convertType.Scale}
+}
+
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison.
 // mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion).
 func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -405,7 +413,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			// For time types, keep the cast but use normalized type name
 			return &parser.CastExpr{
 				Expr: normalizedExpr,
-				Type: &parser.ConvertType{Type: normalizedTypeStr, Length: e.Type.Length, Scale: e.Type.Scale},
+				Type: normalizedCheckCastType(e.Type, normalizedTypeStr, mode),
 			}
 		}
 		return &parser.CastExpr{
@@ -1147,8 +1155,10 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 	if mode == GeneratorModePostgres {
 		normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
 	}
+	// WITHIN GROUP is compared only for PostgreSQL, as it was ignored before ordered-set aggregates
+	// were supported
 	var withinGroup parser.OrderBy
-	if len(e.WithinGroup) > 0 {
+	if len(e.WithinGroup) > 0 && mode == GeneratorModePostgres {
 		withinGroup = normalizeWithinGroup(e.WithinGroup, mode)
 	}
 	return &parser.FuncExpr{
@@ -1169,10 +1179,8 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 // Which casts it adds is unknown without type lookups, so the casts on both are ignored.
 func normalizeWithinGroup(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
 	normalized := normalizeOrderBy(orderBy, mode)
-	if mode == GeneratorModePostgres {
-		for _, order := range normalized {
-			order.Expr = stripCastsAndParens(order.Expr)
-		}
+	for _, order := range normalized {
+		order.Expr = stripCastsAndParens(order.Expr)
 	}
 	return normalized
 }
@@ -1871,12 +1879,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		aliased, ok := normalized.(*parser.AliasedExpr)
-		if !ok || aliased.As.IsEmpty() || !aliased.As.Quoted {
-			return strings.ToLower(parser.String(normalized))
-		}
-		// A quoted alias keeps its case, which names a different column
-		return strings.ToLower(parser.String(aliased.Expr)) + " as " + aliased.As.Name
+		return strings.ToLower(parser.String(normalized))
 	})
 }
 
