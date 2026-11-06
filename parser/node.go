@@ -781,9 +781,14 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 	}
 }
 
-// addColumn appends the given column to the list in the spec
+// addColumn appends the given column to the list in the spec, and its named or DEFERRABLE UNIQUEs to the indexes
 func (ts *TableSpec) addColumn(cd *ColumnDefinition) {
 	ts.Columns = append(ts.Columns, cd)
+	for _, unique := range cd.Type.InlineUniques {
+		unique.Columns = []IndexColumn{{Column: cd.Name}}
+		ts.addIndex(unique)
+	}
+	cd.Type.InlineUniques = nil
 }
 
 // addIndex appends the given index to the list in the spec
@@ -891,6 +896,8 @@ type ColumnType struct {
 
 	// Key specification
 	KeyOpt ColumnKeyOption
+	// InlineUniques holds column-level UNIQUEs that are named or DEFERRABLE; TableSpec turns them into table constraints.
+	InlineUniques []*IndexDefinition
 
 	References            TableName
 	ReferenceNames        Columns
