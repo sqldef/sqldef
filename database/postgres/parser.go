@@ -1269,6 +1269,13 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 	for _, columnConstraint := range columnDef.Constraints {
 		constraint := columnConstraint.Node.(*pgquery.Node_Constraint).Constraint
 		switch constraint.Contype {
+		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE, pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE,
+			pgquery.ConstrType_CONSTR_ATTR_DEFERRED, pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
+			if foreignKey == nil {
+				return nil, nil, fmt.Errorf("DEFERRABLE and INITIALLY on column %q are only supported after REFERENCES", columnDef.Colname)
+			}
+		}
+		switch constraint.Contype {
 		case pgquery.ConstrType_CONSTR_NULL:
 			columnType.NotNull = parser.NewBoolVal(false)
 		case pgquery.ConstrType_CONSTR_NOTNULL:
@@ -1295,21 +1302,14 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				return nil, nil, err
 			}
 			foreignKey.IndexColumns = []parser.Ident{database.NewIdentWithQuoteDetected(columnDef.Colname)}
-		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE, pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE,
-			pgquery.ConstrType_CONSTR_ATTR_DEFERRED, pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
-			if foreignKey == nil {
-				return nil, nil, fmt.Errorf("DEFERRABLE and INITIALLY on column %q are only supported after REFERENCES", columnDef.Colname)
-			}
-			switch constraint.Contype {
-			case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
-				foreignKey.ConstraintOptions.Deferrable = true
-			case pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
-				foreignKey.ConstraintOptions.Deferrable = false
-			case pgquery.ConstrType_CONSTR_ATTR_DEFERRED:
-				foreignKey.ConstraintOptions.InitiallyDeferred = true
-			case pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
-				foreignKey.ConstraintOptions.InitiallyDeferred = false
-			}
+		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
+			foreignKey.ConstraintOptions.Deferrable = true
+		case pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
+			foreignKey.ConstraintOptions.Deferrable = false
+		case pgquery.ConstrType_CONSTR_ATTR_DEFERRED:
+			foreignKey.ConstraintOptions.InitiallyDeferred = true
+		case pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
+			foreignKey.ConstraintOptions.InitiallyDeferred = false
 		case pgquery.ConstrType_CONSTR_GENERATED:
 			expr, err := p.parseExpr(constraint.RawExpr)
 			if err != nil {
