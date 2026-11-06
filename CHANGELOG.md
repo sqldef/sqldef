@@ -1,3 +1,9 @@
+## [v3.11.30](https://github.com/sqldef/sqldef/compare/v3.11.29...v3.11.30) - 2026-11-06
+
+- build(deps): bump the github-actions group with 4 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1437
+- build(deps): bump golang from 1.27.1-alpine to 1.27.2-alpine in the docker group by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1435
+- build(deps): bump the gomod group with 5 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1436
+
 ## [v3.11.29](https://github.com/sqldef/sqldef/compare/v3.11.28...v3.11.29) - 2026-10-30
 
 - psqldef: support LATERAL and functions in FROM by @gfx in https://github.com/sqldef/sqldef/pull/1433
