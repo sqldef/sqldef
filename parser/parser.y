@@ -4323,6 +4323,10 @@ default_value_expression:
   {
     $$ = $1
   }
+| CURRENT_USER
+  {
+    $$ = &ColName{Name: NewIdent($1, false)}
+  }
 | BIT_LITERAL
   {
     $$ = NewBitVal($1)

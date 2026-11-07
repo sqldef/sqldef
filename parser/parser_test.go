@@ -631,6 +631,20 @@ func TestNowFunctionInDefaultExpression(t *testing.T) {
 	}
 }
 
+func TestCurrentUserInDefaultExpression(t *testing.T) {
+	sql := "CREATE TABLE test (id int primary key, created_by text default current_user not null)"
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse CURRENT_USER default expression: %v", err)
+	}
+
+	got := String(statement)
+	if !strings.Contains(got, "default(current_user)") {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 func TestTypecastTimestampWithTimeZonePreserved(t *testing.T) {
 	// Regression: a cast to timestamp(p)/time(p) with time zone must keep the
 	// time zone modifier when re-serialized. Dropping it turns the cast into a
