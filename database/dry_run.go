@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -62,8 +63,8 @@ func (d *DryRunDatabase) GetTransactionQueries() TransactionQueries {
 	return d.wrapped.GetTransactionQueries()
 }
 
-func (d *DryRunDatabase) SessionSetupQueries() []string {
-	return d.wrapped.SessionSetupQueries()
+func (d *DryRunDatabase) SetupSession(ctx context.Context, conn *sql.Conn) error {
+	return d.wrapped.SetupSession(ctx, conn)
 }
 
 func (d *DryRunDatabase) GetConfig() Config {

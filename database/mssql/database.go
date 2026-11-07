@@ -1,6 +1,7 @@
 package mssql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -894,7 +895,7 @@ func (d *MssqlDatabase) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
 }
 
-func (d *MssqlDatabase) SessionSetupQueries() []string {
+func (d *MssqlDatabase) SetupSession(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 

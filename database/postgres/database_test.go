@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
+	"github.com/lib/pq/pqerror"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/testutil"
 	"github.com/stretchr/testify/assert"
@@ -401,4 +403,10 @@ func TestSplitInlineChecks(t *testing.T) {
 			assert.Equal(t, tc.wantInTable, gotInTable)
 		})
 	}
+}
+
+func TestIsFeatureNotSupported(t *testing.T) {
+	assert.True(t, isFeatureNotSupported(fmt.Errorf("set: %w", &pq.Error{Code: pqerror.FeatureNotSupported})))
+	assert.False(t, isFeatureNotSupported(&pq.Error{Code: pqerror.InsufficientPrivilege}))
+	assert.False(t, isFeatureNotSupported(nil))
 }
