@@ -3,7 +3,9 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"os"
 	"strconv"
@@ -405,8 +407,52 @@ func TestSplitInlineChecks(t *testing.T) {
 	}
 }
 
-func TestIsFeatureNotSupported(t *testing.T) {
-	assert.True(t, isFeatureNotSupported(fmt.Errorf("set: %w", &pq.Error{Code: pqerror.FeatureNotSupported})))
-	assert.False(t, isFeatureNotSupported(&pq.Error{Code: pqerror.InsufficientPrivilege}))
-	assert.False(t, isFeatureNotSupported(nil))
+// sessionSetupConn is a driver connection whose SET check_function_bodies fails with setErr
+// and whose other statements succeed and are recorded.
+type sessionSetupConn struct {
+	setErr   error
+	executed *[]string
+}
+
+func (c sessionSetupConn) Prepare(string) (driver.Stmt, error) { panic("unreachable") }
+func (c sessionSetupConn) Close() error                        { return nil }
+func (c sessionSetupConn) Begin() (driver.Tx, error)           { panic("unreachable") }
+
+func (c sessionSetupConn) ExecContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Result, error) {
+	if strings.HasPrefix(query, "SET check_function_bodies") {
+		if c.setErr != nil {
+			return nil, c.setErr
+		}
+		return driver.ResultNoRows, nil
+	}
+	*c.executed = append(*c.executed, query)
+	return driver.ResultNoRows, nil
+}
+
+type sessionSetupConnector struct{ conn sessionSetupConn }
+
+func (c sessionSetupConnector) Connect(context.Context) (driver.Conn, error) { return c.conn, nil }
+func (c sessionSetupConnector) Driver() driver.Driver                        { panic("unreachable") }
+
+func runDDLsWithSetError(t *testing.T, setErr error) ([]string, error) {
+	var executed []string
+	db := sql.OpenDB(sessionSetupConnector{sessionSetupConn{setErr: setErr, executed: &executed}})
+	t.Cleanup(func() { db.Close() })
+	d := &PostgresDatabase{db: db, config: database.Config{DisableDdlTransaction: true}}
+	err := database.RunDDLs(d, []string{"CREATE TABLE t (id int)"}, "", "", database.NullLogger{})
+	return executed, err
+}
+
+func TestRunDDLsIgnoresUnsupportedCheckFunctionBodies(t *testing.T) {
+	executed, err := runDDLsWithSetError(t, &pq.Error{Code: pqerror.FeatureNotSupported})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"CREATE TABLE t (id int)"}, executed)
+}
+
+func TestRunDDLsStopsWhenSessionSetupFails(t *testing.T) {
+	executed, err := runDDLsWithSetError(t, &pq.Error{Code: pqerror.InsufficientPrivilege})
+	var pqErr *pq.Error
+	require.ErrorAs(t, err, &pqErr)
+	assert.Equal(t, pqerror.InsufficientPrivilege, pqErr.Code)
+	assert.Empty(t, executed)
 }
