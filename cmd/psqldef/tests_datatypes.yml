@@ -789,6 +789,20 @@ ColumnOfCollatedDomainWithDefaultCollation:
     CREATE DOMAIN d AS text COLLATE "C";
     CREATE TABLE users (x d COLLATE "default");
 
+ColumnAndIndexWithCollationQualifiedByDefaultSchema:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE TABLE t (a text COLLATE pg_catalog."C", b text COLLATE pg_catalog."POSIX");
+    CREATE INDEX t_a ON t (a COLLATE "POSIX");
+  up: |
+    ALTER TABLE public.t ADD COLUMN b text COLLATE "POSIX";
+    CREATE INDEX t_a ON public.t (a COLLATE "POSIX");
+  down: |
+    DROP INDEX public.t_a;
+    ALTER TABLE public.t DROP COLUMN b;
+
 ColumnCollationOmittedInDesiredIsKept:
   legacy_ignore_quotes: false
   current: |

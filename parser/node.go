@@ -38,34 +38,37 @@ type nodeBuffer struct {
 	postgresQuotes bool
 	// foldUnquoted writes unquoted identifiers in lowercase, as PostgreSQL folds them
 	foldUnquoted bool
-	// comparisonKey writes identifiers and string literals as placeholders into protected, so
-	// that ComparisonKey can fold the case of everything else
+	// comparisonKey writes identifiers as placeholders into protected, so that a comparison key
+	// can fold the case of everything else, and records string literals into literals
 	comparisonKey  bool
 	foldQuoted     bool
 	dropQualifiers bool
-	// foldLiterals folds the case of string literals that a cast reads case-insensitively
-	foldLiterals bool
-	protected    []string
+	protected      []string
+	literals       []keyLiteral
+	// literalType is the type of the cast whose operand is being formatted
+	literalType string
 }
 
-// dropsQualifier reports whether a comparison key leaves out a qualifier. A quoted one is kept, as
-// pg_get_viewdef() writes it whenever it has to be quoted.
+// keyLiteral is a string literal in a comparison key
+type keyLiteral struct {
+	value string
+	// stringTyped is whether the literal is cast to a string type, whose case is significant.
+	// PostgreSQL rewrites constants of other types such as uuid and regclass in its own case.
+	stringTyped bool
+}
+
+// dropsQualifier reports whether a comparison key leaves out a qualifier. pg_get_viewdef() omits
+// a schema on the search path even when it was quoted, so only a name that has to be quoted is kept.
 func (buf *nodeBuffer) dropsQualifier(qualifier Ident) bool {
-	return buf.dropQualifiers && !qualifier.Quoted
+	return buf.dropQualifiers && (!qualifier.Quoted || qualifier.Name == foldASCII(qualifier.Name))
 }
 
-// formatCastOperand formats the operand of a cast. PostgreSQL rewrites a constant of a type such
-// as uuid or timestamp in its own case ('Infinity'::timestamp is read back as 'infinity'), so
-// a comparison key folds such a literal.
+// formatCastOperand formats the operand of a cast, recording the type of a literal operand
 func (buf *nodeBuffer) formatCastOperand(operand SQLNode, typeName string) {
-	if !buf.comparisonKey || !isStringLiteral(operand) || !isCaseInsensitiveLiteralType(typeName) {
-		operand.Format(buf)
-		return
+	if isStringLiteral(operand) {
+		buf.literalType = typeName
 	}
-	saved := buf.foldLiterals
-	buf.foldLiterals = true
 	operand.Format(buf)
-	buf.foldLiterals = saved
 }
 
 func isStringLiteral(node SQLNode) bool {
@@ -78,13 +81,11 @@ func isStringLiteral(node SQLNode) bool {
 	return false
 }
 
-func isCaseInsensitiveLiteralType(typeName string) bool {
+// isStringLiteralType reports whether the case of a literal of the type is significant
+func isStringLiteralType(typeName string) bool {
 	switch strings.TrimSuffix(strings.ToLower(typeName), "[]") {
-	case "uuid", "boolean", "bool", "date", "time", "timetz", "timestamp", "timestamptz",
-		"time with time zone", "time without time zone", "timestamp with time zone", "timestamp without time zone",
-		"interval", "numeric", "decimal", "real", "double precision", "float", "float4", "float8",
-		"smallint", "integer", "int", "bigint", "int2", "int4", "int8",
-		"inet", "cidr", "macaddr", "macaddr8", "money":
+	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext",
+		"json", "jsonb", "xml", "bytea":
 		return true
 	}
 	return false
@@ -93,6 +94,16 @@ func isCaseInsensitiveLiteralType(typeName string) bool {
 func (buf *nodeBuffer) writeProtected(s string) {
 	buf.WriteString("\x00" + strconv.Itoa(len(buf.protected)) + "\x00")
 	buf.protected = append(buf.protected, s)
+}
+
+// foldASCII folds an identifier as PostgreSQL does, which lowercases ASCII letters only
+func foldASCII(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, name)
 }
 
 // Printf mimics fmt.Fprintf(buf, ...), but limited to %s for string and %v for Node.
@@ -153,31 +164,46 @@ func PostgresString(node SQLNode) string {
 
 var protectedPlaceholder = regexp.MustCompile("\x00([0-9]+)\x00")
 
-// ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names and unquoted
-// identifiers compare case-insensitively, while string literals and quoted identifiers keep their
+// ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
+// literals and unquoted identifiers compare case-insensitively, while quoted identifiers keep their
 // case. foldQuoted folds quoted identifiers too, for the legacy mode that ignores quotes.
 func ComparisonKey(node SQLNode, foldQuoted bool) string {
-	return comparisonKey(node, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted})
+	key, _ := comparisonKey(node, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted})
+	return key
 }
 
-// UnqualifiedComparisonKey is ComparisonKey without the qualifiers of column, table and function
-// names, which pg_get_viewdef() adds or omits depending on whether a name is ambiguous
-func UnqualifiedComparisonKey(node SQLNode, foldQuoted bool) string {
-	return comparisonKey(node, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted, dropQualifiers: true})
+// SameForComparison reports whether two PostgreSQL expressions have the same ComparisonKey and
+// their string literals differ in case only where neither side is known to be of a non-string type.
+// dropQualifiers leaves out the qualifiers that pg_get_viewdef() adds or omits depending on
+// whether a name is ambiguous or on the search path.
+func SameForComparison(a, b SQLNode, foldQuoted, dropQualifiers bool) bool {
+	keyA, literalsA := comparisonKey(a, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted, dropQualifiers: dropQualifiers})
+	keyB, literalsB := comparisonKey(b, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted, dropQualifiers: dropQualifiers})
+	if keyA != keyB || len(literalsA) != len(literalsB) {
+		return false
+	}
+	for i, literalA := range literalsA {
+		literalB := literalsB[i]
+		if literalA.value != literalB.value && (literalA.stringTyped || literalB.stringTyped) {
+			return false
+		}
+	}
+	return true
 }
 
-func comparisonKey(node SQLNode, buf nodeBuffer) string {
+func comparisonKey(node SQLNode, buf nodeBuffer) (string, []keyLiteral) {
 	node.Format(&buf)
-	return protectedPlaceholder.ReplaceAllStringFunc(strings.ToLower(buf.String()), func(m string) string {
+	key := protectedPlaceholder.ReplaceAllStringFunc(strings.ToLower(buf.String()), func(m string) string {
 		i, _ := strconv.Atoi(m[1 : len(m)-1])
 		return buf.protected[i]
 	})
+	return key, buf.literals
 }
 
 func (buf *nodeBuffer) writeIdentKey(n Ident) {
 	name := n.Name
 	if !n.Quoted || buf.foldQuoted {
-		name = strings.ToLower(name)
+		name = foldASCII(name)
 	}
 	buf.writeProtected(name)
 }
@@ -2503,11 +2529,9 @@ func (node literalNode) Format(buf *nodeBuffer) {
 }
 
 func encodeSQLBytes(val string, buf *nodeBuffer) {
-	if buf.comparisonKey && !buf.foldLiterals {
-		literal := nodeBuffer{}
-		encodeSQLBytes(val, &literal)
-		buf.writeProtected(literal.String())
-		return
+	if buf.comparisonKey {
+		buf.literals = append(buf.literals, keyLiteral{value: val, stringTyped: isStringLiteralType(buf.literalType)})
+		buf.literalType = ""
 	}
 	buf.WriteByte('\'')
 	for _, ch := range val {

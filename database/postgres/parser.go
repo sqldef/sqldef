@@ -1280,7 +1280,7 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 		return nil, nil, err
 	}
 	if columnDef.CollClause != nil {
-		columnType.Collate = lastNameOf(columnDef.CollClause.Collname)
+		columnType.Collate = collationName(columnDef.CollClause.Collname)
 	}
 
 	var foreignKey *parser.ForeignKeyDefinition
@@ -1890,4 +1890,15 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 	return &parser.MultiStatement{
 		Statements: statements,
 	}, nil
+}
+
+// collationName returns a collation name in the form the generic parser gives it: a qualified one
+// as SQL, and one in pg_catalog unqualified
+func collationName(names []*pgquery.Node) string {
+	if len(names) == 2 {
+		if schema := names[0].GetString_().GetSval(); schema != "pg_catalog" {
+			return parser.PostgresString(parser.NewIdent(schema, true)) + "." + parser.PostgresString(parser.NewIdent(lastNameOf(names), true))
+		}
+	}
+	return lastNameOf(names)
 }

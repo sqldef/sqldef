@@ -2406,25 +2406,23 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		tableLookup := g.createTableLookup()
 		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
-		// Only PostgreSQL keeps the case of quoted identifiers; the other databases' exports quote
-		// every identifier
-		var currentNormalized, desiredNormalized string
-		if g.mode == GeneratorModePostgres {
-			currentNormalized = parser.UnqualifiedComparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
-			desiredNormalized = parser.UnqualifiedComparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
-		} else {
-			currentNormalized = strings.ToLower(parser.String(currentNormalizedAST))
-			desiredNormalized = strings.ToLower(parser.String(desiredNormalizedAST))
-		}
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
 			"desired_before_norm", parser.String(desiredView.definition),
-			"current_after_norm", currentNormalized,
-			"desired_after_norm", desiredNormalized,
+			"current_after_norm", parser.String(currentNormalizedAST),
+			"desired_after_norm", parser.String(desiredNormalizedAST),
 		)
+		// Only PostgreSQL keeps the case of quoted identifiers; the other databases' exports quote
+		// every identifier
+		var sameDefinitions bool
+		if g.mode == GeneratorModePostgres {
+			sameDefinitions = parser.SameForComparison(currentNormalizedAST, desiredNormalizedAST, g.legacyIgnoreQuotes, true)
+		} else {
+			sameDefinitions = strings.EqualFold(parser.String(currentNormalizedAST), parser.String(desiredNormalizedAST))
+		}
 
 		currentAliases, desiredAliases := g.quoteAwareOutputAliases(currentNormalizedAST), g.quoteAwareOutputAliases(desiredNormalizedAST)
-		if currentNormalized != desiredNormalized || !slices.Equal(currentAliases, desiredAliases) {
+		if !sameDefinitions || !slices.Equal(currentAliases, desiredAliases) {
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				var recreateDDLs []statement
 				var dependents []*View
@@ -3177,13 +3175,8 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 
 func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstraint, expression parser.Expr) bool {
 	normalizedExpr := normalizeCheckExpr(expression, g.mode)
-	normalizedExprStr := parser.ComparisonKey(normalizedExpr, g.legacyIgnoreQuotes)
-
 	for _, c := range constraints {
-		normalizedC := normalizeCheckExpr(c.expression, g.mode)
-		normalizedCStr := parser.ComparisonKey(normalizedC, g.legacyIgnoreQuotes)
-
-		if normalizedCStr == normalizedExprStr {
+		if parser.SameForComparison(normalizeCheckExpr(c.expression, g.mode), normalizedExpr, g.legacyIgnoreQuotes, false) {
 			return true
 		}
 	}
@@ -5915,7 +5908,10 @@ func (g *Generator) canonicalCollation(collation string) string {
 	if collation == "default" {
 		return ""
 	}
-	return strings.TrimPrefix(collation, g.forceEscapeSQLName(g.defaultSchema)+".")
+	if name, ok := strings.CutPrefix(collation, g.forceEscapeSQLName(g.defaultSchema)+"."); ok {
+		return strings.ReplaceAll(strings.Trim(name, `"`), `""`, `"`)
+	}
+	return collation
 }
 
 // withKeptCollation returns the desired column with the current collation when it omits one, as
@@ -6089,7 +6085,7 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
 	if g.mode == GeneratorModePostgres {
-		return parser.ComparisonKey(normalizedA, g.legacyIgnoreQuotes) == parser.ComparisonKey(normalizedB, g.legacyIgnoreQuotes)
+		return parser.SameForComparison(normalizedA, normalizedB, g.legacyIgnoreQuotes, false)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
 }
@@ -6186,7 +6182,7 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 	case *parser.FuncExpr:
 		if d.mode == GeneratorModePostgres {
 			// pg_get_indexdef() leaves out the schema of a function on the search path
-			if q := strings.ToLower(e.Qualifier.Name); !e.Qualifier.Quoted && (q == "pg_catalog" || q == "public") {
+			if q := e.Qualifier.Name; q == "pg_catalog" || q == d.defaultSchema {
 				unqualified := *e
 				unqualified.Qualifier = parser.Ident{}
 				return parser.PostgresFoldedString(&unqualified)
@@ -6306,9 +6302,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	var desiredExprSchema, desiredExpr string
 
 	if g.mode == GeneratorModePostgres {
-		currentExprSchema, currentExpr = splitTableName(parser.ComparisonKey(normalizedCurrent, g.legacyIgnoreQuotes), g.defaultSchema)
-		desiredExprSchema, desiredExpr = splitTableName(parser.ComparisonKey(normalizedDesired, g.legacyIgnoreQuotes), g.defaultSchema)
-		return currentExprSchema == desiredExprSchema && currentExpr == desiredExpr
+		return parser.SameForComparison(g.withoutDefaultSchema(normalizedCurrent), g.withoutDefaultSchema(normalizedDesired), g.legacyIgnoreQuotes, false)
 	}
 	currentExprSchema, currentExpr = splitTableName(parser.String(normalizedCurrent), g.defaultSchema)
 	desiredExprSchema, desiredExpr = splitTableName(parser.String(normalizedDesired), g.defaultSchema)
@@ -6318,6 +6312,17 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
+}
+
+// withoutDefaultSchema drops the default schema from a function call, which PostgreSQL leaves out
+// of a default it reads back
+func (g *Generator) withoutDefaultSchema(expr parser.Expr) parser.Expr {
+	if funcExpr, ok := expr.(*parser.FuncExpr); ok && strings.EqualFold(funcExpr.Qualifier.Name, g.defaultSchema) {
+		unqualified := *funcExpr
+		unqualified.Qualifier = parser.Ident{}
+		return &unqualified
+	}
+	return expr
 }
 
 // unwrapCast strips a type cast from an expression, returning the inner expression.
@@ -7032,7 +7037,7 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
 	if g.mode == GeneratorModePostgres {
-		return parser.ComparisonKey(normalizedA, g.legacyIgnoreQuotes) == parser.ComparisonKey(normalizedB, g.legacyIgnoreQuotes)
+		return parser.SameForComparison(normalizedA, normalizedB, g.legacyIgnoreQuotes, false)
 	}
 	// TODO: case-insensitive comparison is not always correct
 	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))

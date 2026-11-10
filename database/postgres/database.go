@@ -1573,7 +1573,7 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	  s.identity_generation,
 	  -- The collation is written only when it differs from the type's, as pg_dump does
 	  CASE WHEN f.attcollation <> t.typcollation THEN
-	    CASE WHEN cn.nspname IN ('pg_catalog', current_schema()) THEN quote_ident(co.collname)
+	    CASE WHEN cn.nspname = 'pg_catalog' THEN quote_ident(co.collname)
 	    ELSE quote_ident(cn.nspname) || '.' || quote_ident(co.collname) END
 	  END
 	FROM pg_attribute f

@@ -1153,6 +1153,13 @@ ChangeViewStringLiteralContainingDot:
   down: |
     CREATE OR REPLACE VIEW public.v AS select a from t where a = 'x.y';
 
+ViewWithLiteralsPostgresqlRewritesInItsOwnCase:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id uuid, s text);
+    CREATE VIEW v AS SELECT id FROM t WHERE id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11';
+    CREATE VIEW w AS SELECT s FROM "public"."t";
+
 ChangeWithinGroupOrderInView:
   legacy_ignore_quotes: false
   current: |

@@ -800,12 +800,11 @@ func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T
 ) t`)
 	tableLookup := func(QualifiedName) *Table { return nil }
 
-	normalize := func(definition parser.SelectStatement) string {
-		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
-		return parser.UnqualifiedComparisonKey(normalized, true)
+	normalize := func(definition parser.SelectStatement) parser.SelectStatement {
+		return normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
 	}
 
-	assert.Equal(t, normalize(current), normalize(desired))
+	assert.True(t, parser.SameForComparison(normalize(current), normalize(desired), true, true))
 }
 
 func TestNormalizeViewDefinitionExpandsStarFromTable(t *testing.T) {
