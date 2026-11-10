@@ -233,9 +233,13 @@ func (s createViewStatement) Render() string {
 	if s.orReplace {
 		ddl += "OR REPLACE "
 	}
-	definition := parser.String(s.view.definition)
+	viewDefinition := s.view.definition
+	if s.d.mode == GeneratorModePostgres {
+		viewDefinition = withDroppedOutputCasts(viewDefinition)
+	}
+	definition := parser.String(viewDefinition)
 	if s.d.mode == GeneratorModePostgres && !s.d.legacyIgnoreQuotes {
-		definition = parser.PostgresString(s.view.definition)
+		definition = parser.PostgresString(viewDefinition)
 	}
 	if s.view.viewType == "SQL SECURITY" {
 		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)
@@ -1121,4 +1125,27 @@ func (a disableRowLevelSecurityAction) render(dialect) string {
 		return "NO FORCE ROW LEVEL SECURITY"
 	}
 	return "DISABLE ROW LEVEL SECURITY"
+}
+
+// withDroppedOutputCasts puts back the casts that the parser dropped from string literals in the
+// output columns of a view, as they give an unaliased column its name and type
+func withDroppedOutputCasts(definition parser.SelectStatement) parser.SelectStatement {
+	sel, ok := definition.(*parser.Select)
+	if !ok {
+		return definition
+	}
+	exprs := make(parser.SelectExprs, len(sel.SelectExprs))
+	for i, expr := range sel.SelectExprs {
+		exprs[i] = expr
+		if aliased, ok := expr.(*parser.AliasedExpr); ok {
+			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
+				untyped := *val
+				untyped.DroppedCast = nil
+				exprs[i] = &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
+			}
+		}
+	}
+	withCasts := *sel
+	withCasts.SelectExprs = exprs
+	return &withCasts
 }

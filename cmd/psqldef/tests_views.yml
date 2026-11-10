@@ -1594,3 +1594,17 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
     CREATE VIEW public.v1 AS select id, "Val" from t;
     DROP VIEW public.v2;
     CREATE VIEW public.v2 AS select id, "Val" as x from t;
+
+ChangeViewWithCastStringLiteralColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, name text);
+    CREATE VIEW v AS SELECT id, 'active'::text, 'x'::varchar FROM users;
+  desired: |
+    CREATE TABLE users (id int, name text);
+    CREATE VIEW v AS SELECT id, 'active'::text, 'x'::varchar, name FROM users;
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select id, 'active'::text, 'x'::varchar, name from users;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select id, 'active'::text, 'x'::varchar from users;
