@@ -382,8 +382,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		if e.Type != nil {
 			typeStr := strings.ToLower(e.Type.Type)
 
-			// Always remove text casts
-			if typeStr == "text" || typeStr == "character varying" {
+			if isUnsizedStringCastType(e.Type) {
 				return recur(e.Expr, mode)
 			}
 
@@ -658,6 +657,36 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
 }
 
+// isUnsizedStringCastType reports whether a cast is to text or character varying without a length,
+// which PostgreSQL adds implicitly where a string of another string type is expected. A cast with
+// a length truncates, so PostgreSQL never adds one.
+func isUnsizedStringCastType(t *parser.ConvertType) bool {
+	switch strings.ToLower(t.Type) {
+	case "text", "character varying", "varchar":
+		return t.Length == nil
+	}
+	return false
+}
+
+func isColNameExpr(expr parser.Expr) bool {
+	_, ok := expr.(*parser.ColName)
+	return ok
+}
+
+// isStringCastExpr reports whether expr is a cast to a string type, such as the
+// c::character varying(3) that PostgreSQL wraps in an implicit ::text
+func isStringCastExpr(expr parser.Expr) bool {
+	cast, ok := expr.(*parser.CastExpr)
+	if !ok || cast.Type == nil {
+		return false
+	}
+	switch strings.ToLower(cast.Type.Type) {
+	case "text", "character varying", "varchar", "character", "char", "bpchar":
+		return true
+	}
+	return false
+}
+
 // stripFuncResultTextCasts removes text/character varying casts applied to
 // function call results, e.g. current_setting(...)::text -> current_setting(...).
 // PostgreSQL drops such casts when they are no-ops while storing policy
@@ -855,10 +884,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
-					if typeStr == "text" || typeStr == "character varying" {
-						return normalizedExpr
-					}
+				if isUnsizedStringCastType(e.Type) && (isColNameExpr(normalizedExpr) || isStringCastExpr(normalizedExpr)) {
+					return normalizedExpr
 				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase

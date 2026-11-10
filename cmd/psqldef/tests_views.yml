@@ -1241,27 +1241,26 @@ ChangeViewColumnFromFoldedConstantCastToAlias:
     DROP VIEW public.v;
     CREATE VIEW public.v AS select 1::integer;
 
-# FIXME: A cast to character varying(n) on a column is stripped with its length, as PostgreSQL adds character varying casts implicitly, but ::varchar(n) is not, so the views are replaced on every run
-# ViewWithVarcharLengthCastOnColumn:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (b text);
-#     CREATE VIEW x AS SELECT b::varchar(3) FROM t;
-#
-# ChangeViewColumnVarcharCastLength:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (b text);
-#     CREATE VIEW v AS SELECT b::varchar(3) AS r FROM t;
-#   desired: |
-#     CREATE TABLE t (b text);
-#     CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select b::varchar(10) as r from t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select b::varchar(3) as r from t;
+ViewWithVarcharLengthCastOnColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (b text);
+    CREATE VIEW x AS SELECT b::varchar(3) FROM t;
+
+ChangeViewColumnVarcharCastLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(3) AS r FROM t;
+  desired: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select b::varchar(10) as r from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select b::varchar(3) as r from t;
 
 ViewWithVarcharAndFloatCasts:
   legacy_ignore_quotes: false
