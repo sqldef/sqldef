@@ -174,8 +174,8 @@ func isRegType(typeName string) bool {
 	return false
 }
 
-// withoutOmittedSchema leaves out an omitted schema of a relation name in a regclass constant, which
-// PostgreSQL writes back without a schema on the search path
+// withoutOmittedSchema leaves out an omitted schema of a name in a reg* constant, such as regclass,
+// which PostgreSQL writes back without a schema on the search path
 func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
 	if schema, name, ok := strings.Cut(val, "."); ok && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
 		return name
@@ -2534,6 +2534,10 @@ func literalCastType(columnType ColumnType, array BoolVal) *ConvertType {
 		typeName += "[]"
 	}
 	t := &ConvertType{Type: typeName, Length: columnType.Length, Scale: columnType.Scale}
+	// char is char(1), while bpchar has no length
+	if (typeName == "char" || typeName == "character") && t.Length == nil {
+		t.Length = NewIntVal("1")
+	}
 	if columnType.Timezone {
 		t.TimeZone = " with time zone"
 	}
@@ -2690,7 +2694,7 @@ func (node literalNode) Format(buf *nodeBuffer) {
 
 func encodeSQLBytes(val string, buf *nodeBuffer) {
 	if buf.comparisonKey {
-		if FoldASCII(buf.literalType) == "regclass" {
+		if isRegType(FoldASCII(buf.literalType)) {
 			val = buf.withoutOmittedSchema(val)
 		}
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})

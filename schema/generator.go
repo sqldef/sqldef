@@ -217,45 +217,47 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		dialect:                    newDialect(mode, config, defaultSchema),
-		desiredTables:              desiredAggregated.Tables,
-		desiredSizedVarcharColumns: sizedVarcharColumns(desiredAggregated.Tables, mode),
-		currentTables:              aggregated.Tables,
-		desiredViews:               desiredAggregated.Views,
-		currentViews:               aggregated.Views,
-		desiredTriggers:            desiredAggregated.Triggers,
-		currentTriggers:            aggregated.Triggers,
-		desiredEvents:              desiredAggregated.Events,
-		currentEvents:              aggregated.Events,
-		desiredFunctions:           desiredAggregated.Functions,
-		currentFunctions:           aggregated.Functions,
-		desiredTypes:               desiredAggregated.Types,
-		currentTypes:               aggregated.Types,
-		desiredDomains:             desiredAggregated.Domains,
-		currentDomains:             aggregated.Domains,
-		desiredPartitionOfs:        desiredAggregated.PartitionOfs,
-		currentPartitionOfs:        aggregated.PartitionOfs,
-		desiredComments:            desiredAggregated.Comments,
-		currentComments:            aggregated.Comments,
-		recreatedViews:             make(map[string]recreatedView),
-		desiredExtensions:          desiredAggregated.Extensions,
-		currentExtensions:          aggregated.Extensions,
-		desiredSchemas:             desiredAggregated.Schemas,
-		currentSchemas:             aggregated.Schemas,
-		desiredPrivileges:          desiredAggregated.Privileges,
-		currentPrivileges:          aggregated.Privileges,
-		algorithm:                  config.Algorithm,
-		lock:                       config.Lock,
-		config:                     config,
-		handledForeignKeys:         make(map[string]bool),
-		droppedTables:              make(map[string]bool),
-		droppedColumns:             make(map[string]bool),
-		droppedIndexes:             make(map[string]bool),
-		heldBackIndexes:            make(map[string]bool),
-		indexToTable:               make(map[string]QualifiedName),
-		postgresCheckPlans:         make(map[string]*postgresCheckMatchPlan),
-		emittedPrivileges:          make(map[string]bool),
-		postgresIndexPlans:         make(map[string]*postgresIndexMatchPlan),
+		dialect:             newDialect(mode, config, defaultSchema),
+		desiredTables:       desiredAggregated.Tables,
+		currentTables:       aggregated.Tables,
+		desiredViews:        desiredAggregated.Views,
+		currentViews:        aggregated.Views,
+		desiredTriggers:     desiredAggregated.Triggers,
+		currentTriggers:     aggregated.Triggers,
+		desiredEvents:       desiredAggregated.Events,
+		currentEvents:       aggregated.Events,
+		desiredFunctions:    desiredAggregated.Functions,
+		currentFunctions:    aggregated.Functions,
+		desiredTypes:        desiredAggregated.Types,
+		currentTypes:        aggregated.Types,
+		desiredDomains:      desiredAggregated.Domains,
+		currentDomains:      aggregated.Domains,
+		desiredPartitionOfs: desiredAggregated.PartitionOfs,
+		currentPartitionOfs: aggregated.PartitionOfs,
+		desiredComments:     desiredAggregated.Comments,
+		currentComments:     aggregated.Comments,
+		recreatedViews:      make(map[string]recreatedView),
+		desiredExtensions:   desiredAggregated.Extensions,
+		currentExtensions:   aggregated.Extensions,
+		desiredSchemas:      desiredAggregated.Schemas,
+		currentSchemas:      aggregated.Schemas,
+		desiredPrivileges:   desiredAggregated.Privileges,
+		currentPrivileges:   aggregated.Privileges,
+		algorithm:           config.Algorithm,
+		lock:                config.Lock,
+		config:              config,
+		handledForeignKeys:  make(map[string]bool),
+		droppedTables:       make(map[string]bool),
+		droppedColumns:      make(map[string]bool),
+		droppedIndexes:      make(map[string]bool),
+		heldBackIndexes:     make(map[string]bool),
+		indexToTable:        make(map[string]QualifiedName),
+		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
+		emittedPrivileges:   make(map[string]bool),
+		postgresIndexPlans:  make(map[string]*postgresIndexMatchPlan),
+	}
+	if mode == GeneratorModePostgres {
+		generator.desiredSizedVarcharColumns = sizedVarcharColumns(desiredAggregated.Tables, mode)
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -6363,7 +6365,9 @@ func (d dialect) postgresFoldedString(expr parser.Expr) string {
 func (g *Generator) comparisonDialect() dialect {
 	d := g.dialect
 	d.comparing = true
-	d.noOpCast = g.noOpCast
+	if g.mode == GeneratorModePostgres {
+		d.noOpCast = g.noOpCast
+	}
 	return d
 }
 

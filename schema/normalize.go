@@ -1232,20 +1232,29 @@ func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.S
 // into "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
 func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
 	// PostgreSQL stores an untyped string literal as text, so 'x'::text and 'x' differ only in their
-	// names. Both become an untyped literal with its name as an alias. So does a literal whose cast
-	// sqldef does not keep, which it creates as such.
+	// names. Both become an untyped literal with its name as an alias. A literal whose cast sqldef
+	// does not keep, which it creates untyped, keeps its name as an alias too, and its type, which
+	// tells whether the case of its value is significant.
+	var literalName parser.Ident
 	if aliased, ok := expr.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres {
-		if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && (isTextCast(val.DroppedCast) || !parser.KeepsLiteralCast(val.DroppedCast)) {
+		if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
 			as := aliased.As
 			if as.IsEmpty() {
 				as = castTypeColname(val.DroppedCast)
 			}
-			untyped := *val
-			untyped.DroppedCast = nil
-			expr = &parser.AliasedExpr{Expr: &untyped, As: as}
+			if isTextCast(val.DroppedCast) {
+				untyped := *val
+				untyped.DroppedCast = nil
+				expr = &parser.AliasedExpr{Expr: &untyped, As: as}
+			} else if !parser.KeepsLiteralCast(val.DroppedCast) {
+				literalName = as
+			}
 		}
 	}
 	normalized := normalizeSelectExpr(expr, mode)
+	if !literalName.IsEmpty() {
+		return &parser.AliasedExpr{Expr: normalized.(*parser.AliasedExpr).Expr, As: literalName}
+	}
 	aliased, ok := expr.(*parser.AliasedExpr)
 	if !ok || mode != GeneratorModePostgres {
 		return normalized
@@ -1950,10 +1959,6 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 			if val, ok := aliased.Expr.(*parser.SQLVal); ok && parser.KeepsLiteralCast(val.DroppedCast) {
 				castType := *val.DroppedCast
 				castType.Type = normalizeTypeName(castType.Type, mode)
-				// char is char(1), while bpchar has no length
-				if castType.Type == "character" && castType.Length == nil && !strings.EqualFold(val.DroppedCast.Type, "bpchar") {
-					castType.Length = parser.NewIntVal("1")
-				}
 				key += "::" + parser.ComparisonKey(&castType, opts)
 			}
 		}

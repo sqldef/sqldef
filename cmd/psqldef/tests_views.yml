@@ -1664,10 +1664,10 @@ ChangeViewWithStringLiteralCastsInSubqueryAndCTE:
     CREATE TABLE t (id int);
     CREATE VIEW v AS WITH c AS (SELECT 'a'::varchar(3), 'b'::text) SELECT count(*) AS n, 1 AS m FROM c, (SELECT 'x'::char, 'y'::bpchar AS y) s;
   up: |
-    CREATE OR REPLACE VIEW public.v AS WITH c AS (select 'a'::varchar(3), 'b'::text) select count(*) as n, 1 as m from c, (select 'x'::char, 'y'::bpchar as y) as s;
+    CREATE OR REPLACE VIEW public.v AS WITH c AS (select 'a'::varchar(3), 'b'::text) select count(*) as n, 1 as m from c, (select 'x'::char(1), 'y'::bpchar as y) as s;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS WITH c AS (select 'a'::varchar(3), 'b'::text) select count(*) as n from c, (select 'x'::char, 'y'::bpchar as y) as s;
+    CREATE VIEW public.v AS WITH c AS (select 'a'::varchar(3), 'b'::text) select count(*) as n from c, (select 'x'::char(1), 'y'::bpchar as y) as s;
 
 ChangeViewWithStringLiteralCastsToAliasesOfTypes:
   legacy_ignore_quotes: false
@@ -1678,7 +1678,7 @@ ChangeViewWithStringLiteralCastsToAliasesOfTypes:
     CREATE TABLE t (id int);
     CREATE VIEW v AS SELECT 'x'::"text" AS c, 'y'::char AS h, 'z'::"char" AS z, 1 AS m FROM t;
   up: |
-    CREATE OR REPLACE VIEW public.v AS select 'x'::text as c, 'y'::char as h, 'z'::"char" as z, 1 as m from t;
+    CREATE OR REPLACE VIEW public.v AS select 'x'::text as c, 'y'::char(1) as h, 'z'::"char" as z, 1 as m from t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select 'x'::text as c, 'y'::char as h, 'z'::"char" as z from t;
+    CREATE VIEW public.v AS select 'x'::text as c, 'y'::char(1) as h, 'z'::"char" as z from t;

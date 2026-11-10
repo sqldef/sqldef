@@ -11986,7 +11986,7 @@ yydefault:
 	case 614:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
-			// Return the innermost type for chained casts like ::varchar::text
+			// Return the last type of chained casts like ::varchar::text, which types the literal
 			if yyDollar[4].convertType != nil {
 				yyVAL.convertType = yyDollar[4].convertType
 			} else {
