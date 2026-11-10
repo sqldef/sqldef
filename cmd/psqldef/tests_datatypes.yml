@@ -1822,3 +1822,12 @@ ChangeColumnTypeKeepsUnquotedCollationInLegacyMode:
     ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE varchar(20) COLLATE "C";
   down: |
     ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE text COLLATE "C";
+
+AddCollationToColumnInLegacyMode:
+  current: |
+    CREATE TABLE t (a text);
+  desired: |
+    CREATE TABLE t (a text COLLATE C);
+  up: |
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE text COLLATE "C";
+  down: ""

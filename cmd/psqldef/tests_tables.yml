@@ -501,21 +501,20 @@ CheckWithTypedLiteralsInOtherCase:
     );
     CREATE VIEW v AS SELECT id FROM t WHERE ts > 'Infinity'::timestamp AND id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'::uuid;
 
-# FIXME: The case of a literal of a type other than a string type is ignored, as PostgreSQL rewrites constants of many types in its own case
-# ChangeCheckEnumLiteralCase:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TYPE mood AS ENUM ('Active', 'active');
-#     CREATE TABLE users (m mood, CONSTRAINT m_check CHECK (m <> 'Active'));
-#   desired: |
-#     CREATE TYPE mood AS ENUM ('Active', 'active');
-#     CREATE TABLE users (m mood, CONSTRAINT m_check CHECK (m <> 'active'));
-#   up: |
-#     ALTER TABLE public.users DROP CONSTRAINT m_check;
-#     ALTER TABLE public.users ADD CONSTRAINT m_check CHECK (m <> 'active');
-#   down: |
-#     ALTER TABLE public.users DROP CONSTRAINT m_check;
-#     ALTER TABLE public.users ADD CONSTRAINT m_check CHECK (m <> 'Active');
+ChangeCheckEnumLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('Active', 'active');
+    CREATE TABLE users (m mood, CONSTRAINT m_check CHECK (m <> 'Active'));
+  desired: |
+    CREATE TYPE mood AS ENUM ('Active', 'active');
+    CREATE TABLE users (m mood, CONSTRAINT m_check CHECK (m <> 'active'));
+  up: |
+    ALTER TABLE public.users DROP CONSTRAINT m_check;
+    ALTER TABLE public.users ADD CONSTRAINT m_check CHECK (m <> 'active');
+  down: |
+    ALTER TABLE public.users DROP CONSTRAINT m_check;
+    ALTER TABLE public.users ADD CONSTRAINT m_check CHECK (m <> 'Active');
 
 ChangeCheckJsonKeyCaseUnderCast:
   legacy_ignore_quotes: false

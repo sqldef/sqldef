@@ -57,9 +57,8 @@ type nodeBuffer struct {
 // keyLiteral is a string literal in a comparison key
 type keyLiteral struct {
 	value string
-	// caseSignificant is false for a literal of a type whose constants PostgreSQL may rewrite in
-	// its own case, such as uuid
-	caseSignificant bool
+	// typeName is the type the literal is cast to, if any
+	typeName string
 }
 
 func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
@@ -99,20 +98,59 @@ func isStringLiteral(node SQLNode) bool {
 	return false
 }
 
-// isLiteralCaseSignificant reports whether the case of a literal of the type is significant: an
-// untyped literal or one of a string type. PostgreSQL rewrites constants of many other types, such as
-// uuid, pg_lsn or a domain over boolean, in its own case. A reg* constant is a name, which keeps its
-// case only where it is quoted.
-func isLiteralCaseSignificant(val, typeName string) bool {
-	switch strings.TrimSuffix(FoldASCII(typeName), "[]") {
-	case "", "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext",
+// isLiteralCaseSignificant reports whether the case of a literal is significant: it is for an
+// untyped literal or one of a string type, but not for one of a type whose constants PostgreSQL
+// rewrites in its own case, such as uuid. A reg* constant is a name, which keeps its case only where
+// it is quoted. The case of other types, such as an enum or a domain over boolean, is significant
+// only if unknownSignificant is set.
+func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool {
+	typeName := strings.TrimSuffix(FoldASCII(literal.typeName), "[]")
+	if typeName == "" || isStringType(typeName) {
+		return true
+	}
+	if isRegType(typeName) {
+		return strings.Contains(literal.value, `"`)
+	}
+	switch typeName {
+	case "bytea", "int4range", "int8range", "numrange", "tsrange", "tstzrange", "daterange",
+		"int4multirange", "int8multirange", "nummultirange", "tsmultirange", "tstzmultirange",
+		"datemultirange", "uuid", "boolean", "bool", "smallint", "integer", "int", "int2", "int4",
+		"int8", "bigint", "numeric", "decimal", "real", "float4", "float8", "double precision",
+		"money", "date", "time", "timetz", "time without time zone", "time with time zone",
+		"timestamp", "timestamptz", "timestamp without time zone", "timestamp with time zone",
+		"interval", "inet", "cidr", "macaddr", "macaddr8", "bit", "varbit", "bit varying", "oid",
+		"pg_lsn", "tsvector", "tsquery":
+		return false
+	}
+	return unknownSignificant
+}
+
+// isStringType reports whether a PostgreSQL type is a string type, whose constants keep their case
+func isStringType(typeName string) bool {
+	switch typeName {
+	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext",
 		"json", "jsonb", "xml":
 		return true
-	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
-		"regoperator", "regconfig", "regdictionary", "regcollation":
-		return strings.Contains(val, `"`)
 	}
 	return false
+}
+
+func isRegType(typeName string) bool {
+	switch typeName {
+	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
+		"regoperator", "regconfig", "regdictionary", "regcollation":
+		return true
+	}
+	return false
+}
+
+// withoutOmittedSchema leaves out an omitted schema of a relation name in a regclass constant, which
+// PostgreSQL writes back without a schema on the search path
+func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
+	if schema, name, ok := strings.Cut(val, "."); ok && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
+		return name
+	}
+	return val
 }
 
 func (buf *nodeBuffer) writeProtected(s string) {
@@ -201,6 +239,9 @@ type ComparisonOptions struct {
 	// DropSchemas leaves out every schema of table and function names, as sqldef does not know the
 	// search path, which may hold other schemas than the default one
 	DropSchemas bool
+	// UnknownTypesCaseSensitive compares the case of a literal of a type that is neither a string
+	// type nor one whose constants PostgreSQL is known to rewrite, such as an enum
+	UnknownTypesCaseSensitive bool
 }
 
 func (o ComparisonOptions) buffer() nodeBuffer {
@@ -216,7 +257,7 @@ func ComparisonKey(node SQLNode, opts ComparisonOptions) string {
 }
 
 // SameForComparison reports whether two PostgreSQL expressions have the same ComparisonKey and
-// their string literals differ in case only where neither side is known to be of a non-string type.
+// their string literals differ in case only where the case is significant on both sides.
 func SameForComparison(a, b SQLNode, opts ComparisonOptions) bool {
 	keyA, literalsA := comparisonKey(a, opts.buffer())
 	keyB, literalsB := comparisonKey(b, opts.buffer())
@@ -225,7 +266,9 @@ func SameForComparison(a, b SQLNode, opts ComparisonOptions) bool {
 	}
 	for i, literalA := range literalsA {
 		literalB := literalsB[i]
-		if literalA.value != literalB.value && literalA.caseSignificant && literalB.caseSignificant {
+		if literalA.value != literalB.value &&
+			isLiteralCaseSignificant(literalA, opts.UnknownTypesCaseSensitive) &&
+			isLiteralCaseSignificant(literalB, opts.UnknownTypesCaseSensitive) {
 			return false
 		}
 	}
@@ -2586,7 +2629,10 @@ func (node literalNode) Format(buf *nodeBuffer) {
 
 func encodeSQLBytes(val string, buf *nodeBuffer) {
 	if buf.comparisonKey {
-		buf.literals = append(buf.literals, keyLiteral{value: val, caseSignificant: isLiteralCaseSignificant(val, buf.literalType)})
+		if FoldASCII(buf.literalType) == "regclass" {
+			val = buf.withoutOmittedSchema(val)
+		}
+		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
 		buf.literalType = ""
 	}
 	buf.WriteByte('\'')
@@ -2827,6 +2873,15 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	formatFuncName(buf, node.Name)
+	// The first argument of a sequence function is a regclass constant
+	if buf.comparisonKey && len(node.Exprs) > 0 {
+		switch FoldASCII(node.Name.Name) {
+		case "nextval", "currval", "setval":
+			if aliased, ok := node.Exprs[0].(*AliasedExpr); ok && isStringLiteral(aliased.Expr) {
+				buf.literalType = "regclass"
+			}
+		}
+	}
 	buf.Printf("(%s%v)", distinct, node.Exprs)
 	if len(node.WithinGroup) > 0 {
 		buf.Printf(" within group (order by ")

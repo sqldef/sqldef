@@ -1554,3 +1554,9 @@ ViewWithUntypedAndTextStringLiteralsInLegacyMode:
     CREATE VIEW v1 AS SELECT a, 'x' FROM t;
     CREATE VIEW v2 AS SELECT a, 'x' AS "text" FROM t;
     CREATE VIEW v3 AS SELECT CAST('x' AS text) FROM t;
+
+ViewWithNextvalOfSchemaQualifiedSequence:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id serial, n bigint);
+    CREATE VIEW v AS SELECT n FROM t WHERE n > nextval('public.t_id_seq');

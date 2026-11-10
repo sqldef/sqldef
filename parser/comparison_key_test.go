@@ -19,6 +19,8 @@ func TestSameForComparison(t *testing.T) {
 		{"a = 'Active'", "a = 'active'", false},
 		{"a = 'Active'", "a = 'active'::mood", true},
 		{"a > '0/1a'", "a > '0/1A'::pg_lsn", true},
+		{"nextval('public.seq')", "nextval('seq'::regclass)", true},
+		{"nextval('other.seq')", "nextval('seq'::regclass)", false},
 		{"to_regclass('\"Users\"') IS NULL", "to_regclass('\"users\"'::regclass) IS NULL", false},
 		{"to_regclass('Users'::regclass) IS NULL", "to_regclass('users'::regclass) IS NULL", true},
 		{"lower(public.f(a)) = 'x'", "lower(f(a)) = 'x'", true},

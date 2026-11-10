@@ -3681,7 +3681,7 @@ func (d dialect) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 		column += fmt.Sprintf("(%d)", *indexColumn.length)
 	}
 	if indexColumn.collation != "" {
-		column += fmt.Sprintf(" COLLATE %s", d.indexCollationName(indexColumn.collation))
+		column += fmt.Sprintf(" COLLATE %s", d.quotedCollationName(indexColumn.collation))
 	}
 	if indexColumn.operatorClass != "" {
 		column += " " + indexColumn.operatorClass
@@ -4042,9 +4042,9 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
-// indexCollationName writes the collation of an index column. A PostgreSQL one is quoted as written,
-// as sqldef has always done for an index collation.
-func (d dialect) indexCollationName(collation string) string {
+// quotedCollationName writes a collation with a PostgreSQL name quoted as written, as sqldef has
+// always written an index collation, and as the legacy mode writes identifiers
+func (d dialect) quotedCollationName(collation string) string {
 	if d.mode == GeneratorModePostgres {
 		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
 			return d.forceEscapeSQLName(part.Name)
@@ -6168,7 +6168,8 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		checkA.noInherit == checkB.noInherit
 }
 
-// areSameCheckExprs compares two expressions with the CHECK constraint normalization, case-sensitively.
+// areSameCheckExprs compares two expressions with the CHECK constraint normalization,
+// case-sensitively except where PostgreSQL rewrites a constant in its own case.
 func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	normalizedA := normalizeCheckExpr(exprA, g.mode)
 	normalizedB := normalizeCheckExpr(exprB, g.mode)
@@ -6178,7 +6179,9 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
 	if g.mode == GeneratorModePostgres {
-		return parser.SameForComparison(normalizedA, normalizedB, g.comparisonOptions(false))
+		opts := g.comparisonOptions(false)
+		opts.UnknownTypesCaseSensitive = true
+		return parser.SameForComparison(normalizedA, normalizedB, opts)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
 }
@@ -6845,7 +6848,7 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 // an omitted clause has to compare equal to one that restates it. "default" names the database
 // default, which the export never writes out either. An index on a materialized view has no column
 // definitions to resolve against, so its collation is compared as written. Names keep their case as
-// written, as indexCollationName quotes them.
+// written, as quotedCollationName quotes them.
 func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
 	if indexColumn.collation != "" {
 		return g.canonicalCollationFolding(indexColumn.collation, false)
