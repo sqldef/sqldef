@@ -1140,7 +1140,7 @@ ChangeViewWhereToQuotedColumnDifferingInCase:
   down: |
     CREATE OR REPLACE VIEW public.v AS select a as x from t where a is null;
 
-# FIXME: A view's text literal is compared like a regclass name, without the schema PostgreSQL leaves out of it, as sqldef may have written one without its cast
+# FIXME: A view's literal holding a schema-qualified name is compared like a regclass name, without its schema, as sqldef may have written one without its cast
 # ChangeViewStringLiteralContainingDot:
 #   legacy_ignore_quotes: false
 #   current: |

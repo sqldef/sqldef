@@ -178,6 +178,30 @@ func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
 	return val
 }
 
+// isObjectName reports whether a string is an object name with a schema, or a quoted name, as a
+// reg* constant may hold
+func isObjectName(val string) bool {
+	schema, name, ok := strings.Cut(val, ".")
+	if !ok {
+		return isNamePart(val) && strings.HasPrefix(val, `"`)
+	}
+	return isNamePart(schema) && isNamePart(name)
+}
+
+// isNamePart reports whether a string is a quoted identifier or one PostgreSQL reads unquoted
+func isNamePart(part string) bool {
+	if quoted, ok := strings.CutPrefix(part, `"`); ok {
+		name, ok := strings.CutSuffix(quoted, `"`)
+		return ok && name != "" && !strings.Contains(name, `"`)
+	}
+	for i, c := range part {
+		if !(c == '_' || unicode.IsLetter(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
+			return false
+		}
+	}
+	return part != ""
+}
+
 // needsNoQuotes reports whether a name is a lowercase identifier, which PostgreSQL writes unquoted
 // unless it is a keyword
 func needsNoQuotes(name string) bool {
@@ -285,7 +309,8 @@ type ComparisonOptions struct {
 	NoOpCast NoOpCastFunc
 	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass without
 	// its cast, as sqldef writes a view without the casts of its literals. Its name is compared as
-	// PostgreSQL writes it back, and so is a text literal, which may be one written so.
+	// PostgreSQL writes it back, and so is another literal holding a name, which may be one written
+	// so.
 	UntypedRegLiterals bool
 }
 
@@ -2694,8 +2719,9 @@ func encodeSQLBytes(val string, buf *nodeBuffer) {
 		switch typeName := FoldASCII(buf.literalType); {
 		case typeName == "regclass" || buf.untypedRegLiterals && IsRegType(typeName):
 			val = buf.withoutOmittedSchema(val)
-		case buf.untypedRegLiterals && (typeName == "" || typeName == "text"):
-			// A reg* literal that sqldef wrote untyped is stored as text as written
+		case buf.untypedRegLiterals && isObjectName(val):
+			// A reg* literal that sqldef wrote untyped is stored as written, and may be read with
+			// the type of what it is compared with
 			val = buf.withoutOmittedSchema(val)
 		}
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
