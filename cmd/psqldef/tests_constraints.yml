@@ -2407,18 +2407,16 @@ PrimaryKeyWithoutOverlaps:
       CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
     );
 
-# FIXME: Unnamed WITHOUT OVERLAPS constraints are not idempotent because
-# PG auto-generates a constraint name that doesn't match on re-apply.
-# This is a pre-existing issue with unnamed constraints, not specific to WITHOUT OVERLAPS.
-#PrimaryKeyWithoutOverlapsUnnamed:
-#  legacy_ignore_quotes: false
-#  min_version: "18.0"
-#  desired: |
-#    CREATE TABLE reservations (
-#      id integer NOT NULL,
-#      valid_range daterange NOT NULL,
-#      PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
-#    );
+PrimaryKeyWithoutOverlapsUnnamed:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
 
 UniqueWithoutOverlaps:
   legacy_ignore_quotes: false
@@ -2432,17 +2430,17 @@ UniqueWithoutOverlaps:
       CONSTRAINT reservations_uq UNIQUE (room_id, valid_range WITHOUT OVERLAPS)
     );
 
-# FIXME: Unnamed WITHOUT OVERLAPS constraints are not idempotent (same issue as above).
-#UniqueWithoutOverlapsUnnamed:
-#  legacy_ignore_quotes: false
-#  min_version: "18.0"
-#  desired: |
-#    CREATE TABLE reservations (
-#      id integer NOT NULL,
-#      room_id integer NOT NULL,
-#      valid_range daterange NOT NULL,
-#      UNIQUE (room_id, valid_range WITHOUT OVERLAPS)
-#    );
+UniqueWithoutOverlapsUnnamed:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      room_id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      UNIQUE (room_id, valid_range WITHOUT OVERLAPS)
+    );
 
 ForeignKeyWithPeriod:
   legacy_ignore_quotes: false
