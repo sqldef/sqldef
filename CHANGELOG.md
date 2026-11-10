@@ -1,3 +1,7 @@
+## [v3.11.29](https://github.com/sqldef/sqldef/compare/v3.11.28...v3.11.29) - 2026-10-30
+
+- psqldef: support LATERAL and functions in FROM by @gfx in https://github.com/sqldef/sqldef/pull/1433
+
 ## [v3.11.28](https://github.com/sqldef/sqldef/compare/v3.11.27...v3.11.28) - 2026-10-27
 
 - psqldef: keep what belongs to an object the filters leave out by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1405
