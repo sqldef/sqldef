@@ -1198,12 +1198,24 @@ ViewWithCastOfUnnamedExpressionDefaultAliases:
     CREATE VIEW c AS SELECT CASE WHEN a > 0 THEN 1 ELSE a END FROM t;
     CREATE VIEW e AS SELECT CASE WHEN a > 0 THEN a ELSE 1 END FROM t;
 
-# FIXME: The parser drops a cast on a string literal, and PostgreSQL drops a cast to the column's own type, so the default names of these casts are unknown and the views are replaced on every run
-# ViewWithCastOfStringLiteralOrSameTypeDefaultAliases:
+ViewWithCastOfStringLiteralDefaultAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE mood AS ENUM ('ok');
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT 'x'::text, 'y'::varchar, 'ok'::mood, '{}'::int[] FROM t;
+
+# FIXME: The parser rejects a column named text, which is the default name of the cast in the subquery
+# ViewWithStarOverCastOfStringLiteral:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE VIEW w AS SELECT * FROM (SELECT 'x'::text) s;
+
+# FIXME: PostgreSQL drops a cast to the column's own type, so the default name of the outer cast is unknown without the column type and the view is replaced on every run
+# ViewWithCastToSameTypeDefaultAlias:
 #   legacy_ignore_quotes: false
 #   desired: |
 #     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT 'x'::text FROM t;
 #     CREATE VIEW w AS SELECT a::int::text FROM t;
 
 # FIXME: PostgreSQL 14 and earlier name an unaliased TRUE bool instead of ?column?, which needs the server version

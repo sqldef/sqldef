@@ -492,6 +492,15 @@ ColumnExpressionsWithVarcharLengthCast:
   desired: |
     CREATE TABLE t (c text CHECK (c::varchar(3) = 'x'));
 
+CheckWithTypedLiteralsInOtherCase:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id uuid CHECK (id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'::uuid),
+      ts timestamp CHECK (ts < 'Infinity'::timestamp)
+    );
+    CREATE VIEW v AS SELECT id FROM t WHERE ts > 'Infinity'::timestamp AND id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'::uuid;
+
 ChangeCheckVarcharCastLength:
   legacy_ignore_quotes: false
   current: |

@@ -765,6 +765,30 @@ ChangeDefaultStringLiteralCase:
   down: |
     ALTER TABLE public.users ALTER COLUMN name SET DEFAULT lower('ABC');
 
+ColumnWithUnquotedAndQualifiedCollations:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (a text COLLATE UCS_BASIC, b text COLLATE pg_catalog."C");
+
+ChangeColumnFromCollatedTextToEnum:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TABLE users (s text COLLATE "C");
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TABLE users (s mood);
+  up: |
+    ALTER TABLE public.users ALTER COLUMN s TYPE mood USING s::mood;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN s TYPE text COLLATE "C";
+
+ColumnOfCollatedDomainWithDefaultCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE users (x d COLLATE "default");
+
 ColumnCollationOmittedInDesiredIsKept:
   legacy_ignore_quotes: false
   current: |

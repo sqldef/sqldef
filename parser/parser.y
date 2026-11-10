@@ -27,6 +27,15 @@ func setParseTree(yylex any, stmt Statement) {
   yylex.(*Tokenizer).ParseTree = stmt
 }
 
+// foldCollationName returns a collation name as PostgreSQL resolves it. The other databases match
+// collation names case-insensitively, so they keep them as written.
+func foldCollationName(yylex any, name Ident) string {
+  if yylex.(*Tokenizer).mode == ParserModePostgres && !name.Quoted {
+    return strings.ToLower(name.Name)
+  }
+  return name.Name
+}
+
 func setAllowComments(yylex any, allow bool) {
   yylex.(*Tokenizer).AllowComments = allow
 }
@@ -471,7 +480,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
-%type <str> charset_opt collate_opt type_collate_opt
+%type <str> charset_opt collate_opt type_collate_opt collation_name
 %type <boolVal> unsigned_opt zero_fill_opt array_opt cast_array_opt time_zone_opt
 %type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
@@ -3992,13 +4001,13 @@ column_definition_type:
   }
 // SQLite3, MySQL and PostgreSQL also accept COLLATE after other column constraints,
 // e.g. "name text NOT NULL COLLATE NOCASE"; SQL Server does not
-| column_definition_type COLLATE ID
+| column_definition_type COLLATE collation_name
   {
     if yylex.(*Tokenizer).mode == ParserModeMssql {
       yylex.Error("COLLATE must come right after the data type")
       return 1
     }
-    $1.Collate = $3.Name
+    $1.Collate = $3
     $$ = $1
   }
 | column_definition_type default_definition
@@ -5443,9 +5452,9 @@ collate_opt:
   {
     $$ = $1 // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
   }
-| COLLATE ID
+| COLLATE collation_name
   {
-    $$ = $2.Name
+    $$ = $2
   }
 
 // COLLATE right after a type that has no collate_opt of its own, e.g. SQL Server's sysname and ntext
@@ -5454,9 +5463,24 @@ type_collate_opt:
   {
     $$ = ""
   }
-| COLLATE ID
+| COLLATE collation_name
   {
-    $$ = $2.Name
+    $$ = $2
+  }
+
+// PostgreSQL folds an unquoted collation name to lower case, and pg_catalog holds the built-in ones
+collation_name:
+  ID
+  {
+    $$ = foldCollationName(yylex, $1)
+  }
+| ID '.' ID
+  {
+    if schema := foldCollationName(yylex, $1); schema != "pg_catalog" {
+      $$ = schema + "." + foldCollationName(yylex, $3)
+    } else {
+      $$ = foldCollationName(yylex, $3)
+    }
   }
 
 index_definition:
@@ -5722,19 +5746,19 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| sql_id COLLATE charset asc_desc_opt nulls_ordering_opt
+| sql_id COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: $1, Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| non_reserved_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| non_reserved_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| col_name_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| type_func_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| type_func_name_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
@@ -8067,7 +8091,7 @@ value:
     if isFoldableValueCast($2) {
       $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
     } else {
-      $$ = NewStrVal($1)
+      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
     }
   }
 | UNICODE_STRING
@@ -8629,7 +8653,7 @@ array_element:
     if isFoldableValueCast($2) {
       $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
     } else {
-      $$ = NewStrVal($1)
+      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
     }
   }
 | typed_literal

@@ -43,7 +43,35 @@ type nodeBuffer struct {
 	comparisonKey  bool
 	foldQuoted     bool
 	dropQualifiers bool
-	protected      []string
+	// foldLiterals folds the case of string literals that a cast reads case-insensitively
+	foldLiterals bool
+	protected    []string
+}
+
+// formatCastOperand formats the operand of a cast. PostgreSQL rewrites a constant of a type such
+// as uuid or timestamp in its own case ('Infinity'::timestamp is read back as 'infinity'), so
+// a comparison key folds such a literal.
+func (buf *nodeBuffer) formatCastOperand(operand SQLNode, typeName string) {
+	if !buf.comparisonKey || !isCaseInsensitiveLiteralType(typeName) {
+		operand.Format(buf)
+		return
+	}
+	saved := buf.foldLiterals
+	buf.foldLiterals = true
+	operand.Format(buf)
+	buf.foldLiterals = saved
+}
+
+func isCaseInsensitiveLiteralType(typeName string) bool {
+	switch strings.TrimSuffix(strings.ToLower(typeName), "[]") {
+	case "uuid", "boolean", "bool", "date", "time", "timetz", "timestamp", "timestamptz",
+		"time with time zone", "time without time zone", "timestamp with time zone", "timestamp without time zone",
+		"interval", "numeric", "decimal", "real", "double precision", "float", "float4", "float8",
+		"smallint", "integer", "int", "bigint", "int2", "int4", "int8",
+		"inet", "cidr", "macaddr", "macaddr8", "bytea", "money":
+		return true
+	}
+	return false
 }
 
 func (buf *nodeBuffer) writeProtected(s string) {
@@ -2291,6 +2319,9 @@ const (
 type SQLVal struct {
 	Type ValType
 	Val  string
+	// DroppedCast is the cast that the parser dropped from a string literal ('x'::text), kept
+	// for the default column name and comparison key, which depend on it
+	DroppedCast *ConvertType
 }
 
 // NewStrVal builds a new StrVal.
@@ -2425,6 +2456,10 @@ func NewValArgWithOpt(in string, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
+		if node.DroppedCast != nil {
+			buf.formatCastOperand(literalNode(node.Val), node.DroppedCast.Type)
+			return
+		}
 		encodeSQLBytes(node.Val, buf)
 	case UnicodeStrVal:
 		buf.WriteRune('N')
@@ -2444,8 +2479,15 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	}
 }
 
+// literalNode formats a string literal
+type literalNode string
+
+func (node literalNode) Format(buf *nodeBuffer) {
+	encodeSQLBytes(string(node), buf)
+}
+
 func encodeSQLBytes(val string, buf *nodeBuffer) {
-	if buf.comparisonKey {
+	if buf.comparisonKey && !buf.foldLiterals {
 		literal := nodeBuffer{}
 		encodeSQLBytes(val, &literal)
 		buf.writeProtected(literal.String())
@@ -2629,7 +2671,8 @@ type TypedLiteral struct {
 
 // Format formats the node.
 func (node *TypedLiteral) Format(buf *nodeBuffer) {
-	buf.Printf("%s %v", node.Type, node.Value)
+	buf.Printf("%s ", node.Type)
+	buf.formatCastOperand(node.Value, node.Type)
 }
 
 // CollateExpr represents dynamic collate operator.
@@ -2824,7 +2867,8 @@ type CastExpr struct {
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v::%v", node.Expr, node.Type)
+	buf.formatCastOperand(node.Expr, node.Type.Type)
+	buf.Printf("::%v", node.Type)
 }
 
 // Convert types
@@ -2846,7 +2890,9 @@ type ConvertExpr struct {
 func (node *ConvertExpr) Format(buf *nodeBuffer) {
 	switch node.Action {
 	case CastStr:
-		buf.Printf("cast(%v as %v)", node.Expr, node.Type)
+		buf.Printf("cast(")
+		buf.formatCastOperand(node.Expr, node.Type.Type)
+		buf.Printf(" as %v)", node.Type)
 		return
 	case TryCastStr:
 		buf.Printf("try_cast(%v as %v)", node.Expr, node.Type)

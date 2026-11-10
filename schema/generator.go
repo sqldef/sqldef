@@ -2406,12 +2406,14 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		tableLookup := g.createTableLookup()
 		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
-		comparisonKey := parser.ComparisonKey
+		// Only PostgreSQL keeps the case of quoted identifiers; the other databases' exports quote
+		// every identifier
+		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
+		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 		if g.mode == GeneratorModePostgres {
-			comparisonKey = parser.UnqualifiedComparisonKey
+			currentNormalized = parser.UnqualifiedComparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
+			desiredNormalized = parser.UnqualifiedComparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
 		}
-		currentNormalized := comparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
-		desiredNormalized := comparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
 			"desired_before_norm", parser.String(desiredView.definition),
@@ -4047,6 +4049,9 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 // its collation names are case-sensitive ("C", "POSIX"), so they are always quoted there.
 func (d dialect) collationName(collation string) string {
 	if d.mode == GeneratorModePostgres {
+		if schema, name, ok := strings.Cut(collation, "."); ok {
+			return d.forceEscapeSQLName(schema) + "." + d.forceEscapeSQLName(name)
+		}
 		return d.forceEscapeSQLName(collation)
 	}
 	return collation
@@ -5901,19 +5906,35 @@ func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool
 	if desired.collate == "" {
 		return true
 	}
-	if strings.EqualFold(desired.collate, "default") {
-		return current.collate == ""
+	return g.canonicalCollation(current.collate) == g.canonicalCollation(desired.collate)
+}
+
+// canonicalCollation drops the default schema, which the export leaves out, and resolves
+// "default" to an omitted collation, which the export writes only for a domain that has its own
+func (g *Generator) canonicalCollation(collation string) string {
+	if collation == "default" {
+		return ""
 	}
-	return current.collate == desired.collate
+	return strings.TrimPrefix(collation, g.defaultSchema+".")
 }
 
 // withKeptCollation returns the desired column with the current collation when it omits one, as
 // ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
 func withKeptCollation(current Column, desired Column) Column {
-	if desired.collate == "" {
+	if desired.collate == "" && (isCollatableType(desired.typeName) || strings.EqualFold(current.typeName, desired.typeName)) {
 		desired.collate = current.collate
 	}
 	return desired
+}
+
+// isCollatableType reports whether a built-in type takes a collation, so a collation can be carried
+// over to it from another type
+func isCollatableType(typeName string) bool {
+	switch strings.ToLower(typeName) {
+	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext":
+		return true
+	}
+	return false
 }
 
 func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
@@ -6067,6 +6088,9 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
+	if g.mode == GeneratorModePostgres {
+		return parser.ComparisonKey(normalizedA, g.legacyIgnoreQuotes) == parser.ComparisonKey(normalizedB, g.legacyIgnoreQuotes)
+	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
 }
 

@@ -1571,9 +1571,11 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	  ELSE format_type(f.atttypid, f.atttypmod)
 	  END,
 	  s.identity_generation,
-	  -- The collation is written only when it differs from the type's, as pg_dump does. Its schema
-	  -- is left out, as it is for index collations, since the parser takes an unqualified name only
-	  CASE WHEN f.attcollation <> t.typcollation THEN quote_ident(co.collname) END
+	  -- The collation is written only when it differs from the type's, as pg_dump does
+	  CASE WHEN f.attcollation <> t.typcollation THEN
+	    CASE WHEN cn.nspname IN ('pg_catalog', current_schema()) THEN quote_ident(co.collname)
+	    ELSE quote_ident(cn.nspname) || '.' || quote_ident(co.collname) END
+	  END
 	FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
@@ -1581,6 +1583,7 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 	LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
 	LEFT JOIN pg_collation co ON co.oid = f.attcollation
+	LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
 	WHERE c.relkind in ('r', 'p')
 	AND n.nspname || '.' || c.relname = ANY($1::text[])
 	AND f.attnum > 0

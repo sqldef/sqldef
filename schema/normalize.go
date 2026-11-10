@@ -376,7 +376,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			return normalizeExpr(e, mode)
 		}
 		// Remove certain casts that PostgreSQL simplifies
-		// - text, character varying: Always removed
+		// - text, character varying: Removed unless they have a length (see isUnsizedStringCastType)
 		// - date, timestamp without time zone: Removed when cast from string literals
 		// - time, time without time zone: Kept but normalized (PostgreSQL preserves these for precision)
 		if e.Type != nil {
@@ -681,7 +681,7 @@ func isStringCastExpr(expr parser.Expr) bool {
 		return false
 	}
 	switch strings.ToLower(cast.Type.Type) {
-	case "text", "character varying", "varchar", "character", "char", "bpchar":
+	case "text", "character varying", "varchar":
 		return true
 	}
 	return false
@@ -1791,7 +1791,10 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		case parser.IntVal, parser.FloatVal:
 			return parser.NewIdent("?column?", false), colnameNone
 		case parser.StrVal:
-			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
+			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL names after the type
+			if e.DroppedCast != nil {
+				return parser.NewIdent(castTypeColname(e.DroppedCast), false), colnameWeak
+			}
 			return Ident{}, colnameWeakUnnamed
 		}
 	case parser.BoolVal:
