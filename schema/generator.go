@@ -305,7 +305,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, out)
 					}
 				}
-				mergeTable(currentTable, desired.table, mergedIndexes, g.collationKeeper())
+				g.mergeTable(currentTable, desired.table, mergedIndexes)
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if !desired.table.renamedFrom.IsEmpty() {
@@ -336,7 +336,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 								interDDLs = append(interDDLs, out)
 							}
 						}
-						mergeTable(oldTable, desired.table, mergedIndexes, g.collationKeeper())
+						g.mergeTable(oldTable, desired.table, mergedIndexes)
 					} else {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, rawStatement(desired.statement))
@@ -4239,12 +4239,12 @@ func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 }
 
 // Destructively modify table1 to have table2 columns and the given indexes
-func mergeTable(table1 *Table, table2 Table, indexes []Index, keepCollation func(current, desired Column) Column) {
+func (g *Generator) mergeTable(table1 *Table, table2 Table, indexes []Index) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
-		if current, ok := table1.columns[column.name.Name]; ok && keepCollation != nil {
+		if current, ok := table1.columns[column.name.Name]; ok && g.mode == GeneratorModePostgres {
 			// An omitted collation keeps the current one (see haveSameColumnCollation)
-			merged := keepCollation(*current, *column)
+			merged := g.withKeptCollation(*current, *column)
 			table1.columns[column.name.Name] = &merged
 			continue
 		}
@@ -5986,15 +5986,6 @@ func postgresNameParts(name string) []Ident {
 	return parts
 }
 
-// collationKeeper returns withKeptCollation for PostgreSQL, the only database that compares column
-// collations only when they are set
-func (g *Generator) collationKeeper() func(current, desired Column) Column {
-	if g.mode != GeneratorModePostgres {
-		return nil
-	}
-	return g.withKeptCollation
-}
-
 // withKeptCollation returns the desired column with the current collation when it omits one, as
 // ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
 func (g *Generator) withKeptCollation(current Column, desired Column) Column {
@@ -6304,7 +6295,6 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 	}
 }
 
-// formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
 // omittedFunctionSchemas returns the schemas left out of function names. pg_get_indexdef() leaves out
 // the schema of a function on the search path, but DDL keeps the default schema, as a function in it
 // would otherwise resolve to one of the same name in pg_catalog.
@@ -6322,6 +6312,7 @@ func (g *Generator) comparisonDialect() dialect {
 	return d
 }
 
+// formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
 func (d dialect) formatSelectExprQuoteAware(expr parser.SelectExpr) string {
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:

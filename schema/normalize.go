@@ -1814,6 +1814,10 @@ func figureCastColname(expr parser.Expr, typ *parser.ConvertType) (Ident, int) {
 // type's internal name ("integer" is int4, "character varying" is varchar)
 func castTypeColname(typ *parser.ConvertType) string {
 	name := strings.TrimSuffix(strings.ToLower(typ.Type), "[]")
+	// The name of a schema-qualified type leaves out its schema
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		name = name[i+1:]
+	}
 	if typ.TimeZone != "" {
 		name += typ.TimeZone
 	}

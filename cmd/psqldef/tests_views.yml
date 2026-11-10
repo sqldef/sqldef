@@ -1530,3 +1530,10 @@ ViewOverTableWithCaseSensitiveName:
   desired: |
     CREATE TABLE "Users" (id integer);
     CREATE VIEW v AS SELECT id FROM "Users";
+
+ViewWithCastOfStringLiteralToSchemaQualifiedType:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE SCHEMA s;
+    CREATE TYPE s.mood AS ENUM ('happy');
+    CREATE VIEW v AS SELECT 'happy'::s.mood;
