@@ -481,7 +481,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
-%type <str> charset_opt collate_opt type_collate_opt collation_name
+%type <str> charset_opt collate_opt type_collate_opt collation_name collation_name_qualified_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt cast_array_opt time_zone_opt
 %type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
@@ -4002,12 +4002,13 @@ column_definition_type:
   }
 // SQLite3, MySQL and PostgreSQL also accept COLLATE after other column constraints,
 // e.g. "name text NOT NULL COLLATE NOCASE"; SQL Server does not
-| column_definition_type COLLATE collation_name
+| column_definition_type COLLATE ID collate_after_constraints collation_name_qualified_opt
   {
-    if yylex.(*Tokenizer).mode == ParserModeMssql {
-      return abortParse(yylex, "COLLATE must come right after the data type")
+    if $5 == "" {
+      $1.Collate = collationNamePart(yylex, $3)
+    } else {
+      $1.Collate = collationNamePart(yylex, $3) + "." + $5
     }
-    $1.Collate = $3
     $$ = $1
   }
 | column_definition_type default_definition
@@ -5469,6 +5470,25 @@ type_collate_opt:
   }
 
 // PostgreSQL folds an unquoted collation name to lower case, and pg_catalog holds the built-in ones
+// collate_after_constraints rejects COLLATE after other column constraints in SQL Server. It is
+// reduced right after the collation's first name, before the parser reads ahead, so that the error
+// points at that name.
+collate_after_constraints:
+  {
+    if yylex.(*Tokenizer).mode == ParserModeMssql {
+      return abortParse(yylex, "COLLATE must come right after the data type")
+    }
+  }
+
+collation_name_qualified_opt:
+  {
+    $$ = ""
+  }
+| '.' ID
+  {
+    $$ = collationNamePart(yylex, $2)
+  }
+
 collation_name:
   ID
   {
