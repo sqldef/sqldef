@@ -233,9 +233,13 @@ func (s createViewStatement) Render() string {
 	if s.orReplace {
 		ddl += "OR REPLACE "
 	}
-	definition := parser.String(s.view.definition)
+	viewDefinition := s.view.definition
+	if s.d.mode == GeneratorModePostgres {
+		viewDefinition = withRegclassOutputCasts(viewDefinition)
+	}
+	definition := parser.String(viewDefinition)
 	if s.d.mode == GeneratorModePostgres && !s.d.legacyIgnoreQuotes {
-		definition = parser.PostgresString(s.view.definition)
+		definition = parser.PostgresString(viewDefinition)
 	}
 	if s.view.viewType == "SQL SECURITY" {
 		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)
@@ -1121,4 +1125,34 @@ func (a disableRowLevelSecurityAction) render(dialect) string {
 		return "NO FORCE ROW LEVEL SECURITY"
 	}
 	return "DISABLE ROW LEVEL SECURITY"
+}
+
+// withRegclassOutputCasts puts back the regclass casts that the parser dropped from string literals in
+// the aliased output columns of a view. Their columns stay regclass, and PostgreSQL stores the names
+// as it writes regclass constants, which the comparison expects. Other literals are written without
+// their casts as before, as is an unaliased one, which the cast would name (see writesRegclassCast).
+func withRegclassOutputCasts(definition parser.SelectStatement) parser.SelectStatement {
+	sel, ok := definition.(*parser.Select)
+	if !ok {
+		return definition
+	}
+	withCasts := *sel
+	withCasts.SelectExprs = util.TransformSlice(sel.SelectExprs, func(expr parser.SelectExpr) parser.SelectExpr {
+		if aliased, ok := expr.(*parser.AliasedExpr); ok {
+			if val, ok := aliased.Expr.(*parser.SQLVal); ok && writesRegclassCast(aliased, val) {
+				untyped := *val
+				untyped.DroppedCast = nil
+				return &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
+			}
+		}
+		return expr
+	})
+	return &withCasts
+}
+
+// writesRegclassCast reports whether withRegclassOutputCasts puts back the cast of a literal. A name
+// with a quote or a backslash is left out, as the literal escapes them in MySQL's style.
+func writesRegclassCast(aliased *parser.AliasedExpr, val *parser.SQLVal) bool {
+	return !aliased.As.IsEmpty() && val.DroppedCast != nil && strings.EqualFold(val.DroppedCast.Type, "regclass") &&
+		!strings.ContainsAny(val.Val, `"'\`)
 }
