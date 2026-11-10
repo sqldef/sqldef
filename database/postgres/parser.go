@@ -1272,13 +1272,16 @@ func (p PostgresParser) parseFkAction(action string) parser.Ident {
 }
 
 func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName parser.TableName) (*parser.ColumnDefinition, *parser.ForeignKeyDefinition, error) {
-	if columnDef.Inhcount != 0 || columnDef.Identity != "" || columnDef.Generated != "" || columnDef.Storage != "" || columnDef.CollClause != nil {
+	if columnDef.Inhcount != 0 || columnDef.Identity != "" || columnDef.Generated != "" || columnDef.Storage != "" {
 		return nil, nil, fmt.Errorf("unhandled node in parseColumnDef: %#v", columnDef)
 	}
 
 	columnType, err := p.parseTypeName(columnDef.TypeName)
 	if err != nil {
 		return nil, nil, err
+	}
+	if columnDef.CollClause != nil {
+		columnType.Collate = lastNameOf(columnDef.CollClause.Collname)
 	}
 
 	var foreignKey *parser.ForeignKeyDefinition

@@ -684,6 +684,48 @@ ColumnCollateAfterOtherConstraints:
       name text NOT NULL COLLATE "C",
       code text DEFAULT '' COLLATE "C"
     );
+
+AddColumnWithCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL);
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, name text COLLATE "C");
+  up: |
+    ALTER TABLE public.users ADD COLUMN name text COLLATE "C";
+  down: |
+    ALTER TABLE public.users DROP COLUMN name;
+
+ChangeColumnTypeKeepsCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name varchar(10) COLLATE "C");
+  desired: |
+    CREATE TABLE users (name varchar(20) COLLATE "C");
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(20) COLLATE "C";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(10) COLLATE "C";
+
+ChangeColumnCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text COLLATE "C");
+  desired: |
+    CREATE TABLE users (name text COLLATE "POSIX");
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "POSIX";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "C";
+
+ColumnCollationOmittedInDesiredIsKept:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text COLLATE "C");
+  desired: |
+    CREATE TABLE users (name text);
+  up: ""
+  down: ""
 CreateTableWithCurrentTimestamp:
   desired: |
     CREATE TABLE timestamps (

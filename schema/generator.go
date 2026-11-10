@@ -1283,7 +1283,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// either side. In that case the column default must be re-applied
 				// around the ALTER (see classifyEnumTypeChange's docstring).
 				var enumTypeChange bool
-				if !g.haveSameDataType(*currentColumn, desiredColumn) {
+				if !g.haveSameDataType(*currentColumn, desiredColumn) || !g.haveSameColumnCollation(*currentColumn, desiredColumn) {
 					// Serial types require changing both column type and sequence type
 					if isPostgresSerialType(currentColumn.typeName) && isPostgresSerialType(desiredColumn.typeName) {
 						underlyingType := getSerialUnderlyingType(desiredColumn.typeName)
@@ -3494,7 +3494,7 @@ func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (str
 		definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
 	}
 	if column.collate != "" {
-		definition += fmt.Sprintf("COLLATE %s ", column.collate)
+		definition += fmt.Sprintf("COLLATE %s ", d.collationName(column.collate))
 	}
 
 	if column.generated == nil {
@@ -4054,6 +4054,15 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 		kind = "MATERIALIZED VIEW"
 	}
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
+}
+
+// collationName renders a column collation. PostgreSQL folds an unquoted name to lower case, but
+// its collation names are case-sensitive ("C", "POSIX"), so they are always quoted there.
+func (d dialect) collationName(collation string) string {
+	if d.mode == GeneratorModePostgres {
+		return d.forceEscapeSQLName(collation)
+	}
+	return collation
 }
 
 func (d dialect) forceEscapeSQLName(name string) string {
@@ -5890,6 +5899,15 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate) &&
 		reflect.DeepEqual(current.comment, desired.comment)
+}
+
+// haveSameColumnCollation compares a PostgreSQL column collation only when the desired column sets
+// one, like haveSameColumnDefinition does for MySQL, since an omitted one may be any default.
+func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool {
+	if desired.collate == "" || strings.EqualFold(desired.collate, "default") {
+		return true
+	}
+	return current.collate == desired.collate
 }
 
 func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
