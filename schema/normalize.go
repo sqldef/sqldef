@@ -665,11 +665,6 @@ func isUnsizedStringCastType(t *parser.ConvertType) bool {
 	return isStringCastType(t) && t.Length == nil
 }
 
-// isTextCast reports whether a cast is to text, which PostgreSQL adds to an untyped string literal
-func isTextCast(t *parser.ConvertType) bool {
-	return t != nil && strings.EqualFold(t.Type, "text") && t.Length == nil
-}
-
 func isStringCastType(t *parser.ConvertType) bool {
 	switch strings.ToLower(t.Type) {
 	case "text", "character varying", "varchar":
@@ -1231,30 +1226,16 @@ func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.S
 // normalization changes its default name in PostgreSQL, such as by folding "1::integer" (int4)
 // into "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
 func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
-	// PostgreSQL stores an untyped string literal as text, so 'x'::text and 'x' differ only in their
-	// names. Both become an untyped literal with its name as an alias. A literal whose cast sqldef
-	// does not keep, which it creates untyped, keeps its name as an alias too, and its type, which
-	// tells whether the case of its value is significant.
-	var literalName parser.Ident
+	// sqldef writes the literal of an output column without the cast that the parser dropped, so a
+	// reg* constant, whose name PostgreSQL resolves, compares as the text it writes
 	if aliased, ok := expr.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres {
-		if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
-			as := aliased.As
-			if as.IsEmpty() {
-				as = castTypeColname(val.DroppedCast)
-			}
-			if isTextCast(val.DroppedCast) {
-				untyped := *val
-				untyped.DroppedCast = nil
-				expr = &parser.AliasedExpr{Expr: &untyped, As: as}
-			} else if !parser.KeepsLiteralCast(val.DroppedCast) {
-				literalName = as
-			}
+		if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && parser.IsRegType(parser.FoldASCII(val.DroppedCast.Type)) {
+			untyped := *val
+			untyped.DroppedCast = nil
+			expr = &parser.AliasedExpr{Expr: &untyped, As: aliased.As}
 		}
 	}
 	normalized := normalizeSelectExpr(expr, mode)
-	if !literalName.IsEmpty() {
-		return &parser.AliasedExpr{Expr: normalized.(*parser.AliasedExpr).Expr, As: literalName}
-	}
 	aliased, ok := expr.(*parser.AliasedExpr)
 	if !ok || mode != GeneratorModePostgres {
 		return normalized
@@ -1814,10 +1795,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		case parser.IntVal, parser.FloatVal:
 			return parser.NewIdent("?column?", false), colnameNone
 		case parser.StrVal:
-			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL names after the type
-			if e.DroppedCast != nil {
-				return castTypeColname(e.DroppedCast), colnameWeak
-			}
+			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL would name after the type
 			return Ident{}, colnameWeakUnnamed
 		}
 	case parser.BoolVal:
@@ -1835,20 +1813,12 @@ func figureCastColname(expr parser.Expr, typ *parser.ConvertType) (Ident, int) {
 	if !isWeakColname(strength) {
 		return name, strength
 	}
-	return castTypeColname(typ), colnameWeak
+	return parser.NewIdent(castTypeColname(typ), false), colnameWeak
 }
 
 // castTypeColname returns the name PostgreSQL gives a column after a cast's type, which is the
 // type's internal name ("integer" is int4, "character varying" is varchar)
-func castTypeColname(typ *parser.ConvertType) parser.Ident {
-	// A quoted type name keeps its case
-	if inner, ok := strings.CutPrefix(strings.TrimSuffix(typ.Type, "[]"), `"`); ok {
-		return parser.NewIdent(strings.ReplaceAll(strings.TrimSuffix(inner, `"`), `""`, `"`), true)
-	}
-	return parser.NewIdent(castTypeColnameUnquoted(typ), false)
-}
-
-func castTypeColnameUnquoted(typ *parser.ConvertType) string {
+func castTypeColname(typ *parser.ConvertType) string {
 	name := strings.TrimSuffix(strings.ToLower(typ.Type), "[]")
 	// The name of a schema-qualified type leaves out its schema
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
@@ -1953,16 +1923,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		key := parser.ComparisonKey(normalized, opts)
-		// The cast of a string literal, which the comparison key leaves out, types the column
-		if aliased, ok := normalized.(*parser.AliasedExpr); ok {
-			if val, ok := aliased.Expr.(*parser.SQLVal); ok && parser.KeepsLiteralCast(val.DroppedCast) {
-				castType := *val.DroppedCast
-				castType.Type = normalizeTypeName(castType.Type, mode)
-				key += "::" + parser.ComparisonKey(&castType, opts)
-			}
-		}
-		return key
+		return parser.ComparisonKey(normalized, opts)
 	})
 }
 

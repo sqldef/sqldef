@@ -4910,11 +4910,15 @@ character_cast_opt:
   }
 | TYPECAST column_type array_opt character_cast_opt
   {
-    // Return the last type of chained casts like ::varchar::text, which types the literal
+    // Return the innermost type for chained casts like ::varchar::text
     if $4 != nil {
       $$ = $4
     } else {
-      $$ = literalCastType($2, $3)
+      typeName := $2.Type
+      if $3 {
+        typeName = typeName + "[]"
+      }
+      $$ = &ConvertType{Type: typeName}
     }
   }
 

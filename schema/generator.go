@@ -2373,10 +2373,44 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 			}
 		}
 
+		// sqldef writes a literal without the cast that the parser dropped, so its column becomes text
+		if changesLiteralColumnToText(currentView.definition, desiredView.definition) {
+			return true
+		}
+
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
 		return !reflect.DeepEqual(currentNormalized, desiredNormalized[:len(currentNormalized)])
 	}
 
+	return false
+}
+
+// changesLiteralColumnToText reports whether an output column of the current view that may not be
+// text is a string literal in the desired view, which sqldef writes untyped, so that it becomes text
+func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
+	currentSelect, ok := unwrapParenSelect(current).(*parser.Select)
+	if !ok {
+		return false
+	}
+	desiredSelect, ok := unwrapParenSelect(desired).(*parser.Select)
+	if !ok {
+		return false
+	}
+	isText := func(expr parser.SelectExpr) bool {
+		aliased, ok := expr.(*parser.AliasedExpr)
+		if !ok {
+			return false
+		}
+		val, ok := aliased.Expr.(*parser.SQLVal)
+		return ok && val.Type == parser.StrVal && (val.DroppedCast == nil || strings.EqualFold(val.DroppedCast.Type, "text"))
+	}
+	for i, expr := range desiredSelect.SelectExprs[:min(len(currentSelect.SelectExprs), len(desiredSelect.SelectExprs))] {
+		if aliased, ok := expr.(*parser.AliasedExpr); ok {
+			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && !isText(currentSelect.SelectExprs[i]) {
+				return true
+			}
+		}
+	}
 	return false
 }
 

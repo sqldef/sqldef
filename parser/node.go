@@ -111,7 +111,7 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 	if typeName == "" || isStringType(typeName) {
 		return true
 	}
-	if isRegType(typeName) {
+	if IsRegType(typeName) {
 		return strings.Contains(literal.value, `"`)
 	}
 	switch typeName {
@@ -126,21 +126,6 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 		return false
 	}
 	return unknownSignificant
-}
-
-// KeepsLiteralCast reports whether sqldef keeps a cast that the parser dropped from a string literal
-// where it names or types a view's output column: one to a string type, whose literal PostgreSQL
-// stores as written. A literal of another type, which PostgreSQL may rewrite (such as 't'::boolean
-// as true), stays untyped.
-func KeepsLiteralCast(t *ConvertType) bool {
-	if t == nil {
-		return false
-	}
-	switch FoldASCII(t.Type) {
-	case "text", "character varying", "varchar", "character", "char", "bpchar", `"char"`, "name":
-		return true
-	}
-	return false
 }
 
 // isStringType reports whether a PostgreSQL type is a string type, whose constants keep their case
@@ -165,7 +150,9 @@ func IsSizedStringCast(t *ConvertType) bool {
 	return false
 }
 
-func isRegType(typeName string) bool {
+// IsRegType reports whether a type is an OID alias type such as regclass, whose constant names an
+// object
+func IsRegType(typeName string) bool {
 	switch typeName {
 	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
 		"regoperator", "regconfig", "regdictionary", "regcollation":
@@ -2538,29 +2525,6 @@ func postgresFloatTypeName(precision string) string {
 		return "real"
 	}
 	return "double precision"
-}
-
-// literalCastType is the type of a cast that the parser drops from a string literal, kept whole so
-// that the cast can be written back where it names or types a view's output column
-func literalCastType(columnType ColumnType, array BoolVal) *ConvertType {
-	typeName := columnType.Type
-	// A quoted name in lowercase names the same type as an unquoted one, except "char", which is not
-	// char(1)
-	if columnType.TypeIdent.Quoted && (columnType.TypeIdent.Name != FoldASCII(columnType.TypeIdent.Name) || columnType.TypeIdent.Name == "char") {
-		typeName = PostgresString(columnType.TypeIdent)
-	}
-	if array {
-		typeName += "[]"
-	}
-	t := &ConvertType{Type: typeName, Length: columnType.Length, Scale: columnType.Scale}
-	// char is char(1), while bpchar has no length
-	if (typeName == "char" || typeName == "character") && t.Length == nil {
-		t.Length = NewIntVal("1")
-	}
-	if columnType.Timezone {
-		t.TimeZone = " with time zone"
-	}
-	return t
 }
 
 // isFoldableValueCast reports whether a value-context string cast should be kept

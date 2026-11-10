@@ -233,13 +233,9 @@ func (s createViewStatement) Render() string {
 	if s.orReplace {
 		ddl += "OR REPLACE "
 	}
-	viewDefinition := s.view.definition
-	if s.d.mode == GeneratorModePostgres {
-		viewDefinition = withDroppedOutputCasts(viewDefinition)
-	}
-	definition := parser.String(viewDefinition)
+	definition := parser.String(s.view.definition)
 	if s.d.mode == GeneratorModePostgres && !s.d.legacyIgnoreQuotes {
-		definition = parser.PostgresString(viewDefinition)
+		definition = parser.PostgresString(s.view.definition)
 	}
 	if s.view.viewType == "SQL SECURITY" {
 		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)
@@ -1125,79 +1121,4 @@ func (a disableRowLevelSecurityAction) render(dialect) string {
 		return "NO FORCE ROW LEVEL SECURITY"
 	}
 	return "DISABLE ROW LEVEL SECURITY"
-}
-
-// withDroppedOutputCasts puts back the casts that the parser dropped from string literals in the
-// output columns of a view and of its subqueries and CTEs, as they give a column its name and type.
-// A cast that sqldef does not keep (see parser.KeepsLiteralCast) leaves its name only.
-func withDroppedOutputCasts(definition parser.SelectStatement) parser.SelectStatement {
-	switch stmt := definition.(type) {
-	case *parser.Union:
-		withCasts := *stmt
-		withCasts.Left = withDroppedOutputCasts(stmt.Left)
-		withCasts.Right = withDroppedOutputCasts(stmt.Right)
-		withCasts.With = withDroppedOutputCastsInCTEs(stmt.With)
-		return &withCasts
-	case *parser.ParenSelect:
-		return &parser.ParenSelect{Select: withDroppedOutputCasts(stmt.Select)}
-	case *parser.Select:
-		withCasts := *stmt
-		withCasts.SelectExprs = util.TransformSlice(stmt.SelectExprs, withDroppedOutputCast)
-		withCasts.From = util.TransformSlice(stmt.From, withDroppedOutputCastsInTableExpr)
-		withCasts.With = withDroppedOutputCastsInCTEs(stmt.With)
-		return &withCasts
-	}
-	return definition
-}
-
-func withDroppedOutputCast(expr parser.SelectExpr) parser.SelectExpr {
-	aliased, ok := expr.(*parser.AliasedExpr)
-	if !ok {
-		return expr
-	}
-	val, ok := aliased.Expr.(*parser.SQLVal)
-	if !ok || val.DroppedCast == nil {
-		return expr
-	}
-	untyped := *val
-	untyped.DroppedCast = nil
-	if parser.KeepsLiteralCast(val.DroppedCast) {
-		return &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
-	}
-	if aliased.As.IsEmpty() {
-		return &parser.AliasedExpr{Expr: &untyped, As: castTypeColname(val.DroppedCast)}
-	}
-	return expr
-}
-
-func withDroppedOutputCastsInTableExpr(expr parser.TableExpr) parser.TableExpr {
-	switch e := expr.(type) {
-	case *parser.AliasedTableExpr:
-		if subquery, ok := e.Expr.(*parser.Subquery); ok {
-			withCasts := *e
-			withCasts.Expr = &parser.Subquery{Select: withDroppedOutputCasts(subquery.Select)}
-			return &withCasts
-		}
-	case *parser.JoinTableExpr:
-		withCasts := *e
-		withCasts.LeftExpr = withDroppedOutputCastsInTableExpr(e.LeftExpr)
-		withCasts.RightExpr = withDroppedOutputCastsInTableExpr(e.RightExpr)
-		return &withCasts
-	case *parser.ParenTableExpr:
-		return &parser.ParenTableExpr{Exprs: util.TransformSlice(e.Exprs, withDroppedOutputCastsInTableExpr)}
-	}
-	return expr
-}
-
-func withDroppedOutputCastsInCTEs(with *parser.With) *parser.With {
-	if with == nil {
-		return nil
-	}
-	withCasts := *with
-	withCasts.CTEs = util.TransformSlice(with.CTEs, func(cte *parser.CommonTableExpr) *parser.CommonTableExpr {
-		withCast := *cte
-		withCast.Definition = withDroppedOutputCasts(cte.Definition)
-		return &withCast
-	})
-	return &withCasts
 }

@@ -11986,11 +11986,15 @@ yydefault:
 	case 614:
 		yyDollar = yyS[yypt-4 : yypt+1]
 		{
-			// Return the last type of chained casts like ::varchar::text, which types the literal
+			// Return the innermost type for chained casts like ::varchar::text
 			if yyDollar[4].convertType != nil {
 				yyVAL.convertType = yyDollar[4].convertType
 			} else {
-				yyVAL.convertType = literalCastType(yyDollar[2].columnType, yyDollar[3].boolVal)
+				typeName := yyDollar[2].columnType.Type
+				if yyDollar[3].boolVal {
+					typeName = typeName + "[]"
+				}
+				yyVAL.convertType = &ConvertType{Type: typeName}
 			}
 		}
 	case 630:
