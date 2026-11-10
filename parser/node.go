@@ -48,9 +48,8 @@ type nodeBuffer struct {
 	omittedSchemas []string
 	// dropSchemas leaves out every schema of table and function names
 	dropSchemas bool
-	// dropSizedStringCasts leaves out casts of columns to character varying(n), which PostgreSQL
-	// drops where the column already has the type
-	dropSizedStringCasts      bool
+	// noOpCast reports the casts of columns that PostgreSQL drops, which are left out
+	noOpCast                  NoOpCastFunc
 	unknownTypesCaseSensitive bool
 	protected                 []string
 	literals                  []keyLiteral
@@ -258,10 +257,16 @@ type ComparisonOptions struct {
 	// UnknownTypesCaseSensitive compares the case of a literal of a type that is neither a string
 	// type nor one whose constants PostgreSQL is known to rewrite, such as an enum
 	UnknownTypesCaseSensitive bool
+	// NoOpCast reports the casts of columns that PostgreSQL drops, which are left out
+	NoOpCast NoOpCastFunc
 }
 
+// NoOpCastFunc reports whether a cast of a column is one that PostgreSQL drops, as the column
+// already has the type
+type NoOpCastFunc func(col *ColName, t *ConvertType) bool
+
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -273,23 +278,9 @@ func ComparisonKey(node SQLNode, opts ComparisonOptions) string {
 }
 
 // SameForComparison reports whether two PostgreSQL expressions have the same ComparisonKey and
-// their string literals differ in case only where the case is significant on both sides. A cast of
-// a column to character varying(n) on one side only may be one that PostgreSQL dropped as the column
-// already has the type, so it is left out then.
+// their string literals differ in case only where the case is significant on both sides.
 func SameForComparison(a, b SQLNode, opts ComparisonOptions) bool {
-	if sameForComparison(a, b, opts.buffer()) {
-		return true
-	}
-	dropping := opts.buffer()
-	dropping.dropSizedStringCasts = true
-	keyA, _ := comparisonKey(a, dropping)
-	keyB, _ := comparisonKey(b, dropping)
-	if fullA, _ := comparisonKey(a, opts.buffer()); fullA != keyA {
-		if fullB, _ := comparisonKey(b, opts.buffer()); fullB != keyB {
-			return false
-		}
-	}
-	return sameForComparison(a, b, dropping)
+	return sameForComparison(a, b, opts.buffer())
 }
 
 func sameForComparison(a, b SQLNode, buf nodeBuffer) bool {
@@ -328,19 +319,17 @@ func (buf *nodeBuffer) writeIdentKey(n Ident) {
 }
 
 // StringWithoutSchemas is String for comparison, without omittedSchemas in table and function names
-// and without casts of columns to character varying(n), which PostgreSQL drops where the column
-// already has the type
-func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
-	buf := nodeBuffer{omittedSchemas: omittedSchemas, dropSizedStringCasts: true}
+// and without the casts of columns that noOpCast reports
+func StringWithoutSchemas(node SQLNode, noOpCast NoOpCastFunc, omittedSchemas ...string) string {
+	buf := nodeBuffer{omittedSchemas: omittedSchemas, noOpCast: noOpCast}
 	node.Format(&buf)
 	return buf.String()
 }
 
 // PostgresFoldedStringWithoutSchemas is PostgresFoldedString for comparison, without any schema in
-// table and function names and without casts of columns to character varying(n), which PostgreSQL
-// drops where the column already has the type
-func PostgresFoldedStringWithoutSchemas(node SQLNode) string {
-	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true, dropSizedStringCasts: true}
+// table and function names and without the casts of columns that noOpCast reports
+func PostgresFoldedStringWithoutSchemas(node SQLNode, noOpCast NoOpCastFunc) string {
+	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true, noOpCast: noOpCast}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -3068,7 +3057,7 @@ type CastExpr struct {
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
-	if _, ok := node.Expr.(*ColName); ok && buf.dropSizedStringCasts && IsSizedStringCast(node.Type) {
+	if col, ok := node.Expr.(*ColName); ok && buf.noOpCast != nil && buf.noOpCast(col, node.Type) {
 		node.Expr.Format(buf)
 		return
 	}

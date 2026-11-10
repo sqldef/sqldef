@@ -80,6 +80,8 @@ type dialect struct {
 	legacyIgnoreQuotes bool
 	// comparing formats expressions for comparison instead of DDL
 	comparing bool
+	// noOpCast reports the casts of columns that a comparison leaves out
+	noOpCast parser.NoOpCastFunc
 }
 
 func newDialect(mode GeneratorMode, config database.GeneratorConfig, defaultSchema string) dialect {
@@ -2338,9 +2340,7 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		// Columns are compared like definitions, but case-insensitively
 		opts := g.comparisonOptions(true)
-		opts.FoldQuoted = true
 		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
 		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
 
@@ -6303,8 +6303,7 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
 		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
-		// PostgreSQL drops a cast to character varying(n) where the operand already has the type
-		if _, ok := e.Expr.(*parser.ColName); ok && d.comparing && parser.IsSizedStringCast(e.Type) {
+		if col, ok := e.Expr.(*parser.ColName); ok && d.noOpCast != nil && d.noOpCast(col, e.Type) {
 			return d.formatExprQuoteAware(e.Expr)
 		}
 		if parser.NeedsParensAsCastOperand(e.Expr) {
@@ -6352,16 +6351,43 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 // comparison leaves out every schema, as pg_get_indexdef() leaves out the schemas on the search path.
 func (d dialect) postgresFoldedString(expr parser.Expr) string {
 	if d.comparing {
-		return parser.PostgresFoldedStringWithoutSchemas(expr)
+		return parser.PostgresFoldedStringWithoutSchemas(expr, d.noOpCast)
 	}
 	return parser.PostgresFoldedString(expr, "pg_catalog")
 }
 
-// comparisonDialect returns the dialect that formats expressions for comparison
-func (g *Generator) comparisonDialect() dialect {
+// comparisonDialect returns the dialect that formats expressions on the table with columns for
+// comparison
+func (g *Generator) comparisonDialect(columns map[string]*Column) dialect {
 	d := g.dialect
 	d.comparing = true
+	d.noOpCast = g.noOpCast(columns)
 	return d
+}
+
+// noOpCast reports the casts that PostgreSQL drops: one of a column to character varying(n) where
+// the column already has the type. It looks the column up in columns, or in every table if columns
+// is nil, where a column of the name with the type in any table matches.
+func (g *Generator) noOpCast(columns map[string]*Column) parser.NoOpCastFunc {
+	return func(col *parser.ColName, t *parser.ConvertType) bool {
+		if !parser.IsSizedStringCast(t) || normalizeTypeName(t.Type, g.mode) != "character varying" {
+			return false
+		}
+		hasType := func(columns map[string]*Column) bool {
+			column := g.findColumnByName(columns, col.Name)
+			return column != nil && !column.array && column.length != nil && column.length.raw == t.Length.Val &&
+				normalizeTypeName(column.typeName, g.mode) == "character varying"
+		}
+		if columns != nil {
+			return hasType(columns)
+		}
+		for _, table := range slices.Concat(g.desiredTables, g.currentTables) {
+			if hasType(table.columns) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
@@ -6472,6 +6498,7 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 		OmittedSchemas: []string{"pg_catalog"},
 		// pg_get_viewdef() leaves out every schema on the search path, which sqldef does not know
 		DropSchemas: dropQualifiers,
+		NoOpCast:    g.noOpCast(nil),
 	}
 }
 
@@ -6865,8 +6892,8 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 			dirB = AscScr
 		}
 
-		normalizedA := g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
-		normalizedB := g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
+		normalizedA := g.formatIndexExprForComparison(nil, indexA.columns[i].columnExpr)
+		normalizedB := g.formatIndexExprForComparison(nil, indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB || dirA != dirB {
 			return false
 		}
@@ -6957,8 +6984,8 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		normalizedA = g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
-		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
+		normalizedA = g.formatIndexExprForComparison(columns, indexA.columns[i].columnExpr)
+		normalizedB = g.formatIndexExprForComparison(columns, indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
@@ -6976,7 +7003,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 			return false
 		}
 	}
-	if !g.areSameWhereClause(indexA.where, indexB.where) {
+	if !g.areSameWhereClause(columns, indexA.where, indexB.where) {
 		return false
 	}
 
@@ -7038,12 +7065,12 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 	return true
 }
 
-func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
+func (g *Generator) formatIndexExprForComparison(columns map[string]*Column, expr parser.Expr) string {
 	normalized := normalizeExpr(expr, g.mode)
 
 	if !g.legacyIgnoreQuotes {
 		if g.mode == GeneratorModePostgres {
-			return g.comparisonDialect().formatExprQuoteAware(normalized)
+			return g.comparisonDialect(columns).formatExprQuoteAware(normalized)
 		}
 		if g.mode == GeneratorModeMssql {
 			if colName, ok := normalized.(*parser.ColName); ok {
@@ -7055,24 +7082,24 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 		}
 	}
 
-	return g.formatLegacyExprForComparison(normalized)
+	return g.formatLegacyExprForComparison(columns, normalized)
 }
 
 // formatLegacyExprForComparison formats an expression for the legacy mode's comparisons, leaving out
 // the PostgreSQL schemas that pg_get_indexdef() and pg_get_expr() leave out of function names
-func (g *Generator) formatLegacyExprForComparison(expr parser.Expr) string {
+func (g *Generator) formatLegacyExprForComparison(columns map[string]*Column, expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
-		return parser.StringWithoutSchemas(expr, "pg_catalog")
+		return parser.StringWithoutSchemas(expr, g.noOpCast(columns), "pg_catalog")
 	}
 	return parser.String(expr)
 }
 
-func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
-	return g.sameNormalizedExpr(whereA, whereB)
+func (g *Generator) areSameWhereClause(columns map[string]*Column, whereA, whereB parser.Expr) bool {
+	return g.sameNormalizedExpr(columns, whereA, whereB)
 }
 
 // sameNormalizedExpr compares two expressions after normalization, case-sensitively and quote-aware.
-func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
+func (g *Generator) sameNormalizedExpr(columns map[string]*Column, a, b parser.Expr) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -7084,10 +7111,10 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 	normalizedB := normalizeExpr(b, g.mode)
 
 	if !g.legacyIgnoreQuotes {
-		d := g.comparisonDialect()
+		d := g.comparisonDialect(columns)
 		return d.formatExprQuoteAware(normalizedA) == d.formatExprQuoteAware(normalizedB)
 	}
-	return g.formatLegacyExprForComparison(normalizedA) == g.formatLegacyExprForComparison(normalizedB)
+	return g.formatLegacyExprForComparison(columns, normalizedA) == g.formatLegacyExprForComparison(columns, normalizedB)
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
@@ -7156,13 +7183,13 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if !g.areSameWhereClause(exclusionA.where, exclusionB.where) {
+	if !g.areSameWhereClause(nil, exclusionA.where, exclusionB.where) {
 		return false
 	}
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.operator != b.operator || !g.sameNormalizedExpr(a.expression, b.expression) {
+		if a.operator != b.operator || !g.sameNormalizedExpr(nil, a.expression, b.expression) {
 			return false
 		}
 	}
