@@ -2973,9 +2973,12 @@ func (node *CastExpr) Format(buf *nodeBuffer) {
 
 // NeedsParensAsCastOperand reports whether an expression has to be parenthesized before ::
 func NeedsParensAsCastOperand(expr Expr) bool {
-	switch expr.(type) {
+	switch e := expr.(type) {
 	case *BinaryExpr, *UnaryExpr, *ComparisonExpr, *AndExpr, *OrExpr, *NotExpr, *ConcatExpr, *IsExpr, *RangeCond, *CollateExpr:
 		return true
+	case *SQLVal:
+		// A negative number is a unary minus, which binds looser than a cast
+		return (e.Type == IntVal || e.Type == FloatVal) && strings.HasPrefix(e.Val, "-")
 	}
 	return false
 }

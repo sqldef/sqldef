@@ -3486,7 +3486,7 @@ func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (str
 		definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
 	}
 	if column.collate != "" {
-		definition += fmt.Sprintf("COLLATE %s ", d.collationName(column.collate))
+		definition += fmt.Sprintf("COLLATE %s ", column.collate)
 	}
 
 	if column.generated == nil {
@@ -3681,7 +3681,7 @@ func (d dialect) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 		column += fmt.Sprintf("(%d)", *indexColumn.length)
 	}
 	if indexColumn.collation != "" {
-		column += fmt.Sprintf(" COLLATE %s", d.collationName(indexColumn.collation))
+		column += fmt.Sprintf(" COLLATE %s", d.indexCollationName(indexColumn.collation))
 	}
 	if indexColumn.operatorClass != "" {
 		column += " " + indexColumn.operatorClass
@@ -4042,9 +4042,9 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
-// collationName writes a collation name. A PostgreSQL one is SQL already; the legacy mode quotes it
-// as written.
-func (d dialect) collationName(collation string) string {
+// indexCollationName writes the collation of an index column. A PostgreSQL collation name is SQL
+// as written, which the legacy mode quotes as written.
+func (d dialect) indexCollationName(collation string) string {
 	if d.mode == GeneratorModePostgres && d.legacyIgnoreQuotes {
 		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
 			return d.forceEscapeSQLName(part.Name)
@@ -6413,7 +6413,7 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 	return parser.ComparisonOptions{
 		FoldQuoted:     g.legacyIgnoreQuotes,
 		DropQualifiers: dropQualifiers,
-		OmittedSchemas: []string{"pg_catalog", g.defaultSchema},
+		OmittedSchemas: g.comparisonDialect().omittedFunctionSchemas(),
 	}
 }
 
@@ -6831,9 +6831,9 @@ func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn
 	if collation == "" {
 		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
 			if column := g.findColumnByName(columns, colName.Name); column != nil {
-				collation = g.columnCollation(*column, g.desiredDomains)
+				collation = g.columnCollation(*column, g.currentDomains)
 				if collation == "" {
-					collation = g.columnCollation(*column, g.currentDomains)
+					collation = g.columnCollation(*column, g.desiredDomains)
 				}
 			}
 		}
@@ -7002,7 +7002,7 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 // the PostgreSQL schemas that pg_get_indexdef() and pg_get_expr() leave out of function names
 func (g *Generator) formatLegacyExprForComparison(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
-		return parser.StringWithoutSchemas(expr, "pg_catalog", g.defaultSchema)
+		return parser.StringWithoutSchemas(expr, g.comparisonDialect().omittedFunctionSchemas()...)
 	}
 	return parser.String(expr)
 }

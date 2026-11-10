@@ -1791,3 +1791,24 @@ ChangeColumnFromCollatedDomainToVarcharKeepsCollation:
     ALTER TABLE public.t ALTER COLUMN a TYPE varchar(20) COLLATE "C";
   down: |
     ALTER TABLE public.t ALTER COLUMN a TYPE d;
+
+ChangeDefaultCastOfNegativeNumber:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (label text DEFAULT (-1)::text);
+  desired: |
+    CREATE TABLE t (label text DEFAULT (-2)::text);
+  up: |
+    ALTER TABLE public.t ALTER COLUMN label SET DEFAULT (-2)::text;
+  down: |
+    ALTER TABLE public.t ALTER COLUMN label SET DEFAULT (-1)::text;
+
+AddColumnWithUnquotedCollationInLegacyMode:
+  current: |
+    CREATE TABLE t (id integer);
+  desired: |
+    CREATE TABLE t (id integer, name text COLLATE UCS_BASIC);
+  up: |
+    ALTER TABLE "public"."t" ADD COLUMN "name" text COLLATE UCS_BASIC;
+  down: |
+    ALTER TABLE "public"."t" DROP COLUMN "name";
