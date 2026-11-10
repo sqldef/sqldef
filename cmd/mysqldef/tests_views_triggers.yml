@@ -723,3 +723,66 @@ ViewWithCastAsChar:
       num int
     );
     CREATE VIEW user_num_texts AS SELECT CAST(num AS CHAR) AS num_text FROM users;
+
+ViewIndexHintWithMultipleHintsAndKeyKeyword:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(255),
+      age int,
+      PRIMARY KEY (id),
+      KEY idx_name (name),
+      KEY idx_age (age)
+    );
+    CREATE VIEW user_ids AS SELECT u.id FROM users u USE KEY (idx_name) IGNORE KEY (idx_age) JOIN users u2 FORCE INDEX (PRIMARY) ON u.id = u2.id;
+# MariaDB drops the FOR clause when it stores the view
+ViewIndexHintForScope:
+  flavor: "!mariadb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(255),
+      age int,
+      PRIMARY KEY (id),
+      KEY idx_name (name),
+      KEY idx_age (age)
+    );
+    CREATE VIEW user_ids AS SELECT id FROM users USE INDEX FOR JOIN (idx_name) USE INDEX FOR ORDER BY (idx_age) USE INDEX FOR GROUP BY (PRIMARY);
+ViewIndexHintWithEmptyIndexList:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(255),
+      PRIMARY KEY (id),
+      KEY idx_name (name)
+    );
+    CREATE VIEW user_ids AS SELECT id FROM users USE INDEX ();
+ViewIndexHintChange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(255),
+      age int,
+      PRIMARY KEY (id),
+      KEY idx_name (name),
+      KEY idx_age (age)
+    );
+    CREATE VIEW user_ids AS SELECT id FROM users USE INDEX (PRIMARY, idx_name);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(255),
+      age int,
+      PRIMARY KEY (id),
+      KEY idx_name (name),
+      KEY idx_age (age)
+    );
+    CREATE VIEW user_ids AS SELECT id FROM users USE INDEX (PRIMARY, idx_age);
+  up: |
+    CREATE OR REPLACE VIEW user_ids AS select id from users use index (PRIMARY, idx_age);
+  down: |
+    CREATE OR REPLACE VIEW user_ids AS select id from users use index (PRIMARY, idx_name);

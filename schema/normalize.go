@@ -1257,6 +1257,26 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	}
 }
 
+// normalizeIndexHints rewrites index hints to one index per hint in a fixed order.
+// MySQL stores `USE INDEX (a, b)` in a view as `USE INDEX (b) USE INDEX (a)`.
+// The order matters to MySQL only when `USE INDEX ()` is combined with another USE INDEX,
+// which this comparison does not tell apart.
+func normalizeIndexHints(hints []*parser.IndexHint) []*parser.IndexHint {
+	var normalized []*parser.IndexHint
+	for _, hint := range hints {
+		if len(hint.Indexes) == 0 {
+			normalized = append(normalized, hint)
+		}
+		for _, index := range hint.Indexes {
+			normalized = append(normalized, &parser.IndexHint{Type: hint.Type, For: hint.For, Indexes: []Ident{index}})
+		}
+	}
+	slices.SortFunc(normalized, func(a, b *parser.IndexHint) int {
+		return strings.Compare(strings.ToLower(parser.String(a)), strings.ToLower(parser.String(b)))
+	})
+	return normalized
+}
+
 // normalizeTableExprs normalizes FROM clause table expressions
 func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode, tableLookup TableLookupFunc) parser.TableExprs {
 	normalized := make(parser.TableExprs, len(exprs))
@@ -1315,7 +1335,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup T
 			As:             as,
 			Columns:        columns,
 			TableHints:     e.TableHints,
-			IndexHints:     e.IndexHints,
+			IndexHints:     normalizeIndexHints(e.IndexHints),
 			Lateral:        lateral,
 			WithOrdinality: e.WithOrdinality,
 		}
