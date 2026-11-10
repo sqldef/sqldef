@@ -6428,7 +6428,7 @@ func (g *Generator) noOpCast(col *parser.ColName, t *parser.ConvertType) bool {
 func sizedVarcharColumns(tables []*Table, mode GeneratorMode) map[string][]*Column {
 	columns := map[string][]*Column{}
 	for _, table := range tables {
-		for _, column := range table.columns {
+		for _, column := range util.CanonicalMapIter(table.columns) {
 			if !column.array && column.length != nil && normalizeTypeName(column.typeName, mode) == "character varying" {
 				key := parser.FoldASCII(column.name.Name)
 				columns[key] = append(columns[key], column)

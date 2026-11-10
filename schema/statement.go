@@ -233,10 +233,9 @@ func (s createViewStatement) Render() string {
 	if s.orReplace {
 		ddl += "OR REPLACE "
 	}
-	viewDefinition := s.view.definition
-	definition := parser.String(viewDefinition)
+	definition := parser.String(s.view.definition)
 	if s.d.mode == GeneratorModePostgres && !s.d.legacyIgnoreQuotes {
-		definition = parser.PostgresString(viewDefinition)
+		definition = parser.PostgresString(s.view.definition)
 	}
 	if s.view.viewType == "SQL SECURITY" {
 		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)

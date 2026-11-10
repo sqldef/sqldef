@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // SQLNode defines the interface for all nodes
@@ -56,6 +58,9 @@ type nodeBuffer struct {
 	literals                  []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
 	literalType string
+	// literalWrittenUntyped is set for a literal that sqldef writes without its cast, so that
+	// PostgreSQL stores a regclass name in it as written
+	literalWrittenUntyped bool
 }
 
 // keyLiteral is a string literal in a comparison key
@@ -281,8 +286,8 @@ type ComparisonOptions struct {
 	UnknownTypesCaseSensitive bool
 	// NoOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	NoOpCast NoOpCastFunc
-	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass as an
-	// untyped one, as sqldef writes a view without the casts of its literals
+	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass without
+	// its cast, as sqldef writes a view without the casts of its literals
 	UntypedRegLiterals bool
 }
 
@@ -2649,7 +2654,16 @@ func NewValArgWithOpt(in string, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
-		if node.DroppedCast != nil && !(buf.untypedRegLiterals && IsRegType(FoldASCII(node.DroppedCast.Type))) {
+		if node.DroppedCast != nil {
+			if buf.untypedRegLiterals && IsRegType(FoldASCII(node.DroppedCast.Type)) {
+				// The literal is written without its cast, but the name in it keeps its case only
+				// where it is quoted
+				buf.literalType = node.DroppedCast.Type
+				buf.literalWrittenUntyped = true
+				encodeSQLBytes(node.Val, buf)
+				buf.literalWrittenUntyped = false
+				return
+			}
 			buf.formatCastOperand(literalNode(node.Val), node.DroppedCast.Type)
 			return
 		}
@@ -2681,7 +2695,7 @@ func (node literalNode) Format(buf *nodeBuffer) {
 
 func encodeSQLBytes(val string, buf *nodeBuffer) {
 	if buf.comparisonKey {
-		if FoldASCII(buf.literalType) == "regclass" {
+		if FoldASCII(buf.literalType) == "regclass" && !buf.literalWrittenUntyped {
 			val = buf.withoutOmittedSchema(val)
 		}
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
@@ -3762,10 +3776,26 @@ func (n Ident) Format(buf *nodeBuffer) {
 		return
 	}
 	if buf.foldUnquoted {
-		formatID(buf, FoldASCII(n.Name))
+		formatPostgresID(buf, FoldASCII(n.Name))
+		return
+	}
+	if buf.postgresQuotes {
+		formatPostgresID(buf, n.Name)
 		return
 	}
 	formatID(buf, n.Name)
+}
+
+// formatPostgresID writes an unquoted identifier as is if PostgreSQL reads it so, and quotes it
+// otherwise, where formatID would quote it in MySQL's style
+func formatPostgresID(buf *nodeBuffer, name string) {
+	for i, c := range name {
+		if !(c == '_' || unicode.IsLetter(c) || c >= utf8.RuneSelf || i > 0 && (c == '$' || isAsciiDigit(c))) {
+			buf.writePostgresQuoted(name)
+			return
+		}
+	}
+	buf.WriteString(name)
 }
 
 // formatFuncName formats a function name, which is never back-quoted even if it matches a
