@@ -5909,17 +5909,49 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 // one, like haveSameColumnDefinition does for MySQL, so an omitted one keeps the current collation.
 // The export writes a collation only where it differs from the one of the column's type.
 func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool {
-	if desired.collate == "" {
+	collation := g.managedCollation(desired.collate)
+	if collation == "" {
 		return true
 	}
-	return g.canonicalCollation(g.columnCollation(current, g.currentDomains)) == g.canonicalCollation(desired.collate)
+	return g.sameCollations(g.columnCollation(current, g.currentDomains), collation)
 }
 
-// columnCollation returns the collation of a column, which is the one of its domain if it sets none
+// managedCollation returns a desired column collation that sqldef manages. The legacy mode matches
+// an unquoted name as if it were quoted, but has always written it as written, which PostgreSQL
+// folds, so it manages only a quoted name.
+func (g *Generator) managedCollation(collation string) string {
+	if g.legacyIgnoreQuotes && collation != "" {
+		if parts := postgresNameParts(collation); !parts[len(parts)-1].Quoted {
+			return ""
+		}
+	}
+	return collation
+}
+
+// sameCollations compares two column collations. The export qualifies a collation outside
+// pg_catalog, which may be on the search path that sqldef does not know, so an unqualified name
+// matches a qualified one of the same name.
+func (g *Generator) sameCollations(a, b string) bool {
+	a, b = g.canonicalCollation(a), g.canonicalCollation(b)
+	if a == b {
+		return true
+	}
+	partsA, partsB := postgresNameParts(a), postgresNameParts(b)
+	if len(partsA) == 0 || len(partsB) == 0 || (len(partsA) == 1) == (len(partsB) == 1) {
+		return false
+	}
+	return partsA[len(partsA)-1] == partsB[len(partsB)-1]
+}
+
+// columnCollation returns the collation of a column, which is the one of its type if it sets none:
+// a domain's, or "C" for name, which the export leaves out as it does any collation of a type
 func (g *Generator) columnCollation(column Column, domains []*Domain) string {
 	if column.collate == "" {
 		if domain := g.findDomainForColumn(column, domains); domain != nil {
 			return domain.collation
+		}
+		if strings.EqualFold(strings.TrimSuffix(column.typeName, "[]"), "name") {
+			return `"C"`
 		}
 	}
 	return column.collate
@@ -5995,12 +6027,12 @@ func postgresNameParts(name string) []Ident {
 // withKeptCollation returns the desired column with the current collation when it omits one, as
 // ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
 func (g *Generator) withKeptCollation(current Column, desired Column) Column {
+	desired.collate = g.managedCollation(desired.collate)
 	if desired.collate == "" && g.takesCollationOf(current, desired) {
 		desired.collate = current.collate
 	}
-	// The current collation is written as PostgreSQL resolved it, while the legacy mode matches an
-	// unquoted desired one that PostgreSQL would fold
-	if current.collate != "" && desired.collate != "" && g.canonicalCollation(current.collate) == g.canonicalCollation(desired.collate) {
+	// The current collation is written as PostgreSQL resolved it
+	if current.collate != "" && desired.collate != "" && g.sameCollations(current.collate, desired.collate) {
 		desired.collate = current.collate
 	}
 	return desired

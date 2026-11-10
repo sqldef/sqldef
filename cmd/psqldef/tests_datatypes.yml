@@ -1823,11 +1823,17 @@ ChangeColumnTypeKeepsUnquotedCollationInLegacyMode:
   down: |
     ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE text COLLATE "C";
 
-AddCollationToColumnInLegacyMode:
+UnquotedColumnCollationIsNotManagedInLegacyMode:
   current: |
-    CREATE TABLE t (a text);
+    CREATE TABLE t (a text, b varchar(5) COLLATE "C");
   desired: |
-    CREATE TABLE t (a text COLLATE C);
+    CREATE TABLE t (a text COLLATE C, b varchar(10) COLLATE UCS_BASIC);
   up: |
-    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE text COLLATE "C";
-  down: ""
+    ALTER TABLE "public"."t" ALTER COLUMN "b" TYPE varchar(10) COLLATE "C";
+  down: |
+    ALTER TABLE "public"."t" ALTER COLUMN "b" TYPE varchar(5) COLLATE "C";
+
+ColumnOfTypeNameRestatingItsCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (n name COLLATE "C");
