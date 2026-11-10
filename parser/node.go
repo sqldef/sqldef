@@ -40,9 +40,10 @@ type nodeBuffer struct {
 	foldUnquoted bool
 	// comparisonKey writes identifiers and string literals as placeholders into protected, so
 	// that ComparisonKey can fold the case of everything else
-	comparisonKey bool
-	foldQuoted    bool
-	protected     []string
+	comparisonKey  bool
+	foldQuoted     bool
+	dropQualifiers bool
+	protected      []string
 }
 
 func (buf *nodeBuffer) writeProtected(s string) {
@@ -112,7 +113,16 @@ var protectedPlaceholder = regexp.MustCompile("\x00([0-9]+)\x00")
 // identifiers compare case-insensitively, while string literals and quoted identifiers keep their
 // case. foldQuoted folds quoted identifiers too, for the legacy mode that ignores quotes.
 func ComparisonKey(node SQLNode, foldQuoted bool) string {
-	buf := nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted}
+	return comparisonKey(node, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted})
+}
+
+// UnqualifiedComparisonKey is ComparisonKey without the qualifiers of column, table and function
+// names, which pg_get_viewdef() adds or omits depending on whether a name is ambiguous
+func UnqualifiedComparisonKey(node SQLNode, foldQuoted bool) string {
+	return comparisonKey(node, nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted, dropQualifiers: true})
+}
+
+func comparisonKey(node SQLNode, buf nodeBuffer) string {
 	node.Format(&buf)
 	return protectedPlaceholder.ReplaceAllStringFunc(strings.ToLower(buf.String()), func(m string) string {
 		i, _ := strconv.Atoi(m[1 : len(m)-1])
@@ -1877,7 +1887,7 @@ func (node TableName) Format(buf *nodeBuffer) {
 	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.IsEmpty() {
+	if !node.Schema.IsEmpty() && !buf.dropQualifiers {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
@@ -2491,7 +2501,7 @@ type ColName struct {
 
 // Format formats the node.
 func (node *ColName) Format(buf *nodeBuffer) {
-	if !node.Qualifier.IsEmpty() {
+	if !node.Qualifier.IsEmpty() && !buf.dropQualifiers {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	buf.Printf("%v", node.Name)
@@ -2662,7 +2672,7 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if node.Distinct {
 		distinct = "distinct "
 	}
-	if !node.Qualifier.IsEmpty() {
+	if !node.Qualifier.IsEmpty() && !buf.dropQualifiers {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	formatFuncName(buf, node.Name)

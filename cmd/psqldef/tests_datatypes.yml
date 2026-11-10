@@ -718,6 +718,53 @@ ChangeColumnCollation:
   down: |
     ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "C";
 
+ChangeColumnTypeKeepsOmittedCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name varchar(10) COLLATE "C");
+  desired: |
+    CREATE TABLE users (name varchar(20));
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(20) COLLATE "C";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(10) COLLATE "C";
+
+ChangeColumnCollationToDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text COLLATE "C");
+  desired: |
+    CREATE TABLE users (name text COLLATE "default");
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "default";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "C";
+
+RenameColumnAndChangeCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (old text COLLATE "C");
+  desired: |
+    CREATE TABLE users (nm text COLLATE "POSIX" -- @renamed from=old
+    );
+  up: |
+    ALTER TABLE public.users RENAME COLUMN old TO nm;
+    ALTER TABLE public.users ALTER COLUMN nm TYPE text COLLATE "POSIX";
+  down: |
+    ALTER TABLE public.users ADD COLUMN old text COLLATE "C";
+    ALTER TABLE public.users DROP COLUMN nm;
+
+ChangeDefaultStringLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text DEFAULT lower('ABC'));
+  desired: |
+    CREATE TABLE users (name text DEFAULT lower('abc'));
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name SET DEFAULT lower('abc');
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name SET DEFAULT lower('ABC');
+
 ColumnCollationOmittedInDesiredIsKept:
   legacy_ignore_quotes: false
   current: |

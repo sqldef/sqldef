@@ -1116,8 +1116,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					g.renameCurrentPrivilegeColumn(desired.table.name, desiredColumn.renamedFrom, desiredColumn.name)
 
 					// After renaming, check if type/constraints need to be changed
-					if !g.haveSameDataType(*renameFromColumn, desiredColumn) {
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: desiredColumn}))
+					if !g.haveSameDataType(*renameFromColumn, desiredColumn) || !g.haveSameColumnCollation(*renameFromColumn, desiredColumn) {
+						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: withKeptCollation(*renameFromColumn, desiredColumn)}))
 					}
 
 					if !g.isPrimaryKey(*renameFromColumn, currentTable) {
@@ -1298,7 +1298,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name}))
 						}
 						// Change type - use desiredColumn for escaping to match user's quote style
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: desiredColumn, using: usingClause}))
+						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
 					}
 				}
 
@@ -2406,15 +2406,12 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		tableLookup := g.createTableLookup()
 		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
-		currentNormalized := parser.ComparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
-		desiredNormalized := parser.ComparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
-
-		// Post-normalization fix for generic parser: strip remaining table qualifiers
-		// The generic parser's ColName.Name may not respect the empty qualifier we set
+		comparisonKey := parser.ComparisonKey
 		if g.mode == GeneratorModePostgres {
-			currentNormalized = stripTableQualifiers(currentNormalized)
-			desiredNormalized = stripTableQualifiers(desiredNormalized)
+			comparisonKey = parser.UnqualifiedComparisonKey
 		}
+		currentNormalized := comparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
+		desiredNormalized := comparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
 			"desired_before_norm", parser.String(desiredView.definition),
@@ -2536,20 +2533,6 @@ func dependsOn(name, target string, deps map[string][]string, visited map[string
 		}
 	}
 	return false
-}
-
-// stripTableQualifiers removes table qualifiers from column references in SQL
-// E.g., "users.name" -> "name", "t.id" -> "id"
-// This is needed for PostgreSQL 13-15 where table qualifiers are included in column references.
-func stripTableQualifiers(sql string) string {
-	// Match table.column patterns where:
-	// - table name is [a-z_][a-z0-9_]* (identifier)
-	// - followed by a dot
-	// - followed by column name [a-z_][a-z0-9_]* (identifier)
-	// We use word boundaries to avoid matching within quoted strings
-	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
-	// Replace "table.column" with just "column" (keeping capture group 1)
-	return re.ReplaceAllString(sql, "$1")
 }
 
 // createTableLookup returns a TableLookupFunc that looks up tables from both
@@ -3696,7 +3679,7 @@ func (d dialect) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 		// PostgreSQL collation names are case-sensitive identifiers ("C", "en_US"), and the
 		// database always prints them quoted.
 		if d.mode == GeneratorModePostgres {
-			column += fmt.Sprintf(" COLLATE %s", d.forceEscapeSQLName(indexColumn.collation))
+			column += fmt.Sprintf(" COLLATE %s", d.collationName(indexColumn.collation))
 		} else {
 			column += fmt.Sprintf(" COLLATE %s", indexColumn.collation)
 		}
@@ -4258,6 +4241,12 @@ func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 func mergeTable(table1 *Table, table2 Table, indexes []Index) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
+		if current, ok := table1.columns[column.name.Name]; ok {
+			// An omitted collation keeps the current one (see haveSameColumnCollation)
+			merged := withKeptCollation(*current, *column)
+			table1.columns[column.name.Name] = &merged
+			continue
+		}
 		table1.columns[column.name.Name] = column
 	}
 
@@ -5906,12 +5895,25 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 }
 
 // haveSameColumnCollation compares a PostgreSQL column collation only when the desired column sets
-// one, like haveSameColumnDefinition does for MySQL, since an omitted one may be any default.
+// one, like haveSameColumnDefinition does for MySQL, so an omitted one keeps the current collation.
+// The export omits the "default" collation.
 func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool {
-	if desired.collate == "" || strings.EqualFold(desired.collate, "default") {
+	if desired.collate == "" {
 		return true
 	}
+	if strings.EqualFold(desired.collate, "default") {
+		return current.collate == ""
+	}
 	return current.collate == desired.collate
+}
+
+// withKeptCollation returns the desired column with the current collation when it omits one, as
+// ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
+func withKeptCollation(current Column, desired Column) Column {
+	if desired.collate == "" {
+		desired.collate = current.collate
+	}
+	return desired
 }
 
 func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
@@ -6270,6 +6272,11 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	var currentExprSchema, currentExpr string
 	var desiredExprSchema, desiredExpr string
 
+	if g.mode == GeneratorModePostgres {
+		currentExprSchema, currentExpr = splitTableName(parser.ComparisonKey(normalizedCurrent, g.legacyIgnoreQuotes), g.defaultSchema)
+		desiredExprSchema, desiredExpr = splitTableName(parser.ComparisonKey(normalizedDesired, g.legacyIgnoreQuotes), g.defaultSchema)
+		return currentExprSchema == desiredExprSchema && currentExpr == desiredExpr
+	}
 	currentExprSchema, currentExpr = splitTableName(parser.String(normalizedCurrent), g.defaultSchema)
 	desiredExprSchema, desiredExpr = splitTableName(parser.String(normalizedDesired), g.defaultSchema)
 	slog.Debug("Generator#areSameDefaultValue (complex expressions)",

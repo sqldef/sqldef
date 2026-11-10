@@ -802,7 +802,7 @@ func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T
 
 	normalize := func(definition parser.SelectStatement) string {
 		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
-		return stripTableQualifiers(strings.ToLower(parser.String(normalized)))
+		return parser.UnqualifiedComparisonKey(normalized, true)
 	}
 
 	assert.Equal(t, normalize(current), normalize(desired))

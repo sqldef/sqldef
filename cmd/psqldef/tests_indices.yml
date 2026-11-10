@@ -1384,6 +1384,17 @@ IndexAndDefaultWithQuotedFunctionName:
     ALTER TABLE public.t ALTER COLUMN a DROP DEFAULT;
     DROP INDEX public.t_idx;
 
+IndexRestatingCollationOfColumnWithOmittedCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT COLLATE "C");
+    CREATE INDEX idx_name ON products USING btree (name);
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name COLLATE "C");
+  up: ""
+  down: ""
+
 UnnamedIndexDuplicatesKeepBoth:
   legacy_ignore_quotes: false
   current: |

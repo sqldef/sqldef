@@ -1140,6 +1140,19 @@ ChangeViewWhereToQuotedColumnDifferingInCase:
   down: |
     CREATE OR REPLACE VIEW public.v AS select a as x from t where a is null;
 
+ChangeViewStringLiteralContainingDot:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'x.y';
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'y';
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'y';
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'x.y';
+
 ChangeWithinGroupOrderInView:
   legacy_ignore_quotes: false
   current: |
