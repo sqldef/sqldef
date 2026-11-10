@@ -53,6 +53,7 @@ type nodeBuffer struct {
 	noOpCast                  NoOpCastFunc
 	unknownTypesCaseSensitive bool
 	untypedRegLiterals        bool
+	reduceLiteralNames        bool
 	protected                 []string
 	literals                  []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
@@ -316,10 +317,11 @@ type ComparisonOptions struct {
 	// NoOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	NoOpCast NoOpCastFunc
 	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass without
-	// its cast, as sqldef writes a view without the casts of its literals. Its name is compared as
-	// PostgreSQL writes it back, and so is another literal holding a name, which may be one written
-	// so.
+	// its cast, as sqldef writes a view without the casts of its literals
 	UntypedRegLiterals bool
+	// ReduceLiteralNames compares a literal holding an object name as PostgreSQL writes a reg*
+	// constant back, as it may be one written without its cast
+	ReduceLiteralNames bool
 }
 
 // NoOpCastFunc reports whether a cast of a column is one that PostgreSQL drops, as the column
@@ -327,7 +329,7 @@ type ComparisonOptions struct {
 type NoOpCastFunc func(col *ColName, t *ConvertType) bool
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, reduceLiteralNames: o.ReduceLiteralNames}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -2727,7 +2729,7 @@ func encodeSQLBytes(val string, buf *nodeBuffer) {
 		switch typeName := FoldASCII(buf.literalType); {
 		case typeName == "regclass" && !buf.untypedRegLiterals:
 			val = buf.withoutOmittedSchema(val)
-		case buf.untypedRegLiterals && isObjectName(val):
+		case buf.reduceLiteralNames && isObjectName(val):
 			// A reg* literal that sqldef wrote untyped is stored as written, and may be read with
 			// the type of what it is compared with
 			val = buf.withoutOmittedSchema(val)

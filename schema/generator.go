@@ -2350,6 +2350,9 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// differ in case are compared below.
 		opts := g.viewComparisonOptions()
 		opts.FoldQuoted = true
+		// Literals compare as written, so that a column whose literal PostgreSQL rewrote is recreated
+		// rather than replaced by one without its cast
+		opts.ReduceLiteralNames = false
 		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
 		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
 
@@ -2373,70 +2376,10 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 			}
 		}
 
-		// sqldef writes a literal without the cast that the parser dropped, so its column becomes text
-		if changesLiteralColumnToText(currentView.definition, desiredView.definition) {
-			return true
-		}
-
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
 		return !reflect.DeepEqual(currentNormalized, desiredNormalized[:len(currentNormalized)])
 	}
 
-	return false
-}
-
-// changesLiteralColumnToText reports whether an output column of the current view that may not be
-// text is a string literal in the desired view, or may have the type of a reg* literal in both,
-// which sqldef writes untyped, so that its type may change
-func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
-	currentSelect, ok := unwrapParenSelect(current).(*parser.Select)
-	if !ok {
-		return false
-	}
-	desiredSelect, ok := unwrapParenSelect(desired).(*parser.Select)
-	if !ok {
-		return false
-	}
-	isText := func(expr parser.SelectExpr) bool {
-		aliased, ok := expr.(*parser.AliasedExpr)
-		if !ok {
-			return false
-		}
-		val, ok := aliased.Expr.(*parser.SQLVal)
-		return ok && val.Type == parser.StrVal && (val.DroppedCast == nil || strings.EqualFold(val.DroppedCast.Type, "text"))
-	}
-	for i, expr := range desiredSelect.SelectExprs[:min(len(currentSelect.SelectExprs), len(desiredSelect.SelectExprs))] {
-		if typedByRegLiteral(expr) && typedByRegLiteral(currentSelect.SelectExprs[i]) {
-			return true
-		}
-		if aliased, ok := expr.(*parser.AliasedExpr); ok {
-			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && !isText(currentSelect.SelectExprs[i]) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// typedByRegLiteral reports whether the type of an expression may be that of a literal cast to a
-// reg* type such as regclass, whose cast sqldef does not write
-func typedByRegLiteral(node parser.SQLNode) bool {
-	switch e := node.(type) {
-	case *parser.AliasedExpr:
-		return typedByRegLiteral(e.Expr)
-	case *parser.SQLVal:
-		return e.DroppedCast != nil && parser.IsRegType(parser.FoldASCII(e.DroppedCast.Type))
-	case *parser.ParenExpr:
-		return typedByRegLiteral(e.Expr)
-	case *parser.CaseExpr:
-		return slices.ContainsFunc(e.Whens, func(w *parser.When) bool { return typedByRegLiteral(w.Val) }) ||
-			(e.Else != nil && typedByRegLiteral(e.Else))
-	case *parser.FuncExpr:
-		switch parser.FoldASCII(e.Name.Name) {
-		case "coalesce", "nullif", "greatest", "least":
-			return slices.ContainsFunc(e.Exprs, func(arg parser.SelectExpr) bool { return typedByRegLiteral(arg) })
-		}
-	}
 	return false
 }
 
@@ -6580,6 +6523,7 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
 	opts := g.comparisonOptions(true)
 	opts.UntypedRegLiterals = true
+	opts.ReduceLiteralNames = true
 	return opts
 }
 
