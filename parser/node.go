@@ -57,8 +57,8 @@ type nodeBuffer struct {
 // keyLiteral is a string literal in a comparison key
 type keyLiteral struct {
 	value string
-	// caseSignificant is false for a literal of a built-in type such as uuid or boolean, whose
-	// constants PostgreSQL rewrites in its own case
+	// caseSignificant is false for a literal of a type whose constants PostgreSQL may rewrite in
+	// its own case, such as uuid
 	caseSignificant bool
 }
 
@@ -99,25 +99,20 @@ func isStringLiteral(node SQLNode) bool {
 	return false
 }
 
-// isLiteralCaseSignificant reports whether the case of a literal of the type is significant. It is,
-// unless the type is a built-in one that PostgreSQL rewrites constants of: an untyped literal, an
-// enum or a domain over text keeps its case. A reg* constant is a name, which keeps its case only
-// where it is quoted.
+// isLiteralCaseSignificant reports whether the case of a literal of the type is significant: an
+// untyped literal or one of a string type. PostgreSQL rewrites constants of many other types, such as
+// uuid, pg_lsn or a domain over boolean, in its own case. A reg* constant is a name, which keeps its
+// case only where it is quoted.
 func isLiteralCaseSignificant(val, typeName string) bool {
 	switch strings.TrimSuffix(FoldASCII(typeName), "[]") {
+	case "", "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext",
+		"json", "jsonb", "xml":
+		return true
 	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
 		"regoperator", "regconfig", "regdictionary", "regcollation":
 		return strings.Contains(val, `"`)
-	case "bytea", "int4range", "int8range", "numrange", "tsrange", "tstzrange", "daterange",
-		"int4multirange", "int8multirange", "nummultirange", "tsmultirange", "tstzmultirange",
-		"datemultirange", "uuid", "boolean", "bool", "smallint", "integer", "int", "int2", "int4", "int8", "bigint",
-		"numeric", "decimal", "real", "float4", "float8", "double precision", "money", "date",
-		"time", "timetz", "time without time zone", "time with time zone", "timestamp",
-		"timestamptz", "timestamp without time zone", "timestamp with time zone", "interval",
-		"inet", "cidr", "macaddr", "macaddr8", "bit", "varbit", "bit varying", "oid":
-		return false
 	}
-	return true
+	return false
 }
 
 func (buf *nodeBuffer) writeProtected(s string) {

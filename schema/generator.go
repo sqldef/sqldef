@@ -4042,10 +4042,10 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
-// indexCollationName writes the collation of an index column. A PostgreSQL collation name is SQL
-// as written, which the legacy mode quotes as written.
+// indexCollationName writes the collation of an index column. A PostgreSQL one is quoted as written,
+// as sqldef has always done for an index collation.
 func (d dialect) indexCollationName(collation string) string {
-	if d.mode == GeneratorModePostgres && d.legacyIgnoreQuotes {
+	if d.mode == GeneratorModePostgres {
 		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
 			return d.forceEscapeSQLName(part.Name)
 		}), ".")
@@ -5929,17 +5929,23 @@ func (g *Generator) columnCollation(column Column, domains []*Domain) string {
 // search path, which the export leaves out, and resolving "default" to an omitted collation, which
 // the export writes only for a domain that has its own. The legacy mode folds every name.
 func (g *Generator) canonicalCollation(collation string) string {
+	return g.canonicalCollationFolding(collation, true)
+}
+
+// canonicalCollationFolding is canonicalCollation, which keeps the case of every name as written
+// unless fold is set
+func (g *Generator) canonicalCollationFolding(collation string, fold bool) string {
 	if g.mode != GeneratorModePostgres {
 		return collation
 	}
 	parts := util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
-		if !part.Quoted || g.legacyIgnoreQuotes {
+		if fold && (!part.Quoted || g.legacyIgnoreQuotes) {
 			return parser.FoldASCII(part.Name)
 		}
 		return part.Name
 	})
 	defaultSchema := g.defaultSchema
-	if g.legacyIgnoreQuotes {
+	if fold && g.legacyIgnoreQuotes {
 		defaultSchema = parser.FoldASCII(defaultSchema)
 	}
 	if len(parts) == 2 && (parts[0] == "pg_catalog" || parts[0] == defaultSchema) {
@@ -5994,7 +6000,7 @@ func (g *Generator) withKeptCollation(current Column, desired Column) Column {
 	}
 	// The current collation is written as PostgreSQL resolved it, while the legacy mode matches an
 	// unquoted desired one that PostgreSQL would fold
-	if current.collate != "" && g.canonicalCollation(current.collate) == g.canonicalCollation(desired.collate) {
+	if current.collate != "" && desired.collate != "" && g.canonicalCollation(current.collate) == g.canonicalCollation(desired.collate) {
 		desired.collate = current.collate
 	}
 	return desired
@@ -6838,20 +6844,22 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 // COLLATE clause from the DDL it exports whenever it names the collation the column already has, so
 // an omitted clause has to compare equal to one that restates it. "default" names the database
 // default, which the export never writes out either. An index on a materialized view has no column
-// definitions to resolve against, so its collation is compared as written.
+// definitions to resolve against, so its collation is compared as written. Names keep their case as
+// written, as indexCollationName quotes them.
 func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
-	collation := indexColumn.collation
-	if collation == "" {
-		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			if column := g.findColumnByName(columns, colName.Name); column != nil {
-				collation = g.columnCollation(*column, g.currentDomains)
-				if collation == "" {
-					collation = g.columnCollation(*column, g.desiredDomains)
-				}
+	if indexColumn.collation != "" {
+		return g.canonicalCollationFolding(indexColumn.collation, false)
+	}
+	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+		if column := g.findColumnByName(columns, colName.Name); column != nil {
+			collation := g.columnCollation(*column, g.currentDomains)
+			if collation == "" {
+				collation = g.columnCollation(*column, g.desiredDomains)
 			}
+			return g.canonicalCollationFolding(collation, false)
 		}
 	}
-	return g.canonicalCollation(collation)
+	return ""
 }
 
 // areSameCollations compares two index-column collation names. PostgreSQL collation names are
