@@ -1560,3 +1560,16 @@ ViewWithNextvalOfSchemaQualifiedSequence:
   desired: |
     CREATE TABLE t (id serial, n bigint);
     CREATE VIEW v AS SELECT n FROM t WHERE n > nextval('public.t_id_seq');
+
+RemoveTruncatingCastOfFunctionResultInView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, s text);
+    CREATE VIEW v AS SELECT id FROM t WHERE lower(s)::varchar(3) = 'abc';
+  desired: |
+    CREATE TABLE t (id int, s text);
+    CREATE VIEW v AS SELECT id FROM t WHERE lower(s) = 'abc';
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select id from t where lower(s) = 'abc';
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select id from t where lower(s)::varchar(3) = 'abc';

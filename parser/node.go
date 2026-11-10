@@ -48,8 +48,8 @@ type nodeBuffer struct {
 	omittedSchemas []string
 	// dropSchemas leaves out every schema of table and function names
 	dropSchemas bool
-	// dropSizedStringCasts leaves out casts to character varying(n), which PostgreSQL drops where
-	// the operand already has the type
+	// dropSizedStringCasts leaves out casts of columns to character varying(n), which PostgreSQL
+	// drops where the column already has the type
 	dropSizedStringCasts      bool
 	unknownTypesCaseSensitive bool
 	protected                 []string
@@ -273,9 +273,9 @@ func ComparisonKey(node SQLNode, opts ComparisonOptions) string {
 }
 
 // SameForComparison reports whether two PostgreSQL expressions have the same ComparisonKey and
-// their string literals differ in case only where the case is significant on both sides. A cast to
-// character varying(n) on one side only may be one that PostgreSQL dropped as its operand already
-// has the type, so it is left out then.
+// their string literals differ in case only where the case is significant on both sides. A cast of
+// a column to character varying(n) on one side only may be one that PostgreSQL dropped as the column
+// already has the type, so it is left out then.
 func SameForComparison(a, b SQLNode, opts ComparisonOptions) bool {
 	if sameForComparison(a, b, opts.buffer()) {
 		return true
@@ -328,8 +328,8 @@ func (buf *nodeBuffer) writeIdentKey(n Ident) {
 }
 
 // StringWithoutSchemas is String for comparison, without omittedSchemas in table and function names
-// and without casts to character varying(n), which PostgreSQL drops where the operand already has
-// the type
+// and without casts of columns to character varying(n), which PostgreSQL drops where the column
+// already has the type
 func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
 	buf := nodeBuffer{omittedSchemas: omittedSchemas, dropSizedStringCasts: true}
 	node.Format(&buf)
@@ -337,8 +337,8 @@ func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
 }
 
 // PostgresFoldedStringWithoutSchemas is PostgresFoldedString for comparison, without any schema in
-// table and function names and without casts to character varying(n), which PostgreSQL drops where
-// the operand already has the type
+// table and function names and without casts of columns to character varying(n), which PostgreSQL
+// drops where the column already has the type
 func PostgresFoldedStringWithoutSchemas(node SQLNode) string {
 	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true, dropSizedStringCasts: true}
 	node.Format(&buf)
@@ -3068,7 +3068,7 @@ type CastExpr struct {
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
-	if buf.dropSizedStringCasts && IsSizedStringCast(node.Type) {
+	if _, ok := node.Expr.(*ColName); ok && buf.dropSizedStringCasts && IsSizedStringCast(node.Type) {
 		node.Expr.Format(buf)
 		return
 	}

@@ -1731,3 +1731,18 @@ IndexOnQuotedLowercaseFunctionName:
     CREATE TABLE "t" ("id" int, "s" text);
     CREATE INDEX "t_a" ON "t" ("lower"("s"));
     CREATE INDEX "t_w" ON "t" ("id") WHERE "lower"("s") = 'a';
+
+ChangeVarcharLengthCastOfFunctionResultInIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text);
+    CREATE INDEX i ON t ((lower(s)::varchar(10)));
+  desired: |
+    CREATE TABLE t (s text);
+    CREATE INDEX i ON t ((lower(s)::varchar(20)));
+  up: |
+    DROP INDEX public.i;
+    CREATE INDEX i ON public.t ((lower(s)::varchar(20)));
+  down: |
+    DROP INDEX public.i;
+    CREATE INDEX i ON public.t ((lower(s)::varchar(10)));

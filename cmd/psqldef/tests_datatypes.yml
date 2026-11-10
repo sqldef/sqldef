@@ -1837,3 +1837,14 @@ ColumnOfTypeNameRestatingItsCollation:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE t (n name COLLATE "C");
+
+ChangeCollatedColumnToQuotedChar:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE TABLE t (a "char");
+  up: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE "char";
+  down: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE text COLLATE "C";
