@@ -501,6 +501,19 @@ CheckWithTypedLiteralsInOtherCase:
     );
     CREATE VIEW v AS SELECT id FROM t WHERE ts > 'Infinity'::timestamp AND id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'::uuid;
 
+ChangeCheckJsonKeyCaseUnderCast:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (data jsonb, CONSTRAINT c CHECK ((data->>'Count')::integer > 0));
+  desired: |
+    CREATE TABLE t (data jsonb, CONSTRAINT c CHECK ((data->>'count')::integer > 0));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK ((data ->> 'count')::integer > 0);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK ((data ->> 'Count')::integer > 0);
+
 ChangeCheckVarcharCastLength:
   legacy_ignore_quotes: false
   current: |

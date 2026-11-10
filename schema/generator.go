@@ -302,7 +302,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, out)
 					}
 				}
-				mergeTable(currentTable, desired.table, mergedIndexes)
+				mergeTable(currentTable, desired.table, mergedIndexes, g.mode == GeneratorModePostgres)
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if !desired.table.renamedFrom.IsEmpty() {
@@ -333,7 +333,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 								interDDLs = append(interDDLs, out)
 							}
 						}
-						mergeTable(oldTable, desired.table, mergedIndexes)
+						mergeTable(oldTable, desired.table, mergedIndexes, g.mode == GeneratorModePostgres)
 					} else {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, rawStatement(desired.statement))
@@ -2408,11 +2408,13 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
 		// Only PostgreSQL keeps the case of quoted identifiers; the other databases' exports quote
 		// every identifier
-		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
-		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
+		var currentNormalized, desiredNormalized string
 		if g.mode == GeneratorModePostgres {
 			currentNormalized = parser.UnqualifiedComparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
 			desiredNormalized = parser.UnqualifiedComparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
+		} else {
+			currentNormalized = strings.ToLower(parser.String(currentNormalizedAST))
+			desiredNormalized = strings.ToLower(parser.String(desiredNormalizedAST))
 		}
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
@@ -4047,11 +4049,9 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 
 // collationName renders a column collation. PostgreSQL folds an unquoted name to lower case, but
 // its collation names are case-sensitive ("C", "POSIX"), so they are always quoted there.
+// The parser keeps a schema-qualified name quoted already.
 func (d dialect) collationName(collation string) string {
-	if d.mode == GeneratorModePostgres {
-		if schema, name, ok := strings.Cut(collation, "."); ok {
-			return d.forceEscapeSQLName(schema) + "." + d.forceEscapeSQLName(name)
-		}
+	if d.mode == GeneratorModePostgres && !strings.HasPrefix(collation, `"`) {
 		return d.forceEscapeSQLName(collation)
 	}
 	return collation
@@ -4243,10 +4243,10 @@ func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 }
 
 // Destructively modify table1 to have table2 columns and the given indexes
-func mergeTable(table1 *Table, table2 Table, indexes []Index) {
+func mergeTable(table1 *Table, table2 Table, indexes []Index, keepCollations bool) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
-		if current, ok := table1.columns[column.name.Name]; ok {
+		if current, ok := table1.columns[column.name.Name]; ok && keepCollations {
 			// An omitted collation keeps the current one (see haveSameColumnCollation)
 			merged := withKeptCollation(*current, *column)
 			table1.columns[column.name.Name] = &merged
@@ -5915,7 +5915,7 @@ func (g *Generator) canonicalCollation(collation string) string {
 	if collation == "default" {
 		return ""
 	}
-	return strings.TrimPrefix(collation, g.defaultSchema+".")
+	return strings.TrimPrefix(collation, g.forceEscapeSQLName(g.defaultSchema)+".")
 }
 
 // withKeptCollation returns the desired column with the current collation when it omits one, as
@@ -6177,11 +6177,20 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
 		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
+		if parser.NeedsParensAsCastOperand(e.Expr) {
+			return "(" + d.formatExprQuoteAware(e.Expr) + ")::" + parser.String(e.Type)
+		}
 		return d.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
 	case *parser.AtTimeZoneExpr:
 		return "(" + d.formatExprQuoteAware(e.Expr) + " at time zone " + d.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
 		if d.mode == GeneratorModePostgres {
+			// pg_get_indexdef() leaves out the schema of a function on the search path
+			if q := strings.ToLower(e.Qualifier.Name); !e.Qualifier.Quoted && (q == "pg_catalog" || q == "public") {
+				unqualified := *e
+				unqualified.Qualifier = parser.Ident{}
+				return parser.PostgresFoldedString(&unqualified)
+			}
 			return parser.PostgresFoldedString(e)
 		}
 		args := make([]string, len(e.Exprs))
@@ -6729,10 +6738,7 @@ func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn
 			}
 		}
 	}
-	if strings.EqualFold(collation, "default") {
-		return ""
-	}
-	return collation
+	return g.canonicalCollation(collation)
 }
 
 // areSameCollations compares two index-column collation names. PostgreSQL collation names are

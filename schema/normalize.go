@@ -427,9 +427,10 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		// Unwrap parentheses around simple expressions (literals, column names, etc.)
 		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name.
 		// AtTimeZoneExpr self-parenthesizes and CASE ... END is self-delimiting, so a wrapper
-		// around them is redundant too. MySQL wraps CASE in parentheses.
+		// around them is redundant too. MySQL wraps CASE in parentheses. A :: cast binds tighter
+		// than any operator, and puts parentheses around its own operand when it needs them.
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr, *parser.CaseExpr:
+		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr, *parser.CaseExpr, *parser.CastExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
@@ -661,26 +662,11 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 // which PostgreSQL adds implicitly where a string of another string type is expected. A cast with
 // a length truncates, so PostgreSQL never adds one.
 func isUnsizedStringCastType(t *parser.ConvertType) bool {
+	return isStringCastType(t) && t.Length == nil
+}
+
+func isStringCastType(t *parser.ConvertType) bool {
 	switch strings.ToLower(t.Type) {
-	case "text", "character varying", "varchar":
-		return t.Length == nil
-	}
-	return false
-}
-
-func isColNameExpr(expr parser.Expr) bool {
-	_, ok := expr.(*parser.ColName)
-	return ok
-}
-
-// isStringCastExpr reports whether expr is a cast to a string type, such as the
-// c::character varying(3) that PostgreSQL wraps in an implicit ::text
-func isStringCastExpr(expr parser.Expr) bool {
-	cast, ok := expr.(*parser.CastExpr)
-	if !ok || cast.Type == nil {
-		return false
-	}
-	switch strings.ToLower(cast.Type.Type) {
 	case "text", "character varying", "varchar":
 		return true
 	}
@@ -884,8 +870,17 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if isUnsizedStringCastType(e.Type) && (isColNameExpr(normalizedExpr) || isStringCastExpr(normalizedExpr)) {
-					return normalizedExpr
+				// A string cast under it is the c::character varying(3) that PostgreSQL wraps in an
+				// implicit ::text
+				if isUnsizedStringCastType(e.Type) {
+					switch operand := normalizedExpr.(type) {
+					case *parser.ColName:
+						return normalizedExpr
+					case *parser.CastExpr:
+						if operand.Type != nil && isStringCastType(operand.Type) {
+							return normalizedExpr
+						}
+					}
 				}
 
 				// Strip redundant casts on NULL values and normalize to lowercase

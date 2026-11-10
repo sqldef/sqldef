@@ -1395,6 +1395,12 @@ IndexRestatingCollationOfColumnWithOmittedCollation:
   up: ""
   down: ""
 
+IndexOnSchemaQualifiedFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE INDEX t_lower ON t (pg_catalog.lower(a));
+
 UnnamedIndexDuplicatesKeepBoth:
   legacy_ignore_quotes: false
   current: |

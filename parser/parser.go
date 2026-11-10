@@ -12578,8 +12578,9 @@ yydefault:
 	case 752:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
+			// A qualified name is kept as SQL, as a collation name such as "en_US.utf8" may contain a dot
 			if schema := foldCollationName(yylex, yyDollar[1].ident); schema != "pg_catalog" {
-				yyVAL.str = schema + "." + foldCollationName(yylex, yyDollar[3].ident)
+				yyVAL.str = PostgresString(NewIdent(schema, true)) + "." + PostgresString(NewIdent(foldCollationName(yylex, yyDollar[3].ident), true))
 			} else {
 				yyVAL.str = foldCollationName(yylex, yyDollar[3].ident)
 			}

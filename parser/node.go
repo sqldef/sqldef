@@ -48,11 +48,17 @@ type nodeBuffer struct {
 	protected    []string
 }
 
+// dropsQualifier reports whether a comparison key leaves out a qualifier. A quoted one is kept, as
+// pg_get_viewdef() writes it whenever it has to be quoted.
+func (buf *nodeBuffer) dropsQualifier(qualifier Ident) bool {
+	return buf.dropQualifiers && !qualifier.Quoted
+}
+
 // formatCastOperand formats the operand of a cast. PostgreSQL rewrites a constant of a type such
 // as uuid or timestamp in its own case ('Infinity'::timestamp is read back as 'infinity'), so
 // a comparison key folds such a literal.
 func (buf *nodeBuffer) formatCastOperand(operand SQLNode, typeName string) {
-	if !buf.comparisonKey || !isCaseInsensitiveLiteralType(typeName) {
+	if !buf.comparisonKey || !isStringLiteral(operand) || !isCaseInsensitiveLiteralType(typeName) {
 		operand.Format(buf)
 		return
 	}
@@ -62,13 +68,23 @@ func (buf *nodeBuffer) formatCastOperand(operand SQLNode, typeName string) {
 	buf.foldLiterals = saved
 }
 
+func isStringLiteral(node SQLNode) bool {
+	switch n := node.(type) {
+	case literalNode:
+		return true
+	case *SQLVal:
+		return n.Type == StrVal
+	}
+	return false
+}
+
 func isCaseInsensitiveLiteralType(typeName string) bool {
 	switch strings.TrimSuffix(strings.ToLower(typeName), "[]") {
 	case "uuid", "boolean", "bool", "date", "time", "timetz", "timestamp", "timestamptz",
 		"time with time zone", "time without time zone", "timestamp with time zone", "timestamp without time zone",
 		"interval", "numeric", "decimal", "real", "double precision", "float", "float4", "float8",
 		"smallint", "integer", "int", "bigint", "int2", "int4", "int8",
-		"inet", "cidr", "macaddr", "macaddr8", "bytea", "money":
+		"inet", "cidr", "macaddr", "macaddr8", "money":
 		return true
 	}
 	return false
@@ -1915,7 +1931,7 @@ func (node TableName) Format(buf *nodeBuffer) {
 	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.IsEmpty() && !buf.dropQualifiers {
+	if !node.Schema.IsEmpty() && !buf.dropsQualifier(node.Schema) {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
@@ -2543,7 +2559,7 @@ type ColName struct {
 
 // Format formats the node.
 func (node *ColName) Format(buf *nodeBuffer) {
-	if !node.Qualifier.IsEmpty() && !buf.dropQualifiers {
+	if !node.Qualifier.IsEmpty() && !buf.dropsQualifier(node.Qualifier.Name) {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	buf.Printf("%v", node.Name)
@@ -2715,7 +2731,7 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if node.Distinct {
 		distinct = "distinct "
 	}
-	if !node.Qualifier.IsEmpty() && !buf.dropQualifiers {
+	if !node.Qualifier.IsEmpty() && !buf.dropsQualifier(node.Qualifier) {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	formatFuncName(buf, node.Name)
@@ -2867,8 +2883,23 @@ type CastExpr struct {
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
+	// :: binds tighter than any operator, so an operand that normalization took out of its
+	// parentheses needs them back
+	if NeedsParensAsCastOperand(node.Expr) {
+		buf.Printf("(%v)::%v", node.Expr, node.Type)
+		return
+	}
 	buf.formatCastOperand(node.Expr, node.Type.Type)
 	buf.Printf("::%v", node.Type)
+}
+
+// NeedsParensAsCastOperand reports whether an expression has to be parenthesized before ::
+func NeedsParensAsCastOperand(expr Expr) bool {
+	switch expr.(type) {
+	case *BinaryExpr, *ComparisonExpr, *AndExpr, *OrExpr, *NotExpr, *ConcatExpr, *IsExpr, *RangeCond, *CollateExpr:
+		return true
+	}
+	return false
 }
 
 // Convert types

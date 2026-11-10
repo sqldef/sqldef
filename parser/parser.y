@@ -5476,8 +5476,9 @@ collation_name:
   }
 | ID '.' ID
   {
+    // A qualified name is kept as SQL, as a collation name such as "en_US.utf8" may contain a dot
     if schema := foldCollationName(yylex, $1); schema != "pg_catalog" {
-      $$ = schema + "." + foldCollationName(yylex, $3)
+      $$ = PostgresString(NewIdent(schema, true)) + "." + PostgresString(NewIdent(foldCollationName(yylex, $3), true))
     } else {
       $$ = foldCollationName(yylex, $3)
     }

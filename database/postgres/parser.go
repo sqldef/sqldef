@@ -1062,13 +1062,12 @@ func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Stat
 }
 
 // parseIdentList converts a pgquery list of strings to []parser.Ident.
-// pgquery doesn't preserve quoting information, so we assume unquoted (false).
+// pgquery doesn't preserve quoting information, so a name is taken as quoted when it has to be.
 func (p PostgresParser) parseIdentList(list *pgquery.List) ([]parser.Ident, error) {
 	var idents []parser.Ident
 	for _, node := range list.Items {
 		switch n := node.Node.(type) {
 		case *pgquery.Node_String_:
-			// pgquery doesn't preserve quoting info, assume unquoted
 			idents = append(idents, database.NewIdentWithQuoteDetected(n.String_.Sval))
 		}
 	}
@@ -1892,4 +1891,3 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 		Statements: statements,
 	}, nil
 }
-
