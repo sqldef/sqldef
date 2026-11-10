@@ -1538,3 +1538,19 @@ ViewWithCastOfStringLiteralToSchemaQualifiedType:
     CREATE SCHEMA s;
     CREATE TYPE s.mood AS ENUM ('happy');
     CREATE VIEW v AS SELECT 'happy'::s.mood;
+
+ViewWithUntypedAndTextStringLiterals:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v1 AS SELECT a, 'x' FROM t;
+    CREATE VIEW v2 AS SELECT a, 'x' AS "text" FROM t;
+    CREATE VIEW v3 AS SELECT CAST('x' AS text) FROM t;
+    CREATE VIEW v4 AS SELECT 'x'::text AS b FROM t;
+
+ViewWithUntypedAndTextStringLiteralsInLegacyMode:
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v1 AS SELECT a, 'x' FROM t;
+    CREATE VIEW v2 AS SELECT a, 'x' AS "text" FROM t;
+    CREATE VIEW v3 AS SELECT CAST('x' AS text) FROM t;

@@ -665,6 +665,11 @@ func isUnsizedStringCastType(t *parser.ConvertType) bool {
 	return isStringCastType(t) && t.Length == nil
 }
 
+// isTextCast reports whether a cast is to text, which PostgreSQL adds to an untyped string literal
+func isTextCast(t *parser.ConvertType) bool {
+	return t != nil && strings.EqualFold(t.Type, "text") && t.Length == nil
+}
+
 func isStringCastType(t *parser.ConvertType) bool {
 	switch strings.ToLower(t.Type) {
 	case "text", "character varying", "varchar":
@@ -1226,6 +1231,19 @@ func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.S
 // normalization changes its default name in PostgreSQL, such as by folding "1::integer" (int4)
 // into "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
 func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
+	// PostgreSQL stores an untyped string literal as text, so 'x'::text and 'x' differ only in their
+	// names. Both become an untyped literal with its name as an alias.
+	if aliased, ok := expr.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres {
+		if val, ok := aliased.Expr.(*parser.SQLVal); ok && isTextCast(val.DroppedCast) {
+			as := aliased.As
+			if as.IsEmpty() {
+				as = parser.NewIdent(castTypeColname(val.DroppedCast), false)
+			}
+			untyped := *val
+			untyped.DroppedCast = nil
+			expr = &parser.AliasedExpr{Expr: &untyped, As: as}
+		}
+	}
 	normalized := normalizeSelectExpr(expr, mode)
 	aliased, ok := expr.(*parser.AliasedExpr)
 	if !ok || mode != GeneratorModePostgres {

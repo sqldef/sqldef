@@ -5992,6 +5992,11 @@ func (g *Generator) withKeptCollation(current Column, desired Column) Column {
 	if desired.collate == "" && g.takesCollationOf(current, desired) {
 		desired.collate = current.collate
 	}
+	// The current collation is written as PostgreSQL resolved it, while the legacy mode matches an
+	// unquoted desired one that PostgreSQL would fold
+	if current.collate != "" && g.canonicalCollation(current.collate) == g.canonicalCollation(desired.collate) {
+		desired.collate = current.collate
+	}
 	return desired
 }
 

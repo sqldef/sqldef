@@ -1812,3 +1812,13 @@ AddColumnWithUnquotedCollationInLegacyMode:
     ALTER TABLE "public"."t" ADD COLUMN "name" text COLLATE UCS_BASIC;
   down: |
     ALTER TABLE "public"."t" DROP COLUMN "name";
+
+ChangeColumnTypeKeepsUnquotedCollationInLegacyMode:
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE TABLE t (a varchar(20) COLLATE C);
+  up: |
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE varchar(20) COLLATE "C";
+  down: |
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE text COLLATE "C";
