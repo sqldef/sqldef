@@ -1779,7 +1779,7 @@ ColumnRestatingQualifiedCollationOfItsDomain:
     CREATE DOMAIN d AS text COLLATE pg_catalog."POSIX";
     CREATE TABLE t (a d COLLATE "POSIX");
 
-ChangeColumnFromCollatedDomainToVarcharKeepsCollation:
+ChangeColumnFromCollatedDomainToVarcharTakesDefaultCollation:
   legacy_ignore_quotes: false
   current: |
     CREATE DOMAIN d AS text COLLATE "C";
@@ -1788,7 +1788,7 @@ ChangeColumnFromCollatedDomainToVarcharKeepsCollation:
     CREATE DOMAIN d AS text COLLATE "C";
     CREATE TABLE t (a varchar(20));
   up: |
-    ALTER TABLE public.t ALTER COLUMN a TYPE varchar(20) COLLATE "C";
+    ALTER TABLE public.t ALTER COLUMN a TYPE varchar(20);
   down: |
     ALTER TABLE public.t ALTER COLUMN a TYPE d;
 

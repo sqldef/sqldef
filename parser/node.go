@@ -46,8 +46,10 @@ type nodeBuffer struct {
 	// omittedSchemas are the schemas left out of table and function names, as PostgreSQL leaves
 	// out a schema on the search path when it reads an expression back
 	omittedSchemas []string
-	protected      []string
-	literals       []keyLiteral
+	// dropSchemas leaves out every schema of table and function names
+	dropSchemas bool
+	protected   []string
+	literals    []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
 	literalType string
 }
@@ -61,6 +63,12 @@ type keyLiteral struct {
 }
 
 func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
+	if buf.dropSchemas {
+		return true
+	}
+	if len(buf.omittedSchemas) == 0 {
+		return false
+	}
 	name := schema.Name
 	if !schema.Quoted || buf.foldQuoted {
 		name = FoldASCII(name)
@@ -195,10 +203,13 @@ type ComparisonOptions struct {
 	// OmittedSchemas are left out of table and function names, as PostgreSQL leaves out a schema on
 	// the search path
 	OmittedSchemas []string
+	// DropSchemas leaves out every schema of table and function names, as sqldef does not know the
+	// search path, which may hold other schemas than the default one
+	DropSchemas bool
 }
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -246,6 +257,14 @@ func (buf *nodeBuffer) writeIdentKey(n Ident) {
 // StringWithoutSchemas is String without omittedSchemas in table and function names
 func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
 	buf := nodeBuffer{omittedSchemas: omittedSchemas}
+	node.Format(&buf)
+	return buf.String()
+}
+
+// PostgresFoldedStringWithoutSchemas is PostgresFoldedString without any schema in table and
+// function names
+func PostgresFoldedStringWithoutSchemas(node SQLNode) string {
+	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true}
 	node.Format(&buf)
 	return buf.String()
 }

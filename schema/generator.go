@@ -5990,7 +5990,7 @@ func postgresNameParts(name string) []Ident {
 // ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
 func (g *Generator) withKeptCollation(current Column, desired Column) Column {
 	if desired.collate == "" && g.takesCollationOf(current, desired) {
-		desired.collate = g.columnCollation(current, g.currentDomains)
+		desired.collate = current.collate
 	}
 	return desired
 }
@@ -6263,7 +6263,7 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		return "(" + d.formatExprQuoteAware(e.Expr) + " at time zone " + d.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
 		if d.mode == GeneratorModePostgres {
-			return parser.PostgresFoldedString(e, d.omittedFunctionSchemas()...)
+			return d.postgresFoldedString(e)
 		}
 		args := make([]string, len(e.Exprs))
 		for i, arg := range e.Exprs {
@@ -6289,20 +6289,26 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		return result
 	default:
 		if d.mode == GeneratorModePostgres {
-			return parser.PostgresFoldedString(expr, d.omittedFunctionSchemas()...)
+			return d.postgresFoldedString(expr)
 		}
 		return parser.String(expr)
 	}
 }
 
-// omittedFunctionSchemas returns the schemas left out of function names. pg_get_indexdef() leaves out
-// the schema of a function on the search path, but DDL keeps the default schema, as a function in it
-// would otherwise resolve to one of the same name in pg_catalog.
-func (d dialect) omittedFunctionSchemas() []string {
+// postgresFoldedString formats an expression of an index. DDL leaves out only pg_catalog, as a
+// function in the default schema would otherwise resolve to one of the same name in pg_catalog. A
+// comparison leaves out every schema, as pg_get_indexdef() leaves out the schemas on the search path.
+func (d dialect) postgresFoldedString(expr parser.Expr) string {
 	if d.comparing {
-		return []string{"pg_catalog", d.defaultSchema}
+		return parser.PostgresFoldedStringWithoutSchemas(expr)
 	}
-	return []string{"pg_catalog"}
+	return parser.PostgresFoldedString(expr, "pg_catalog")
+}
+
+// searchPathSchemas returns the schemas known to be on the search path, which PostgreSQL leaves out
+// when it reads an expression back
+func (g *Generator) searchPathSchemas() []string {
+	return []string{"pg_catalog", g.defaultSchema}
 }
 
 // comparisonDialect returns the dialect that formats expressions for comparison
@@ -6413,7 +6419,9 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 	return parser.ComparisonOptions{
 		FoldQuoted:     g.legacyIgnoreQuotes,
 		DropQualifiers: dropQualifiers,
-		OmittedSchemas: g.comparisonDialect().omittedFunctionSchemas(),
+		OmittedSchemas: g.searchPathSchemas(),
+		// pg_get_viewdef() leaves out every schema on the search path, which sqldef does not know
+		DropSchemas: dropQualifiers,
 	}
 }
 
@@ -7002,7 +7010,7 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 // the PostgreSQL schemas that pg_get_indexdef() and pg_get_expr() leave out of function names
 func (g *Generator) formatLegacyExprForComparison(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
-		return parser.StringWithoutSchemas(expr, g.comparisonDialect().omittedFunctionSchemas()...)
+		return parser.StringWithoutSchemas(expr, g.searchPathSchemas()...)
 	}
 	return parser.String(expr)
 }
