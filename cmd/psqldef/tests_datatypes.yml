@@ -1765,3 +1765,16 @@ IntervalFieldQualifierDefault:
   legacy_ignore_quotes: false
 
 # Function returning TABLE
+
+IndexRestatingCollationOfColumnDomain:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE t (a d);
+    CREATE INDEX t_a ON t (a COLLATE "C");
+
+ColumnRestatingQualifiedCollationOfItsDomain:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE pg_catalog."POSIX";
+    CREATE TABLE t (a d COLLATE "POSIX");

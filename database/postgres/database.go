@@ -796,11 +796,14 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
 		       t.typdefault AS default_value,
 		       t.typnotnull AS not_null,
-		       c.collname AS collation,
+		       CASE WHEN c.collname = 'default' THEN NULL
+		            WHEN cn.nspname = 'pg_catalog' THEN quote_ident(c.collname)
+		            ELSE quote_ident(cn.nspname) || '.' || quote_ident(c.collname) END AS collation,
 		       obj_description(t.oid, 'pg_type') AS domain_comment
 		FROM pg_catalog.pg_type t
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
+		LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid = c.collnamespace
 		WHERE t.typtype = 'd'
 		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_type') AND d.deptype = 'e')
@@ -876,8 +879,8 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		var ddl strings.Builder
 		ddl.WriteString(fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.quoteIdentifierIfNeeded(di.schema), d.quoteIdentifierIfNeeded(di.name), di.dataType))
 
-		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
-			ddl.WriteString(fmt.Sprintf(" COLLATE %s", d.quoteIdentifierIfNeeded(di.collation.String)))
+		if di.collation.Valid {
+			ddl.WriteString(" COLLATE " + di.collation.String)
 		}
 
 		if di.defaultValue.Valid {

@@ -2630,7 +2630,9 @@ type ColName struct {
 
 // Format formats the node.
 func (node *ColName) Format(buf *nodeBuffer) {
-	if !node.Qualifier.IsEmpty() && !buf.dropsQualifier(node.Qualifier.Name) {
+	// pg_get_viewdef() qualifies a column with its table on PostgreSQL 13-15 and wherever it is
+	// ambiguous, however the table's name is written
+	if !node.Qualifier.IsEmpty() && !buf.dropQualifiers {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	buf.Printf("%v", node.Name)
@@ -2773,7 +2775,11 @@ func (node *CollateExpr) Format(buf *nodeBuffer) {
 	if buf.comparisonKey {
 		// A collation name is case-sensitive, and the parser keeps it as written
 		buf.Printf("%v collate ", node.Expr)
-		buf.writeProtected(`"` + node.Charset + `"`)
+		charset := node.Charset
+		if buf.foldQuoted {
+			charset = FoldASCII(charset)
+		}
+		buf.writeProtected(`"` + charset + `"`)
 		return
 	}
 	buf.Printf("%v collate \"%s\"", node.Expr, node.Charset)

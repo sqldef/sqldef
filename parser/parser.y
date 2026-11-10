@@ -5478,6 +5478,10 @@ collation_name:
   {
     $$ = collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)
   }
+| STRING
+  {
+    $$ = $1
+  }
 
 index_definition:
   index_info '(' index_column_list ')' index_option_opt index_partition_opt

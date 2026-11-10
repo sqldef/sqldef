@@ -3679,13 +3679,7 @@ func (d dialect) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 		column += fmt.Sprintf("(%d)", *indexColumn.length)
 	}
 	if indexColumn.collation != "" {
-		// PostgreSQL collation names are case-sensitive identifiers ("C", "en_US"), and the
-		// database always prints them quoted.
-		if d.mode == GeneratorModePostgres {
-			column += fmt.Sprintf(" COLLATE %s", d.collationName(indexColumn.collation))
-		} else {
-			column += fmt.Sprintf(" COLLATE %s", indexColumn.collation)
-		}
+		column += fmt.Sprintf(" COLLATE %s", d.collationName(indexColumn.collation))
 	}
 	if indexColumn.operatorClass != "" {
 		column += " " + indexColumn.operatorClass
@@ -4046,9 +4040,6 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
-// collationName renders a column collation. PostgreSQL folds an unquoted name to lower case, but
-// its collation names are case-sensitive ("C", "POSIX"), so they are always quoted there.
-// The parser keeps a schema-qualified name quoted already.
 // collationName writes a collation name. A PostgreSQL one is SQL already; the legacy mode quotes it
 // as written.
 func (d dialect) collationName(collation string) string {
@@ -5485,8 +5476,6 @@ func (g *Generator) classifyEnumTypeChange(currentColumn, desiredColumn Column) 
 	return fmt.Sprintf("%s::%s", column, target), enumInvolved
 }
 
-// findEnumTypeForColumn looks up the enum type that the column refers to in the given
-// types list, or returns nil if the column does not refer to an enum type.
 // findDomainForColumn returns the domain that is the type of the column
 func (g *Generator) findDomainForColumn(column Column, domains []*Domain) *Domain {
 	if g.mode != GeneratorModePostgres || column.typeName == "" {
@@ -5516,6 +5505,8 @@ func columnTypeName(column Column) QualifiedName {
 	}
 }
 
+// findEnumTypeForColumn looks up the enum type that the column refers to in the given
+// types list, or returns nil if the column does not refer to an enum type.
 func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
 	if g.mode != GeneratorModePostgres || column.typeName == "" {
 		return nil
@@ -5967,6 +5958,9 @@ func postgresNameParts(name string) []Ident {
 			var part strings.Builder
 			for {
 				i := strings.IndexByte(rest, '"')
+				if i < 0 {
+					panic(fmt.Sprintf("unterminated quoted name: %s", name))
+				}
 				part.WriteString(rest[:i])
 				rest = rest[i+1:]
 				if !strings.HasPrefix(rest, `"`) {
@@ -6828,7 +6822,7 @@ func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn
 	if collation == "" {
 		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
 			if column := g.findColumnByName(columns, colName.Name); column != nil {
-				collation = column.collate
+				collation = g.columnCollation(*column, slices.Concat(g.desiredDomains, g.currentDomains))
 			}
 		}
 	}
@@ -7350,9 +7344,11 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
 	normalizedExpr := normalizeExpr(expr, d.mode)
-	exprStr := parser.String(normalizedExpr)
+	var exprStr string
 	if d.mode == GeneratorModePostgres && !d.legacyIgnoreQuotes {
 		exprStr = parser.PostgresFoldedString(normalizedExpr)
+	} else {
+		exprStr = parser.String(normalizedExpr)
 	}
 	if d.mode == GeneratorModeMysql || d.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error
