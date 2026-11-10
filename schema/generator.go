@@ -2386,8 +2386,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 }
 
 // changesLiteralColumnToText reports whether an output column of the current view that may not be
-// text is a string literal in the desired view, or has a reg* literal in both, which sqldef writes
-// untyped, so that its type may change
+// text is a string literal in the desired view, or may have the type of a reg* literal in both,
+// which sqldef writes untyped, so that its type may change
 func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
 	currentSelect, ok := unwrapParenSelect(current).(*parser.Select)
 	if !ok {
@@ -2406,14 +2406,35 @@ func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
 		return ok && val.Type == parser.StrVal && (val.DroppedCast == nil || strings.EqualFold(val.DroppedCast.Type, "text"))
 	}
 	for i, expr := range desiredSelect.SelectExprs[:min(len(currentSelect.SelectExprs), len(desiredSelect.SelectExprs))] {
-		// A reg* literal that PostgreSQL stored with its type may be what gives the column its type
-		if parser.ContainsRegLiteral(expr) && parser.ContainsRegLiteral(currentSelect.SelectExprs[i]) {
+		if typedByRegLiteral(expr) && typedByRegLiteral(currentSelect.SelectExprs[i]) {
 			return true
 		}
 		if aliased, ok := expr.(*parser.AliasedExpr); ok {
 			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && !isText(currentSelect.SelectExprs[i]) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// typedByRegLiteral reports whether the type of an expression may be that of a literal cast to a
+// reg* type such as regclass, whose cast sqldef does not write
+func typedByRegLiteral(node parser.SQLNode) bool {
+	switch e := node.(type) {
+	case *parser.AliasedExpr:
+		return typedByRegLiteral(e.Expr)
+	case *parser.SQLVal:
+		return e.DroppedCast != nil && parser.IsRegType(parser.FoldASCII(e.DroppedCast.Type))
+	case *parser.ParenExpr:
+		return typedByRegLiteral(e.Expr)
+	case *parser.CaseExpr:
+		return slices.ContainsFunc(e.Whens, func(w *parser.When) bool { return typedByRegLiteral(w.Val) }) ||
+			(e.Else != nil && typedByRegLiteral(e.Else))
+	case *parser.FuncExpr:
+		switch parser.FoldASCII(e.Name.Name) {
+		case "coalesce", "nullif", "greatest", "least":
+			return slices.ContainsFunc(e.Exprs, func(arg parser.SelectExpr) bool { return typedByRegLiteral(arg) })
 		}
 	}
 	return false
@@ -6559,7 +6580,6 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
 	opts := g.comparisonOptions(true)
 	opts.UntypedRegLiterals = true
-	opts.DefaultSchema = g.defaultSchema
 	return opts
 }
 

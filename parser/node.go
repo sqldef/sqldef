@@ -19,7 +19,6 @@ package parser
 import (
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -55,8 +54,6 @@ type nodeBuffer struct {
 	noOpCast                  NoOpCastFunc
 	unknownTypesCaseSensitive bool
 	untypedRegLiterals        bool
-	defaultSchema             string
-	sawRegLiteral             bool
 	protected                 []string
 	literals                  []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
@@ -165,14 +162,6 @@ func IsRegType(typeName string) bool {
 		return true
 	}
 	return false
-}
-
-// ContainsRegLiteral reports whether a node has a string literal cast to a reg* type such as
-// regclass
-func ContainsRegLiteral(node SQLNode) bool {
-	var buf nodeBuffer
-	node.Format(&buf)
-	return buf.sawRegLiteral
 }
 
 // withoutOmittedSchema writes an object name in a reg* constant as PostgreSQL writes it back:
@@ -295,11 +284,9 @@ type ComparisonOptions struct {
 	// NoOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	NoOpCast NoOpCastFunc
 	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass without
-	// its cast, as sqldef writes a view without the casts of its literals. The schema of a name in
-	// it is left out, and so is DefaultSchema or one of OmittedSchemas in a text literal, which may
-	// be one written so.
+	// its cast, as sqldef writes a view without the casts of its literals. Its name is compared as
+	// PostgreSQL writes it back, and so is a text literal, which may be one written so.
 	UntypedRegLiterals bool
-	DefaultSchema      string
 }
 
 // NoOpCastFunc reports whether a cast of a column is one that PostgreSQL drops, as the column
@@ -307,7 +294,7 @@ type ComparisonOptions struct {
 type NoOpCastFunc func(col *ColName, t *ConvertType) bool
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, defaultSchema: o.DefaultSchema}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -2666,9 +2653,6 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
 		if node.DroppedCast != nil {
-			if IsRegType(FoldASCII(node.DroppedCast.Type)) {
-				buf.sawRegLiteral = true
-			}
 			if buf.untypedRegLiterals && IsRegType(FoldASCII(node.DroppedCast.Type)) {
 				// The literal is written without its cast, but the name in it keeps its case only
 				// where it is quoted
@@ -2711,10 +2695,8 @@ func encodeSQLBytes(val string, buf *nodeBuffer) {
 		case typeName == "regclass" || buf.untypedRegLiterals && IsRegType(typeName):
 			val = buf.withoutOmittedSchema(val)
 		case buf.untypedRegLiterals && (typeName == "" || typeName == "text"):
-			// A reg* literal that sqldef wrote untyped is stored as text, with its schema
-			if schema, name, ok := strings.Cut(val, "."); ok && (schema == buf.defaultSchema || slices.Contains(buf.omittedSchemas, schema)) {
-				val = name
-			}
+			// A reg* literal that sqldef wrote untyped is stored as text as written
+			val = buf.withoutOmittedSchema(val)
 		}
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
 		buf.literalType = ""
