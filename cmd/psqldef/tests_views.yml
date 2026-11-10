@@ -1686,3 +1686,9 @@ ChangeViewWithStringLiteralCastsToAliasesOfTypes:
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select 'x'::text as c, 'y'::char(1) as h, 'z'::"char" as z from t;
+
+ViewWithRegclassAndRegtypeLiterals:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE tt (id int);
+    CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS a, 'public."tt"'::regclass AS b, 'Integer'::regtype AS c FROM tt;

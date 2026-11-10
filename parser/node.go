@@ -111,7 +111,7 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 	if typeName == "" || isStringType(typeName) {
 		return true
 	}
-	if IsRegType(typeName) {
+	if isRegType(typeName) {
 		return strings.Contains(literal.value, `"`)
 	}
 	switch typeName {
@@ -165,9 +165,7 @@ func IsSizedStringCast(t *ConvertType) bool {
 	return false
 }
 
-// IsRegType reports whether a type is an OID alias type such as regclass, whose constant names an
-// object
-func IsRegType(typeName string) bool {
+func isRegType(typeName string) bool {
 	switch typeName {
 	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
 		"regoperator", "regconfig", "regdictionary", "regcollation":
@@ -176,13 +174,32 @@ func IsRegType(typeName string) bool {
 	return false
 }
 
-// withoutOmittedSchema leaves out an omitted schema of a relation name in a regclass constant, which
-// PostgreSQL writes back without a schema on the search path
+// withoutOmittedSchema writes a relation name in a regclass constant as PostgreSQL writes it back:
+// without a schema on the search path, and without quotes where the name needs none
 func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
 	if schema, name, ok := strings.Cut(val, "."); ok && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
-		return name
+		val = name
+	}
+	if unquoted, ok := strings.CutPrefix(val, `"`); ok {
+		if name, ok := strings.CutSuffix(unquoted, `"`); ok && needsNoQuotes(name) {
+			return name
+		}
 	}
 	return val
+}
+
+// needsNoQuotes reports whether a name is a lowercase identifier, which PostgreSQL writes unquoted
+// unless it is a keyword
+func needsNoQuotes(name string) bool {
+	if name == "" || !(name[0] == '_' || 'a' <= name[0] && name[0] <= 'z') {
+		return false
+	}
+	for _, c := range []byte(name) {
+		if !(c == '_' || c == '$' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func (buf *nodeBuffer) writeProtected(s string) {

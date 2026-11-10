@@ -1242,9 +1242,7 @@ func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parse
 			if as.IsEmpty() {
 				as = castTypeColname(val.DroppedCast)
 			}
-			// A reg* constant names an object, which PostgreSQL resolves and sqldef does not, so it
-			// compares as the text sqldef creates it as
-			if isTextCast(val.DroppedCast) || parser.IsRegType(parser.FoldASCII(strings.TrimSuffix(val.DroppedCast.Type, "[]"))) {
+			if isTextCast(val.DroppedCast) {
 				untyped := *val
 				untyped.DroppedCast = nil
 				expr = &parser.AliasedExpr{Expr: &untyped, As: as}
