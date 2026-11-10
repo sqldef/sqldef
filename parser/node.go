@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -178,14 +177,18 @@ func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
 	return val
 }
 
-// isObjectName reports whether a string is an object name with a schema, or a quoted name, as a
-// reg* constant may hold
+// isObjectName reports whether a string may be what a reg* constant holds with a schema, such as
+// public.t or pg_catalog.lower(text), or a quoted name
 func isObjectName(val string) bool {
-	schema, name, ok := strings.Cut(val, ".")
+	schema, rest, ok := strings.Cut(val, ".")
 	if !ok {
 		return isNamePart(val) && strings.HasPrefix(val, `"`)
 	}
-	return isNamePart(schema) && isNamePart(name)
+	if rest == "" || !isNamePart(schema) {
+		return false
+	}
+	c, _ := utf8.DecodeRuneInString(rest)
+	return c == '"' || isNameStart(c)
 }
 
 // isNamePart reports whether a string is a quoted identifier or one PostgreSQL reads unquoted
@@ -195,11 +198,16 @@ func isNamePart(part string) bool {
 		return ok && name != "" && !strings.Contains(name, `"`)
 	}
 	for i, c := range part {
-		if !(c == '_' || unicode.IsLetter(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
+		if !(isNameStart(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
 			return false
 		}
 	}
 	return part != ""
+}
+
+// isNameStart reports whether PostgreSQL reads a character as the start of an unquoted identifier
+func isNameStart(c rune) bool {
+	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c >= utf8.RuneSelf
 }
 
 // needsNoQuotes reports whether a name is a lowercase identifier, which PostgreSQL writes unquoted
@@ -2717,7 +2725,7 @@ func (node literalNode) Format(buf *nodeBuffer) {
 func encodeSQLBytes(val string, buf *nodeBuffer) {
 	if buf.comparisonKey {
 		switch typeName := FoldASCII(buf.literalType); {
-		case typeName == "regclass" || buf.untypedRegLiterals && IsRegType(typeName):
+		case typeName == "regclass" && !buf.untypedRegLiterals:
 			val = buf.withoutOmittedSchema(val)
 		case buf.untypedRegLiterals && isObjectName(val):
 			// A reg* literal that sqldef wrote untyped is stored as written, and may be read with
@@ -3816,7 +3824,7 @@ func (n Ident) Format(buf *nodeBuffer) {
 // otherwise, where formatID would quote it in MySQL's style
 func formatPostgresID(buf *nodeBuffer, name string) {
 	for i, c := range name {
-		if !(c == '_' || unicode.IsLetter(c) || c >= utf8.RuneSelf || i > 0 && (c == '$' || isAsciiDigit(c))) {
+		if !(isNameStart(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
 			buf.writePostgresQuoted(name)
 			return
 		}
