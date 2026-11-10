@@ -95,7 +95,7 @@ type Generator struct {
 	desiredTables []*Table
 	currentTables []*Table
 	// desiredSizedVarcharColumns are the desired columns of type character varying(n), for noOpCast
-	desiredSizedVarcharColumns []*Column
+	desiredSizedVarcharColumns map[string][]*Column
 
 	desiredViews []*View
 	currentViews []*View
@@ -6374,7 +6374,7 @@ func (g *Generator) noOpCast(col *parser.ColName, t *parser.ConvertType) bool {
 	if !parser.IsSizedStringCast(t) || normalizeTypeName(t.Type, g.mode) != "character varying" {
 		return false
 	}
-	for _, column := range g.desiredSizedVarcharColumns {
+	for _, column := range g.desiredSizedVarcharColumns[parser.FoldASCII(col.Name.Name)] {
 		if column.length.raw == t.Length.Val && g.identsEqual(column.name, col.Name) {
 			return true
 		}
@@ -6382,13 +6382,14 @@ func (g *Generator) noOpCast(col *parser.ColName, t *parser.ConvertType) bool {
 	return false
 }
 
-// sizedVarcharColumns returns the columns of type character varying(n)
-func sizedVarcharColumns(tables []*Table, mode GeneratorMode) []*Column {
-	var columns []*Column
+// sizedVarcharColumns returns the columns of type character varying(n) by their folded names
+func sizedVarcharColumns(tables []*Table, mode GeneratorMode) map[string][]*Column {
+	columns := map[string][]*Column{}
 	for _, table := range tables {
-		for _, column := range util.CanonicalMapIter(table.columns) {
+		for _, column := range table.columns {
 			if !column.array && column.length != nil && normalizeTypeName(column.typeName, mode) == "character varying" {
-				columns = append(columns, column)
+				key := parser.FoldASCII(column.name.Name)
+				columns[key] = append(columns[key], column)
 			}
 		}
 	}

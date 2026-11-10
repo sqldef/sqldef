@@ -1950,6 +1950,10 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 			if val, ok := aliased.Expr.(*parser.SQLVal); ok && parser.KeepsLiteralCast(val.DroppedCast) {
 				castType := *val.DroppedCast
 				castType.Type = normalizeTypeName(castType.Type, mode)
+				// char is char(1), while bpchar has no length
+				if castType.Type == "character" && castType.Length == nil && !strings.EqualFold(val.DroppedCast.Type, "bpchar") {
+					castType.Length = parser.NewIntVal("1")
+				}
 				key += "::" + parser.ComparisonKey(&castType, opts)
 			}
 		}

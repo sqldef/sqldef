@@ -114,15 +114,6 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 	if isRegType(typeName) {
 		return strings.Contains(literal.value, `"`)
 	}
-	if isRewrittenLiteralType(typeName) {
-		return false
-	}
-	return unknownSignificant
-}
-
-// isRewrittenLiteralType reports whether PostgreSQL rewrites a constant of a type in its own form,
-// such as 't'::boolean as true
-func isRewrittenLiteralType(typeName string) bool {
 	switch typeName {
 	case "bytea", "int4range", "int8range", "numrange", "tsrange", "tstzrange", "daterange",
 		"int4multirange", "int8multirange", "nummultirange", "tsmultirange", "tstzmultirange",
@@ -132,28 +123,24 @@ func isRewrittenLiteralType(typeName string) bool {
 		"timestamp", "timestamptz", "timestamp without time zone", "timestamp with time zone",
 		"interval", "inet", "cidr", "macaddr", "macaddr8", "bit", "varbit", "bit varying", "oid",
 		"pg_lsn", "tsvector", "tsquery":
-		return true
+		return false
 	}
-	return false
+	return unknownSignificant
 }
 
 // KeepsLiteralCast reports whether sqldef keeps a cast that the parser dropped from a string literal
-// where it names or types a view's output column. PostgreSQL stores the literal of such a type as
-// written, while it rewrites others, such as a boolean, and sqldef cannot write a json literal with a
-// double quote back.
+// where it names or types a view's output column: one to a string type, whose literal PostgreSQL
+// stores as written. A literal of another type, which PostgreSQL may rewrite (such as 't'::boolean
+// as true), stays untyped.
 func KeepsLiteralCast(t *ConvertType) bool {
 	if t == nil {
 		return false
 	}
-	typeName := strings.TrimSuffix(FoldASCII(t.Type), "[]")
-	if t.TimeZone != "" {
-		typeName += t.TimeZone
+	switch FoldASCII(t.Type) {
+	case "text", "character varying", "varchar", "character", "char", "bpchar", `"char"`, "name":
+		return true
 	}
-	switch typeName {
-	case "json", "jsonb":
-		return false
-	}
-	return !isRegType(typeName) && !isRewrittenLiteralType(typeName)
+	return false
 }
 
 // isStringType reports whether a PostgreSQL type is a string type, whose constants keep their case
@@ -2538,7 +2525,9 @@ func postgresFloatTypeName(precision string) string {
 // that the cast can be written back where it names or types a view's output column
 func literalCastType(columnType ColumnType, array BoolVal) *ConvertType {
 	typeName := columnType.Type
-	if columnType.TypeIdent.Quoted {
+	// A quoted name in lowercase names the same type as an unquoted one, except "char", which is not
+	// char(1)
+	if columnType.TypeIdent.Quoted && (columnType.TypeIdent.Name != FoldASCII(columnType.TypeIdent.Name) || columnType.TypeIdent.Name == "char") {
 		typeName = PostgresString(columnType.TypeIdent)
 	}
 	if array {

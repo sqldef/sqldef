@@ -1635,7 +1635,7 @@ ChangeViewWithStringLiteralCastsToTypesWithModifiers:
     CREATE TABLE t (id int);
     CREATE VIEW v AS SELECT id, 'a'::"Mood", 'x'::varchar(5) AS c FROM t;
   up: |
-    CREATE OR REPLACE VIEW public.v AS select id, 'a'::"Mood", 'x'::varchar(5) as c from t;
+    CREATE OR REPLACE VIEW public.v AS select id, 'a' as "Mood", 'x'::varchar(5) as c from t;
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select id from t;
@@ -1643,16 +1643,42 @@ ChangeViewWithStringLiteralCastsToTypesWithModifiers:
 ChangeViewColumnTypeByStringLiteralCast:
   legacy_ignore_quotes: false
   current: |
-    CREATE TYPE mood AS ENUM ('a', 'b');
     CREATE TABLE t (id int);
     CREATE VIEW v AS SELECT id, 'a' AS d FROM t;
   desired: |
-    CREATE TYPE mood AS ENUM ('a', 'b');
     CREATE TABLE t (id int);
-    CREATE VIEW v AS SELECT id, 'a'::mood AS d, 1 AS extra FROM t;
+    CREATE VIEW v AS SELECT id, 'a'::varchar(5) AS d, 1 AS extra FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select id, 'a'::mood as d, 1 as extra from t;
+    CREATE VIEW public.v AS select id, 'a'::varchar(5) as d, 1 as extra from t;
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select id, 'a' as d from t;
+
+ChangeViewWithStringLiteralCastsInSubqueryAndCTE:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS WITH c AS (SELECT 'a'::varchar(3), 'b'::text) SELECT count(*) AS n FROM c, (SELECT 'x'::char, 'y'::bpchar AS y) s;
+  desired: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS WITH c AS (SELECT 'a'::varchar(3), 'b'::text) SELECT count(*) AS n, 1 AS m FROM c, (SELECT 'x'::char, 'y'::bpchar AS y) s;
+  up: |
+    CREATE OR REPLACE VIEW public.v AS WITH c AS (select 'a'::varchar(3), 'b'::text) select count(*) as n, 1 as m from c, (select 'x'::char, 'y'::bpchar as y) as s;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS WITH c AS (select 'a'::varchar(3), 'b'::text) select count(*) as n from c, (select 'x'::char, 'y'::bpchar as y) as s;
+
+ChangeViewWithStringLiteralCastsToAliasesOfTypes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT 'x'::"text" AS c, 'y'::char AS h, 'z'::"char" AS z FROM t;
+  desired: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT 'x'::"text" AS c, 'y'::char AS h, 'z'::"char" AS z, 1 AS m FROM t;
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select 'x'::text as c, 'y'::char as h, 'z'::"char" as z, 1 as m from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select 'x'::text as c, 'y'::char as h, 'z'::"char" as z from t;
