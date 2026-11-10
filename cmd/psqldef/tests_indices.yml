@@ -1368,6 +1368,22 @@ IndexKeepsCollationWhenItsColumnCollationChanges:
   down: |
     ALTER TABLE public.products ALTER COLUMN name TYPE text COLLATE "C";
 
+IndexAndDefaultWithQuotedFunctionName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION "MyFn"() RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT 'x' $$;
+    CREATE TABLE t (a text);
+  desired: |
+    CREATE FUNCTION "MyFn"() RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT 'x' $$;
+    CREATE TABLE t (a text DEFAULT upper("MyFn"()));
+    CREATE INDEX t_idx ON t ("MyFn"(), lower(a));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN a SET DEFAULT upper("MyFn"());
+    CREATE INDEX t_idx ON public.t ("MyFn"(), lower(a));
+  down: |
+    ALTER TABLE public.t ALTER COLUMN a DROP DEFAULT;
+    DROP INDEX public.t_idx;
+
 UnnamedIndexDuplicatesKeepBoth:
   legacy_ignore_quotes: false
   current: |

@@ -1087,6 +1087,59 @@ ChangeUnnestOfArrayToUnnestOfMultipleArrays:
 #   down: |
 #     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
 
+ChangeViewStringLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'Active';
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'active';
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'Active';
+
+ChangeViewStringLiteralCaseInLegacyMode:
+  current: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'Active';
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
+  up: |
+    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'active';
+  down: |
+    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'Active';
+
+ChangeViewColumnToQuotedColumnDifferingInCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT a FROM t;
+  desired: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT "A" FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select "A" from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select a from t;
+
+ChangeViewWhereToQuotedColumnDifferingInCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT a AS x FROM t WHERE a IS NULL;
+  desired: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT a AS x FROM t WHERE "A" IS NULL;
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select a as x from t where "A" is null;
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select a as x from t where a is null;
+
 ChangeWithinGroupOrderInView:
   legacy_ignore_quotes: false
   current: |

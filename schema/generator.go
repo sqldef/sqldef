@@ -2285,8 +2285,8 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
-// quotedOutputAliases returns the output column aliases of a normalized view definition, with the
-// case of quoted ones, since the definitions are compared in lowercase
+// quotedOutputAliases returns the output column names of a normalized view definition, with the
+// case of quoted ones
 func quotedOutputAliases(stmt parser.SelectStatement) []string {
 	stmt = unwrapParenSelect(stmt)
 	if union, ok := stmt.(*parser.Union); ok {
@@ -2301,10 +2301,14 @@ func quotedOutputAliases(stmt parser.SelectStatement) []string {
 		if !ok {
 			return ""
 		}
-		if aliased.As.Quoted {
-			return aliased.As.Name
+		name := aliased.As
+		if name.IsEmpty() {
+			name, _ = selectExprOutputName(aliased.Expr, GeneratorModePostgres)
 		}
-		return strings.ToLower(aliased.As.Name)
+		if name.Quoted {
+			return name.Name
+		}
+		return strings.ToLower(name.Name)
 	})
 }
 
@@ -2402,8 +2406,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		tableLookup := g.createTableLookup()
 		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
-		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
-		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
+		currentNormalized := parser.ComparisonKey(currentNormalizedAST, g.legacyIgnoreQuotes)
+		desiredNormalized := parser.ComparisonKey(desiredNormalizedAST, g.legacyIgnoreQuotes)
 
 		// Post-normalization fix for generic parser: strip remaining table qualifiers
 		// The generic parser's ColName.Name may not respect the empty qualifier we set
@@ -3186,11 +3190,11 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 
 func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstraint, expression parser.Expr) bool {
 	normalizedExpr := normalizeCheckExpr(expression, g.mode)
-	normalizedExprStr := strings.ToLower(parser.String(normalizedExpr))
+	normalizedExprStr := parser.ComparisonKey(normalizedExpr, g.legacyIgnoreQuotes)
 
 	for _, c := range constraints {
 		normalizedC := normalizeCheckExpr(c.expression, g.mode)
-		normalizedCStr := strings.ToLower(parser.String(normalizedC))
+		normalizedCStr := parser.ComparisonKey(normalizedC, g.legacyIgnoreQuotes)
 
 		if normalizedCStr == normalizedExprStr {
 			return true
@@ -6151,8 +6155,9 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 	case *parser.AtTimeZoneExpr:
 		return "(" + d.formatExprQuoteAware(e.Expr) + " at time zone " + d.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
-		// For function expressions, format arguments with quote awareness
-		// Normalize function name to lowercase (PostgreSQL convention)
+		if d.mode == GeneratorModePostgres {
+			return parser.PostgresFoldedString(e)
+		}
 		args := make([]string, len(e.Exprs))
 		for i, arg := range e.Exprs {
 			args[i] = d.formatSelectExprQuoteAware(arg)
@@ -6176,7 +6181,9 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		result += " END"
 		return result
 	default:
-		// For other expression types, fall back to parser.String
+		if d.mode == GeneratorModePostgres {
+			return parser.PostgresFoldedString(expr)
+		}
 		return parser.String(expr)
 	}
 }
@@ -6987,6 +6994,9 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
+	if g.mode == GeneratorModePostgres {
+		return parser.ComparisonKey(normalizedA, g.legacyIgnoreQuotes) == parser.ComparisonKey(normalizedB, g.legacyIgnoreQuotes)
+	}
 	// TODO: case-insensitive comparison is not always correct
 	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))
 }
@@ -7201,6 +7211,9 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 	// Normalize the expression to handle typed literals and other database-specific normalizations
 	normalizedExpr := normalizeExpr(expr, d.mode)
 	exprStr := parser.String(normalizedExpr)
+	if d.mode == GeneratorModePostgres && !d.legacyIgnoreQuotes {
+		exprStr = parser.PostgresFoldedString(normalizedExpr)
+	}
 	if d.mode == GeneratorModeMysql || d.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error
 		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit

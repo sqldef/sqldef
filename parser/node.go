@@ -18,6 +18,7 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,18 @@ type nodeBuffer struct {
 	// postgresQuotes keeps the double quotes of quoted identifiers, which PostgreSQL would
 	// otherwise fold to lowercase or reject as reserved words
 	postgresQuotes bool
+	// foldUnquoted writes unquoted identifiers in lowercase, as PostgreSQL folds them
+	foldUnquoted bool
+	// comparisonKey writes identifiers and string literals as placeholders into protected, so
+	// that ComparisonKey can fold the case of everything else
+	comparisonKey bool
+	foldQuoted    bool
+	protected     []string
+}
+
+func (buf *nodeBuffer) writeProtected(s string) {
+	buf.WriteString("\x00" + strconv.Itoa(len(buf.protected)) + "\x00")
+	buf.protected = append(buf.protected, s)
 }
 
 // Printf mimics fmt.Fprintf(buf, ...), but limited to %s for string and %v for Node.
@@ -89,6 +102,36 @@ func String(node SQLNode) string {
 // such as "UserId" and "order"
 func PostgresString(node SQLNode) string {
 	buf := nodeBuffer{postgresQuotes: true}
+	node.Format(&buf)
+	return buf.String()
+}
+
+var protectedPlaceholder = regexp.MustCompile("\x00([0-9]+)\x00")
+
+// ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names and unquoted
+// identifiers compare case-insensitively, while string literals and quoted identifiers keep their
+// case. foldQuoted folds quoted identifiers too, for the legacy mode that ignores quotes.
+func ComparisonKey(node SQLNode, foldQuoted bool) string {
+	buf := nodeBuffer{comparisonKey: true, foldQuoted: foldQuoted}
+	node.Format(&buf)
+	return protectedPlaceholder.ReplaceAllStringFunc(strings.ToLower(buf.String()), func(m string) string {
+		i, _ := strconv.Atoi(m[1 : len(m)-1])
+		return buf.protected[i]
+	})
+}
+
+func (buf *nodeBuffer) writeIdentKey(n Ident) {
+	name := n.Name
+	if !n.Quoted || buf.foldQuoted {
+		name = strings.ToLower(name)
+	}
+	buf.writeProtected(name)
+}
+
+// PostgresFoldedString is PostgresString with unquoted identifiers in lowercase, which is how
+// PostgreSQL reads and writes them back
+func PostgresFoldedString(node SQLNode) string {
+	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -2392,6 +2435,12 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 }
 
 func encodeSQLBytes(val string, buf *nodeBuffer) {
+	if buf.comparisonKey {
+		literal := nodeBuffer{}
+		encodeSQLBytes(val, &literal)
+		buf.writeProtected(literal.String())
+		return
+	}
 	buf.WriteByte('\'')
 	for _, ch := range val {
 		if encodedChar := sqlEncodeMap[byte(ch)]; encodedChar == dontEscape {
@@ -3411,8 +3460,16 @@ func (n Ident) IsEmpty() bool {
 
 // Format formats the node for SQL generation.
 func (n Ident) Format(buf *nodeBuffer) {
+	if buf.comparisonKey {
+		buf.writeIdentKey(n)
+		return
+	}
 	if buf.postgresQuotes && n.Quoted {
 		buf.writePostgresQuoted(n.Name)
+		return
+	}
+	if buf.foldUnquoted {
+		formatID(buf, strings.ToLower(n.Name))
 		return
 	}
 	formatID(buf, n.Name)
@@ -3421,8 +3478,16 @@ func (n Ident) Format(buf *nodeBuffer) {
 // formatFuncName formats a function name, which is never back-quoted even if it matches a
 // reserved word
 func formatFuncName(buf *nodeBuffer, name Ident) {
+	if buf.comparisonKey {
+		buf.writeIdentKey(name)
+		return
+	}
 	if buf.postgresQuotes && name.Quoted {
 		buf.writePostgresQuoted(name.Name)
+		return
+	}
+	if buf.foldUnquoted {
+		buf.WriteString(strings.ToLower(name.Name))
 		return
 	}
 	buf.WriteString(name.Name)

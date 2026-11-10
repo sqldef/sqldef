@@ -520,8 +520,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
 			return atz
 		}
-		// Normalize function name to lowercase (PostgreSQL convention)
-		funcName := parser.NewIdent(strings.ToLower(e.Name.Name), false)
+		funcName := foldFuncName(e.Name, mode)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
 			Name:      funcName,
@@ -1113,6 +1112,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	}
 }
 
+// foldFuncName lowercases an unquoted function name as PostgreSQL does. A quoted one keeps its
+// case, since "MyFn" and myfn name different functions.
+func foldFuncName(name parser.Ident, mode GeneratorMode) parser.Ident {
+	if mode == GeneratorModePostgres && name.Quoted {
+		return name
+	}
+	return parser.NewIdent(strings.ToLower(name.Name), false)
+}
+
 // normalizeFuncExpr normalizes a function call's name and arguments, keeping it a function call
 func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays bool) *parser.FuncExpr {
 	funcName := strings.ToLower(e.Name.Name)
@@ -1149,11 +1157,9 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 		}
 		normalizedExprs = append(normalizedExprs, normalized)
 	}
-	// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
-	// For MySQL, preserve the original case as MySQL preserves case for function names
 	normalizedName := e.Name
 	if mode == GeneratorModePostgres {
-		normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
+		normalizedName = foldFuncName(e.Name, mode)
 	}
 	// WITHIN GROUP is compared only for PostgreSQL, as it was ignored before ordered-set aggregates
 	// were supported
@@ -1882,7 +1888,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		return strings.ToLower(parser.String(normalized))
+		return parser.ComparisonKey(normalized, true)
 	})
 }
 
