@@ -2345,7 +2345,11 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
+		// Columns are compared like definitions, but case-insensitively, as a column that differs
+		// only in the case of a quoted name it reads is more likely the same one. Quoted names that
+		// differ in case are compared below.
 		opts := g.comparisonOptions(true)
+		opts.FoldQuoted = true
 		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
 		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
 

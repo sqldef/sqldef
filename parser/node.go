@@ -111,7 +111,7 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 	if typeName == "" || isStringType(typeName) {
 		return true
 	}
-	if isRegType(typeName) {
+	if IsRegType(typeName) {
 		return strings.Contains(literal.value, `"`)
 	}
 	switch typeName {
@@ -165,7 +165,9 @@ func IsSizedStringCast(t *ConvertType) bool {
 	return false
 }
 
-func isRegType(typeName string) bool {
+// IsRegType reports whether a type is an OID alias type such as regclass, whose constant names an
+// object
+func IsRegType(typeName string) bool {
 	switch typeName {
 	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
 		"regoperator", "regconfig", "regdictionary", "regcollation":
@@ -174,8 +176,8 @@ func isRegType(typeName string) bool {
 	return false
 }
 
-// withoutOmittedSchema leaves out an omitted schema of a name in a reg* constant, such as regclass,
-// which PostgreSQL writes back without a schema on the search path
+// withoutOmittedSchema leaves out an omitted schema of a relation name in a regclass constant, which
+// PostgreSQL writes back without a schema on the search path
 func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
 	if schema, name, ok := strings.Cut(val, "."); ok && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
 		return name
@@ -2694,7 +2696,7 @@ func (node literalNode) Format(buf *nodeBuffer) {
 
 func encodeSQLBytes(val string, buf *nodeBuffer) {
 	if buf.comparisonKey {
-		if isRegType(FoldASCII(buf.literalType)) {
+		if FoldASCII(buf.literalType) == "regclass" {
 			val = buf.withoutOmittedSchema(val)
 		}
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
