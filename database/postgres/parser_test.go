@@ -795,14 +795,14 @@ func TestParseIndexColumnWithPgquery(t *testing.T) {
 	t.Run("collation and operator class", func(t *testing.T) {
 		_, columns := indexSpecOf(t, `CREATE INDEX i ON t (a COLLATE "C" text_pattern_ops)`)
 		require.Len(t, columns, 1)
-		assert.Equal(t, "C", columns[0].Collation)
+		assert.Equal(t, `"C"`, columns[0].Collation)
 		assert.Equal(t, "text_pattern_ops", columns[0].OperatorClass)
 	})
 
 	t.Run("schema qualified collation", func(t *testing.T) {
 		_, columns := indexSpecOf(t, `CREATE INDEX i ON t (a COLLATE pg_catalog."C")`)
 		require.Len(t, columns, 1)
-		assert.Equal(t, "C", columns[0].Collation)
+		assert.Equal(t, `"pg_catalog"."C"`, columns[0].Collation)
 	})
 
 	t.Run("nulls ordering", func(t *testing.T) {

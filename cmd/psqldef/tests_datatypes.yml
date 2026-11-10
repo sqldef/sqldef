@@ -782,6 +782,25 @@ ChangeDefaultCastOfNegatedColumnFreeExpression:
   down: |
     ALTER TABLE public.users ALTER COLUMN label SET DEFAULT (-length('ab'))::text;
 
+ColumnOfCollatedDomainRestatingItsCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE t (a d COLLATE "C");
+
+ChangeColumnFromCollatedTextToDomainKeepsCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE DOMAIN d AS text;
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE DOMAIN d AS text;
+    CREATE TABLE t (a d);
+  up: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE d COLLATE "C";
+  down: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE text COLLATE "C";
+
 ColumnWithUnquotedAndQualifiedCollations:
   legacy_ignore_quotes: false
   desired: |
@@ -814,7 +833,7 @@ ColumnAndIndexWithCollationQualifiedByDefaultSchema:
     CREATE TABLE t (a text COLLATE pg_catalog."C", b text COLLATE pg_catalog."POSIX");
     CREATE INDEX t_a ON t (a COLLATE "POSIX");
   up: |
-    ALTER TABLE public.t ADD COLUMN b text COLLATE "POSIX";
+    ALTER TABLE public.t ADD COLUMN b text COLLATE pg_catalog."POSIX";
     CREATE INDEX t_a ON public.t (a COLLATE "POSIX");
   down: |
     DROP INDEX public.t_a;

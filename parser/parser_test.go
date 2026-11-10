@@ -2615,8 +2615,8 @@ func TestColumnCollateAfterOtherConstraints(t *testing.T) {
 	}{
 		{"mysql after NOT NULL", ParserModeMysql, "CREATE TABLE t (c varchar(20) NOT NULL COLLATE utf8mb4_bin)", "utf8mb4_bin", true, "", false},
 		{"mysql after DEFAULT", ParserModeMysql, "CREATE TABLE t (c varchar(20) DEFAULT '' COLLATE utf8mb4_bin)", "utf8mb4_bin", false, "''", false},
-		{"postgres after NOT NULL", ParserModePostgres, `CREATE TABLE t (c text NOT NULL COLLATE "C")`, "C", true, "", false},
-		{"postgres after DEFAULT", ParserModePostgres, `CREATE TABLE t (c text DEFAULT '' COLLATE "C")`, "C", false, "''", false},
+		{"postgres after NOT NULL", ParserModePostgres, `CREATE TABLE t (c text NOT NULL COLLATE "C")`, `"C"`, true, "", false},
+		{"postgres after DEFAULT", ParserModePostgres, `CREATE TABLE t (c text DEFAULT '' COLLATE "C")`, `"C"`, false, "''", false},
 		{"sqlite3 after NOT NULL", ParserModeSQLite3, "CREATE TABLE t (c text NOT NULL COLLATE NOCASE UNIQUE)", "NOCASE", true, "", false},
 		{"sqlite3 after DEFAULT", ParserModeSQLite3, "CREATE TABLE t (c text DEFAULT '' COLLATE NOCASE NOT NULL)", "NOCASE", true, "''", false},
 		{"sqlite3 after CHECK", ParserModeSQLite3, "CREATE TABLE t (c text CHECK (length(c) = 3) COLLATE RTRIM)", "RTRIM", false, "", true},

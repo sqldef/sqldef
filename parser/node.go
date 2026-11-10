@@ -63,16 +63,16 @@ type keyLiteral struct {
 // dropsQualifier reports whether a comparison key leaves out a qualifier. pg_get_viewdef() omits
 // a schema on the search path even when it was quoted, so only a name that has to be quoted is kept.
 func (buf *nodeBuffer) dropsQualifier(qualifier Ident) bool {
-	return buf.dropQualifiers && (!qualifier.Quoted || qualifier.Name == foldASCII(qualifier.Name))
+	return buf.dropQualifiers && (!qualifier.Quoted || qualifier.Name == FoldASCII(qualifier.Name))
 }
 
 func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
 	name := schema.Name
 	if !schema.Quoted || buf.foldQuoted {
-		name = foldASCII(name)
+		name = FoldASCII(name)
 	}
 	for _, omitted := range buf.omittedSchemas {
-		if name == omitted || (buf.foldQuoted && name == foldASCII(omitted)) {
+		if name == omitted || (buf.foldQuoted && name == FoldASCII(omitted)) {
 			return true
 		}
 	}
@@ -102,11 +102,13 @@ func isStringLiteral(node SQLNode) bool {
 // enum or a domain over text keeps its case. A reg* constant is a name, which keeps its case only
 // where it is quoted.
 func isLiteralCaseSignificant(val, typeName string) bool {
-	switch strings.TrimSuffix(foldASCII(typeName), "[]") {
+	switch strings.TrimSuffix(FoldASCII(typeName), "[]") {
 	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
 		"regoperator", "regconfig", "regdictionary", "regcollation":
 		return strings.Contains(val, `"`)
-	case "uuid", "boolean", "bool", "smallint", "integer", "int", "int2", "int4", "int8", "bigint",
+	case "bytea", "int4range", "int8range", "numrange", "tsrange", "tstzrange", "daterange",
+		"int4multirange", "int8multirange", "nummultirange", "tsmultirange", "tstzmultirange",
+		"datemultirange", "uuid", "boolean", "bool", "smallint", "integer", "int", "int2", "int4", "int8", "bigint",
 		"numeric", "decimal", "real", "float4", "float8", "double precision", "money", "date",
 		"time", "timetz", "time without time zone", "time with time zone", "timestamp",
 		"timestamptz", "timestamp without time zone", "timestamp with time zone", "interval",
@@ -121,8 +123,8 @@ func (buf *nodeBuffer) writeProtected(s string) {
 	buf.protected = append(buf.protected, s)
 }
 
-// foldASCII folds an identifier as PostgreSQL does, which lowercases ASCII letters only
-func foldASCII(name string) string {
+// FoldASCII folds an identifier as PostgreSQL does, which lowercases ASCII letters only
+func FoldASCII(name string) string {
 	return strings.Map(func(r rune) rune {
 		if r >= 'A' && r <= 'Z' {
 			return r + ('a' - 'A')
@@ -241,9 +243,16 @@ func comparisonKey(node SQLNode, buf nodeBuffer) (string, []keyLiteral) {
 func (buf *nodeBuffer) writeIdentKey(n Ident) {
 	name := n.Name
 	if !n.Quoted || buf.foldQuoted {
-		name = foldASCII(name)
+		name = FoldASCII(name)
 	}
 	buf.writeProtected(name)
+}
+
+// StringWithoutSchemas is String without omittedSchemas in function names
+func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
+	buf := nodeBuffer{omittedSchemas: omittedSchemas}
+	node.Format(&buf)
+	return buf.String()
 }
 
 // PostgresFoldedString is PostgresString with unquoted identifiers in lowercase, which is how
@@ -2761,6 +2770,12 @@ type CollateExpr struct {
 
 // Format formats the node.
 func (node *CollateExpr) Format(buf *nodeBuffer) {
+	if buf.comparisonKey {
+		// A collation name is case-sensitive, and the parser keeps it as written
+		buf.Printf("%v collate ", node.Expr)
+		buf.writeProtected(`"` + node.Charset + `"`)
+		return
+	}
 	buf.Printf("%v collate \"%s\"", node.Expr, node.Charset)
 }
 
@@ -3618,7 +3633,7 @@ func (n Ident) Format(buf *nodeBuffer) {
 		return
 	}
 	if buf.foldUnquoted {
-		formatID(buf, foldASCII(n.Name))
+		formatID(buf, FoldASCII(n.Name))
 		return
 	}
 	formatID(buf, n.Name)
@@ -3636,7 +3651,7 @@ func formatFuncName(buf *nodeBuffer, name Ident) {
 		return
 	}
 	if buf.foldUnquoted {
-		buf.WriteString(foldASCII(name.Name))
+		buf.WriteString(FoldASCII(name.Name))
 		return
 	}
 	buf.WriteString(name.Name)

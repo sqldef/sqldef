@@ -1408,6 +1408,21 @@ IndexOnNestedFunctionQualifiedByDefaultSchema:
     CREATE TABLE t (a text);
     CREATE INDEX t_f ON t (lower(public.f(a)));
 
+IndexOnSchemaQualifiedFunctionInLegacyMode:
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE INDEX t_lower ON t (pg_catalog.lower(a));
+
+UnquotedCollationMatchesQuotedOneInLegacyMode:
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+    CREATE INDEX t_a ON t (a COLLATE "C");
+  desired: |
+    CREATE TABLE t (a text COLLATE C);
+    CREATE INDEX t_a ON t (a COLLATE C);
+  up: ""
+  down: ""
+
 IndexColumnWithUnquotedAndQualifiedCollations:
   legacy_ignore_quotes: false
   desired: |

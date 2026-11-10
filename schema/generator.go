@@ -303,7 +303,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, out)
 					}
 				}
-				mergeTable(currentTable, desired.table, mergedIndexes, g.mode == GeneratorModePostgres)
+				mergeTable(currentTable, desired.table, mergedIndexes, g.collationKeeper())
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if !desired.table.renamedFrom.IsEmpty() {
@@ -334,7 +334,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 								interDDLs = append(interDDLs, out)
 							}
 						}
-						mergeTable(oldTable, desired.table, mergedIndexes, g.mode == GeneratorModePostgres)
+						mergeTable(oldTable, desired.table, mergedIndexes, g.collationKeeper())
 					} else {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, rawStatement(desired.statement))
@@ -1118,7 +1118,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) || !g.haveSameColumnCollation(*renameFromColumn, desiredColumn) {
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: withKeptCollation(*renameFromColumn, desiredColumn)}))
+						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*renameFromColumn, desiredColumn)}))
 					}
 
 					if !g.isPrimaryKey(*renameFromColumn, currentTable) {
@@ -1299,7 +1299,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name}))
 						}
 						// Change type - use desiredColumn for escaping to match user's quote style
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
+						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
 					}
 				}
 
@@ -2336,8 +2336,11 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode)
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode)
+		// Columns are compared like definitions, but case-insensitively
+		opts := g.comparisonOptions(true)
+		opts.FoldQuoted = true
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -4046,9 +4049,13 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 // collationName renders a column collation. PostgreSQL folds an unquoted name to lower case, but
 // its collation names are case-sensitive ("C", "POSIX"), so they are always quoted there.
 // The parser keeps a schema-qualified name quoted already.
+// collationName writes a collation name. A PostgreSQL one is SQL already; the legacy mode quotes it
+// as written.
 func (d dialect) collationName(collation string) string {
-	if d.mode == GeneratorModePostgres && !strings.HasPrefix(collation, `"`) {
-		return d.forceEscapeSQLName(collation)
+	if d.mode == GeneratorModePostgres && d.legacyIgnoreQuotes {
+		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+			return d.forceEscapeSQLName(part.Name)
+		}), ".")
 	}
 	return collation
 }
@@ -4239,12 +4246,12 @@ func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 }
 
 // Destructively modify table1 to have table2 columns and the given indexes
-func mergeTable(table1 *Table, table2 Table, indexes []Index, keepCollations bool) {
+func mergeTable(table1 *Table, table2 Table, indexes []Index, keepCollation func(current, desired Column) Column) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
-		if current, ok := table1.columns[column.name.Name]; ok && keepCollations {
+		if current, ok := table1.columns[column.name.Name]; ok && keepCollation != nil {
 			// An omitted collation keeps the current one (see haveSameColumnCollation)
-			merged := withKeptCollation(*current, *column)
+			merged := keepCollation(*current, *column)
 			table1.columns[column.name.Name] = &merged
 			continue
 		}
@@ -5480,11 +5487,16 @@ func (g *Generator) classifyEnumTypeChange(currentColumn, desiredColumn Column) 
 
 // findEnumTypeForColumn looks up the enum type that the column refers to in the given
 // types list, or returns nil if the column does not refer to an enum type.
-func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
+// findDomainForColumn returns the domain that is the type of the column
+func (g *Generator) findDomainForColumn(column Column, domains []*Domain) *Domain {
 	if g.mode != GeneratorModePostgres || column.typeName == "" {
 		return nil
 	}
+	return g.findDomainByName(domains, columnTypeName(column))
+}
 
+// columnTypeName returns the qualified name of a column's user-defined type
+func columnTypeName(column Column) QualifiedName {
 	// typeIdent carries the quote info and is set for user-defined types
 	// (domains, enums, ...). The generic parser leaves it empty when the
 	// source SQL writes a schema-qualified custom type like "myschema.item",
@@ -5495,16 +5507,21 @@ func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
 	if typeIdent.IsEmpty() {
 		typeIdent = Ident{Name: column.typeName}
 	}
-
-	target := &Type{name: QualifiedName{
+	return QualifiedName{
 		Schema: Ident{
 			Name:   strings.TrimSuffix(column.references.Name, "."),
 			Quoted: column.references.Quoted,
 		},
 		Name: typeIdent,
-	}}
+	}
+}
 
-	found := g.findType(types, target)
+func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
+	if g.mode != GeneratorModePostgres || column.typeName == "" {
+		return nil
+	}
+
+	found := g.findType(types, &Type{name: columnTypeName(column)})
 	if found == nil || len(found.enumValues) == 0 {
 		return nil
 	}
@@ -5897,37 +5914,112 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 
 // haveSameColumnCollation compares a PostgreSQL column collation only when the desired column sets
 // one, like haveSameColumnDefinition does for MySQL, so an omitted one keeps the current collation.
-// The export omits the "default" collation.
+// The export writes a collation only where it differs from the one of the column's type.
 func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool {
 	if desired.collate == "" {
 		return true
 	}
-	return g.canonicalCollation(current.collate) == g.canonicalCollation(desired.collate)
+	return g.canonicalCollation(g.columnCollation(current, g.currentDomains)) == g.canonicalCollation(desired.collate)
 }
 
-// canonicalCollation drops the default schema, which the export leaves out, and resolves
-// "default" to an omitted collation, which the export writes only for a domain that has its own
+// columnCollation returns the collation of a column, which is the one of its domain if it sets none
+func (g *Generator) columnCollation(column Column, domains []*Domain) string {
+	if column.collate == "" {
+		if domain := g.findDomainForColumn(column, domains); domain != nil {
+			return domain.collation
+		}
+	}
+	return column.collate
+}
+
+// canonicalCollation resolves a PostgreSQL collation name written in SQL, dropping a schema on the
+// search path, which the export leaves out, and resolving "default" to an omitted collation, which
+// the export writes only for a domain that has its own. The legacy mode folds every name.
 func (g *Generator) canonicalCollation(collation string) string {
-	if collation == "default" {
+	if g.mode != GeneratorModePostgres {
+		return collation
+	}
+	parts := util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+		if !part.Quoted || g.legacyIgnoreQuotes {
+			return parser.FoldASCII(part.Name)
+		}
+		return part.Name
+	})
+	defaultSchema := g.defaultSchema
+	if g.legacyIgnoreQuotes {
+		defaultSchema = parser.FoldASCII(defaultSchema)
+	}
+	if len(parts) == 2 && (parts[0] == "pg_catalog" || parts[0] == defaultSchema) {
+		parts = parts[1:]
+	}
+	if len(parts) == 1 && parts[0] == "default" {
 		return ""
 	}
-	if name, ok := strings.CutPrefix(collation, g.forceEscapeSQLName(g.defaultSchema)+"."); ok {
-		return strings.ReplaceAll(strings.Trim(name, `"`), `""`, `"`)
+	return strings.Join(util.TransformSlice(parts, g.forceEscapeSQLName), ".")
+}
+
+// postgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
+// name. A quoted part such as "en_US.utf8" may contain a dot.
+func postgresNameParts(name string) []Ident {
+	var parts []Ident
+	for name != "" {
+		if rest, ok := strings.CutPrefix(name, `"`); ok {
+			var part strings.Builder
+			for {
+				i := strings.IndexByte(rest, '"')
+				part.WriteString(rest[:i])
+				rest = rest[i+1:]
+				if !strings.HasPrefix(rest, `"`) {
+					break
+				}
+				part.WriteByte('"')
+				rest = rest[1:]
+			}
+			parts = append(parts, Ident{Name: part.String(), Quoted: true})
+			name = rest
+		} else {
+			end := strings.IndexByte(name, '.')
+			if end < 0 {
+				end = len(name)
+			}
+			parts = append(parts, Ident{Name: name[:end]})
+			name = name[end:]
+		}
+		name = strings.TrimPrefix(name, ".")
 	}
-	return collation
+	return parts
+}
+
+// collationKeeper returns withKeptCollation for PostgreSQL, the only database that compares column
+// collations only when they are set
+func (g *Generator) collationKeeper() func(current, desired Column) Column {
+	if g.mode != GeneratorModePostgres {
+		return nil
+	}
+	return g.withKeptCollation
 }
 
 // withKeptCollation returns the desired column with the current collation when it omits one, as
 // ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
-func withKeptCollation(current Column, desired Column) Column {
-	if desired.collate == "" && (isCollatableType(desired.typeName) || strings.EqualFold(current.typeName, desired.typeName)) {
+func (g *Generator) withKeptCollation(current Column, desired Column) Column {
+	if desired.collate == "" && g.takesCollationOf(current, desired) {
 		desired.collate = current.collate
 	}
 	return desired
 }
 
-// isCollatableType reports whether a built-in type takes a collation, so a collation can be carried
-// over to it from another type
+// takesCollationOf reports whether the desired column's type takes a collation that can be carried
+// over from the current column: the same type, a built-in collatable type, or a domain over one that
+// sets no collation of its own
+func (g *Generator) takesCollationOf(current Column, desired Column) bool {
+	if strings.EqualFold(current.typeName, desired.typeName) || isCollatableType(desired.typeName) {
+		return true
+	}
+	domain := g.findDomainForColumn(desired, g.desiredDomains)
+	return domain != nil && domain.collation == "" && isCollatableType(domain.baseType)
+}
+
+// isCollatableType reports whether a built-in type takes a collation
 func isCollatableType(typeName string) bool {
 	switch strings.ToLower(typeName) {
 	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext":
@@ -6296,12 +6388,12 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	}
 
 	// Both are complex expressions - use string comparison on already-normalized expressions
-	var currentExprSchema, currentExpr string
-	var desiredExprSchema, desiredExpr string
-
 	if g.mode == GeneratorModePostgres {
 		return parser.SameForComparison(normalizedCurrent, normalizedDesired, g.comparisonOptions(false))
 	}
+	var currentExprSchema, currentExpr string
+	var desiredExprSchema, desiredExpr string
+
 	currentExprSchema, currentExpr = splitTableName(parser.String(normalizedCurrent), g.defaultSchema)
 	desiredExprSchema, desiredExpr = splitTableName(parser.String(normalizedDesired), g.defaultSchema)
 	slog.Debug("Generator#areSameDefaultValue (complex expressions)",
@@ -6897,7 +6989,16 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 		}
 	}
 
-	return parser.String(normalized)
+	return g.formatLegacyExprForComparison(normalized)
+}
+
+// formatLegacyExprForComparison formats an expression for the legacy mode's comparisons, leaving out
+// the PostgreSQL schemas that pg_get_indexdef() and pg_get_expr() leave out of function names
+func (g *Generator) formatLegacyExprForComparison(expr parser.Expr) string {
+	if g.mode == GeneratorModePostgres {
+		return parser.StringWithoutSchemas(expr, "pg_catalog", g.defaultSchema)
+	}
+	return parser.String(expr)
 }
 
 func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
@@ -6919,7 +7020,7 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 	if !g.legacyIgnoreQuotes {
 		return g.formatExprQuoteAware(normalizedA) == g.formatExprQuoteAware(normalizedB)
 	}
-	return parser.String(normalizedA) == parser.String(normalizedB)
+	return g.formatLegacyExprForComparison(normalizedA) == g.formatLegacyExprForComparison(normalizedB)
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {

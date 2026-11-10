@@ -789,34 +789,14 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		// For casts, use the raw type name from pgquery to preserve "bpchar" instead of "character"
-		// This matches what the generic parser produces from ::bpchar syntax
-		rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
-		typeName := rawTypeName
-		if typeName == "" {
-			// Fallback to normalized type if raw extraction fails
-			slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
-				"normalized_type", columnType.Type,
-				"type_node", fmt.Sprintf("%#v", node.TypeCast.TypeName))
-			typeName = columnType.Type
-		}
-		if columnType.Array {
-			typeName += "[]"
-		}
-		castType := &parser.ConvertType{
-			Type:    typeName,
-			Length:  columnType.Length,
-			Scale:   columnType.Scale,
-			Charset: columnType.Charset,
-		}
 		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
 			// Like the generic parser, keep the cast dropped from a string literal
 			if val, ok := expr.(*parser.SQLVal); ok && val.Type == parser.StrVal {
-				val.DroppedCast = castType
+				val.DroppedCast = p.castType(node.TypeCast.TypeName, columnType)
 			}
 			return expr, nil
 		}
-		return &parser.CastExpr{Type: castType, Expr: expr}, nil
+		return &parser.CastExpr{Type: p.castType(node.TypeCast.TypeName, columnType), Expr: expr}, nil
 	case *pgquery.Node_SqlvalueFunction:
 		switch node.SqlvalueFunction.Op {
 		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:
@@ -997,7 +977,7 @@ func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn
 	indexColumn := parser.IndexColumn{
 		Direction:     direction,
 		NullsOrdering: nullsOrdering,
-		Collation:     lastNameOf(elem.Collation),
+		Collation:     collationName(elem.Collation),
 		OperatorClass: lastNameOf(elem.Opclass),
 	}
 
@@ -1893,13 +1873,32 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 	}, nil
 }
 
-// collationName returns a collation name in the form the generic parser gives it: a qualified one
-// as SQL, and one in pg_catalog unqualified
-func collationName(names []*pgquery.Node) string {
-	if len(names) == 2 {
-		if schema := names[0].GetString_().GetSval(); schema != "pg_catalog" {
-			return parser.PostgresString(parser.NewIdent(schema, true)) + "." + parser.PostgresString(parser.NewIdent(lastNameOf(names), true))
-		}
+// castType returns the type of a cast. It uses the raw type name from pgquery to preserve "bpchar"
+// instead of "character", which matches what the generic parser produces from ::bpchar syntax.
+func (p PostgresParser) castType(typeName *pgquery.TypeName, columnType parser.ColumnType) *parser.ConvertType {
+	name := p.getRawTypeName(typeName)
+	if name == "" {
+		// Fallback to normalized type if raw extraction fails
+		slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
+			"normalized_type", columnType.Type,
+			"type_node", fmt.Sprintf("%#v", typeName))
+		name = columnType.Type
 	}
-	return lastNameOf(names)
+	if columnType.Array {
+		name += "[]"
+	}
+	return &parser.ConvertType{
+		Type:    name,
+		Length:  columnType.Length,
+		Scale:   columnType.Scale,
+		Charset: columnType.Charset,
+	}
+}
+
+// collationName returns a collation name as SQL, as the generic parser gives it
+func collationName(names []*pgquery.Node) string {
+	parts := util.TransformSlice(names, func(name *pgquery.Node) string {
+		return parser.PostgresString(parser.NewIdent(name.GetString_().GetSval(), true))
+	})
+	return strings.Join(parts, ".")
 }

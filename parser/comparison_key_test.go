@@ -21,6 +21,8 @@ func TestSameForComparison(t *testing.T) {
 		{"to_regclass('\"Users\"') IS NULL", "to_regclass('\"users\"'::regclass) IS NULL", false},
 		{"to_regclass('Users'::regclass) IS NULL", "to_regclass('users'::regclass) IS NULL", true},
 		{"lower(public.f(a)) = 'x'", "lower(f(a)) = 'x'", true},
+		{"a = 'EMPTY'::int4range", "a = 'empty'::int4range", true},
+		{"a COLLATE \"C\" = 'x'", "a COLLATE \"c\" = 'x'", false},
 		{"lower(other.f(a)) = 'x'", "lower(f(a)) = 'x'", false},
 		{"(data ->> 'Count'::text)::integer > 0", "(data ->> 'count'::text)::integer > 0", false},
 		{"LOWER(\"MyCol\")", "lower(\"MyCol\")", true},

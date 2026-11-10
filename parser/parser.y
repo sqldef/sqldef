@@ -27,11 +27,12 @@ func setParseTree(yylex any, stmt Statement) {
   yylex.(*Tokenizer).ParseTree = stmt
 }
 
-// foldCollationName returns a collation name as PostgreSQL resolves it. The other databases match
-// collation names case-insensitively, so they keep them as written.
-func foldCollationName(yylex any, name Ident) string {
-  if yylex.(*Tokenizer).mode == ParserModePostgres && !name.Quoted {
-    return foldASCII(name.Name)
+// collationNamePart returns a part of a collation name. PostgreSQL keeps it as SQL, so that the
+// generator can resolve it as the quote mode says. The other databases match collation names
+// case-insensitively, so they keep them as written.
+func collationNamePart(yylex any, name Ident) string {
+  if yylex.(*Tokenizer).mode == ParserModePostgres && name.Quoted {
+    return `"` + strings.ReplaceAll(name.Name, `"`, `""`) + `"`
   }
   return name.Name
 }
@@ -4004,8 +4005,7 @@ column_definition_type:
 | column_definition_type COLLATE collation_name
   {
     if yylex.(*Tokenizer).mode == ParserModeMssql {
-      yylex.Error("COLLATE must come right after the data type")
-      return 1
+      return abortParse(yylex, "COLLATE must come right after the data type")
     }
     $1.Collate = $3
     $$ = $1
@@ -4623,11 +4623,11 @@ domain_constraint:
     $$.collation = ""
     $$.checks = nil
   }
-| COLLATE sql_id
+| COLLATE collation_name
   {
     $$.defaultDef = nil
     $$.notNull = false
-    $$.collation = $2.Name
+    $$.collation = $2
     $$.checks = nil
   }
 | CHECK '(' expression ')'
@@ -5472,16 +5472,11 @@ type_collate_opt:
 collation_name:
   ID
   {
-    $$ = foldCollationName(yylex, $1)
+    $$ = collationNamePart(yylex, $1)
   }
 | ID '.' ID
   {
-    // A qualified name is kept as SQL, as a collation name such as "en_US.utf8" may contain a dot
-    if schema := foldCollationName(yylex, $1); schema != "pg_catalog" {
-      $$ = PostgresString(NewIdent(schema, true)) + "." + PostgresString(NewIdent(foldCollationName(yylex, $3), true))
-    } else {
-      $$ = foldCollationName(yylex, $3)
-    }
+    $$ = collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)
   }
 
 index_definition:

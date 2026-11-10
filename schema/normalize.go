@@ -1897,7 +1897,7 @@ func expandStarExprWithColumns(exprs parser.SelectExprs, columns parser.Columns)
 // This handles differences in how PostgreSQL versions format column names:
 // - PostgreSQL 13-15: includes table qualifiers (e.g., "users.id")
 // - PostgreSQL 16+: omits unnecessary qualifiers (e.g., "id")
-func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode) []string {
+func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode, opts parser.ComparisonOptions) []string {
 	if def == nil {
 		return nil
 	}
@@ -1913,7 +1913,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		return parser.ComparisonKey(normalized, parser.ComparisonOptions{FoldQuoted: true})
+		return parser.ComparisonKey(normalized, opts)
 	})
 }
 
