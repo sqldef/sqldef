@@ -804,7 +804,7 @@ func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T
 		return normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
 	}
 
-	assert.True(t, parser.SameForComparison(normalize(current), normalize(desired), true, true))
+	assert.True(t, parser.SameForComparison(normalize(current), normalize(desired), parser.ComparisonOptions{FoldQuoted: true, DropQualifiers: true}))
 }
 
 func TestNormalizeViewDefinitionExpandsStarFromTable(t *testing.T) {

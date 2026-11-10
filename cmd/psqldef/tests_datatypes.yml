@@ -765,6 +765,23 @@ ChangeDefaultStringLiteralCase:
   down: |
     ALTER TABLE public.users ALTER COLUMN name SET DEFAULT lower('ABC');
 
+DefaultWithNestedFunctionQualifiedByDefaultSchema:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION gen_code() RETURNS text AS $$ SELECT 'c' $$ LANGUAGE sql;
+    CREATE TABLE users (code text DEFAULT (public.gen_code() || '-x'));
+
+ChangeDefaultCastOfNegatedColumnFreeExpression:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (amount integer DEFAULT (-1)::integer, label text DEFAULT (-length('ab'))::text);
+  desired: |
+    CREATE TABLE users (amount integer DEFAULT (-1)::integer, label text DEFAULT (-length('abc'))::text);
+  up: |
+    ALTER TABLE public.users ALTER COLUMN label SET DEFAULT (-length('abc'))::text;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN label SET DEFAULT (-length('ab'))::text;
+
 ColumnWithUnquotedAndQualifiedCollations:
   legacy_ignore_quotes: false
   desired: |

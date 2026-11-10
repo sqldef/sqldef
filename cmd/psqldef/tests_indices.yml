@@ -1401,6 +1401,20 @@ IndexOnSchemaQualifiedFunction:
     CREATE TABLE t (a text);
     CREATE INDEX t_lower ON t (pg_catalog.lower(a));
 
+IndexOnNestedFunctionQualifiedByDefaultSchema:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f(x text) RETURNS text AS $$ SELECT x $$ LANGUAGE sql IMMUTABLE;
+    CREATE TABLE t (a text);
+    CREATE INDEX t_f ON t (lower(public.f(a)));
+
+IndexColumnWithUnquotedAndQualifiedCollations:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a text, b text);
+    CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
+    CREATE INDEX t_b ON t (b COLLATE pg_catalog."C");
+
 UnnamedIndexDuplicatesKeepBoth:
   legacy_ignore_quotes: false
   current: |

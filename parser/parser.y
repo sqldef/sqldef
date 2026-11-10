@@ -31,7 +31,7 @@ func setParseTree(yylex any, stmt Statement) {
 // collation names case-insensitively, so they keep them as written.
 func foldCollationName(yylex any, name Ident) string {
   if yylex.(*Tokenizer).mode == ParserModePostgres && !name.Quoted {
-    return strings.ToLower(name.Name)
+    return foldASCII(name.Name)
   }
   return name.Name
 }
@@ -5747,19 +5747,19 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| sql_id COLLATE charset asc_desc_opt nulls_ordering_opt
+| sql_id COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: $1, Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| non_reserved_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| non_reserved_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| col_name_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| type_func_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| type_func_name_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }

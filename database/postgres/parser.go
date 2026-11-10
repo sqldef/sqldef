@@ -789,33 +789,34 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
-			return expr, nil
-		} else {
-			// For casts, use the raw type name from pgquery to preserve "bpchar" instead of "character"
-			// This matches what the generic parser produces from ::bpchar syntax
-			rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
-			typeName := rawTypeName
-			if typeName == "" {
-				// Fallback to normalized type if raw extraction fails
-				slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
-					"normalized_type", columnType.Type,
-					"type_node", fmt.Sprintf("%#v", node.TypeCast.TypeName))
-				typeName = columnType.Type
-			}
-			if columnType.Array {
-				typeName += "[]"
-			}
-			return &parser.CastExpr{
-				Type: &parser.ConvertType{
-					Type:    typeName,
-					Length:  columnType.Length,
-					Scale:   columnType.Scale,
-					Charset: columnType.Charset,
-				},
-				Expr: expr,
-			}, nil
+		// For casts, use the raw type name from pgquery to preserve "bpchar" instead of "character"
+		// This matches what the generic parser produces from ::bpchar syntax
+		rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
+		typeName := rawTypeName
+		if typeName == "" {
+			// Fallback to normalized type if raw extraction fails
+			slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
+				"normalized_type", columnType.Type,
+				"type_node", fmt.Sprintf("%#v", node.TypeCast.TypeName))
+			typeName = columnType.Type
 		}
+		if columnType.Array {
+			typeName += "[]"
+		}
+		castType := &parser.ConvertType{
+			Type:    typeName,
+			Length:  columnType.Length,
+			Scale:   columnType.Scale,
+			Charset: columnType.Charset,
+		}
+		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
+			// Like the generic parser, keep the cast dropped from a string literal
+			if val, ok := expr.(*parser.SQLVal); ok && val.Type == parser.StrVal {
+				val.DroppedCast = castType
+			}
+			return expr, nil
+		}
+		return &parser.CastExpr{Type: castType, Expr: expr}, nil
 	case *pgquery.Node_SqlvalueFunction:
 		switch node.SqlvalueFunction.Op {
 		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:

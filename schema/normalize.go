@@ -1913,7 +1913,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		return parser.ComparisonKey(normalized, true)
+		return parser.ComparisonKey(normalized, parser.ComparisonOptions{FoldQuoted: true})
 	})
 }
 
