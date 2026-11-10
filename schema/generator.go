@@ -2386,7 +2386,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 }
 
 // changesLiteralColumnToText reports whether an output column of the current view that may not be
-// text is a string literal in the desired view, which sqldef writes untyped, so that it becomes text
+// text is a string literal in the desired view, or has a reg* literal in both, which sqldef writes
+// untyped, so that its type may change
 func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
 	currentSelect, ok := unwrapParenSelect(current).(*parser.Select)
 	if !ok {
@@ -2405,6 +2406,10 @@ func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
 		return ok && val.Type == parser.StrVal && (val.DroppedCast == nil || strings.EqualFold(val.DroppedCast.Type, "text"))
 	}
 	for i, expr := range desiredSelect.SelectExprs[:min(len(currentSelect.SelectExprs), len(desiredSelect.SelectExprs))] {
+		// A reg* literal that PostgreSQL stored with its type may be what gives the column its type
+		if parser.ContainsRegLiteral(expr) && parser.ContainsRegLiteral(currentSelect.SelectExprs[i]) {
+			return true
+		}
 		if aliased, ok := expr.(*parser.AliasedExpr); ok {
 			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && !isText(currentSelect.SelectExprs[i]) {
 				return true
@@ -6554,6 +6559,7 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
 	opts := g.comparisonOptions(true)
 	opts.UntypedRegLiterals = true
+	opts.DefaultSchema = g.defaultSchema
 	return opts
 }
 
