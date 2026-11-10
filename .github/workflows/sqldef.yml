@@ -86,6 +86,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # parser.go is not committed by pull requests; generate it from parser.y.
+      - name: Generate parser
+        run: make parser
+
       - run: docker compose up -d --wait ${{ matrix.service }}
         if: matrix.service
         env:
@@ -157,6 +161,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # parser.go is not committed by pull requests; generate it from parser.y.
+      - name: Generate parser
+        run: make parser
+
       - run: make test-core
         id: test
         env:
@@ -222,25 +230,102 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      - name: Remove existing parser.go to force regeneration
-        run: rm -f parser/parser.go
+      # pull_request.base.sha is not the tip the merge commit was built on: it
+      # lags behind master, and diffing against it picks up whatever master
+      # gained since. The merge commit's first parent is the exact base.
+      - name: Determine the base commit
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            base="$(git rev-parse HEAD^1)"
+          else
+            base="$MERGE_GROUP_BASE_SHA"
+          fi
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; then
+            echo "::error::base commit '${base}' is not available"
+            exit 1
+          fi
+          echo "base: ${base}"
+          echo "BASE_SHA=${base}" >> "$GITHUB_ENV"
+        env:
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+
+      # parser.go is generated. Letting pull requests carry it makes every
+      # concurrent grammar change conflict on the generated output, so only
+      # .github/workflows/parser.yml may update it.
+      - name: Reject generated files in the pull request diff
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "$BASE_SHA...HEAD" | grep -qx 'parser/parser.go'; then
+            echo "::error file=parser/parser.go::parser/parser.go is generated and must not be committed. Edit parser/parser.y only; parser.go is regenerated on master."
+            echo "To drop it from this branch:"
+            echo "    git checkout \"\$(git merge-base origin/master HEAD)\" -- parser/parser.go && git commit -m 'parser: drop generated parser.go'"
+            exit 1
+          fi
+          echo "✓ the pull request does not touch generated files"
 
       - name: Regenerate parser
         run: make parser
 
-      - name: Check for differences
+      # tagpr tags the commit of the merged release pull request, and never a
+      # later one, so a release merged before parser.yml regenerates parser.go
+      # would be tagged with a stale parser.go. Only the release pull request
+      # changes VERSION; hold it back until master is in sync.
+      - name: Reject a release with a stale parser.go
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
-          if [ -n "$(git diff --name-only parser/parser.go)" ]; then
-            echo "::error::parser.go has been modified and doesn't match what would be generated from parser.y"
-            echo "Diff:"
-            git diff parser/parser.go
+          if git diff --quiet "$BASE_SHA" HEAD -- VERSION; then
+            echo "✓ not a release"
+            exit 0
+          fi
+          if ! git diff --quiet -- parser/parser.go; then
+            echo "::error file=parser/parser.go::parser.go does not match parser.y, so this release would be tagged with a stale parser. Wait for the parser workflow to regenerate it on master, then queue the release again."
             exit 1
           fi
-          echo "✓ parser.go is in sync with parser.y"
+          echo "✓ the release carries a parser.go in sync with parser.y"
+
+      - name: Report grammar conflicts
+        if: github.event_name == 'pull_request'
+        run: |
+          goyacc_version="$(sed -n 's/^GOYACC_VERSION=//p' Makefile)"
+          conflicts() {
+            go run golang.org/x/tools/cmd/goyacc@"$goyacc_version" -l -o /dev/null "$1" 2>&1 |
+              grep -oE 'conflicts: .*' || echo 'conflicts: none'
+          }
+          current="$(conflicts parser/parser.y)"
+          git show "$BASE_SHA:parser/parser.y" > /tmp/base-parser.y
+          base="$(conflicts /tmp/base-parser.y)"
+          {
+            echo '### Grammar conflicts'
+            echo "- base: \`${base}\`"
+            echo "- head: \`${current}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$current" != "$base" ]; then
+            echo "::warning file=parser/parser.y::grammar conflicts changed: ${base} -> ${current}"
+          fi
+
+      # master is brought back in sync by .github/workflows/parser.yml right
+      # after a merge, so it is only a warning there. A tag must never ship a
+      # parser.go that does not match its parser.y.
+      - name: Check the committed parser.go is in sync
+        if: github.event_name == 'push'
+        run: |
+          if [ -z "$(git diff --name-only parser/parser.go)" ]; then
+            echo "✓ parser.go is in sync with parser.y"
+            exit 0
+          fi
+          if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            echo "::error file=parser/parser.go::parser.go does not match what parser.y generates. This tag must not be released."
+            git diff --stat parser/parser.go
+            exit 1
+          fi
+          echo "::warning file=parser/parser.go::parser.go is stale; waiting for the parser workflow to regenerate it"
 
       - name: Lint
         run: make lint
@@ -273,6 +358,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+
+      # parser.go is not committed by pull requests; generate it from parser.y.
+      - name: Generate parser
+        run: make parser
 
       - name: make package-${{ matrix.EXT }}
         run: |
