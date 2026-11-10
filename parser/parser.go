@@ -12587,7 +12587,7 @@ yydefault:
 	case 753:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.str = yyDollar[1].str
+			yyVAL.str = collationNamePart(yylex, NewIdent(yyDollar[1].str, true))
 		}
 	case 754:
 		yyDollar = yyS[yypt-6 : yypt+1]

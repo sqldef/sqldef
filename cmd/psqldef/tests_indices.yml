@@ -1703,3 +1703,17 @@ RenameTableKeepsUnnamedIndex:
     CREATE TABLE t (a int);
     CREATE INDEX ON public.t (a);
     DROP TABLE public.u;
+
+IndexKeepsDefaultSchemaOfFunction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION lower(x text) RETURNS text AS $$ SELECT x $$ LANGUAGE sql IMMUTABLE;
+    CREATE TABLE t (a text);
+  desired: |
+    CREATE FUNCTION lower(x text) RETURNS text AS $$ SELECT x $$ LANGUAGE sql IMMUTABLE;
+    CREATE TABLE t (a text);
+    CREATE INDEX t_lower ON t (public.lower(a));
+  up: |
+    CREATE INDEX t_lower ON public.t (public.lower(a));
+  down: |
+    DROP INDEX public.t_lower;

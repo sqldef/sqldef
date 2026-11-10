@@ -5480,7 +5480,7 @@ collation_name:
   }
 | STRING
   {
-    $$ = $1
+    $$ = collationNamePart(yylex, NewIdent($1, true))
   }
 
 index_definition:

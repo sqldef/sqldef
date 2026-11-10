@@ -78,6 +78,8 @@ type dialect struct {
 	mode               GeneratorMode
 	defaultSchema      string
 	legacyIgnoreQuotes bool
+	// comparing formats expressions for comparison instead of DDL
+	comparing bool
 }
 
 func newDialect(mode GeneratorMode, config database.GeneratorConfig, defaultSchema string) dialect {
@@ -5997,7 +5999,7 @@ func (g *Generator) collationKeeper() func(current, desired Column) Column {
 // ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
 func (g *Generator) withKeptCollation(current Column, desired Column) Column {
 	if desired.collate == "" && g.takesCollationOf(current, desired) {
-		desired.collate = current.collate
+		desired.collate = g.columnCollation(current, g.currentDomains)
 	}
 	return desired
 }
@@ -6270,8 +6272,7 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		return "(" + d.formatExprQuoteAware(e.Expr) + " at time zone " + d.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
 		if d.mode == GeneratorModePostgres {
-			// pg_get_indexdef() leaves out the schema of a function on the search path
-			return parser.PostgresFoldedString(e, "pg_catalog", d.defaultSchema)
+			return parser.PostgresFoldedString(e, d.omittedFunctionSchemas()...)
 		}
 		args := make([]string, len(e.Exprs))
 		for i, arg := range e.Exprs {
@@ -6297,13 +6298,30 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		return result
 	default:
 		if d.mode == GeneratorModePostgres {
-			return parser.PostgresFoldedString(expr, "pg_catalog", d.defaultSchema)
+			return parser.PostgresFoldedString(expr, d.omittedFunctionSchemas()...)
 		}
 		return parser.String(expr)
 	}
 }
 
 // formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
+// omittedFunctionSchemas returns the schemas left out of function names. pg_get_indexdef() leaves out
+// the schema of a function on the search path, but DDL keeps the default schema, as a function in it
+// would otherwise resolve to one of the same name in pg_catalog.
+func (d dialect) omittedFunctionSchemas() []string {
+	if d.comparing {
+		return []string{"pg_catalog", d.defaultSchema}
+	}
+	return []string{"pg_catalog"}
+}
+
+// comparisonDialect returns the dialect that formats expressions for comparison
+func (g *Generator) comparisonDialect() dialect {
+	d := g.dialect
+	d.comparing = true
+	return d
+}
+
 func (d dialect) formatSelectExprQuoteAware(expr parser.SelectExpr) string {
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
@@ -6822,7 +6840,10 @@ func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn
 	if collation == "" {
 		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
 			if column := g.findColumnByName(columns, colName.Name); column != nil {
-				collation = g.columnCollation(*column, slices.Concat(g.desiredDomains, g.currentDomains))
+				collation = g.columnCollation(*column, g.desiredDomains)
+				if collation == "" {
+					collation = g.columnCollation(*column, g.currentDomains)
+				}
 			}
 		}
 	}
@@ -6971,7 +6992,7 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 
 	if !g.legacyIgnoreQuotes {
 		if g.mode == GeneratorModePostgres {
-			return g.formatExprQuoteAware(normalized)
+			return g.comparisonDialect().formatExprQuoteAware(normalized)
 		}
 		if g.mode == GeneratorModeMssql {
 			if colName, ok := normalized.(*parser.ColName); ok {
@@ -7012,7 +7033,8 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 	normalizedB := normalizeExpr(b, g.mode)
 
 	if !g.legacyIgnoreQuotes {
-		return g.formatExprQuoteAware(normalizedA) == g.formatExprQuoteAware(normalizedB)
+		d := g.comparisonDialect()
+		return d.formatExprQuoteAware(normalizedA) == d.formatExprQuoteAware(normalizedB)
 	}
 	return g.formatLegacyExprForComparison(normalizedA) == g.formatLegacyExprForComparison(normalizedB)
 }

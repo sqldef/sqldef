@@ -43,8 +43,8 @@ type nodeBuffer struct {
 	comparisonKey  bool
 	foldQuoted     bool
 	dropQualifiers bool
-	// omittedSchemas are the schemas left out of function names, as PostgreSQL leaves out a
-	// schema on the search path when it reads an expression back
+	// omittedSchemas are the schemas left out of table and function names, as PostgreSQL leaves
+	// out a schema on the search path when it reads an expression back
 	omittedSchemas []string
 	protected      []string
 	literals       []keyLiteral
@@ -58,12 +58,6 @@ type keyLiteral struct {
 	// caseSignificant is false for a literal of a built-in type such as uuid or boolean, whose
 	// constants PostgreSQL rewrites in its own case
 	caseSignificant bool
-}
-
-// dropsQualifier reports whether a comparison key leaves out a qualifier. pg_get_viewdef() omits
-// a schema on the search path even when it was quoted, so only a name that has to be quoted is kept.
-func (buf *nodeBuffer) dropsQualifier(qualifier Ident) bool {
-	return buf.dropQualifiers && (!qualifier.Quoted || qualifier.Name == FoldASCII(qualifier.Name))
 }
 
 func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
@@ -195,10 +189,11 @@ var protectedPlaceholder = regexp.MustCompile("\x00([0-9]+)\x00")
 type ComparisonOptions struct {
 	// FoldQuoted folds quoted identifiers too, for the legacy mode that ignores quotes
 	FoldQuoted bool
-	// DropQualifiers leaves out the qualifiers that pg_get_viewdef() adds or omits depending on
-	// whether a name is ambiguous or on the search path
+	// DropQualifiers leaves out the table qualifiers of columns, which pg_get_viewdef() adds or
+	// omits depending on the PostgreSQL version and whether a name is ambiguous
 	DropQualifiers bool
-	// OmittedSchemas are left out of function names
+	// OmittedSchemas are left out of table and function names, as PostgreSQL leaves out a schema on
+	// the search path
 	OmittedSchemas []string
 }
 
@@ -248,7 +243,7 @@ func (buf *nodeBuffer) writeIdentKey(n Ident) {
 	buf.writeProtected(name)
 }
 
-// StringWithoutSchemas is String without omittedSchemas in function names
+// StringWithoutSchemas is String without omittedSchemas in table and function names
 func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
 	buf := nodeBuffer{omittedSchemas: omittedSchemas}
 	node.Format(&buf)
@@ -256,7 +251,7 @@ func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
 }
 
 // PostgresFoldedString is PostgresString with unquoted identifiers in lowercase, which is how
-// PostgreSQL reads and writes them back, and without omittedSchemas in function names
+// PostgreSQL reads and writes them back, and without omittedSchemas in table and function names
 func PostgresFoldedString(node SQLNode, omittedSchemas ...string) string {
 	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, omittedSchemas: omittedSchemas}
 	node.Format(&buf)
@@ -2004,7 +1999,7 @@ func (node TableName) Format(buf *nodeBuffer) {
 	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.IsEmpty() && !buf.dropsQualifier(node.Schema) {
+	if !node.Schema.IsEmpty() && !buf.omitsSchema(node.Schema) {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
@@ -2814,7 +2809,7 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if node.Distinct {
 		distinct = "distinct "
 	}
-	if !node.Qualifier.IsEmpty() && !buf.dropsQualifier(node.Qualifier) && !buf.omitsSchema(node.Qualifier) {
+	if !node.Qualifier.IsEmpty() && !buf.omitsSchema(node.Qualifier) {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	formatFuncName(buf, node.Name)
