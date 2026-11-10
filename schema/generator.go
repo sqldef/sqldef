@@ -94,6 +94,8 @@ type Generator struct {
 
 	desiredTables []*Table
 	currentTables []*Table
+	// desiredSizedVarcharColumns are the desired columns of type character varying(n), for noOpCast
+	desiredSizedVarcharColumns []*Column
 
 	desiredViews []*View
 	currentViews []*View
@@ -215,44 +217,45 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		dialect:             newDialect(mode, config, defaultSchema),
-		desiredTables:       desiredAggregated.Tables,
-		currentTables:       aggregated.Tables,
-		desiredViews:        desiredAggregated.Views,
-		currentViews:        aggregated.Views,
-		desiredTriggers:     desiredAggregated.Triggers,
-		currentTriggers:     aggregated.Triggers,
-		desiredEvents:       desiredAggregated.Events,
-		currentEvents:       aggregated.Events,
-		desiredFunctions:    desiredAggregated.Functions,
-		currentFunctions:    aggregated.Functions,
-		desiredTypes:        desiredAggregated.Types,
-		currentTypes:        aggregated.Types,
-		desiredDomains:      desiredAggregated.Domains,
-		currentDomains:      aggregated.Domains,
-		desiredPartitionOfs: desiredAggregated.PartitionOfs,
-		currentPartitionOfs: aggregated.PartitionOfs,
-		desiredComments:     desiredAggregated.Comments,
-		currentComments:     aggregated.Comments,
-		recreatedViews:      make(map[string]recreatedView),
-		desiredExtensions:   desiredAggregated.Extensions,
-		currentExtensions:   aggregated.Extensions,
-		desiredSchemas:      desiredAggregated.Schemas,
-		currentSchemas:      aggregated.Schemas,
-		desiredPrivileges:   desiredAggregated.Privileges,
-		currentPrivileges:   aggregated.Privileges,
-		algorithm:           config.Algorithm,
-		lock:                config.Lock,
-		config:              config,
-		handledForeignKeys:  make(map[string]bool),
-		droppedTables:       make(map[string]bool),
-		droppedColumns:      make(map[string]bool),
-		droppedIndexes:      make(map[string]bool),
-		heldBackIndexes:     make(map[string]bool),
-		indexToTable:        make(map[string]QualifiedName),
-		postgresCheckPlans:  make(map[string]*postgresCheckMatchPlan),
-		emittedPrivileges:   make(map[string]bool),
-		postgresIndexPlans:  make(map[string]*postgresIndexMatchPlan),
+		dialect:                    newDialect(mode, config, defaultSchema),
+		desiredTables:              desiredAggregated.Tables,
+		desiredSizedVarcharColumns: sizedVarcharColumns(desiredAggregated.Tables, mode),
+		currentTables:              aggregated.Tables,
+		desiredViews:               desiredAggregated.Views,
+		currentViews:               aggregated.Views,
+		desiredTriggers:            desiredAggregated.Triggers,
+		currentTriggers:            aggregated.Triggers,
+		desiredEvents:              desiredAggregated.Events,
+		currentEvents:              aggregated.Events,
+		desiredFunctions:           desiredAggregated.Functions,
+		currentFunctions:           aggregated.Functions,
+		desiredTypes:               desiredAggregated.Types,
+		currentTypes:               aggregated.Types,
+		desiredDomains:             desiredAggregated.Domains,
+		currentDomains:             aggregated.Domains,
+		desiredPartitionOfs:        desiredAggregated.PartitionOfs,
+		currentPartitionOfs:        aggregated.PartitionOfs,
+		desiredComments:            desiredAggregated.Comments,
+		currentComments:            aggregated.Comments,
+		recreatedViews:             make(map[string]recreatedView),
+		desiredExtensions:          desiredAggregated.Extensions,
+		currentExtensions:          aggregated.Extensions,
+		desiredSchemas:             desiredAggregated.Schemas,
+		currentSchemas:             aggregated.Schemas,
+		desiredPrivileges:          desiredAggregated.Privileges,
+		currentPrivileges:          aggregated.Privileges,
+		algorithm:                  config.Algorithm,
+		lock:                       config.Lock,
+		config:                     config,
+		handledForeignKeys:         make(map[string]bool),
+		droppedTables:              make(map[string]bool),
+		droppedColumns:             make(map[string]bool),
+		droppedIndexes:             make(map[string]bool),
+		heldBackIndexes:            make(map[string]bool),
+		indexToTable:               make(map[string]QualifiedName),
+		postgresCheckPlans:         make(map[string]*postgresCheckMatchPlan),
+		emittedPrivileges:          make(map[string]bool),
+		postgresIndexPlans:         make(map[string]*postgresIndexMatchPlan),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -6356,38 +6359,40 @@ func (d dialect) postgresFoldedString(expr parser.Expr) string {
 	return parser.PostgresFoldedString(expr, "pg_catalog")
 }
 
-// comparisonDialect returns the dialect that formats expressions on the table with columns for
-// comparison
-func (g *Generator) comparisonDialect(columns map[string]*Column) dialect {
+// comparisonDialect returns the dialect that formats expressions for comparison
+func (g *Generator) comparisonDialect() dialect {
 	d := g.dialect
 	d.comparing = true
-	d.noOpCast = g.noOpCast(columns)
+	d.noOpCast = g.noOpCast
 	return d
 }
 
-// noOpCast reports the casts that PostgreSQL drops: one of a column to character varying(n) where
-// the column already has the type. It looks the column up in columns, or in every table if columns
-// is nil, where a column of the name with the type in any table matches.
-func (g *Generator) noOpCast(columns map[string]*Column) parser.NoOpCastFunc {
-	return func(col *parser.ColName, t *parser.ConvertType) bool {
-		if !parser.IsSizedStringCast(t) || normalizeTypeName(t.Type, g.mode) != "character varying" {
-			return false
-		}
-		hasType := func(columns map[string]*Column) bool {
-			column := g.findColumnByName(columns, col.Name)
-			return column != nil && !column.array && column.length != nil && column.length.raw == t.Length.Val &&
-				normalizeTypeName(column.typeName, g.mode) == "character varying"
-		}
-		if columns != nil {
-			return hasType(columns)
-		}
-		for _, table := range slices.Concat(g.desiredTables, g.currentTables) {
-			if hasType(table.columns) {
-				return true
-			}
-		}
+// noOpCast reports whether PostgreSQL drops a cast of a column, as it does one to character
+// varying(n) where the column already has the type. sqldef does not resolve the table of a column,
+// so a desired column of the name with the type in any table matches.
+func (g *Generator) noOpCast(col *parser.ColName, t *parser.ConvertType) bool {
+	if !parser.IsSizedStringCast(t) || normalizeTypeName(t.Type, g.mode) != "character varying" {
 		return false
 	}
+	for _, column := range g.desiredSizedVarcharColumns {
+		if column.length.raw == t.Length.Val && g.identsEqual(column.name, col.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+// sizedVarcharColumns returns the columns of type character varying(n)
+func sizedVarcharColumns(tables []*Table, mode GeneratorMode) []*Column {
+	var columns []*Column
+	for _, table := range tables {
+		for _, column := range util.CanonicalMapIter(table.columns) {
+			if !column.array && column.length != nil && normalizeTypeName(column.typeName, mode) == "character varying" {
+				columns = append(columns, column)
+			}
+		}
+	}
+	return columns
 }
 
 // formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
@@ -6498,7 +6503,7 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 		OmittedSchemas: []string{"pg_catalog"},
 		// pg_get_viewdef() leaves out every schema on the search path, which sqldef does not know
 		DropSchemas: dropQualifiers,
-		NoOpCast:    g.noOpCast(nil),
+		NoOpCast:    g.noOpCast,
 	}
 }
 
@@ -6892,8 +6897,8 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 			dirB = AscScr
 		}
 
-		normalizedA := g.formatIndexExprForComparison(nil, indexA.columns[i].columnExpr)
-		normalizedB := g.formatIndexExprForComparison(nil, indexB.columns[i].columnExpr)
+		normalizedA := g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
+		normalizedB := g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB || dirA != dirB {
 			return false
 		}
@@ -6984,8 +6989,8 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		normalizedA = g.formatIndexExprForComparison(columns, indexA.columns[i].columnExpr)
-		normalizedB = g.formatIndexExprForComparison(columns, indexB.columns[i].columnExpr)
+		normalizedA = g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
+		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
@@ -7003,7 +7008,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 			return false
 		}
 	}
-	if !g.areSameWhereClause(columns, indexA.where, indexB.where) {
+	if !g.areSameWhereClause(indexA.where, indexB.where) {
 		return false
 	}
 
@@ -7065,12 +7070,12 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 	return true
 }
 
-func (g *Generator) formatIndexExprForComparison(columns map[string]*Column, expr parser.Expr) string {
+func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 	normalized := normalizeExpr(expr, g.mode)
 
 	if !g.legacyIgnoreQuotes {
 		if g.mode == GeneratorModePostgres {
-			return g.comparisonDialect(columns).formatExprQuoteAware(normalized)
+			return g.comparisonDialect().formatExprQuoteAware(normalized)
 		}
 		if g.mode == GeneratorModeMssql {
 			if colName, ok := normalized.(*parser.ColName); ok {
@@ -7082,24 +7087,24 @@ func (g *Generator) formatIndexExprForComparison(columns map[string]*Column, exp
 		}
 	}
 
-	return g.formatLegacyExprForComparison(columns, normalized)
+	return g.formatLegacyExprForComparison(normalized)
 }
 
 // formatLegacyExprForComparison formats an expression for the legacy mode's comparisons, leaving out
 // the PostgreSQL schemas that pg_get_indexdef() and pg_get_expr() leave out of function names
-func (g *Generator) formatLegacyExprForComparison(columns map[string]*Column, expr parser.Expr) string {
+func (g *Generator) formatLegacyExprForComparison(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
-		return parser.StringWithoutSchemas(expr, g.noOpCast(columns), "pg_catalog")
+		return parser.StringWithoutSchemas(expr, g.noOpCast, "pg_catalog")
 	}
 	return parser.String(expr)
 }
 
-func (g *Generator) areSameWhereClause(columns map[string]*Column, whereA, whereB parser.Expr) bool {
-	return g.sameNormalizedExpr(columns, whereA, whereB)
+func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
+	return g.sameNormalizedExpr(whereA, whereB)
 }
 
 // sameNormalizedExpr compares two expressions after normalization, case-sensitively and quote-aware.
-func (g *Generator) sameNormalizedExpr(columns map[string]*Column, a, b parser.Expr) bool {
+func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -7111,10 +7116,10 @@ func (g *Generator) sameNormalizedExpr(columns map[string]*Column, a, b parser.E
 	normalizedB := normalizeExpr(b, g.mode)
 
 	if !g.legacyIgnoreQuotes {
-		d := g.comparisonDialect(columns)
+		d := g.comparisonDialect()
 		return d.formatExprQuoteAware(normalizedA) == d.formatExprQuoteAware(normalizedB)
 	}
-	return g.formatLegacyExprForComparison(columns, normalizedA) == g.formatLegacyExprForComparison(columns, normalizedB)
+	return g.formatLegacyExprForComparison(normalizedA) == g.formatLegacyExprForComparison(normalizedB)
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
@@ -7183,13 +7188,13 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if !g.areSameWhereClause(nil, exclusionA.where, exclusionB.where) {
+	if !g.areSameWhereClause(exclusionA.where, exclusionB.where) {
 		return false
 	}
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.operator != b.operator || !g.sameNormalizedExpr(nil, a.expression, b.expression) {
+		if a.operator != b.operator || !g.sameNormalizedExpr(a.expression, b.expression) {
 			return false
 		}
 	}

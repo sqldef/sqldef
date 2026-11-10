@@ -11990,11 +11990,7 @@ yydefault:
 			if yyDollar[4].convertType != nil {
 				yyVAL.convertType = yyDollar[4].convertType
 			} else {
-				typeName := yyDollar[2].columnType.Type
-				if yyDollar[3].boolVal {
-					typeName = typeName + "[]"
-				}
-				yyVAL.convertType = &ConvertType{Type: typeName}
+				yyVAL.convertType = literalCastType(yyDollar[2].columnType, yyDollar[3].boolVal)
 			}
 		}
 	case 630:

@@ -2509,6 +2509,23 @@ func postgresFloatTypeName(precision string) string {
 // isFoldableValueCast reports whether a value-context string cast should be kept
 // (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
 // numeric/money/interval need this; dropping the rest preserves historical behavior.
+// literalCastType is the type of a cast that the parser drops from a string literal, kept whole so
+// that the cast can be written back where it names or types a view's output column
+func literalCastType(columnType ColumnType, array BoolVal) *ConvertType {
+	typeName := columnType.Type
+	if columnType.TypeIdent.Quoted {
+		typeName = PostgresString(columnType.TypeIdent)
+	}
+	if array {
+		typeName += "[]"
+	}
+	t := &ConvertType{Type: typeName, Length: columnType.Length, Scale: columnType.Scale}
+	if columnType.Timezone {
+		t.TimeZone = " with time zone"
+	}
+	return t
+}
+
 func isFoldableValueCast(t *ConvertType) bool {
 	if t == nil {
 		return false

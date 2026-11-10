@@ -4914,11 +4914,7 @@ character_cast_opt:
     if $4 != nil {
       $$ = $4
     } else {
-      typeName := $2.Type
-      if $3 {
-        typeName = typeName + "[]"
-      }
-      $$ = &ConvertType{Type: typeName}
+      $$ = literalCastType($2, $3)
     }
   }
 

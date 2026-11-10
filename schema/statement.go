@@ -1128,24 +1128,31 @@ func (a disableRowLevelSecurityAction) render(dialect) string {
 }
 
 // withDroppedOutputCasts puts back the casts that the parser dropped from string literals in the
-// output columns of a view, as they give an unaliased column its name and type
+// output columns of a view, as they give a column its name and type
 func withDroppedOutputCasts(definition parser.SelectStatement) parser.SelectStatement {
-	sel, ok := definition.(*parser.Select)
-	if !ok {
-		return definition
-	}
-	exprs := make(parser.SelectExprs, len(sel.SelectExprs))
-	for i, expr := range sel.SelectExprs {
-		exprs[i] = expr
-		if aliased, ok := expr.(*parser.AliasedExpr); ok {
-			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
-				untyped := *val
-				untyped.DroppedCast = nil
-				exprs[i] = &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
+	switch stmt := definition.(type) {
+	case *parser.Union:
+		withCasts := *stmt
+		withCasts.Left = withDroppedOutputCasts(stmt.Left)
+		withCasts.Right = withDroppedOutputCasts(stmt.Right)
+		return &withCasts
+	case *parser.ParenSelect:
+		return &parser.ParenSelect{Select: withDroppedOutputCasts(stmt.Select)}
+	case *parser.Select:
+		exprs := make(parser.SelectExprs, len(stmt.SelectExprs))
+		for i, expr := range stmt.SelectExprs {
+			exprs[i] = expr
+			if aliased, ok := expr.(*parser.AliasedExpr); ok {
+				if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
+					untyped := *val
+					untyped.DroppedCast = nil
+					exprs[i] = &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
+				}
 			}
 		}
+		withCasts := *stmt
+		withCasts.SelectExprs = exprs
+		return &withCasts
 	}
-	withCasts := *sel
-	withCasts.SelectExprs = exprs
-	return &withCasts
+	return definition
 }

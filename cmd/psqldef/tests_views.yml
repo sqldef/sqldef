@@ -1608,3 +1608,49 @@ ChangeViewWithCastStringLiteralColumns:
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select id, 'active'::text, 'x'::varchar from users;
+
+ChangeUnionViewWithCastStringLiterals:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id FROM t;
+  desired: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id, 'x'::text FROM t UNION SELECT id, 'y'::text FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select id, 'x'::text from t union select id, 'y'::text from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select id from t;
+
+ChangeViewWithStringLiteralCastsToTypesWithModifiers:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE "Mood" AS ENUM ('a', 'b');
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id FROM t;
+  desired: |
+    CREATE TYPE "Mood" AS ENUM ('a', 'b');
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id, 'a'::"Mood", 'x'::varchar(5) AS c FROM t;
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select id, 'a'::"Mood", 'x'::varchar(5) as c from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select id from t;
+
+ChangeViewColumnTypeByStringLiteralCast:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id, '2020-01-01' AS d FROM t;
+  desired: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id, '2020-01-01'::date AS d, 1 AS extra FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select id, '2020-01-01'::date as d, 1 as extra from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select id, '2020-01-01' as d from t;

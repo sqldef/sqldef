@@ -1237,7 +1237,7 @@ func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parse
 		if val, ok := aliased.Expr.(*parser.SQLVal); ok && isTextCast(val.DroppedCast) {
 			as := aliased.As
 			if as.IsEmpty() {
-				as = parser.NewIdent(castTypeColname(val.DroppedCast), false)
+				as = castTypeColname(val.DroppedCast)
 			}
 			untyped := *val
 			untyped.DroppedCast = nil
@@ -1806,7 +1806,7 @@ func figureColname(expr parser.Expr) (Ident, int) {
 		case parser.StrVal:
 			// The parser drops a cast on a string literal ('a'::text), which PostgreSQL names after the type
 			if e.DroppedCast != nil {
-				return parser.NewIdent(castTypeColname(e.DroppedCast), false), colnameWeak
+				return castTypeColname(e.DroppedCast), colnameWeak
 			}
 			return Ident{}, colnameWeakUnnamed
 		}
@@ -1825,12 +1825,20 @@ func figureCastColname(expr parser.Expr, typ *parser.ConvertType) (Ident, int) {
 	if !isWeakColname(strength) {
 		return name, strength
 	}
-	return parser.NewIdent(castTypeColname(typ), false), colnameWeak
+	return castTypeColname(typ), colnameWeak
 }
 
 // castTypeColname returns the name PostgreSQL gives a column after a cast's type, which is the
 // type's internal name ("integer" is int4, "character varying" is varchar)
-func castTypeColname(typ *parser.ConvertType) string {
+func castTypeColname(typ *parser.ConvertType) parser.Ident {
+	// A quoted type name keeps its case
+	if inner, ok := strings.CutPrefix(strings.TrimSuffix(typ.Type, "[]"), `"`); ok {
+		return parser.NewIdent(strings.ReplaceAll(strings.TrimSuffix(inner, `"`), `""`, `"`), true)
+	}
+	return parser.NewIdent(castTypeColnameUnquoted(typ), false)
+}
+
+func castTypeColnameUnquoted(typ *parser.ConvertType) string {
 	name := strings.TrimSuffix(strings.ToLower(typ.Type), "[]")
 	// The name of a schema-qualified type leaves out its schema
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
@@ -1935,7 +1943,16 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		return parser.ComparisonKey(normalized, opts)
+		key := parser.ComparisonKey(normalized, opts)
+		// The cast of a string literal, which the comparison key leaves out, types the column
+		if aliased, ok := normalized.(*parser.AliasedExpr); ok {
+			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
+				castType := *val.DroppedCast
+				castType.Type = normalizeTypeName(castType.Type, mode)
+				key += "::" + parser.ComparisonKey(&castType, opts)
+			}
+		}
+		return key
 	})
 }
 
