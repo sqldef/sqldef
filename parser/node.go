@@ -3181,9 +3181,6 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	// timezone modifier belong to the element type, so they have to be emitted
 	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
 	typeName, isArray := strings.CutSuffix(node.Type, "[]")
-	if schema, name, ok := strings.Cut(typeName, "."); ok && buf.comparisonKey && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
-		typeName = name
-	}
 	buf.Printf("%s", typeName)
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)

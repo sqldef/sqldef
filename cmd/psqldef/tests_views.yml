@@ -1580,20 +1580,6 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
 #     CREATE TABLE t (id int, "Val" int, val text);
 #     CREATE VIEW v2 AS SELECT id, val AS x FROM t;
 
-ViewWithColumnCastsToTypesWithoutKeywords:
-  legacy_ignore_quotes: false
-  current: |
-    CREATE TYPE mood AS ENUM ('sad', 'happy');
-    CREATE TABLE t (id int, name text);
-  desired: |
-    CREATE TYPE mood AS ENUM ('sad', 'happy');
-    CREATE TABLE t (id int, name text);
-    CREATE VIEW v AS SELECT id, name::mood AS m, name::public.mood AS pm, (name)::regclass AS r FROM t;
-  up: |
-    CREATE VIEW v AS SELECT id, name::mood AS m, name::public.mood AS pm, (name)::regclass AS r FROM t;
-  down: |
-    DROP VIEW public.v;
-
 # FIXME: A view's regclass literal is written without its cast, and PostgreSQL's 'tt'::regclass for a literal written with its schema is compared as a different column
 # ChangeViewWithRegclassLiteralColumn:
 #   legacy_ignore_quotes: false
@@ -1604,7 +1590,7 @@ ViewWithColumnCastsToTypesWithoutKeywords:
 #     CREATE TABLE tt (id int);
 #     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt WHERE id > 0;
 
-# FIXME: Without column types, the casts that PostgreSQL adds to a view's function arguments, such as (v.rc)::regclass for a text column, make the view differ on every run
+# FIXME: The generic parser does not parse a cast of a column to a type without a keyword, such as the (rc)::regclass that PostgreSQL adds to w for a text column
 # ChangeViewReadByFunctionWithImplicitCast:
 #   legacy_ignore_quotes: false
 #   current: |
