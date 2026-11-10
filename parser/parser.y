@@ -454,7 +454,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <expr> when_expression_opt
 %type <str> reserved_keyword non_reserved_keyword col_name_keyword type_func_name_keyword key_kw
 %type <str> trim_direction
-%type <ident> sql_id reserved_sql_id extension_name, col_alias as_ci_opt
+%type <ident> sql_id reserved_sql_id extension_name, col_alias col_label as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
 %type <ident> table_id reserved_table_id as_opt_id
@@ -4375,6 +4375,14 @@ default_value_expression:
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
+| default_value_expression TYPECAST DOUBLE PRECISION array_opt
+  {
+    t := "double precision"
+    if $5 {
+      t += "[]"
+    }
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
+  }
 | default_value_expression '+' default_value_expression
   {
     $$ = &BinaryExpr{Left: $1, Operator: PlusStr, Right: $3}
@@ -6435,9 +6443,26 @@ as_ci_opt:
   {
     $$ = $1
   }
-| AS col_alias
+| AS col_label
   {
     $$ = $2
+  }
+
+// col_label: names allowed after AS, which include type and function names that PostgreSQL
+// uses as default output names, as in "SELECT (1)::text AS text"
+col_label:
+  col_alias
+| type_func_name_keyword
+  {
+    $$ = NewIdent($1, false)
+  }
+| TEXT
+  {
+    $$ = NewIdent($1, false)
+  }
+| INTERVAL
+  {
+    $$ = NewIdent($1, false)
   }
 
 col_alias:
@@ -7305,9 +7330,13 @@ value_expression:
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
-| value_expression TYPECAST DOUBLE PRECISION
+| value_expression TYPECAST DOUBLE PRECISION array_opt
   {
-    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "double precision"}}
+    t := "double precision"
+    if $5 {
+      t += "[]"
+    }
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
   }
 | value_expression TYPECAST TIMESTAMP WITH TIME ZONE
   {
@@ -7362,6 +7391,10 @@ function_call_generic:
 | sql_id '(' select_expression_list ')' WITHIN GROUP '(' ORDER BY order_list ')'
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3, WithinGroup: $10}
+  }
+| sql_id '(' ')' WITHIN GROUP '(' ORDER BY order_list ')'
+  {
+    $$ = &FuncExpr{Name: $1, WithinGroup: $9}
   }
 | sql_id '(' ')' OVER '(' window_spec ')'
   {
@@ -7858,6 +7891,11 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3), Scale: NewIntVal($5)}
   }
+| VARCHAR
+  {
+    // Named as PostgreSQL stores it, so that it is compared like "character varying"
+    $$ = &ConvertType{Type: "character varying"}
+  }
 | VARCHAR '(' INTEGRAL ')'
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
@@ -7917,6 +7955,15 @@ simple_convert_type:
 | REAL
   {
     $$ = &ConvertType{Type: $1}
+  }
+| FLOAT_TYPE
+  {
+    // Named as PostgreSQL stores it, so that it is compared like "double precision"
+    $$ = &ConvertType{Type: "double precision"}
+  }
+| FLOAT_TYPE '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: postgresFloatTypeName($3)}
   }
 | VECTOR '(' INTEGRAL ')'
   {
@@ -8620,6 +8667,14 @@ array_element:
       t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| tuple_expression TYPECAST DOUBLE PRECISION array_opt
+  {
+    t := "double precision"
+    if $5 {
+      t += "[]"
+    }
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
   }
 | variadic_opt array_constructor
   {

@@ -2285,6 +2285,37 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
+// quotedOutputAliases returns the output column aliases of a normalized view definition, with the
+// case of quoted ones, since the definitions are compared in lowercase
+func quotedOutputAliases(stmt parser.SelectStatement) []string {
+	stmt = unwrapParenSelect(stmt)
+	if union, ok := stmt.(*parser.Union); ok {
+		return quotedOutputAliases(union.Left)
+	}
+	sel, ok := stmt.(*parser.Select)
+	if !ok {
+		return nil
+	}
+	return util.TransformSlice(sel.SelectExprs, func(expr parser.SelectExpr) string {
+		aliased, ok := expr.(*parser.AliasedExpr)
+		if !ok {
+			return ""
+		}
+		if aliased.As.Quoted {
+			return aliased.As.Name
+		}
+		return strings.ToLower(aliased.As.Name)
+	})
+}
+
+// quoteAwareOutputAliases returns quotedOutputAliases when quotes are significant
+func (g *Generator) quoteAwareOutputAliases(stmt parser.SelectStatement) []string {
+	if g.mode != GeneratorModePostgres || g.legacyIgnoreQuotes {
+		return nil
+	}
+	return quotedOutputAliases(stmt)
+}
+
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
 	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 		return true
@@ -2311,6 +2342,16 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// If columns are removed, we need to DROP and CREATE.
 		if len(currentNormalized) > len(desiredNormalized) {
 			return true
+		}
+
+		// A quoted output column renamed only in case is a renamed column
+		if !g.legacyIgnoreQuotes {
+			tableLookup := g.createTableLookup()
+			currentAliases := quotedOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
+			desiredAliases := quotedOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
+			if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
+				return true
+			}
 		}
 
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
@@ -2377,7 +2418,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 			"desired_after_norm", desiredNormalized,
 		)
 
-		if currentNormalized != desiredNormalized {
+		currentAliases, desiredAliases := g.quoteAwareOutputAliases(currentNormalizedAST), g.quoteAwareOutputAliases(desiredNormalizedAST)
+		if currentNormalized != desiredNormalized || !slices.Equal(currentAliases, desiredAliases) {
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				var recreateDDLs []statement
 				var dependents []*View
@@ -6223,19 +6265,23 @@ func unwrapCast(expr parser.Expr) parser.Expr {
 	return castExpr.Expr
 }
 
+// stripCastsAndParens repeatedly strips type casts and parentheses, in either order or nesting
+func stripCastsAndParens(expr parser.Expr) parser.Expr {
+	for {
+		next := unwrapParenExpr(unwrapCast(expr))
+		if next == expr {
+			return expr
+		}
+		expr = next
+	}
+}
+
 // unwrapLiteralCastAndParens repeatedly strips type casts and parentheses (in either
 // order/nesting, e.g. `('pending'::order_status)` or `('foo')::text`) down to
 // a literal, for equality comparison purposes. Casts on anything else are kept:
 // they change the value (e.g. now()::timestamp vs now()::timestamptz).
 func unwrapLiteralCastAndParens(expr parser.Expr) parser.Expr {
-	inner := expr
-	for {
-		next := unwrapParenExpr(unwrapCast(inner))
-		if next == inner {
-			break
-		}
-		inner = next
-	}
+	inner := stripCastsAndParens(expr)
 	if _, ok := inner.(*parser.SQLVal); ok {
 		return inner
 	}

@@ -2216,7 +2216,7 @@ func TestFunctionCallForms(t *testing.T) {
 		{name: "no arguments with over", expr: "f() OVER ()", expected: "f() over()"},
 		{name: "arguments with over", expr: "f(x) OVER ()", expected: "f(x) over()"},
 		{name: "arguments with partition by", expr: "f(x) OVER (PARTITION BY y)", expected: "f(x) over(partition by y)"},
-		{name: "within group", expr: "f(x) WITHIN GROUP (ORDER BY y)", expected: "f(x) within group( order by y asc)"},
+		{name: "within group", expr: "f(x) WITHIN GROUP (ORDER BY y)", expected: "f(x) within group (order by y asc)"},
 		{name: "lag without over", expr: "LAG(x)", expected: "lag(x)"},
 		{name: "lag with over", expr: "LAG(x) OVER (ORDER BY y)", expected: "lag(x) over( order by y asc)"},
 		{name: "lead without over", expr: "LEAD(x)", expected: "lead(x)"},

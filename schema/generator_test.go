@@ -657,7 +657,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: normalize table prefix with COLLATE",
 			mode:     GeneratorModePostgres,
 			input:    `select users.id, (users.name COLLATE "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate "ja-jp-x-icu") from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize multiple table prefixes",
@@ -669,25 +669,25 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: normalize with lowercase collate",
 			mode:     GeneratorModePostgres,
 			input:    `select users.id, (users.name collate "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate "ja-jp-x-icu") from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize spaces",
 			mode:     GeneratorModePostgres,
 			input:    `select   users.id,    (users.name   COLLATE   "ja-JP-x-icu")   as   name   from   users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate "ja-jp-x-icu") from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize with joins",
 			mode:     GeneratorModePostgres,
 			input:    `select u.id, (u.name COLLATE "en_US") as name from users u join orders o on u.id = o.user_id`,
-			expected: `select id, (name collate "en_us") as name from users as u join orders as o on u.id = o.user_id`,
+			expected: `select id, (name collate "en_us") from users as u join orders as o on u.id = o.user_id`,
 		},
 		{
 			name:     "PostgreSQL: preserve column names without prefixes",
 			mode:     GeneratorModePostgres,
 			input:    `select id, (name COLLATE "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate "ja-jp-x-icu") from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize ARRAY in function calls",
@@ -912,9 +912,17 @@ func TestExtractSubqueryColumnsFromFrom(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from))
+			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from, tt.from, GeneratorModePostgres))
 		})
 	}
+}
+
+func TestExtractSubqueryColumnsFromFromNamesOutputsBeforeNormalization(t *testing.T) {
+	from := parser.TableExprs{&parser.AliasedTableExpr{Expr: &parser.Subquery{Select: &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "bigint"}}, As: parser.NewIdent("int8", false)},
+	}}}}}
+	normalizedFrom := normalizeTableExprs(from, GeneratorModePostgres, nil)
+	assert.Equal(t, parser.Columns{parser.NewIdent("int8", false)}, extractSubqueryColumnsFromFrom(from, normalizedFrom, GeneratorModePostgres))
 }
 
 func TestExtractSelectOutputColumns(t *testing.T) {
@@ -948,9 +956,25 @@ func TestExtractSelectOutputColumns(t *testing.T) {
 			expected: parser.Columns{parser.NewIdent("?column?", false)},
 		},
 		{
-			name: "anonymous expression with an unknown name",
+			name: "anonymous operator expression",
 			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
 				&parser.AliasedExpr{Expr: &parser.BinaryExpr{Operator: "+", Left: parser.NewIntVal("1"), Right: parser.NewIntVal("2")}},
+			}},
+			expected: parser.Columns{parser.NewIdent("?column?", false)},
+		},
+		{
+			name: "case with an else of an unknown name",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.CaseExpr{
+					Whens: []*parser.When{{Cond: parser.BoolVal(true), Val: parser.NewIntVal("1")}},
+					Else:  &parser.Subquery{Select: &parser.Select{}},
+				}},
+			}},
+		},
+		{
+			name: "anonymous expression with an unknown name",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.Subquery{Select: &parser.Select{}}},
 			}},
 		},
 		{
@@ -970,9 +994,30 @@ func TestExtractSelectOutputColumns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractSelectOutputColumns(tt.stmt))
+			assert.Equal(t, tt.expected, extractSelectOutputColumns(tt.stmt, tt.stmt, GeneratorModePostgres))
 		})
 	}
+}
+
+func TestExtractSelectOutputColumnsExpandsStarFromNormalized(t *testing.T) {
+	a := parser.NewIdent("a", false)
+	b := parser.NewIdent("b", false)
+	cast := &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "bigint"}}
+	stmt := &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.StarExpr{},
+		&parser.AliasedExpr{Expr: cast},
+	}}
+	normalized := &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: &parser.ColName{Name: a}},
+		&parser.AliasedExpr{Expr: &parser.ColName{Name: b}},
+		&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+	}}
+	assert.Equal(t, parser.Columns{a, b, parser.NewIdent("int8", false)}, extractSelectOutputColumns(stmt, normalized, GeneratorModePostgres))
+}
+
+func TestExtractSelectOutputColumnsNamesOnlyColumnsOutsidePostgres(t *testing.T) {
+	stmt := &parser.Select{SelectExprs: parser.SelectExprs{&parser.AliasedExpr{Expr: parser.NewIntVal("1")}}}
+	assert.Nil(t, extractSelectOutputColumns(stmt, stmt, GeneratorModeMysql))
 }
 
 func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {
@@ -2189,4 +2234,12 @@ func TestIndexToTableNamesCoversAddIndex(t *testing.T) {
 	table, ok := indexTables[indexSchemaKey(parser.Ident{}, parser.NewIdent("idx_users_name", false))]
 	require.True(t, ok)
 	assert.Equal(t, "users", table.RawString())
+}
+
+func TestNormalizeExprKeepsFunctionArgumentsUnaliased(t *testing.T) {
+	expr := &parser.FuncExpr{Name: parser.NewIdent("jsonb_build_object", false), Exprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: parser.NewStrVal("version")},
+		&parser.AliasedExpr{Expr: &parser.CastExpr{Expr: parser.NewIntVal("1"), Type: &parser.ConvertType{Type: "integer"}}},
+	}}
+	assert.Equal(t, "jsonb_build_object('version', 1)", parser.String(normalizeExpr(expr, GeneratorModePostgres)))
 }

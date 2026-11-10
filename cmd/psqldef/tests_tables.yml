@@ -469,4 +469,28 @@ AddColumnWithIsNotDistinctFromDefault:
   down: |
     ALTER TABLE public.settings DROP COLUMN enabled;
 
+ColumnExpressionsWithFloatCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a int CHECK (a::float > 0),
+      d double precision DEFAULT 1::float,
+      e double precision[] DEFAULT ARRAY[1]::double precision[],
+      f real DEFAULT 1.5::float(10),
+      g jsonb DEFAULT jsonb_build_object('version', 1::integer),
+      h double precision GENERATED ALWAYS AS (a::float) STORED
+    );
+
+ColumnExpressionsWithVarcharCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (b text CHECK (length(b::varchar) > 1));
+    CREATE INDEX t_b ON t ((b::varchar));
+
+# FIXME: A cast to character varying(n) on a column is stripped with its length, as PostgreSQL adds character varying casts implicitly, but ::varchar(n) is not, so the constraint is replaced on every run
+# ColumnExpressionsWithVarcharLengthCast:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE t (c text CHECK (c::varchar(3) = 'x'));
+
 # GiST index with tstzrange type
