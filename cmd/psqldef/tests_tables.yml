@@ -543,3 +543,18 @@ ChangeCheckVarcharCastLength:
     ALTER TABLE public.t ADD CONSTRAINT c_check CHECK (c::character varying(3) = 'x');
 
 # GiST index with tstzrange type
+
+NoOpVarcharLengthCastsOnVarcharColumn:
+  desired: |
+    CREATE TABLE t (id int, c character varying(10), CONSTRAINT k CHECK (c::character varying(10) IN ('a', 'b')));
+    CREATE POLICY p ON t FOR SELECT USING (c::character varying(10) = 'x');
+    CREATE INDEX t_i ON t (id) WHERE c::character varying(10) = 'x';
+    CREATE VIEW v AS SELECT id FROM t WHERE c::character varying(10) = 'x';
+
+NoOpVarcharLengthCastsOnVarcharColumnQuoteAware:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id int, c character varying(10), CONSTRAINT k CHECK (c::character varying(10) IN ('a', 'b')));
+    CREATE POLICY p ON t FOR SELECT USING (c::character varying(10) = 'x');
+    CREATE INDEX t_i ON t (id) WHERE c::character varying(10) = 'x';
+    CREATE VIEW v AS SELECT id FROM t WHERE c::character varying(10) = 'x';

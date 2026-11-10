@@ -6301,6 +6301,10 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
 		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
+		// PostgreSQL drops a cast to character varying(n) where the operand already has the type
+		if d.comparing && parser.IsSizedStringCast(e.Type) {
+			return d.formatExprQuoteAware(e.Expr)
+		}
 		if parser.NeedsParensAsCastOperand(e.Expr) {
 			return "(" + d.formatExprQuoteAware(e.Expr) + ")::" + parser.String(e.Type)
 		}

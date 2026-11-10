@@ -1724,3 +1724,10 @@ IndexKeepsDefaultSchemaOfFunction:
     CREATE INDEX t_lower ON public.t (public.lower(a));
   down: |
     DROP INDEX public.t_lower;
+
+IndexOnQuotedLowercaseFunctionName:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE "t" ("id" int, "s" text);
+    CREATE INDEX "t_a" ON "t" ("lower"("s"));
+    CREATE INDEX "t_w" ON "t" ("id") WHERE "lower"("s") = 'a';

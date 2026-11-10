@@ -1143,7 +1143,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 // case, since "MyFn" and myfn name different functions.
 func foldFuncName(name parser.Ident, mode GeneratorMode) parser.Ident {
 	if mode == GeneratorModePostgres && name.Quoted {
-		return name
+		return NewNormalizedIdent(name)
 	}
 	return parser.NewIdent(strings.ToLower(name.Name), false)
 }

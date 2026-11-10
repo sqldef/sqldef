@@ -48,8 +48,12 @@ type nodeBuffer struct {
 	omittedSchemas []string
 	// dropSchemas leaves out every schema of table and function names
 	dropSchemas bool
-	protected   []string
-	literals    []keyLiteral
+	// dropSizedStringCasts leaves out casts to character varying(n), which PostgreSQL drops where
+	// the operand already has the type
+	dropSizedStringCasts      bool
+	unknownTypesCaseSensitive bool
+	protected                 []string
+	literals                  []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
 	literalType string
 }
@@ -130,6 +134,18 @@ func isStringType(typeName string) bool {
 	switch typeName {
 	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext",
 		"json", "jsonb", "xml":
+		return true
+	}
+	return false
+}
+
+// IsSizedStringCast reports whether a cast is to character varying or text with a length
+func IsSizedStringCast(t *ConvertType) bool {
+	if t == nil || t.Length == nil {
+		return false
+	}
+	switch FoldASCII(t.Type) {
+	case "character varying", "varchar", "text":
 		return true
 	}
 	return false
@@ -245,7 +261,7 @@ type ComparisonOptions struct {
 }
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -257,10 +273,29 @@ func ComparisonKey(node SQLNode, opts ComparisonOptions) string {
 }
 
 // SameForComparison reports whether two PostgreSQL expressions have the same ComparisonKey and
-// their string literals differ in case only where the case is significant on both sides.
+// their string literals differ in case only where the case is significant on both sides. A cast to
+// character varying(n) on one side only may be one that PostgreSQL dropped as its operand already
+// has the type, so it is left out then.
 func SameForComparison(a, b SQLNode, opts ComparisonOptions) bool {
-	keyA, literalsA := comparisonKey(a, opts.buffer())
-	keyB, literalsB := comparisonKey(b, opts.buffer())
+	if sameForComparison(a, b, opts.buffer()) {
+		return true
+	}
+	dropping := opts.buffer()
+	dropping.dropSizedStringCasts = true
+	keyA, _ := comparisonKey(a, dropping)
+	keyB, _ := comparisonKey(b, dropping)
+	if fullA, _ := comparisonKey(a, opts.buffer()); fullA != keyA {
+		if fullB, _ := comparisonKey(b, opts.buffer()); fullB != keyB {
+			return false
+		}
+	}
+	return sameForComparison(a, b, dropping)
+}
+
+func sameForComparison(a, b SQLNode, buf nodeBuffer) bool {
+	opts := ComparisonOptions{UnknownTypesCaseSensitive: buf.unknownTypesCaseSensitive}
+	keyA, literalsA := comparisonKey(a, buf)
+	keyB, literalsB := comparisonKey(b, buf)
 	if keyA != keyB || len(literalsA) != len(literalsB) {
 		return false
 	}
@@ -292,17 +327,20 @@ func (buf *nodeBuffer) writeIdentKey(n Ident) {
 	buf.writeProtected(name)
 }
 
-// StringWithoutSchemas is String without omittedSchemas in table and function names
+// StringWithoutSchemas is String for comparison, without omittedSchemas in table and function names
+// and without casts to character varying(n), which PostgreSQL drops where the operand already has
+// the type
 func StringWithoutSchemas(node SQLNode, omittedSchemas ...string) string {
-	buf := nodeBuffer{omittedSchemas: omittedSchemas}
+	buf := nodeBuffer{omittedSchemas: omittedSchemas, dropSizedStringCasts: true}
 	node.Format(&buf)
 	return buf.String()
 }
 
-// PostgresFoldedStringWithoutSchemas is PostgresFoldedString without any schema in table and
-// function names
+// PostgresFoldedStringWithoutSchemas is PostgresFoldedString for comparison, without any schema in
+// table and function names and without casts to character varying(n), which PostgreSQL drops where
+// the operand already has the type
 func PostgresFoldedStringWithoutSchemas(node SQLNode) string {
-	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true}
+	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true, dropSizedStringCasts: true}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -3030,6 +3068,10 @@ type CastExpr struct {
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
+	if buf.dropSizedStringCasts && IsSizedStringCast(node.Type) {
+		node.Expr.Format(buf)
+		return
+	}
 	// :: binds tighter than any operator, so an operand that normalization took out of its
 	// parentheses needs them back
 	if NeedsParensAsCastOperand(node.Expr) {
