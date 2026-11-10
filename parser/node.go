@@ -51,6 +51,7 @@ type nodeBuffer struct {
 	// noOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	noOpCast                  NoOpCastFunc
 	unknownTypesCaseSensitive bool
+	untypedRegLiterals        bool
 	protected                 []string
 	literals                  []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
@@ -280,6 +281,9 @@ type ComparisonOptions struct {
 	UnknownTypesCaseSensitive bool
 	// NoOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	NoOpCast NoOpCastFunc
+	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass as an
+	// untyped one, as sqldef writes a view without the casts of its literals
+	UntypedRegLiterals bool
 }
 
 // NoOpCastFunc reports whether a cast of a column is one that PostgreSQL drops, as the column
@@ -287,7 +291,7 @@ type ComparisonOptions struct {
 type NoOpCastFunc func(col *ColName, t *ConvertType) bool
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -2645,7 +2649,7 @@ func NewValArgWithOpt(in string, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
-		if node.DroppedCast != nil {
+		if node.DroppedCast != nil && !(buf.untypedRegLiterals && IsRegType(FoldASCII(node.DroppedCast.Type))) {
 			buf.formatCastOperand(literalNode(node.Val), node.DroppedCast.Type)
 			return
 		}
@@ -3177,6 +3181,9 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	// timezone modifier belong to the element type, so they have to be emitted
 	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
 	typeName, isArray := strings.CutSuffix(node.Type, "[]")
+	if schema, name, ok := strings.Cut(typeName, "."); ok && buf.comparisonKey && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
+		typeName = name
+	}
 	buf.Printf("%s", typeName)
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)

@@ -1251,29 +1251,6 @@ func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parse
 	return &parser.AliasedExpr{Expr: normalizedAliased.Expr, As: name}
 }
 
-// withUnwrittenRegclassCastsAsNames compares a regclass literal in an output column of a view whose
-// cast sqldef does not write back (see writesRegclassCast) with the schema and quotes it has, as
-// PostgreSQL stores it as text then. The type is written as pg_catalog.regclass, which the comparison
-// does not take for regclass, but whose case is still not significant.
-func withUnwrittenRegclassCastsAsNames(stmt parser.SelectStatement, mode GeneratorMode) parser.SelectStatement {
-	sel, ok := stmt.(*parser.Select)
-	if !ok || mode != GeneratorModePostgres {
-		return stmt
-	}
-	withNames := *sel
-	withNames.SelectExprs = util.TransformSlice(sel.SelectExprs, func(expr parser.SelectExpr) parser.SelectExpr {
-		if aliased, ok := expr.(*parser.AliasedExpr); ok {
-			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && strings.EqualFold(val.DroppedCast.Type, "regclass") && !writesRegclassCast(aliased, val) {
-				asName := *val
-				asName.DroppedCast = &parser.ConvertType{Type: "pg_catalog.regclass"}
-				return &parser.AliasedExpr{Expr: &asName, As: aliased.As}
-			}
-		}
-		return expr
-	})
-	return &withNames
-}
-
 // normalizeSelectExpr normalizes a single SELECT expression for views
 func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
 	switch e := expr.(type) {

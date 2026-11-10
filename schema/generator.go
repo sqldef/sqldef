@@ -2348,10 +2348,10 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// Columns are compared like definitions, but case-insensitively, as a column that differs
 		// only in the case of a quoted name it reads is more likely the same one. Quoted names that
 		// differ in case are compared below.
-		opts := g.comparisonOptions(true)
+		opts := g.viewComparisonOptions()
 		opts.FoldQuoted = true
-		currentNormalized := normalizeViewColumnsFromDefinition(withUnwrittenRegclassCastsAsNames(currentView.definition, g.mode), g.mode, opts)
-		desiredNormalized := normalizeViewColumnsFromDefinition(withUnwrittenRegclassCastsAsNames(desiredView.definition, g.mode), g.mode, opts)
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2366,8 +2366,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// A quoted output column renamed only in case is a renamed column
 		if !g.legacyIgnoreQuotes {
 			tableLookup := g.createTableLookup()
-			currentAliases := quotedOutputAliases(normalizeViewDefinition(withUnwrittenRegclassCastsAsNames(currentView.definition, g.mode), g.mode, tableLookup))
-			desiredAliases := quotedOutputAliases(normalizeViewDefinition(withUnwrittenRegclassCastsAsNames(desiredView.definition, g.mode), g.mode, tableLookup))
+			currentAliases := quotedOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
+			desiredAliases := quotedOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
 			if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
 				return true
 			}
@@ -2386,8 +2386,7 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 }
 
 // changesLiteralColumnToText reports whether an output column of the current view that may not be
-// text is a string literal in the desired view, which sqldef writes untyped but for some regclass
-// ones (see writesRegclassCast), so that it becomes text
+// text is a string literal in the desired view, which sqldef writes untyped, so that it becomes text
 func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
 	currentSelect, ok := unwrapParenSelect(current).(*parser.Select)
 	if !ok {
@@ -2407,7 +2406,7 @@ func changesLiteralColumnToText(current, desired parser.SelectStatement) bool {
 	}
 	for i, expr := range desiredSelect.SelectExprs[:min(len(currentSelect.SelectExprs), len(desiredSelect.SelectExprs))] {
 		if aliased, ok := expr.(*parser.AliasedExpr); ok {
-			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && !writesRegclassCast(aliased, val) && !isText(currentSelect.SelectExprs[i]) {
+			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && !isText(currentSelect.SelectExprs[i]) {
 				return true
 			}
 		}
@@ -2454,8 +2453,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := normalizeViewDefinition(withUnwrittenRegclassCastsAsNames(currentView.definition, g.mode), g.mode, tableLookup)
-		desiredNormalizedAST := normalizeViewDefinition(withUnwrittenRegclassCastsAsNames(desiredView.definition, g.mode), g.mode, tableLookup)
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
 		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 			slog.Debug("Comparing view definitions",
 				"current_before_norm", parser.String(currentView.definition),
@@ -2468,7 +2467,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// every identifier
 		var sameDefinitions bool
 		if g.mode == GeneratorModePostgres {
-			sameDefinitions = parser.SameForComparison(currentNormalizedAST, desiredNormalizedAST, g.comparisonOptions(true))
+			sameDefinitions = parser.SameForComparison(currentNormalizedAST, desiredNormalizedAST, g.viewComparisonOptions())
 		} else {
 			sameDefinitions = strings.EqualFold(parser.String(currentNormalizedAST), parser.String(desiredNormalizedAST))
 		}
@@ -6549,6 +6548,13 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 		DropSchemas: dropQualifiers,
 		NoOpCast:    g.noOpCast,
 	}
+}
+
+// viewComparisonOptions are the options for comparing view definitions
+func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
+	opts := g.comparisonOptions(true)
+	opts.UntypedRegLiterals = true
+	return opts
 }
 
 // unwrapCast strips a type cast from an expression, returning the inner expression.

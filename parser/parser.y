@@ -8017,6 +8017,22 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1}
   }
+| sql_id
+  {
+    // A custom type, or one without a keyword such as regclass. The name of a cast type keeps no
+    // quotes, so a quoted name is left to the native parser.
+    if $1.Quoted {
+      return abortParse(yylex, fmt.Sprintf("unsupported quoted type name %q in a cast", $1.Name))
+    }
+    $$ = &ConvertType{Type: $1.Name}
+  }
+| sql_id '.' sql_id
+  {
+    if $1.Quoted || $3.Quoted {
+      return abortParse(yylex, fmt.Sprintf("unsupported quoted type name %q in a cast", $1.Name+"."+$3.Name))
+    }
+    $$ = &ConvertType{Type: $1.Name + "." + $3.Name}
+  }
 
 expression_opt:
   /* empty */ %prec EMPTY_EXPR
