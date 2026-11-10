@@ -1232,9 +1232,10 @@ func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.S
 // into "1" (?column?), the name is kept as an alias, as PostgreSQL stores "1 AS int4".
 func normalizeOutputSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
 	// PostgreSQL stores an untyped string literal as text, so 'x'::text and 'x' differ only in their
-	// names. Both become an untyped literal with its name as an alias.
+	// names. Both become an untyped literal with its name as an alias. So does a literal whose cast
+	// sqldef does not keep, which it creates as such.
 	if aliased, ok := expr.(*parser.AliasedExpr); ok && mode == GeneratorModePostgres {
-		if val, ok := aliased.Expr.(*parser.SQLVal); ok && isTextCast(val.DroppedCast) {
+		if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil && (isTextCast(val.DroppedCast) || !parser.KeepsLiteralCast(val.DroppedCast)) {
 			as := aliased.As
 			if as.IsEmpty() {
 				as = castTypeColname(val.DroppedCast)
@@ -1946,7 +1947,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 		key := parser.ComparisonKey(normalized, opts)
 		// The cast of a string literal, which the comparison key leaves out, types the column
 		if aliased, ok := normalized.(*parser.AliasedExpr); ok {
-			if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
+			if val, ok := aliased.Expr.(*parser.SQLVal); ok && parser.KeepsLiteralCast(val.DroppedCast) {
 				castType := *val.DroppedCast
 				castType.Type = normalizeTypeName(castType.Type, mode)
 				key += "::" + parser.ComparisonKey(&castType, opts)

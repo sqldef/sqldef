@@ -1643,14 +1643,16 @@ ChangeViewWithStringLiteralCastsToTypesWithModifiers:
 ChangeViewColumnTypeByStringLiteralCast:
   legacy_ignore_quotes: false
   current: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
     CREATE TABLE t (id int);
-    CREATE VIEW v AS SELECT id, '2020-01-01' AS d FROM t;
+    CREATE VIEW v AS SELECT id, 'a' AS d FROM t;
   desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
     CREATE TABLE t (id int);
-    CREATE VIEW v AS SELECT id, '2020-01-01'::date AS d, 1 AS extra FROM t;
+    CREATE VIEW v AS SELECT id, 'a'::mood AS d, 1 AS extra FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select id, '2020-01-01'::date as d, 1 as extra from t;
+    CREATE VIEW public.v AS select id, 'a'::mood as d, 1 as extra from t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select id, '2020-01-01' as d from t;
+    CREATE VIEW public.v AS select id, 'a' as d from t;

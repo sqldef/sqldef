@@ -1128,7 +1128,8 @@ func (a disableRowLevelSecurityAction) render(dialect) string {
 }
 
 // withDroppedOutputCasts puts back the casts that the parser dropped from string literals in the
-// output columns of a view, as they give a column its name and type
+// output columns of a view, as they give a column its name and type. A cast that sqldef does not
+// keep (see parser.KeepsLiteralCast) leaves its name only.
 func withDroppedOutputCasts(definition parser.SelectStatement) parser.SelectStatement {
 	switch stmt := definition.(type) {
 	case *parser.Union:
@@ -1146,7 +1147,12 @@ func withDroppedOutputCasts(definition parser.SelectStatement) parser.SelectStat
 				if val, ok := aliased.Expr.(*parser.SQLVal); ok && val.DroppedCast != nil {
 					untyped := *val
 					untyped.DroppedCast = nil
-					exprs[i] = &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
+					if parser.KeepsLiteralCast(val.DroppedCast) {
+						exprs[i] = &parser.AliasedExpr{Expr: &parser.CastExpr{Expr: &untyped, Type: val.DroppedCast}, As: aliased.As}
+					} else if aliased.As.IsEmpty() {
+						// The literal stays untyped as before, but keeps the name of the cast
+						exprs[i] = &parser.AliasedExpr{Expr: &untyped, As: castTypeColname(val.DroppedCast)}
+					}
 				}
 			}
 		}

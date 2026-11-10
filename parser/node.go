@@ -114,6 +114,15 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 	if isRegType(typeName) {
 		return strings.Contains(literal.value, `"`)
 	}
+	if isRewrittenLiteralType(typeName) {
+		return false
+	}
+	return unknownSignificant
+}
+
+// isRewrittenLiteralType reports whether PostgreSQL rewrites a constant of a type in its own form,
+// such as 't'::boolean as true
+func isRewrittenLiteralType(typeName string) bool {
 	switch typeName {
 	case "bytea", "int4range", "int8range", "numrange", "tsrange", "tstzrange", "daterange",
 		"int4multirange", "int8multirange", "nummultirange", "tsmultirange", "tstzmultirange",
@@ -123,9 +132,28 @@ func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool 
 		"timestamp", "timestamptz", "timestamp without time zone", "timestamp with time zone",
 		"interval", "inet", "cidr", "macaddr", "macaddr8", "bit", "varbit", "bit varying", "oid",
 		"pg_lsn", "tsvector", "tsquery":
+		return true
+	}
+	return false
+}
+
+// KeepsLiteralCast reports whether sqldef keeps a cast that the parser dropped from a string literal
+// where it names or types a view's output column. PostgreSQL stores the literal of such a type as
+// written, while it rewrites others, such as a boolean, and sqldef cannot write a json literal with a
+// double quote back.
+func KeepsLiteralCast(t *ConvertType) bool {
+	if t == nil {
 		return false
 	}
-	return unknownSignificant
+	typeName := strings.TrimSuffix(FoldASCII(t.Type), "[]")
+	if t.TimeZone != "" {
+		typeName += t.TimeZone
+	}
+	switch typeName {
+	case "json", "jsonb":
+		return false
+	}
+	return !isRegType(typeName) && !isRewrittenLiteralType(typeName)
 }
 
 // isStringType reports whether a PostgreSQL type is a string type, whose constants keep their case
@@ -2506,9 +2534,6 @@ func postgresFloatTypeName(precision string) string {
 	return "double precision"
 }
 
-// isFoldableValueCast reports whether a value-context string cast should be kept
-// (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
-// numeric/money/interval need this; dropping the rest preserves historical behavior.
 // literalCastType is the type of a cast that the parser drops from a string literal, kept whole so
 // that the cast can be written back where it names or types a view's output column
 func literalCastType(columnType ColumnType, array BoolVal) *ConvertType {
@@ -2526,6 +2551,9 @@ func literalCastType(columnType ColumnType, array BoolVal) *ConvertType {
 	return t
 }
 
+// isFoldableValueCast reports whether a value-context string cast should be kept
+// (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
+// numeric/money/interval need this; dropping the rest preserves historical behavior.
 func isFoldableValueCast(t *ConvertType) bool {
 	if t == nil {
 		return false
