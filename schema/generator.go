@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -77,6 +78,10 @@ type dialect struct {
 	mode               GeneratorMode
 	defaultSchema      string
 	legacyIgnoreQuotes bool
+	// comparing formats expressions for comparison instead of DDL
+	comparing bool
+	// noOpCast reports the casts of columns that a comparison leaves out
+	noOpCast parser.NoOpCastFunc
 }
 
 func newDialect(mode GeneratorMode, config database.GeneratorConfig, defaultSchema string) dialect {
@@ -89,6 +94,8 @@ type Generator struct {
 
 	desiredTables []*Table
 	currentTables []*Table
+	// desiredSizedVarcharColumns are the desired columns of type character varying(n), for noOpCast
+	desiredSizedVarcharColumns map[string][]*Column
 
 	desiredViews []*View
 	currentViews []*View
@@ -249,6 +256,9 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		emittedPrivileges:   make(map[string]bool),
 		postgresIndexPlans:  make(map[string]*postgresIndexMatchPlan),
 	}
+	if mode == GeneratorModePostgres {
+		generator.desiredSizedVarcharColumns = sizedVarcharColumns(desiredAggregated.Tables, mode)
+	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
 	return generator.generateDDLs(desiredDDLs)
@@ -302,7 +312,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, out)
 					}
 				}
-				mergeTable(currentTable, desired.table, mergedIndexes)
+				g.mergeTable(currentTable, desired.table, mergedIndexes)
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if !desired.table.renamedFrom.IsEmpty() {
@@ -333,7 +343,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 								interDDLs = append(interDDLs, out)
 							}
 						}
-						mergeTable(oldTable, desired.table, mergedIndexes)
+						g.mergeTable(oldTable, desired.table, mergedIndexes)
 					} else {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, rawStatement(desired.statement))
@@ -1116,8 +1126,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					g.renameCurrentPrivilegeColumn(desired.table.name, desiredColumn.renamedFrom, desiredColumn.name)
 
 					// After renaming, check if type/constraints need to be changed
-					if !g.haveSameDataType(*renameFromColumn, desiredColumn) {
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: desiredColumn}))
+					if !g.haveSameDataType(*renameFromColumn, desiredColumn) || !g.haveSameColumnCollation(*renameFromColumn, desiredColumn) {
+						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*renameFromColumn, desiredColumn)}))
 					}
 
 					if !g.isPrimaryKey(*renameFromColumn, currentTable) {
@@ -1283,7 +1293,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// either side. In that case the column default must be re-applied
 				// around the ALTER (see classifyEnumTypeChange's docstring).
 				var enumTypeChange bool
-				if !g.haveSameDataType(*currentColumn, desiredColumn) {
+				if !g.haveSameDataType(*currentColumn, desiredColumn) || !g.haveSameColumnCollation(*currentColumn, desiredColumn) {
 					// Serial types require changing both column type and sequence type
 					if isPostgresSerialType(currentColumn.typeName) && isPostgresSerialType(desiredColumn.typeName) {
 						underlyingType := getSerialUnderlyingType(desiredColumn.typeName)
@@ -1298,7 +1308,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name}))
 						}
 						// Change type - use desiredColumn for escaping to match user's quote style
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: desiredColumn, using: usingClause}))
+						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
 					}
 				}
 
@@ -2285,8 +2295,8 @@ func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]stat
 	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
 }
 
-// quotedOutputAliases returns the output column aliases of a normalized view definition, with the
-// case of quoted ones, since the definitions are compared in lowercase
+// quotedOutputAliases returns the output column names of a normalized view definition, with the
+// case of quoted ones
 func quotedOutputAliases(stmt parser.SelectStatement) []string {
 	stmt = unwrapParenSelect(stmt)
 	if union, ok := stmt.(*parser.Union); ok {
@@ -2301,10 +2311,14 @@ func quotedOutputAliases(stmt parser.SelectStatement) []string {
 		if !ok {
 			return ""
 		}
-		if aliased.As.Quoted {
-			return aliased.As.Name
+		name := aliased.As
+		if name.IsEmpty() {
+			name, _ = selectExprOutputName(aliased.Expr, GeneratorModePostgres)
 		}
-		return strings.ToLower(aliased.As.Name)
+		if name.Quoted {
+			return name.Name
+		}
+		return strings.ToLower(name.Name)
 	})
 }
 
@@ -2331,8 +2345,16 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode)
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode)
+		// Columns are compared like definitions, but case-insensitively, as a column that differs
+		// only in the case of a quoted name it reads is more likely the same one. Quoted names that
+		// differ in case are compared below.
+		opts := g.viewComparisonOptions()
+		opts.FoldQuoted = true
+		// Literals compare as written, so that a column whose literal PostgreSQL rewrote is recreated
+		// rather than replaced by one without its cast
+		opts.ReduceLiteralNames = false
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2402,24 +2424,25 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		tableLookup := g.createTableLookup()
 		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
-		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
-		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
-
-		// Post-normalization fix for generic parser: strip remaining table qualifiers
-		// The generic parser's ColName.Name may not respect the empty qualifier we set
-		if g.mode == GeneratorModePostgres {
-			currentNormalized = stripTableQualifiers(currentNormalized)
-			desiredNormalized = stripTableQualifiers(desiredNormalized)
+		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+			slog.Debug("Comparing view definitions",
+				"current_before_norm", parser.String(currentView.definition),
+				"desired_before_norm", parser.String(desiredView.definition),
+				"current_after_norm", parser.String(currentNormalizedAST),
+				"desired_after_norm", parser.String(desiredNormalizedAST),
+			)
 		}
-		slog.Debug("Comparing view definitions",
-			"current_before_norm", parser.String(currentView.definition),
-			"desired_before_norm", parser.String(desiredView.definition),
-			"current_after_norm", currentNormalized,
-			"desired_after_norm", desiredNormalized,
-		)
+		// Only PostgreSQL keeps the case of quoted identifiers; the other databases' exports quote
+		// every identifier
+		var sameDefinitions bool
+		if g.mode == GeneratorModePostgres {
+			sameDefinitions = parser.SameForComparison(currentNormalizedAST, desiredNormalizedAST, g.viewComparisonOptions())
+		} else {
+			sameDefinitions = strings.EqualFold(parser.String(currentNormalizedAST), parser.String(desiredNormalizedAST))
+		}
 
 		currentAliases, desiredAliases := g.quoteAwareOutputAliases(currentNormalizedAST), g.quoteAwareOutputAliases(desiredNormalizedAST)
-		if currentNormalized != desiredNormalized || !slices.Equal(currentAliases, desiredAliases) {
+		if !sameDefinitions || !slices.Equal(currentAliases, desiredAliases) {
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				var recreateDDLs []statement
 				var dependents []*View
@@ -2532,20 +2555,6 @@ func dependsOn(name, target string, deps map[string][]string, visited map[string
 		}
 	}
 	return false
-}
-
-// stripTableQualifiers removes table qualifiers from column references in SQL
-// E.g., "users.name" -> "name", "t.id" -> "id"
-// This is needed for PostgreSQL 13-15 where table qualifiers are included in column references.
-func stripTableQualifiers(sql string) string {
-	// Match table.column patterns where:
-	// - table name is [a-z_][a-z0-9_]* (identifier)
-	// - followed by a dot
-	// - followed by column name [a-z_][a-z0-9_]* (identifier)
-	// We use word boundaries to avoid matching within quoted strings
-	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
-	// Replace "table.column" with just "column" (keeping capture group 1)
-	return re.ReplaceAllString(sql, "$1")
 }
 
 // createTableLookup returns a TableLookupFunc that looks up tables from both
@@ -3186,13 +3195,8 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 
 func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstraint, expression parser.Expr) bool {
 	normalizedExpr := normalizeCheckExpr(expression, g.mode)
-	normalizedExprStr := strings.ToLower(parser.String(normalizedExpr))
-
 	for _, c := range constraints {
-		normalizedC := normalizeCheckExpr(c.expression, g.mode)
-		normalizedCStr := strings.ToLower(parser.String(normalizedC))
-
-		if normalizedCStr == normalizedExprStr {
+		if parser.SameForComparison(normalizeCheckExpr(c.expression, g.mode), normalizedExpr, g.comparisonOptions(false)) {
 			return true
 		}
 	}
@@ -3689,13 +3693,7 @@ func (d dialect) generateIndexColumnDefinition(indexColumn IndexColumn) string {
 		column += fmt.Sprintf("(%d)", *indexColumn.length)
 	}
 	if indexColumn.collation != "" {
-		// PostgreSQL collation names are case-sensitive identifiers ("C", "en_US"), and the
-		// database always prints them quoted.
-		if d.mode == GeneratorModePostgres {
-			column += fmt.Sprintf(" COLLATE %s", d.forceEscapeSQLName(indexColumn.collation))
-		} else {
-			column += fmt.Sprintf(" COLLATE %s", indexColumn.collation)
-		}
+		column += fmt.Sprintf(" COLLATE %s", d.quotedCollationName(indexColumn.collation))
 	}
 	if indexColumn.operatorClass != "" {
 		column += " " + indexColumn.operatorClass
@@ -4056,6 +4054,17 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
+// quotedCollationName writes a collation with a PostgreSQL name quoted as written, as sqldef has
+// always written an index collation, and as the legacy mode writes identifiers
+func (d dialect) quotedCollationName(collation string) string {
+	if d.mode == GeneratorModePostgres {
+		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+			return d.forceEscapeSQLName(part.Name)
+		}), ".")
+	}
+	return collation
+}
+
 func (d dialect) forceEscapeSQLName(name string) string {
 	switch d.mode {
 	case GeneratorModeMssql:
@@ -4242,9 +4251,15 @@ func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 }
 
 // Destructively modify table1 to have table2 columns and the given indexes
-func mergeTable(table1 *Table, table2 Table, indexes []Index) {
+func (g *Generator) mergeTable(table1 *Table, table2 Table, indexes []Index) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
+		if current, ok := table1.columns[column.name.Name]; ok && g.mode == GeneratorModePostgres {
+			// An omitted collation keeps the current one (see haveSameColumnCollation)
+			merged := g.withKeptCollation(*current, *column)
+			table1.columns[column.name.Name] = &merged
+			continue
+		}
 		table1.columns[column.name.Name] = column
 	}
 
@@ -5475,13 +5490,16 @@ func (g *Generator) classifyEnumTypeChange(currentColumn, desiredColumn Column) 
 	return fmt.Sprintf("%s::%s", column, target), enumInvolved
 }
 
-// findEnumTypeForColumn looks up the enum type that the column refers to in the given
-// types list, or returns nil if the column does not refer to an enum type.
-func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
+// findDomainForColumn returns the domain that is the type of the column
+func (g *Generator) findDomainForColumn(column Column, domains []*Domain) *Domain {
 	if g.mode != GeneratorModePostgres || column.typeName == "" {
 		return nil
 	}
+	return g.findDomainByName(domains, columnTypeName(column))
+}
 
+// columnTypeName returns the qualified name of a column's user-defined type
+func columnTypeName(column Column) QualifiedName {
 	// typeIdent carries the quote info and is set for user-defined types
 	// (domains, enums, ...). The generic parser leaves it empty when the
 	// source SQL writes a schema-qualified custom type like "myschema.item",
@@ -5492,16 +5510,23 @@ func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
 	if typeIdent.IsEmpty() {
 		typeIdent = Ident{Name: column.typeName}
 	}
-
-	target := &Type{name: QualifiedName{
+	return QualifiedName{
 		Schema: Ident{
 			Name:   strings.TrimSuffix(column.references.Name, "."),
 			Quoted: column.references.Quoted,
 		},
 		Name: typeIdent,
-	}}
+	}
+}
 
-	found := g.findType(types, target)
+// findEnumTypeForColumn looks up the enum type that the column refers to in the given
+// types list, or returns nil if the column does not refer to an enum type.
+func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
+	if g.mode != GeneratorModePostgres || column.typeName == "" {
+		return nil
+	}
+
+	found := g.findType(types, &Type{name: columnTypeName(column)})
 	if found == nil || len(found.enumValues) == 0 {
 		return nil
 	}
@@ -5892,6 +5917,161 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		reflect.DeepEqual(current.comment, desired.comment)
 }
 
+// haveSameColumnCollation compares a PostgreSQL column collation only when the desired column sets
+// one, like haveSameColumnDefinition does for MySQL, so an omitted one keeps the current collation.
+// The export writes a collation only where it differs from the one of the column's type.
+func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool {
+	collation := g.managedCollation(desired.collate)
+	if collation == "" {
+		return true
+	}
+	return g.sameCollations(g.columnCollation(current, g.currentDomains), collation)
+}
+
+// managedCollation returns a desired column collation that sqldef manages. The legacy mode matches
+// an unquoted name as if it were quoted, but has always written it as written, which PostgreSQL
+// folds, so it manages only a quoted name.
+func (g *Generator) managedCollation(collation string) string {
+	if g.legacyIgnoreQuotes && collation != "" {
+		if parts := postgresNameParts(collation); !parts[len(parts)-1].Quoted {
+			return ""
+		}
+	}
+	return collation
+}
+
+// sameCollations compares two column collations. The export qualifies a collation outside
+// pg_catalog, which may be on the search path that sqldef does not know, so an unqualified name
+// matches a qualified one of the same name.
+func (g *Generator) sameCollations(a, b string) bool {
+	a, b = g.canonicalCollation(a), g.canonicalCollation(b)
+	if a == b {
+		return true
+	}
+	partsA, partsB := postgresNameParts(a), postgresNameParts(b)
+	if len(partsA) == 0 || len(partsB) == 0 || (len(partsA) == 1) == (len(partsB) == 1) {
+		return false
+	}
+	return partsA[len(partsA)-1] == partsB[len(partsB)-1]
+}
+
+// columnCollation returns the collation of a column, which is the one of its type if it sets none:
+// a domain's, or "C" for name, which the export leaves out as it does any collation of a type
+func (g *Generator) columnCollation(column Column, domains []*Domain) string {
+	if column.collate == "" {
+		if domain := g.findDomainForColumn(column, domains); domain != nil {
+			return domain.collation
+		}
+		if strings.EqualFold(strings.TrimSuffix(column.typeName, "[]"), "name") {
+			return `"C"`
+		}
+	}
+	return column.collate
+}
+
+// canonicalCollation resolves a PostgreSQL collation name written in SQL, dropping a schema on the
+// search path, which the export leaves out, and resolving "default" to an omitted collation, which
+// the export writes only for a domain that has its own. The legacy mode folds every name.
+func (g *Generator) canonicalCollation(collation string) string {
+	return g.canonicalCollationFolding(collation, true)
+}
+
+// canonicalCollationFolding is canonicalCollation, which keeps the case of every name as written
+// unless fold is set
+func (g *Generator) canonicalCollationFolding(collation string, fold bool) string {
+	if g.mode != GeneratorModePostgres {
+		return collation
+	}
+	parts := util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+		if fold && (!part.Quoted || g.legacyIgnoreQuotes) {
+			return parser.FoldASCII(part.Name)
+		}
+		return part.Name
+	})
+	defaultSchema := g.defaultSchema
+	if fold && g.legacyIgnoreQuotes {
+		defaultSchema = parser.FoldASCII(defaultSchema)
+	}
+	if len(parts) == 2 && (parts[0] == "pg_catalog" || parts[0] == defaultSchema) {
+		parts = parts[1:]
+	}
+	if len(parts) == 1 && parts[0] == "default" {
+		return ""
+	}
+	return strings.Join(util.TransformSlice(parts, g.forceEscapeSQLName), ".")
+}
+
+// postgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
+// name. A quoted part such as "en_US.utf8" may contain a dot.
+func postgresNameParts(name string) []Ident {
+	var parts []Ident
+	for name != "" {
+		if rest, ok := strings.CutPrefix(name, `"`); ok {
+			var part strings.Builder
+			for {
+				i := strings.IndexByte(rest, '"')
+				if i < 0 {
+					panic(fmt.Sprintf("unterminated quoted name: %s", name))
+				}
+				part.WriteString(rest[:i])
+				rest = rest[i+1:]
+				if !strings.HasPrefix(rest, `"`) {
+					break
+				}
+				part.WriteByte('"')
+				rest = rest[1:]
+			}
+			parts = append(parts, Ident{Name: part.String(), Quoted: true})
+			name = rest
+		} else {
+			end := strings.IndexByte(name, '.')
+			if end < 0 {
+				end = len(name)
+			}
+			parts = append(parts, Ident{Name: name[:end]})
+			name = name[end:]
+		}
+		name = strings.TrimPrefix(name, ".")
+	}
+	return parts
+}
+
+// withKeptCollation returns the desired column with the current collation when it omits one, as
+// ALTER COLUMN TYPE without COLLATE resets the column to the type's default collation
+func (g *Generator) withKeptCollation(current Column, desired Column) Column {
+	desired.collate = g.managedCollation(desired.collate)
+	if desired.collate == "" && g.takesCollationOf(current, desired) {
+		desired.collate = current.collate
+	}
+	// The current collation is written as PostgreSQL resolved it
+	if current.collate != "" && desired.collate != "" && g.sameCollations(current.collate, desired.collate) {
+		desired.collate = current.collate
+	}
+	return desired
+}
+
+// takesCollationOf reports whether the desired column's type takes a collation that can be carried
+// over from the current column: the same type, a built-in collatable type, or a domain over one that
+// sets no collation of its own
+func (g *Generator) takesCollationOf(current Column, desired Column) bool {
+	// A quoted type name is not a built-in one except "char", which takes no collation
+	builtin := !desired.typeIdent.Quoted
+	if strings.EqualFold(current.typeName, desired.typeName) || (builtin && isCollatableType(desired.typeName)) {
+		return true
+	}
+	domain := g.findDomainForColumn(desired, g.desiredDomains)
+	return domain != nil && domain.collation == "" && isCollatableType(domain.baseType)
+}
+
+// isCollatableType reports whether a built-in type takes a collation
+func isCollatableType(typeName string) bool {
+	switch strings.ToLower(typeName) {
+	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext":
+		return true
+	}
+	return false
+}
+
 func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 	if generatedA == nil && generatedB == nil {
 		return true
@@ -6034,7 +6214,8 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		checkA.noInherit == checkB.noInherit
 }
 
-// areSameCheckExprs compares two expressions with the CHECK constraint normalization, case-sensitively.
+// areSameCheckExprs compares two expressions with the CHECK constraint normalization,
+// case-sensitively except where PostgreSQL rewrites a constant in its own case.
 func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	normalizedA := normalizeCheckExpr(exprA, g.mode)
 	normalizedB := normalizeCheckExpr(exprB, g.mode)
@@ -6043,6 +6224,11 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
+	if g.mode == GeneratorModePostgres {
+		opts := g.comparisonOptions(false)
+		opts.UnknownTypesCaseSensitive = true
+		return parser.SameForComparison(normalizedA, normalizedB, opts)
+	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
 }
 
@@ -6129,12 +6315,19 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
 		return d.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
+		if col, ok := e.Expr.(*parser.ColName); ok && d.noOpCast != nil && d.noOpCast(col, e.Type) {
+			return d.formatExprQuoteAware(e.Expr)
+		}
+		if parser.NeedsParensAsCastOperand(e.Expr) {
+			return "(" + d.formatExprQuoteAware(e.Expr) + ")::" + parser.String(e.Type)
+		}
 		return d.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
 	case *parser.AtTimeZoneExpr:
 		return "(" + d.formatExprQuoteAware(e.Expr) + " at time zone " + d.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
-		// For function expressions, format arguments with quote awareness
-		// Normalize function name to lowercase (PostgreSQL convention)
+		if d.mode == GeneratorModePostgres {
+			return d.postgresFoldedString(e)
+		}
 		args := make([]string, len(e.Exprs))
 		for i, arg := range e.Exprs {
 			args[i] = d.formatSelectExprQuoteAware(arg)
@@ -6158,9 +6351,60 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 		result += " END"
 		return result
 	default:
-		// For other expression types, fall back to parser.String
+		if d.mode == GeneratorModePostgres {
+			return d.postgresFoldedString(expr)
+		}
 		return parser.String(expr)
 	}
+}
+
+// postgresFoldedString formats an expression of an index. DDL leaves out only pg_catalog, as a
+// function in the default schema would otherwise resolve to one of the same name in pg_catalog. A
+// comparison leaves out every schema, as pg_get_indexdef() leaves out the schemas on the search path.
+func (d dialect) postgresFoldedString(expr parser.Expr) string {
+	if d.comparing {
+		return parser.PostgresFoldedStringWithoutSchemas(expr, d.noOpCast)
+	}
+	return parser.PostgresFoldedString(expr, "pg_catalog")
+}
+
+// comparisonDialect returns the dialect that formats expressions for comparison
+func (g *Generator) comparisonDialect() dialect {
+	d := g.dialect
+	d.comparing = true
+	if g.mode == GeneratorModePostgres {
+		d.noOpCast = g.noOpCast
+	}
+	return d
+}
+
+// noOpCast reports whether PostgreSQL drops a cast of a column, as it does one to character
+// varying(n) where the column already has the type. sqldef does not resolve the table of a column,
+// so a desired column of the name with the type in any table matches.
+func (g *Generator) noOpCast(col *parser.ColName, t *parser.ConvertType) bool {
+	if !parser.IsSizedStringCast(t) || normalizeTypeName(t.Type, g.mode) != "character varying" {
+		return false
+	}
+	for _, column := range g.desiredSizedVarcharColumns[parser.FoldASCII(col.Name.Name)] {
+		if column.length.raw == t.Length.Val && g.identsEqual(column.name, col.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+// sizedVarcharColumns returns the columns of type character varying(n) by their folded names
+func sizedVarcharColumns(tables []*Table, mode GeneratorMode) map[string][]*Column {
+	columns := map[string][]*Column{}
+	for _, table := range tables {
+		for _, column := range util.CanonicalMapIter(table.columns) {
+			if !column.array && column.length != nil && normalizeTypeName(column.typeName, mode) == "character varying" {
+				key := parser.FoldASCII(column.name.Name)
+				columns[key] = append(columns[key], column)
+			}
+		}
+	}
+	return columns
 }
 
 // formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
@@ -6242,6 +6486,12 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	}
 
 	// Both are complex expressions - use string comparison on already-normalized expressions
+	if g.mode == GeneratorModePostgres {
+		// A default has always matched with the default schema of a function left out
+		opts := g.comparisonOptions(false)
+		opts.OmittedSchemas = append(opts.OmittedSchemas, g.defaultSchema)
+		return parser.SameForComparison(normalizedCurrent, normalizedDesired, opts)
+	}
 	var currentExprSchema, currentExpr string
 	var desiredExprSchema, desiredExpr string
 
@@ -6253,6 +6503,28 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
+}
+
+// comparisonOptions compares PostgreSQL expressions as the database reads them back. It leaves out
+// pg_catalog, which is searched first, but not the default schema, as a function there may have the
+// name of one in pg_catalog.
+func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOptions {
+	return parser.ComparisonOptions{
+		FoldQuoted:     g.legacyIgnoreQuotes,
+		DropQualifiers: dropQualifiers,
+		OmittedSchemas: []string{"pg_catalog"},
+		// pg_get_viewdef() leaves out every schema on the search path, which sqldef does not know
+		DropSchemas: dropQualifiers,
+		NoOpCast:    g.noOpCast,
+	}
+}
+
+// viewComparisonOptions are the options for comparing view definitions
+func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
+	opts := g.comparisonOptions(true)
+	opts.UntypedRegLiterals = true
+	opts.ReduceLiteralNames = true
+	return opts
 }
 
 // unwrapCast strips a type cast from an expression, returning the inner expression.
@@ -6663,20 +6935,22 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 // COLLATE clause from the DDL it exports whenever it names the collation the column already has, so
 // an omitted clause has to compare equal to one that restates it. "default" names the database
 // default, which the export never writes out either. An index on a materialized view has no column
-// definitions to resolve against, so its collation is compared as written.
+// definitions to resolve against, so its collation is compared as written. Names keep their case as
+// written, as quotedCollationName quotes them.
 func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
-	collation := indexColumn.collation
-	if collation == "" {
-		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			if column := g.findColumnByName(columns, colName.Name); column != nil {
-				collation = column.collate
+	if indexColumn.collation != "" {
+		return g.canonicalCollationFolding(indexColumn.collation, false)
+	}
+	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+		if column := g.findColumnByName(columns, colName.Name); column != nil {
+			collation := g.columnCollation(*column, g.currentDomains)
+			if collation == "" {
+				collation = g.columnCollation(*column, g.desiredDomains)
 			}
+			return g.canonicalCollationFolding(collation, false)
 		}
 	}
-	if strings.EqualFold(collation, "default") {
-		return ""
-	}
-	return collation
+	return ""
 }
 
 // areSameCollations compares two index-column collation names. PostgreSQL collation names are
@@ -6821,7 +7095,7 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 
 	if !g.legacyIgnoreQuotes {
 		if g.mode == GeneratorModePostgres {
-			return g.formatExprQuoteAware(normalized)
+			return g.comparisonDialect().formatExprQuoteAware(normalized)
 		}
 		if g.mode == GeneratorModeMssql {
 			if colName, ok := normalized.(*parser.ColName); ok {
@@ -6833,7 +7107,16 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 		}
 	}
 
-	return parser.String(normalized)
+	return g.formatLegacyExprForComparison(normalized)
+}
+
+// formatLegacyExprForComparison formats an expression for the legacy mode's comparisons, leaving out
+// the PostgreSQL schemas that pg_get_indexdef() and pg_get_expr() leave out of function names
+func (g *Generator) formatLegacyExprForComparison(expr parser.Expr) string {
+	if g.mode == GeneratorModePostgres {
+		return parser.StringWithoutSchemas(expr, g.noOpCast, "pg_catalog")
+	}
+	return parser.String(expr)
 }
 
 func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
@@ -6853,9 +7136,10 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 	normalizedB := normalizeExpr(b, g.mode)
 
 	if !g.legacyIgnoreQuotes {
-		return g.formatExprQuoteAware(normalizedA) == g.formatExprQuoteAware(normalizedB)
+		d := g.comparisonDialect()
+		return d.formatExprQuoteAware(normalizedA) == d.formatExprQuoteAware(normalizedB)
 	}
-	return parser.String(normalizedA) == parser.String(normalizedB)
+	return g.formatLegacyExprForComparison(normalizedA) == g.formatLegacyExprForComparison(normalizedB)
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
@@ -6969,6 +7253,9 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
+	if g.mode == GeneratorModePostgres {
+		return parser.SameForComparison(normalizedA, normalizedB, g.comparisonOptions(false))
+	}
 	// TODO: case-insensitive comparison is not always correct
 	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))
 }
@@ -7182,7 +7469,12 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
 	normalizedExpr := normalizeExpr(expr, d.mode)
-	exprStr := parser.String(normalizedExpr)
+	var exprStr string
+	if d.mode == GeneratorModePostgres && !d.legacyIgnoreQuotes {
+		exprStr = parser.PostgresFoldedString(normalizedExpr)
+	} else {
+		exprStr = parser.String(normalizedExpr)
+	}
 	if d.mode == GeneratorModeMysql || d.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error
 		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit

@@ -376,14 +376,13 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			return normalizeExpr(e, mode)
 		}
 		// Remove certain casts that PostgreSQL simplifies
-		// - text, character varying: Always removed
+		// - text, character varying: Removed unless they have a length (see isUnsizedStringCastType)
 		// - date, timestamp without time zone: Removed when cast from string literals
 		// - time, time without time zone: Kept but normalized (PostgreSQL preserves these for precision)
 		if e.Type != nil {
 			typeStr := strings.ToLower(e.Type.Type)
 
-			// Always remove text casts
-			if typeStr == "text" || typeStr == "character varying" {
+			if isUnsizedStringCastType(e.Type) {
 				return recur(e.Expr, mode)
 			}
 
@@ -428,9 +427,10 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		// Unwrap parentheses around simple expressions (literals, column names, etc.)
 		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name.
 		// AtTimeZoneExpr self-parenthesizes and CASE ... END is self-delimiting, so a wrapper
-		// around them is redundant too. MySQL wraps CASE in parentheses.
+		// around them is redundant too. MySQL wraps CASE in parentheses. A :: cast binds tighter
+		// than any operator, and puts parentheses around its own operand when it needs them.
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr, *parser.CaseExpr:
+		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr, *parser.CaseExpr, *parser.CastExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
@@ -520,8 +520,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
 			return atz
 		}
-		// Normalize function name to lowercase (PostgreSQL convention)
-		funcName := parser.NewIdent(strings.ToLower(e.Name.Name), false)
+		funcName := foldFuncName(e.Name, mode)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
 			Name:      funcName,
@@ -657,6 +656,21 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 		return nil, false
 	}
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
+}
+
+// isUnsizedStringCastType reports whether a cast is to text or character varying without a length,
+// which PostgreSQL adds implicitly where a string of another string type is expected. A cast with
+// a length truncates, so PostgreSQL never adds one.
+func isUnsizedStringCastType(t *parser.ConvertType) bool {
+	return isStringCastType(t) && t.Length == nil
+}
+
+func isStringCastType(t *parser.ConvertType) bool {
+	switch strings.ToLower(t.Type) {
+	case "text", "character varying", "varchar":
+		return true
+	}
+	return false
 }
 
 // stripFuncResultTextCasts removes text/character varying casts applied to
@@ -856,9 +870,16 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// Strip redundant text/character varying casts on column names
 				// PostgreSQL adds these implicitly when comparing varchar columns
 				// e.g., (status)::text = 'active'::text → status = 'active'
-				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
-					if typeStr == "text" || typeStr == "character varying" {
+				// A string cast under it is the c::character varying(3) that PostgreSQL wraps in an
+				// implicit ::text
+				if isUnsizedStringCastType(e.Type) {
+					switch operand := normalizedExpr.(type) {
+					case *parser.ColName:
 						return normalizedExpr
+					case *parser.CastExpr:
+						if operand.Type != nil && isStringCastType(operand.Type) {
+							return normalizedExpr
+						}
 					}
 				}
 
@@ -1113,6 +1134,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	}
 }
 
+// foldFuncName lowercases an unquoted function name as PostgreSQL does. A quoted one keeps its
+// case, since "MyFn" and myfn name different functions.
+func foldFuncName(name parser.Ident, mode GeneratorMode) parser.Ident {
+	if mode == GeneratorModePostgres && name.Quoted {
+		return NewNormalizedIdent(name)
+	}
+	return parser.NewIdent(strings.ToLower(name.Name), false)
+}
+
 // normalizeFuncExpr normalizes a function call's name and arguments, keeping it a function call
 func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays bool) *parser.FuncExpr {
 	funcName := strings.ToLower(e.Name.Name)
@@ -1149,11 +1179,9 @@ func normalizeFuncExpr(e *parser.FuncExpr, mode GeneratorMode, flattenArrays boo
 		}
 		normalizedExprs = append(normalizedExprs, normalized)
 	}
-	// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
-	// For MySQL, preserve the original case as MySQL preserves case for function names
 	normalizedName := e.Name
 	if mode == GeneratorModePostgres {
-		normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
+		normalizedName = foldFuncName(e.Name, mode)
 	}
 	// WITHIN GROUP is compared only for PostgreSQL, as it was ignored before ordered-set aggregates
 	// were supported
@@ -1803,6 +1831,10 @@ func figureCastColname(expr parser.Expr, typ *parser.ConvertType) (Ident, int) {
 // type's internal name ("integer" is int4, "character varying" is varchar)
 func castTypeColname(typ *parser.ConvertType) string {
 	name := strings.TrimSuffix(strings.ToLower(typ.Type), "[]")
+	// The name of a schema-qualified type leaves out its schema
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		name = name[i+1:]
+	}
 	if typ.TimeZone != "" {
 		name += typ.TimeZone
 	}
@@ -1886,7 +1918,7 @@ func expandStarExprWithColumns(exprs parser.SelectExprs, columns parser.Columns)
 // This handles differences in how PostgreSQL versions format column names:
 // - PostgreSQL 13-15: includes table qualifiers (e.g., "users.id")
 // - PostgreSQL 16+: omits unnecessary qualifiers (e.g., "id")
-func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode) []string {
+func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode, opts parser.ComparisonOptions) []string {
 	if def == nil {
 		return nil
 	}
@@ -1902,7 +1934,7 @@ func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode Generat
 
 	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
 		normalized := normalizeOutputSelectExpr(expr, mode)
-		return strings.ToLower(parser.String(normalized))
+		return parser.ComparisonKey(normalized, opts)
 	})
 }
 

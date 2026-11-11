@@ -768,6 +768,10 @@ func (a alterColumnTypeAction) render(d dialect) string {
 		dataType = d.generateDataType(a.column)
 	}
 	ddl := fmt.Sprintf("ALTER COLUMN %s TYPE %s", d.escapeSQLIdent(a.column.name), dataType)
+	// Without COLLATE, ALTER COLUMN TYPE resets the column to the type's default collation
+	if a.column.collate != "" {
+		ddl += " COLLATE " + a.column.collate
+	}
 	if a.using != "" {
 		ddl += " USING " + a.using
 	}

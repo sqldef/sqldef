@@ -588,3 +588,11 @@ SimpleDeleteFrom:
 PragmaStatement:
   current: |
     PRAGMA defer_foreign_keys=TRUE;
+
+IndexColumnWithStringLiteralCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+    CREATE INDEX users_name ON users (name COLLATE 'NOCASE');

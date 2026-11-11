@@ -684,6 +684,169 @@ ColumnCollateAfterOtherConstraints:
       name text NOT NULL COLLATE "C",
       code text DEFAULT '' COLLATE "C"
     );
+
+AddColumnWithCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL);
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, name text COLLATE "C");
+  up: |
+    ALTER TABLE public.users ADD COLUMN name text COLLATE "C";
+  down: |
+    ALTER TABLE public.users DROP COLUMN name;
+
+ChangeColumnTypeKeepsCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name varchar(10) COLLATE "C");
+  desired: |
+    CREATE TABLE users (name varchar(20) COLLATE "C");
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(20) COLLATE "C";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(10) COLLATE "C";
+
+ChangeColumnCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text COLLATE "C");
+  desired: |
+    CREATE TABLE users (name text COLLATE "POSIX");
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "POSIX";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "C";
+
+ChangeColumnTypeKeepsOmittedCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name varchar(10) COLLATE "C");
+  desired: |
+    CREATE TABLE users (name varchar(20));
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(20) COLLATE "C";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE varchar(10) COLLATE "C";
+
+ChangeColumnCollationToDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text COLLATE "C");
+  desired: |
+    CREATE TABLE users (name text COLLATE "default");
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "default";
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name TYPE text COLLATE "C";
+
+RenameColumnAndChangeCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (old text COLLATE "C");
+  desired: |
+    CREATE TABLE users (nm text COLLATE "POSIX" -- @renamed from=old
+    );
+  up: |
+    ALTER TABLE public.users RENAME COLUMN old TO nm;
+    ALTER TABLE public.users ALTER COLUMN nm TYPE text COLLATE "POSIX";
+  down: |
+    ALTER TABLE public.users ADD COLUMN old text COLLATE "C";
+    ALTER TABLE public.users DROP COLUMN nm;
+
+ChangeDefaultStringLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text DEFAULT lower('ABC'));
+  desired: |
+    CREATE TABLE users (name text DEFAULT lower('abc'));
+  up: |
+    ALTER TABLE public.users ALTER COLUMN name SET DEFAULT lower('abc');
+  down: |
+    ALTER TABLE public.users ALTER COLUMN name SET DEFAULT lower('ABC');
+
+DefaultWithNestedFunctionQualifiedByDefaultSchema:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION gen_code() RETURNS text AS $$ SELECT 'c' $$ LANGUAGE sql;
+    CREATE TABLE users (code text DEFAULT (public.gen_code() || '-x'));
+
+ChangeDefaultCastOfNegatedColumnFreeExpression:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (amount integer DEFAULT (-1)::integer, label text DEFAULT (-length('ab'))::text);
+  desired: |
+    CREATE TABLE users (amount integer DEFAULT (-1)::integer, label text DEFAULT (-length('abc'))::text);
+  up: |
+    ALTER TABLE public.users ALTER COLUMN label SET DEFAULT (-length('abc'))::text;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN label SET DEFAULT (-length('ab'))::text;
+
+ColumnOfCollatedDomainRestatingItsCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE t (a d COLLATE "C");
+
+ChangeColumnFromCollatedTextToDomainKeepsCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE DOMAIN d AS text;
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE DOMAIN d AS text;
+    CREATE TABLE t (a d);
+  up: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE d COLLATE "C";
+  down: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE text COLLATE "C";
+
+ColumnWithUnquotedAndQualifiedCollations:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (a text COLLATE UCS_BASIC, b text COLLATE pg_catalog."C");
+
+ChangeColumnFromCollatedTextToEnum:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TABLE users (s text COLLATE "C");
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TABLE users (s mood);
+  up: |
+    ALTER TABLE public.users ALTER COLUMN s TYPE mood USING s::mood;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN s TYPE text COLLATE "C";
+
+ColumnOfCollatedDomainWithDefaultCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE users (x d COLLATE "default");
+
+ColumnAndIndexWithCollationQualifiedByDefaultSchema:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE TABLE t (a text COLLATE pg_catalog."C", b text COLLATE pg_catalog."POSIX");
+    CREATE INDEX t_a ON t (a COLLATE "POSIX");
+  up: |
+    ALTER TABLE public.t ADD COLUMN b text COLLATE pg_catalog."POSIX";
+    CREATE INDEX t_a ON public.t (a COLLATE "POSIX");
+  down: |
+    DROP INDEX public.t_a;
+    ALTER TABLE public.t DROP COLUMN b;
+
+ColumnCollationOmittedInDesiredIsKept:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text COLLATE "C");
+  desired: |
+    CREATE TABLE users (name text);
+  up: ""
+  down: ""
 CreateTableWithCurrentTimestamp:
   desired: |
     CREATE TABLE timestamps (
@@ -1602,3 +1765,86 @@ IntervalFieldQualifierDefault:
   legacy_ignore_quotes: false
 
 # Function returning TABLE
+
+IndexRestatingCollationOfColumnDomain:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE t (a d);
+    CREATE INDEX t_a ON t (a COLLATE "C");
+
+ColumnRestatingQualifiedCollationOfItsDomain:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d AS text COLLATE pg_catalog."POSIX";
+    CREATE TABLE t (a d COLLATE "POSIX");
+
+ChangeColumnFromCollatedDomainToVarcharTakesDefaultCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE t (a d);
+  desired: |
+    CREATE DOMAIN d AS text COLLATE "C";
+    CREATE TABLE t (a varchar(20));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE varchar(20);
+  down: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE d;
+
+ChangeDefaultCastOfNegativeNumber:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (label text DEFAULT (-1)::text);
+  desired: |
+    CREATE TABLE t (label text DEFAULT (-2)::text);
+  up: |
+    ALTER TABLE public.t ALTER COLUMN label SET DEFAULT (-2)::text;
+  down: |
+    ALTER TABLE public.t ALTER COLUMN label SET DEFAULT (-1)::text;
+
+AddColumnWithUnquotedCollationInLegacyMode:
+  current: |
+    CREATE TABLE t (id integer);
+  desired: |
+    CREATE TABLE t (id integer, name text COLLATE UCS_BASIC);
+  up: |
+    ALTER TABLE "public"."t" ADD COLUMN "name" text COLLATE UCS_BASIC;
+  down: |
+    ALTER TABLE "public"."t" DROP COLUMN "name";
+
+ChangeColumnTypeKeepsUnquotedCollationInLegacyMode:
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE TABLE t (a varchar(20) COLLATE C);
+  up: |
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE varchar(20) COLLATE "C";
+  down: |
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE text COLLATE "C";
+
+UnquotedColumnCollationIsNotManagedInLegacyMode:
+  current: |
+    CREATE TABLE t (a text, b varchar(5) COLLATE "C");
+  desired: |
+    CREATE TABLE t (a text COLLATE C, b varchar(10) COLLATE UCS_BASIC);
+  up: |
+    ALTER TABLE "public"."t" ALTER COLUMN "b" TYPE varchar(10) COLLATE "C";
+  down: |
+    ALTER TABLE "public"."t" ALTER COLUMN "b" TYPE varchar(5) COLLATE "C";
+
+ColumnOfTypeNameRestatingItsCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (n name COLLATE "C");
+
+ChangeCollatedColumnToQuotedChar:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text COLLATE "C");
+  desired: |
+    CREATE TABLE t (a "char");
+  up: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE "char";
+  down: |
+    ALTER TABLE public.t ALTER COLUMN a TYPE text COLLATE "C";

@@ -796,11 +796,14 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
 		       t.typdefault AS default_value,
 		       t.typnotnull AS not_null,
-		       c.collname AS collation,
+		       CASE WHEN c.collname = 'default' THEN NULL
+		            WHEN cn.nspname = 'pg_catalog' THEN quote_ident(c.collname)
+		            ELSE quote_ident(cn.nspname) || '.' || quote_ident(c.collname) END AS collation,
 		       obj_description(t.oid, 'pg_type') AS domain_comment
 		FROM pg_catalog.pg_type t
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
+		LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid = c.collnamespace
 		WHERE t.typtype = 'd'
 		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_type') AND d.deptype = 'e')
@@ -876,8 +879,8 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		var ddl strings.Builder
 		ddl.WriteString(fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.quoteIdentifierIfNeeded(di.schema), d.quoteIdentifierIfNeeded(di.name), di.dataType))
 
-		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
-			ddl.WriteString(fmt.Sprintf(" COLLATE %s", d.quoteIdentifierIfNeeded(di.collation.String)))
+		if di.collation.Valid {
+			ddl.WriteString(" COLLATE " + di.collation.String)
 		}
 
 		if di.defaultValue.Valid {
@@ -1091,6 +1094,9 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
 		fmt.Fprintf(&queryBuilder, "%s %s", d.quoteIdentifierIfNeeded(col.Name), d.escapeDataTypeName(col.GetDataType()))
+		if col.Collation != "" {
+			fmt.Fprintf(&queryBuilder, " COLLATE %s", col.Collation)
+		}
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
@@ -1168,6 +1174,7 @@ type column struct {
 	Default            string
 	IsAutoIncrement    bool
 	IdentityGeneration string
+	Collation          string
 }
 
 func (c *column) GetDataType() string {
@@ -1566,13 +1573,20 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	    END
 	  ELSE format_type(f.atttypid, f.atttypmod)
 	  END,
-	  s.identity_generation
+	  s.identity_generation,
+	  -- The collation is written only when it differs from the type's, as pg_dump does
+	  CASE WHEN f.attcollation <> t.typcollation THEN
+	    CASE WHEN cn.nspname = 'pg_catalog' THEN quote_ident(co.collname)
+	    ELSE quote_ident(cn.nspname) || '.' || quote_ident(co.collname) END
+	  END
 	FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 	LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
+	LEFT JOIN pg_collation co ON co.oid = f.attcollation
+	LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
 	WHERE c.relkind in ('r', 'p')
 	AND n.nspname || '.' || c.relname = ANY($1::text[])
 	AND f.attnum > 0
@@ -1588,8 +1602,8 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	for rows.Next() {
 		col := column{}
 		var tableName, colName, isNullable, dataType, formattedDataType string
-		var colDefault, idGen *string
-		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen)
+		var colDefault, idGen, collation *string
+		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &collation)
 		if err != nil {
 			return nil, err
 		}
@@ -1605,6 +1619,9 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 		col.formattedDataType = formattedDataType
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
+		}
+		if collation != nil {
+			col.Collation = *collation
 		}
 		result[tableName] = append(result[tableName], col)
 	}

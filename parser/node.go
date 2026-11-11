@@ -18,9 +18,11 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // SQLNode defines the interface for all nodes
@@ -35,6 +37,207 @@ type nodeBuffer struct {
 	// postgresQuotes keeps the double quotes of quoted identifiers, which PostgreSQL would
 	// otherwise fold to lowercase or reject as reserved words
 	postgresQuotes bool
+	// foldUnquoted writes unquoted identifiers in lowercase, as PostgreSQL folds them
+	foldUnquoted bool
+	// comparisonKey writes identifiers as placeholders into protected, so that a comparison key
+	// can fold the case of everything else, and records string literals into literals
+	comparisonKey  bool
+	foldQuoted     bool
+	dropQualifiers bool
+	// omittedSchemas are the schemas left out of table and function names, as PostgreSQL leaves
+	// out a schema on the search path when it reads an expression back
+	omittedSchemas []string
+	// dropSchemas leaves out every schema of table and function names
+	dropSchemas bool
+	// noOpCast reports the casts of columns that PostgreSQL drops, which are left out
+	noOpCast                  NoOpCastFunc
+	unknownTypesCaseSensitive bool
+	untypedRegLiterals        bool
+	reduceLiteralNames        bool
+	protected                 []string
+	literals                  []keyLiteral
+	// literalType is the type of the cast whose operand is being formatted
+	literalType string
+}
+
+// keyLiteral is a string literal in a comparison key
+type keyLiteral struct {
+	value string
+	// typeName is the type the literal is cast to, if any
+	typeName string
+}
+
+func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
+	if buf.dropSchemas {
+		return true
+	}
+	if len(buf.omittedSchemas) == 0 {
+		return false
+	}
+	name := schema.Name
+	if !schema.Quoted || buf.foldQuoted {
+		name = FoldASCII(name)
+	}
+	for _, omitted := range buf.omittedSchemas {
+		if name == omitted || (buf.foldQuoted && name == FoldASCII(omitted)) {
+			return true
+		}
+	}
+	return false
+}
+
+// formatCastOperand formats the operand of a cast, recording the type of a literal operand
+func (buf *nodeBuffer) formatCastOperand(operand SQLNode, typeName string) {
+	if isStringLiteral(operand) {
+		buf.literalType = typeName
+	}
+	operand.Format(buf)
+}
+
+func isStringLiteral(node SQLNode) bool {
+	switch n := node.(type) {
+	case literalNode:
+		return true
+	case *SQLVal:
+		return n.Type == StrVal
+	}
+	return false
+}
+
+// isLiteralCaseSignificant reports whether the case of a literal is significant: it is for an
+// untyped literal or one of a string type, but not for one of a type whose constants PostgreSQL
+// rewrites in its own case, such as uuid. A reg* constant is a name, which keeps its case only where
+// it is quoted. The case of other types, such as an enum or a domain over boolean, is significant
+// only if unknownSignificant is set.
+func isLiteralCaseSignificant(literal keyLiteral, unknownSignificant bool) bool {
+	typeName := strings.TrimSuffix(FoldASCII(literal.typeName), "[]")
+	if typeName == "" || isStringType(typeName) {
+		return true
+	}
+	if IsRegType(typeName) {
+		return strings.Contains(literal.value, `"`)
+	}
+	switch typeName {
+	case "bytea", "int4range", "int8range", "numrange", "tsrange", "tstzrange", "daterange",
+		"int4multirange", "int8multirange", "nummultirange", "tsmultirange", "tstzmultirange",
+		"datemultirange", "uuid", "boolean", "bool", "smallint", "integer", "int", "int2", "int4",
+		"int8", "bigint", "numeric", "decimal", "real", "float4", "float8", "double precision",
+		"money", "date", "time", "timetz", "time without time zone", "time with time zone",
+		"timestamp", "timestamptz", "timestamp without time zone", "timestamp with time zone",
+		"interval", "inet", "cidr", "macaddr", "macaddr8", "bit", "varbit", "bit varying", "oid",
+		"pg_lsn", "tsvector", "tsquery":
+		return false
+	}
+	return unknownSignificant
+}
+
+// isStringType reports whether a PostgreSQL type is a string type, whose constants keep their case
+func isStringType(typeName string) bool {
+	switch typeName {
+	case "text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext",
+		"json", "jsonb", "xml":
+		return true
+	}
+	return false
+}
+
+// IsSizedStringCast reports whether a cast is to character varying or text with a length
+func IsSizedStringCast(t *ConvertType) bool {
+	if t == nil || t.Length == nil {
+		return false
+	}
+	switch FoldASCII(t.Type) {
+	case "character varying", "varchar", "text":
+		return true
+	}
+	return false
+}
+
+// IsRegType reports whether a type is an OID alias type such as regclass, whose constant names an
+// object
+func IsRegType(typeName string) bool {
+	switch typeName {
+	case "regclass", "regproc", "regprocedure", "regtype", "regnamespace", "regrole", "regoper",
+		"regoperator", "regconfig", "regdictionary", "regcollation":
+		return true
+	}
+	return false
+}
+
+// withoutOmittedSchema writes an object name in a reg* constant as PostgreSQL writes it back:
+// without a schema on the search path, and without quotes where the name needs none
+func (buf *nodeBuffer) withoutOmittedSchema(val string) string {
+	if schema, name, ok := strings.Cut(val, "."); ok && !strings.Contains(schema, `"`) && buf.omitsSchema(Ident{Name: schema}) {
+		val = name
+	}
+	if unquoted, ok := strings.CutPrefix(val, `"`); ok {
+		if name, ok := strings.CutSuffix(unquoted, `"`); ok && needsNoQuotes(name) {
+			return name
+		}
+	}
+	return val
+}
+
+// isObjectName reports whether a string may be what a reg* constant holds with a schema, such as
+// public.t or pg_catalog.lower(text), or a quoted name
+func isObjectName(val string) bool {
+	schema, rest, ok := strings.Cut(val, ".")
+	if !ok {
+		return isNamePart(val) && strings.HasPrefix(val, `"`)
+	}
+	if rest == "" || !isNamePart(schema) {
+		return false
+	}
+	c, _ := utf8.DecodeRuneInString(rest)
+	return c == '"' || isNameStart(c)
+}
+
+// isNamePart reports whether a string is a quoted identifier or one PostgreSQL reads unquoted
+func isNamePart(part string) bool {
+	if quoted, ok := strings.CutPrefix(part, `"`); ok {
+		name, ok := strings.CutSuffix(quoted, `"`)
+		return ok && name != "" && !strings.Contains(name, `"`)
+	}
+	for i, c := range part {
+		if !(isNameStart(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
+			return false
+		}
+	}
+	return part != ""
+}
+
+// isNameStart reports whether PostgreSQL reads a character as the start of an unquoted identifier
+func isNameStart(c rune) bool {
+	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c >= utf8.RuneSelf
+}
+
+// needsNoQuotes reports whether a name is a lowercase identifier, which PostgreSQL writes unquoted
+// unless it is a keyword
+func needsNoQuotes(name string) bool {
+	if name == "" || !(name[0] == '_' || 'a' <= name[0] && name[0] <= 'z') {
+		return false
+	}
+	for _, c := range []byte(name) {
+		if !(c == '_' || c == '$' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func (buf *nodeBuffer) writeProtected(s string) {
+	buf.WriteString("\x00" + strconv.Itoa(len(buf.protected)) + "\x00")
+	buf.protected = append(buf.protected, s)
+}
+
+// FoldASCII folds an identifier as PostgreSQL does, which lowercases ASCII letters only
+func FoldASCII(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, name)
 }
 
 // Printf mimics fmt.Fprintf(buf, ...), but limited to %s for string and %v for Node.
@@ -89,6 +292,115 @@ func String(node SQLNode) string {
 // such as "UserId" and "order"
 func PostgresString(node SQLNode) string {
 	buf := nodeBuffer{postgresQuotes: true}
+	node.Format(&buf)
+	return buf.String()
+}
+
+var protectedPlaceholder = regexp.MustCompile("\x00([0-9]+)\x00")
+
+// ComparisonOptions controls how ComparisonKey and SameForComparison treat identifiers
+type ComparisonOptions struct {
+	// FoldQuoted folds quoted identifiers too, for the legacy mode that ignores quotes
+	FoldQuoted bool
+	// DropQualifiers leaves out the table qualifiers of columns, which pg_get_viewdef() adds or
+	// omits depending on the PostgreSQL version and whether a name is ambiguous
+	DropQualifiers bool
+	// OmittedSchemas are left out of table and function names, as PostgreSQL leaves out a schema on
+	// the search path
+	OmittedSchemas []string
+	// DropSchemas leaves out every schema of table and function names, as sqldef does not know the
+	// search path, which may hold other schemas than the default one
+	DropSchemas bool
+	// UnknownTypesCaseSensitive compares the case of a literal of a type that is neither a string
+	// type nor one whose constants PostgreSQL is known to rewrite, such as an enum
+	UnknownTypesCaseSensitive bool
+	// NoOpCast reports the casts of columns that PostgreSQL drops, which are left out
+	NoOpCast NoOpCastFunc
+	// UntypedRegLiterals compares a string literal cast to a reg* type such as regclass without
+	// its cast, as sqldef writes a view without the casts of its literals
+	UntypedRegLiterals bool
+	// ReduceLiteralNames compares a literal holding an object name as PostgreSQL writes a reg*
+	// constant back, as it may be one written without its cast
+	ReduceLiteralNames bool
+}
+
+// NoOpCastFunc reports whether a cast of a column is one that PostgreSQL drops, as the column
+// already has the type
+type NoOpCastFunc func(col *ColName, t *ConvertType) bool
+
+func (o ComparisonOptions) buffer() nodeBuffer {
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, reduceLiteralNames: o.ReduceLiteralNames}
+}
+
+// ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
+// literals and unquoted identifiers compare case-insensitively, while quoted identifiers keep their
+// case unless opts.FoldQuoted is set.
+func ComparisonKey(node SQLNode, opts ComparisonOptions) string {
+	key, _ := comparisonKey(node, opts.buffer())
+	return key
+}
+
+// SameForComparison reports whether two PostgreSQL expressions have the same ComparisonKey and
+// their string literals differ in case only where the case is significant on both sides.
+func SameForComparison(a, b SQLNode, opts ComparisonOptions) bool {
+	return sameForComparison(a, b, opts.buffer())
+}
+
+func sameForComparison(a, b SQLNode, buf nodeBuffer) bool {
+	opts := ComparisonOptions{UnknownTypesCaseSensitive: buf.unknownTypesCaseSensitive}
+	keyA, literalsA := comparisonKey(a, buf)
+	keyB, literalsB := comparisonKey(b, buf)
+	if keyA != keyB || len(literalsA) != len(literalsB) {
+		return false
+	}
+	for i, literalA := range literalsA {
+		literalB := literalsB[i]
+		if literalA.value != literalB.value &&
+			isLiteralCaseSignificant(literalA, opts.UnknownTypesCaseSensitive) &&
+			isLiteralCaseSignificant(literalB, opts.UnknownTypesCaseSensitive) {
+			return false
+		}
+	}
+	return true
+}
+
+func comparisonKey(node SQLNode, buf nodeBuffer) (string, []keyLiteral) {
+	node.Format(&buf)
+	key := protectedPlaceholder.ReplaceAllStringFunc(strings.ToLower(buf.String()), func(m string) string {
+		i, _ := strconv.Atoi(m[1 : len(m)-1])
+		return buf.protected[i]
+	})
+	return key, buf.literals
+}
+
+func (buf *nodeBuffer) writeIdentKey(n Ident) {
+	name := n.Name
+	if !n.Quoted || buf.foldQuoted {
+		name = FoldASCII(name)
+	}
+	buf.writeProtected(name)
+}
+
+// StringWithoutSchemas is String for comparison, without omittedSchemas in table and function names
+// and without the casts of columns that noOpCast reports
+func StringWithoutSchemas(node SQLNode, noOpCast NoOpCastFunc, omittedSchemas ...string) string {
+	buf := nodeBuffer{omittedSchemas: omittedSchemas, noOpCast: noOpCast}
+	node.Format(&buf)
+	return buf.String()
+}
+
+// PostgresFoldedStringWithoutSchemas is PostgresFoldedString for comparison, without any schema in
+// table and function names and without the casts of columns that noOpCast reports
+func PostgresFoldedStringWithoutSchemas(node SQLNode, noOpCast NoOpCastFunc) string {
+	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, dropSchemas: true, noOpCast: noOpCast}
+	node.Format(&buf)
+	return buf.String()
+}
+
+// PostgresFoldedString is PostgresString with unquoted identifiers in lowercase, which is how
+// PostgreSQL reads and writes them back, and without omittedSchemas in table and function names
+func PostgresFoldedString(node SQLNode, omittedSchemas ...string) string {
+	buf := nodeBuffer{postgresQuotes: true, foldUnquoted: true, omittedSchemas: omittedSchemas}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -1834,7 +2146,7 @@ func (node TableName) Format(buf *nodeBuffer) {
 	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.IsEmpty() {
+	if !node.Schema.IsEmpty() && !buf.omitsSchema(node.Schema) {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
@@ -2240,6 +2552,9 @@ const (
 type SQLVal struct {
 	Type ValType
 	Val  string
+	// DroppedCast is the cast that the parser dropped from a string literal ('x'::text), kept
+	// for the default column name and comparison key, which depend on it
+	DroppedCast *ConvertType
 }
 
 // NewStrVal builds a new StrVal.
@@ -2374,6 +2689,17 @@ func NewValArgWithOpt(in string, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
+		if node.DroppedCast != nil {
+			if buf.untypedRegLiterals && IsRegType(FoldASCII(node.DroppedCast.Type)) {
+				// The literal is written without its cast, but the name in it keeps its case only
+				// where it is quoted
+				buf.literalType = node.DroppedCast.Type
+				encodeSQLBytes(node.Val, buf)
+				return
+			}
+			buf.formatCastOperand(literalNode(node.Val), node.DroppedCast.Type)
+			return
+		}
 		encodeSQLBytes(node.Val, buf)
 	case UnicodeStrVal:
 		buf.WriteRune('N')
@@ -2393,7 +2719,26 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	}
 }
 
+// literalNode formats a string literal
+type literalNode string
+
+func (node literalNode) Format(buf *nodeBuffer) {
+	encodeSQLBytes(string(node), buf)
+}
+
 func encodeSQLBytes(val string, buf *nodeBuffer) {
+	if buf.comparisonKey {
+		switch typeName := FoldASCII(buf.literalType); {
+		case typeName == "regclass" && !buf.untypedRegLiterals:
+			val = buf.withoutOmittedSchema(val)
+		case buf.reduceLiteralNames && isObjectName(val):
+			// A reg* literal that sqldef wrote untyped is stored as written, and may be read with
+			// the type of what it is compared with
+			val = buf.withoutOmittedSchema(val)
+		}
+		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
+		buf.literalType = ""
+	}
 	buf.WriteByte('\'')
 	for _, ch := range val {
 		if encodedChar := sqlEncodeMap[byte(ch)]; encodedChar == dontEscape {
@@ -2444,7 +2789,9 @@ type ColName struct {
 
 // Format formats the node.
 func (node *ColName) Format(buf *nodeBuffer) {
-	if !node.Qualifier.IsEmpty() {
+	// pg_get_viewdef() qualifies a column with its table on PostgreSQL 13-15 and wherever it is
+	// ambiguous, however the table's name is written
+	if !node.Qualifier.IsEmpty() && !buf.dropQualifiers {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	buf.Printf("%v", node.Name)
@@ -2572,7 +2919,8 @@ type TypedLiteral struct {
 
 // Format formats the node.
 func (node *TypedLiteral) Format(buf *nodeBuffer) {
-	buf.Printf("%s %v", node.Type, node.Value)
+	buf.Printf("%s ", node.Type)
+	buf.formatCastOperand(node.Value, node.Type)
 }
 
 // CollateExpr represents dynamic collate operator.
@@ -2583,6 +2931,16 @@ type CollateExpr struct {
 
 // Format formats the node.
 func (node *CollateExpr) Format(buf *nodeBuffer) {
+	if buf.comparisonKey {
+		// A collation name is case-sensitive, and the parser keeps it as written
+		buf.Printf("%v collate ", node.Expr)
+		charset := node.Charset
+		if buf.foldQuoted {
+			charset = FoldASCII(charset)
+		}
+		buf.writeProtected(`"` + charset + `"`)
+		return
+	}
 	buf.Printf("%v collate \"%s\"", node.Expr, node.Charset)
 }
 
@@ -2615,10 +2973,19 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if node.Distinct {
 		distinct = "distinct "
 	}
-	if !node.Qualifier.IsEmpty() {
+	if !node.Qualifier.IsEmpty() && !buf.omitsSchema(node.Qualifier) {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	formatFuncName(buf, node.Name)
+	// The first argument of a sequence function is a regclass constant
+	if buf.comparisonKey && len(node.Exprs) > 0 {
+		switch FoldASCII(node.Name.Name) {
+		case "nextval", "currval", "setval":
+			if aliased, ok := node.Exprs[0].(*AliasedExpr); ok && isStringLiteral(aliased.Expr) {
+				buf.literalType = "regclass"
+			}
+		}
+	}
 	buf.Printf("(%s%v)", distinct, node.Exprs)
 	if len(node.WithinGroup) > 0 {
 		buf.Printf(" within group (order by ")
@@ -2767,7 +3134,30 @@ type CastExpr struct {
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v::%v", node.Expr, node.Type)
+	if col, ok := node.Expr.(*ColName); ok && buf.noOpCast != nil && buf.noOpCast(col, node.Type) {
+		node.Expr.Format(buf)
+		return
+	}
+	// :: binds tighter than any operator, so an operand that normalization took out of its
+	// parentheses needs them back
+	if NeedsParensAsCastOperand(node.Expr) {
+		buf.Printf("(%v)::%v", node.Expr, node.Type)
+		return
+	}
+	buf.formatCastOperand(node.Expr, node.Type.Type)
+	buf.Printf("::%v", node.Type)
+}
+
+// NeedsParensAsCastOperand reports whether an expression has to be parenthesized before ::
+func NeedsParensAsCastOperand(expr Expr) bool {
+	switch e := expr.(type) {
+	case *BinaryExpr, *UnaryExpr, *ComparisonExpr, *AndExpr, *OrExpr, *NotExpr, *ConcatExpr, *IsExpr, *RangeCond, *CollateExpr:
+		return true
+	case *SQLVal:
+		// A negative number is a unary minus, which binds looser than a cast
+		return (e.Type == IntVal || e.Type == FloatVal) && strings.HasPrefix(e.Val, "-")
+	}
+	return false
 }
 
 // Convert types
@@ -2789,7 +3179,9 @@ type ConvertExpr struct {
 func (node *ConvertExpr) Format(buf *nodeBuffer) {
 	switch node.Action {
 	case CastStr:
-		buf.Printf("cast(%v as %v)", node.Expr, node.Type)
+		buf.Printf("cast(")
+		buf.formatCastOperand(node.Expr, node.Type.Type)
+		buf.Printf(" as %v)", node.Type)
 		return
 	case TryCastStr:
 		buf.Printf("try_cast(%v as %v)", node.Expr, node.Type)
@@ -3413,18 +3805,50 @@ func (n Ident) IsEmpty() bool {
 
 // Format formats the node for SQL generation.
 func (n Ident) Format(buf *nodeBuffer) {
+	if buf.comparisonKey {
+		buf.writeIdentKey(n)
+		return
+	}
 	if buf.postgresQuotes && n.Quoted {
 		buf.writePostgresQuoted(n.Name)
+		return
+	}
+	if buf.foldUnquoted {
+		formatPostgresID(buf, FoldASCII(n.Name))
+		return
+	}
+	if buf.postgresQuotes {
+		formatPostgresID(buf, n.Name)
 		return
 	}
 	formatID(buf, n.Name)
 }
 
+// formatPostgresID writes an unquoted identifier as is if PostgreSQL reads it so, and quotes it
+// otherwise, where formatID would quote it in MySQL's style
+func formatPostgresID(buf *nodeBuffer, name string) {
+	for i, c := range name {
+		if !(isNameStart(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
+			buf.writePostgresQuoted(name)
+			return
+		}
+	}
+	buf.WriteString(name)
+}
+
 // formatFuncName formats a function name, which is never back-quoted even if it matches a
 // reserved word
 func formatFuncName(buf *nodeBuffer, name Ident) {
+	if buf.comparisonKey {
+		buf.writeIdentKey(name)
+		return
+	}
 	if buf.postgresQuotes && name.Quoted {
 		buf.writePostgresQuoted(name.Name)
+		return
+	}
+	if buf.foldUnquoted {
+		buf.WriteString(FoldASCII(name.Name))
 		return
 	}
 	buf.WriteString(name.Name)

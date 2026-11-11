@@ -487,10 +487,126 @@ ColumnExpressionsWithVarcharCasts:
     CREATE TABLE t (b text CHECK (length(b::varchar) > 1));
     CREATE INDEX t_b ON t ((b::varchar));
 
-# FIXME: A cast to character varying(n) on a column is stripped with its length, as PostgreSQL adds character varying casts implicitly, but ::varchar(n) is not, so the constraint is replaced on every run
-# ColumnExpressionsWithVarcharLengthCast:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (c text CHECK (c::varchar(3) = 'x'));
+ColumnExpressionsWithVarcharLengthCast:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (c text CHECK (c::varchar(3) = 'x'));
+
+CheckWithTypedLiteralsInOtherCase:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id uuid CHECK (id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'::uuid),
+      ts timestamp CHECK (ts < 'Infinity'::timestamp)
+    );
+    CREATE VIEW v AS SELECT id FROM t WHERE ts > 'Infinity'::timestamp AND id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'::uuid;
+
+ChangeCheckEnumLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('Active', 'active');
+    CREATE TABLE users (m mood, CONSTRAINT m_check CHECK (m <> 'Active'));
+  desired: |
+    CREATE TYPE mood AS ENUM ('Active', 'active');
+    CREATE TABLE users (m mood, CONSTRAINT m_check CHECK (m <> 'active'));
+  up: |
+    ALTER TABLE public.users DROP CONSTRAINT m_check;
+    ALTER TABLE public.users ADD CONSTRAINT m_check CHECK (m <> 'active');
+  down: |
+    ALTER TABLE public.users DROP CONSTRAINT m_check;
+    ALTER TABLE public.users ADD CONSTRAINT m_check CHECK (m <> 'Active');
+
+ChangeCheckJsonKeyCaseUnderCast:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (data jsonb, CONSTRAINT c CHECK ((data->>'Count')::integer > 0));
+  desired: |
+    CREATE TABLE t (data jsonb, CONSTRAINT c CHECK ((data->>'count')::integer > 0));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK ((data ->> 'count')::integer > 0);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK ((data ->> 'Count')::integer > 0);
+
+ChangeCheckVarcharCastLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (c text CONSTRAINT c_check CHECK (c::varchar(3) = 'x'));
+  desired: |
+    CREATE TABLE t (c text CONSTRAINT c_check CHECK (c::varchar(5) = 'x'));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c_check;
+    ALTER TABLE public.t ADD CONSTRAINT c_check CHECK (c::character varying(5) = 'x');
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c_check;
+    ALTER TABLE public.t ADD CONSTRAINT c_check CHECK (c::character varying(3) = 'x');
 
 # GiST index with tstzrange type
+
+NoOpVarcharLengthCastsOnVarcharColumn:
+  desired: |
+    CREATE TABLE t (id int, c character varying(10), CONSTRAINT k CHECK (c::character varying(10) IN ('a', 'b')));
+    CREATE POLICY p ON t FOR SELECT USING (c::character varying(10) = 'x');
+    CREATE INDEX t_i ON t (id) WHERE c::character varying(10) = 'x';
+    CREATE VIEW v AS SELECT id FROM t WHERE c::character varying(10) = 'x';
+
+NoOpVarcharLengthCastsOnVarcharColumnQuoteAware:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id int, c character varying(10), CONSTRAINT k CHECK (c::character varying(10) IN ('a', 'b')));
+    CREATE POLICY p ON t FOR SELECT USING (c::character varying(10) = 'x');
+    CREATE INDEX t_i ON t (id) WHERE c::character varying(10) = 'x';
+    CREATE VIEW v AS SELECT id FROM t WHERE c::character varying(10) = 'x';
+
+AddTruncatingVarcharCastsOfColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, name varchar(20), n text, CONSTRAINT c1 CHECK (name <> 'abc'), CONSTRAINT c2 CHECK (n <> 'abc'));
+    CREATE POLICY p ON t FOR SELECT USING (n = 'x');
+    CREATE INDEX i1 ON t ((name::varchar(5)));
+    CREATE INDEX i2 ON t (id) WHERE n = 'abc';
+    CREATE VIEW v AS SELECT id FROM t WHERE n = 'abc';
+  desired: |
+    CREATE TABLE t (id int, name varchar(20), n text, CONSTRAINT c1 CHECK (name::varchar(3) <> 'abc'), CONSTRAINT c2 CHECK (n::varchar(3) <> 'abc'));
+    CREATE POLICY p ON t FOR SELECT USING (n::varchar(3) = 'x');
+    CREATE INDEX i1 ON t ((name::varchar(10)));
+    CREATE INDEX i2 ON t (id) WHERE n::varchar(3) = 'abc';
+    CREATE VIEW v AS SELECT id FROM t WHERE n::varchar(3) = 'abc';
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c1;
+    ALTER TABLE public.t DROP CONSTRAINT c2;
+    ALTER TABLE public.t ADD CONSTRAINT c1 CHECK (name::character varying(3) <> 'abc');
+    ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (n::character varying(3) <> 'abc');
+    DROP POLICY p ON public.t;
+    CREATE POLICY p ON t FOR SELECT USING (n::varchar(3) = 'x');
+    CREATE OR REPLACE VIEW public.v AS select id from t where n::varchar(3) = 'abc';
+    DROP INDEX public.i1;
+    CREATE INDEX i1 ON public.t ((name::varchar(10)));
+    DROP INDEX public.i2;
+    CREATE INDEX i2 ON public.t (id) WHERE n::varchar(3) = 'abc';
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c1;
+    ALTER TABLE public.t DROP CONSTRAINT c2;
+    ALTER TABLE public.t ADD CONSTRAINT c1 CHECK (name <> 'abc');
+    ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (n <> 'abc');
+    DROP POLICY p ON public.t;
+    CREATE POLICY p ON t FOR SELECT USING (n = 'x');
+    CREATE OR REPLACE VIEW public.v AS select id from t where n = 'abc';
+    DROP INDEX public.i1;
+    CREATE INDEX i1 ON public.t ((name::varchar(5)));
+    DROP INDEX public.i2;
+    CREATE INDEX i2 ON public.t (id) WHERE n = 'abc';
+
+WidenVarcharColumnUnderTruncatingCheckCast:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, name varchar(10), CONSTRAINT k CHECK (name::varchar(10) <> ''));
+  desired: |
+    CREATE TABLE t (id int, name varchar(20), CONSTRAINT k CHECK (name::varchar(10) <> ''));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN name TYPE varchar(20);
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (name::character varying(10) <> '');
+  down: |
+    ALTER TABLE public.t ALTER COLUMN name TYPE varchar(10);

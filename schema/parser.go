@@ -3,6 +3,7 @@
 package schema
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"os"
@@ -308,7 +309,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				dataType:     parser.String(&stmt.Domain.DataType),
 				defaultValue: parseDefaultDefinition(stmt.Domain.Default),
 				notNull:      stmt.Domain.NotNull,
-				collation:    stmt.Domain.Collation,
+				baseType:     stmt.Domain.DataType.Type,
+				collation:    cmp.Or(stmt.Domain.Collation, stmt.Domain.DataType.Collate),
 				constraints:  constraints,
 			}, nil
 		} else if stmt.Action == parser.CommentOn {

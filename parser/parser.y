@@ -27,6 +27,16 @@ func setParseTree(yylex any, stmt Statement) {
   yylex.(*Tokenizer).ParseTree = stmt
 }
 
+// collationNamePart returns a part of a collation name. PostgreSQL keeps it as SQL, so that the
+// generator can resolve it as the quote mode says. The other databases match collation names
+// case-insensitively, so they keep them as written.
+func collationNamePart(yylex any, name Ident) string {
+  if yylex.(*Tokenizer).mode == ParserModePostgres && name.Quoted {
+    return `"` + strings.ReplaceAll(name.Name, `"`, `""`) + `"`
+  }
+  return name.Name
+}
+
 func setAllowComments(yylex any, allow bool) {
   yylex.(*Tokenizer).AllowComments = allow
 }
@@ -476,7 +486,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
-%type <str> charset_opt collate_opt type_collate_opt
+%type <str> charset_opt collate_opt type_collate_opt collation_name collation_name_qualified_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt cast_array_opt time_zone_opt
 %type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
@@ -3997,13 +4007,13 @@ column_definition_type:
   }
 // SQLite3, MySQL and PostgreSQL also accept COLLATE after other column constraints,
 // e.g. "name text NOT NULL COLLATE NOCASE"; SQL Server does not
-| column_definition_type COLLATE ID
+| column_definition_type COLLATE ID collate_after_constraints collation_name_qualified_opt
   {
-    if yylex.(*Tokenizer).mode == ParserModeMssql {
-      yylex.Error("COLLATE must come right after the data type")
-      return 1
+    if $5 == "" {
+      $1.Collate = collationNamePart(yylex, $3)
+    } else {
+      $1.Collate = collationNamePart(yylex, $3) + "." + $5
     }
-    $1.Collate = $3.Name
     $$ = $1
   }
 | column_definition_type default_definition
@@ -4619,11 +4629,11 @@ domain_constraint:
     $$.collation = ""
     $$.checks = nil
   }
-| COLLATE sql_id
+| COLLATE collation_name
   {
     $$.defaultDef = nil
     $$.notNull = false
-    $$.collation = $2.Name
+    $$.collation = $2
     $$.checks = nil
   }
 | CHECK '(' expression ')'
@@ -5448,9 +5458,9 @@ collate_opt:
   {
     $$ = $1 // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
   }
-| COLLATE ID
+| COLLATE collation_name
   {
-    $$ = $2.Name
+    $$ = $2
   }
 
 // COLLATE right after a type that has no collate_opt of its own, e.g. SQL Server's sysname and ntext
@@ -5459,9 +5469,43 @@ type_collate_opt:
   {
     $$ = ""
   }
-| COLLATE ID
+| COLLATE collation_name
   {
-    $$ = $2.Name
+    $$ = $2
+  }
+
+// PostgreSQL folds an unquoted collation name to lower case, and pg_catalog holds the built-in ones
+// collate_after_constraints rejects COLLATE after other column constraints in SQL Server. It is
+// reduced right after the collation's first name, before the parser reads ahead, so that the error
+// points at that name.
+collate_after_constraints:
+  {
+    if yylex.(*Tokenizer).mode == ParserModeMssql {
+      return abortParse(yylex, "COLLATE must come right after the data type")
+    }
+  }
+
+collation_name_qualified_opt:
+  {
+    $$ = ""
+  }
+| '.' ID
+  {
+    $$ = collationNamePart(yylex, $2)
+  }
+
+collation_name:
+  ID
+  {
+    $$ = collationNamePart(yylex, $1)
+  }
+| ID '.' ID
+  {
+    $$ = collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)
+  }
+| STRING
+  {
+    $$ = collationNamePart(yylex, NewIdent($1, true))
   }
 
 index_definition:
@@ -5727,19 +5771,19 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| sql_id COLLATE charset asc_desc_opt nulls_ordering_opt
+| sql_id COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: $1, Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| non_reserved_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| non_reserved_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| col_name_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| type_func_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+| type_func_name_keyword COLLATE collation_name asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
@@ -8124,7 +8168,7 @@ value:
     if isFoldableValueCast($2) {
       $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
     } else {
-      $$ = NewStrVal($1)
+      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
     }
   }
 | UNICODE_STRING
@@ -8686,7 +8730,7 @@ array_element:
     if isFoldableValueCast($2) {
       $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
     } else {
-      $$ = NewStrVal($1)
+      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
     }
   }
 | typed_literal

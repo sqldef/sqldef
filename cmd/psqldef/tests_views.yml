@@ -1087,6 +1087,80 @@ ChangeUnnestOfArrayToUnnestOfMultipleArrays:
 #   down: |
 #     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
 
+ChangeViewStringLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'Active';
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'active';
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'Active';
+
+ChangeViewStringLiteralCaseInLegacyMode:
+  current: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'Active';
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
+  up: |
+    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'active';
+  down: |
+    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'Active';
+
+ChangeViewColumnToQuotedColumnDifferingInCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT a FROM t;
+  desired: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT "A" FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select "A" from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select a from t;
+
+ChangeViewWhereToQuotedColumnDifferingInCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT a AS x FROM t WHERE a IS NULL;
+  desired: |
+    CREATE TABLE t (a text, "A" text);
+    CREATE VIEW v AS SELECT a AS x FROM t WHERE "A" IS NULL;
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select a as x from t where "A" is null;
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select a as x from t where a is null;
+
+# FIXME: A view's literal holding a schema-qualified name is compared like a regclass name, without its schema, as sqldef may have written one without its cast
+# ChangeViewStringLiteralContainingDot:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (a text);
+#     CREATE VIEW v AS SELECT a FROM t WHERE a = 'x.y';
+#   desired: |
+#     CREATE TABLE t (a text);
+#     CREATE VIEW v AS SELECT a FROM t WHERE a = 'y';
+#   up: |
+#     CREATE OR REPLACE VIEW public.v AS select a from t where a = 'y';
+#   down: |
+#     CREATE OR REPLACE VIEW public.v AS select a from t where a = 'x.y';
+
+ViewWithLiteralsPostgresqlRewritesInItsOwnCase:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id uuid, s text);
+    CREATE VIEW v AS SELECT id FROM t WHERE id <> 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11';
+    CREATE VIEW w AS SELECT s FROM "public"."t";
+
 ChangeWithinGroupOrderInView:
   legacy_ignore_quotes: false
   current: |
@@ -1188,27 +1262,26 @@ ChangeViewColumnFromFoldedConstantCastToAlias:
     DROP VIEW public.v;
     CREATE VIEW public.v AS select 1::integer;
 
-# FIXME: A cast to character varying(n) on a column is stripped with its length, as PostgreSQL adds character varying casts implicitly, but ::varchar(n) is not, so the views are replaced on every run
-# ViewWithVarcharLengthCastOnColumn:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (b text);
-#     CREATE VIEW x AS SELECT b::varchar(3) FROM t;
-#
-# ChangeViewColumnVarcharCastLength:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (b text);
-#     CREATE VIEW v AS SELECT b::varchar(3) AS r FROM t;
-#   desired: |
-#     CREATE TABLE t (b text);
-#     CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select b::varchar(10) as r from t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select b::varchar(3) as r from t;
+ViewWithVarcharLengthCastOnColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (b text);
+    CREATE VIEW x AS SELECT b::varchar(3) FROM t;
+
+ChangeViewColumnVarcharCastLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(3) AS r FROM t;
+  desired: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select b::varchar(10) as r from t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW public.v AS select b::varchar(3) as r from t;
 
 ViewWithVarcharAndFloatCasts:
   legacy_ignore_quotes: false
@@ -1423,3 +1496,109 @@ RenameViewOutputColumnByQuotedCase:
   down: |
     DROP VIEW public.v;
     CREATE VIEW public.v AS select a from t;
+
+# FIXME: View comparison leaves out every schema, as sqldef does not know the search path
+# ChangeViewTableToOneInOtherSchema:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE SCHEMA archive;
+#     CREATE TABLE users (id integer);
+#     CREATE TABLE archive.users (id integer);
+#     CREATE VIEW v AS SELECT id FROM archive.users;
+#   desired: |
+#     CREATE SCHEMA archive;
+#     CREATE TABLE users (id integer);
+#     CREATE TABLE archive.users (id integer);
+#     CREATE VIEW v AS SELECT id FROM users;
+#   up: |
+#     CREATE OR REPLACE VIEW public.v AS select id from users;
+#   down: |
+#     CREATE OR REPLACE VIEW public.v AS select id from archive.users;
+
+ViewOverTableWithCaseSensitiveName:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE "Users" (id integer);
+    CREATE VIEW v AS SELECT id FROM "Users";
+
+ViewWithUntypedAndTextStringLiterals:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v1 AS SELECT a, 'x' FROM t;
+    CREATE VIEW v2 AS SELECT a, 'x' AS "text" FROM t;
+    CREATE VIEW v3 AS SELECT CAST('x' AS text) FROM t;
+    CREATE VIEW v4 AS SELECT 'x'::text AS b FROM t;
+
+ViewWithUntypedAndTextStringLiteralsInLegacyMode:
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v1 AS SELECT a, 'x' FROM t;
+    CREATE VIEW v2 AS SELECT a, 'x' AS "text" FROM t;
+    CREATE VIEW v3 AS SELECT CAST('x' AS text) FROM t;
+
+ViewWithNextvalOfSchemaQualifiedSequence:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id serial, n bigint);
+    CREATE VIEW v AS SELECT n FROM t WHERE n > nextval('public.t_id_seq');
+
+RemoveTruncatingCastOfFunctionResultInView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, s text);
+    CREATE VIEW v AS SELECT id FROM t WHERE lower(s)::varchar(3) = 'abc';
+  desired: |
+    CREATE TABLE t (id int, s text);
+    CREATE VIEW v AS SELECT id FROM t WHERE lower(s) = 'abc';
+  up: |
+    CREATE OR REPLACE VIEW public.v AS select id from t where lower(s) = 'abc';
+  down: |
+    CREATE OR REPLACE VIEW public.v AS select id from t where lower(s)::varchar(3) = 'abc';
+
+ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, "Val" int, val text);
+    CREATE VIEW v1 AS SELECT id, "Val" FROM t;
+  desired: |
+    CREATE TABLE t (id int, "Val" int, val text);
+    CREATE VIEW v1 AS SELECT id, val FROM t;
+  up: |
+    DROP VIEW public.v1;
+    CREATE VIEW public.v1 AS select id, val from t;
+  down: |
+    DROP VIEW public.v1;
+    CREATE VIEW public.v1 AS select id, "Val" from t;
+
+# FIXME: Without column types, a view column that reads another column whose quoted name differs only in case is taken for the same column, and CREATE OR REPLACE fails on the type change
+# ChangeViewColumnTypeThroughQuotedNameDifferingInCase:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (id int, "Val" int, val text);
+#     CREATE VIEW v2 AS SELECT id, "Val" AS x FROM t;
+#   desired: |
+#     CREATE TABLE t (id int, "Val" int, val text);
+#     CREATE VIEW v2 AS SELECT id, val AS x FROM t;
+
+# FIXME: A view's regclass literal is written without its cast, and PostgreSQL's 'tt'::regclass for a literal written with its schema is compared as a different column
+# ChangeViewWithRegclassLiteralColumn:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE tt (id int);
+#     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt;
+#   desired: |
+#     CREATE TABLE tt (id int);
+#     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt WHERE id > 0;
+
+# FIXME: The generic parser does not parse a cast of a column to a type without a keyword, such as the (rc)::regclass that PostgreSQL adds to w for a text column
+# ChangeViewReadByFunctionWithImplicitCast:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE tt (id int);
+#     CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt;
+#     CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;
+#   desired: |
+#     CREATE TABLE tt (id int);
+#     CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt WHERE id > 0;
+#     CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;

@@ -563,6 +563,7 @@ type Domain struct {
 	name         QualifiedName
 	statement    string
 	dataType     string
+	baseType     string
 	defaultValue *DefaultDefinition
 	notNull      bool
 	collation    string
