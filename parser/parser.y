@@ -88,7 +88,8 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
   tableName                TableName
   tableNames               TableNames
   objectName               ObjectName
-  indexHints               *IndexHints
+  indexHints               []*IndexHint
+  indexHint                *IndexHint
   expr                     Expr
   exprs                    Exprs
   boolVal                  BoolVal
@@ -418,6 +419,10 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <objectName> object_name
 %type <aliasedTableName> aliased_table_name
 %type <indexHints> index_hint_list
+%type <indexHint> index_hint
+%type <str> index_hint_for_opt
+%type <idents> index_hint_name_list_opt index_hint_name_list
+%type <ident> index_hint_name
 %type <expr> where_expression_opt exclude_where_opt
 %type <expr> condition
 %type <boolVal> boolean_value
@@ -6926,17 +6931,69 @@ index_hint_list:
   {
     $$ = nil
   }
-| USE INDEX '(' column_list ')'
+| index_hint_list index_hint
   {
-    $$ = &IndexHints{Type: UseStr, Indexes: $4}
+    $$ = append($1, $2)
   }
-| IGNORE INDEX '(' column_list ')'
+
+index_hint:
+  USE index_or_key index_hint_for_opt '(' index_hint_name_list_opt ')'
   {
-    $$ = &IndexHints{Type: IgnoreStr, Indexes: $4}
+    $$ = &IndexHint{Type: UseStr, For: $3, Indexes: $5}
   }
-| FORCE INDEX '(' column_list ')'
+| IGNORE index_or_key index_hint_for_opt '(' index_hint_name_list ')'
   {
-    $$ = &IndexHints{Type: ForceStr, Indexes: $4}
+    $$ = &IndexHint{Type: IgnoreStr, For: $3, Indexes: $5}
+  }
+| FORCE index_or_key index_hint_for_opt '(' index_hint_name_list ')'
+  {
+    $$ = &IndexHint{Type: ForceStr, For: $3, Indexes: $5}
+  }
+
+index_hint_for_opt:
+  {
+    $$ = ""
+  }
+| FOR JOIN
+  {
+    $$ = "for join "
+  }
+| FOR ORDER BY
+  {
+    $$ = "for order by "
+  }
+| FOR GROUP BY
+  {
+    $$ = "for group by "
+  }
+
+index_hint_name_list_opt:
+  {
+    $$ = nil
+  }
+| index_hint_name_list
+  {
+    $$ = $1
+  }
+
+index_hint_name_list:
+  index_hint_name
+  {
+    $$ = []Ident{$1}
+  }
+| index_hint_name_list ',' index_hint_name
+  {
+    $$ = append($1, $3)
+  }
+
+index_hint_name:
+  reserved_sql_id
+  {
+    $$ = $1
+  }
+| PRIMARY
+  {
+    $$ = NewIdent("PRIMARY", false)
   }
 
 where_expression_opt:

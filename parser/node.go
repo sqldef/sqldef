@@ -2039,7 +2039,7 @@ type AliasedTableExpr struct {
 	As         Ident
 	Columns    Columns
 	TableHints []string
-	IndexHints *IndexHints
+	IndexHints []*IndexHint
 	Lateral    bool
 	// WithOrdinality is PostgreSQL's WITH ORDINALITY on a function in FROM
 	WithOrdinality bool
@@ -2063,9 +2063,9 @@ func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
 	if len(node.TableHints) != 0 {
 		buf.Printf(" with(%s)", strings.Join(node.TableHints, ", "))
 	}
-	if node.IndexHints != nil {
+	for _, hint := range node.IndexHints {
 		// Hint node provides the space padding.
-		buf.Printf("%v", node.IndexHints)
+		buf.Printf("%v", hint)
 	}
 }
 
@@ -2244,9 +2244,10 @@ func (node *JoinTableExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v %s %v%v", node.LeftExpr, node.Join, node.RightExpr, node.Condition)
 }
 
-// IndexHints represents a list of index hints.
-type IndexHints struct {
+// IndexHint represents an index hint.
+type IndexHint struct {
 	Type    string
+	For     string
 	Indexes []Ident
 }
 
@@ -2258,12 +2259,13 @@ const (
 )
 
 // Format formats the node.
-func (node *IndexHints) Format(buf *nodeBuffer) {
-	buf.Printf(" %sindex ", node.Type)
-	prefix := "("
-	for _, n := range node.Indexes {
-		buf.Printf("%s%v", prefix, n)
-		prefix = ", "
+func (node *IndexHint) Format(buf *nodeBuffer) {
+	buf.Printf(" %sindex %s(", node.Type, node.For)
+	for i, n := range node.Indexes {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v", n)
 	}
 	buf.Printf(")")
 }
