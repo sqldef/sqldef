@@ -1423,13 +1423,23 @@ UnquotedCollationMatchesQuotedOneInLegacyMode:
   up: ""
   down: ""
 
-# FIXME: An index collation is quoted as written, so an unquoted name is not folded
-# IndexColumnWithUnquotedAndQualifiedCollations:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (a text, b text);
-#     CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
-#     CREATE INDEX t_b ON t (b COLLATE pg_catalog."C");
+IndexColumnWithUnquotedAndQualifiedCollations:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a text, b text);
+    CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
+    CREATE INDEX t_b ON t (b COLLATE pg_catalog."C");
+
+IndexCollationCaseChangeOfUnquotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text);
+    CREATE INDEX t_a ON t (a COLLATE ucs_basic);
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
+  up: ""
+  down: ""
 
 IndexColumnWithQualifiedCollation:
   legacy_ignore_quotes: false

@@ -610,3 +610,69 @@ WidenVarcharColumnUnderTruncatingCheckCast:
     ALTER TABLE public.t ADD CONSTRAINT k CHECK (name::character varying(10) <> '');
   down: |
     ALTER TABLE public.t ALTER COLUMN name TYPE varchar(10);
+
+StringLiteralsKeepBackslashesAndDoubleQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text DEFAULT 'a"b\c', CONSTRAINT k CHECK (s ~ '^\d+$'));
+  desired: |
+    CREATE TABLE t (s text DEFAULT 'a"b\cd', CONSTRAINT k CHECK (s ~ '^\d*$'));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a"b\cd';
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (s ~ '^\d*$');
+  down: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a"b\c';
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (s ~ '^\d+$');
+
+EscapeStringConstantsMatchTheirValues:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text DEFAULT 'x	y\z''q', u text DEFAULT 'AAé');
+  desired: |
+    CREATE TABLE t (s text DEFAULT E'x\ty\\z\'q', u text DEFAULT e'\101\x41é');
+  up: ""
+  down: ""
+
+ChangeEscapeStringConstantDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text DEFAULT E'a\\b');
+  desired: |
+    CREATE TABLE t (s text DEFAULT E'a\\b\nc');
+  up: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a\b
+    c';
+  down: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a\b';
+
+StringLiteralsKeepBackslashesInLegacyMode:
+  current: |
+    CREATE TABLE t (s text DEFAULT 'a\b', CONSTRAINT k CHECK (s ~ '^\w+$'));
+  desired: |
+    CREATE TABLE t (s text DEFAULT 'a\bc', CONSTRAINT k CHECK (s ~ '^\w*$'));
+  up: |
+    ALTER TABLE "public"."t" ALTER COLUMN "s" SET DEFAULT 'a\bc';
+    ALTER TABLE "public"."t" DROP CONSTRAINT "k";
+    ALTER TABLE "public"."t" ADD CONSTRAINT "k" CHECK (s ~ '^\w*$');
+  down: |
+    ALTER TABLE "public"."t" ALTER COLUMN "s" SET DEFAULT 'a\b';
+    ALTER TABLE "public"."t" DROP CONSTRAINT "k";
+    ALTER TABLE "public"."t" ADD CONSTRAINT "k" CHECK (s ~ '^\w+$');
+
+FunctionBodyWithBackslash:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f() RETURNS text LANGUAGE sql AS 'SELECT ''a\b''::text';
+
+ReservedWordNamesInIndexAndView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "order" (id int, "select" int);
+    CREATE INDEX o_i ON "order" ("select") WHERE "select" <> 1;
+    CREATE VIEW v AS SELECT o."select", 'a\b' AS s FROM "order" o;
+  desired: |
+    CREATE TABLE "order" (id int, "select" int);
+    CREATE INDEX o_i ON "order" ("select") WHERE "select" <> 2;
+    CREATE VIEW v AS SELECT o."select", 'a\b' AS s2 FROM "order" o;

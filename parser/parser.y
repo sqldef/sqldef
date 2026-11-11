@@ -37,6 +37,19 @@ func collationNamePart(yylex any, name Ident) string {
   return name.Name
 }
 
+// backslashEscapes tells whether a string literal takes MySQL's backslash escapes
+func backslashEscapes(yylex any) bool {
+  return yylex.(*Tokenizer).mode == ParserModeMysql
+}
+
+func newStrVal(yylex any, s string) *SQLVal {
+  return &SQLVal{Type: StrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
+}
+
+func newUnicodeStrVal(yylex any, s string) *SQLVal {
+  return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
+}
+
 func setAllowComments(yylex any, allow bool) {
   yylex.(*Tokenizer).AllowComments = allow
 }
@@ -4118,7 +4131,7 @@ column_definition_type:
   }
 | column_definition_type COMMENT_KEYWORD STRING
   {
-    $1.Comment = NewStrVal($3)
+    $1.Comment = newStrVal(yylex, $3)
     $$ = $1
   }
 | column_definition_type REFERENCES table_name
@@ -4269,54 +4282,54 @@ default_definition:
 typed_literal:
   DATE STRING
   {
-    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "date", Value: newStrVal(yylex, $2)}
   }
 | TIME STRING
   {
-    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "time", Value: newStrVal(yylex, $2)}
   }
 | TIMESTAMP STRING
   {
-    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "timestamp", Value: newStrVal(yylex, $2)}
   }
 | numeric_bool_literal_type STRING
   {
-    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: $1, Value: newStrVal(yylex, $2)}
   }
 | money_type_keyword STRING
   {
-    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: $1, Value: newStrVal(yylex, $2)}
   }
 | JSON STRING
   {
-    $$ = &TypedLiteral{Type: "json", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "json", Value: newStrVal(yylex, $2)}
   }
 | JSONB STRING
   {
-    $$ = &TypedLiteral{Type: "jsonb", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "jsonb", Value: newStrVal(yylex, $2)}
   }
 | UUID STRING
   {
-    $$ = &TypedLiteral{Type: "uuid", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "uuid", Value: newStrVal(yylex, $2)}
   }
 
 default_value_expression:
   STRING character_cast_opt
   {
     if $2 != nil {
-      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+      $$ = &CastExpr{Expr: newStrVal(yylex, $1), Type: $2}
     } else {
-      $$ = NewStrVal($1)
+      $$ = newStrVal(yylex, $1)
     }
   }
 | sql_id STRING
   {
     // MySQL charset introducer syntax: _charset_name'string'
-    $$ = NewStrVal($2)
+    $$ = newStrVal(yylex, $2)
   }
 | UNICODE_STRING
   {
-    $$ = NewUnicodeStrVal($1)
+    $$ = newUnicodeStrVal(yylex, $1)
   }
 | INTEGRAL
   {
@@ -4372,11 +4385,11 @@ default_value_expression:
   }
 | INTERVAL STRING
   {
-    $$ = &IntervalExpr{Expr: NewStrVal($2)}
+    $$ = &IntervalExpr{Expr: newStrVal(yylex, $2)}
   }
 | INTERVAL STRING interval_unit
   {
-    $$ = &IntervalExpr{Expr: NewStrVal($2), Unit: $3}
+    $$ = &IntervalExpr{Expr: newStrVal(yylex, $2), Unit: $3}
   }
 | variadic_opt array_constructor
   {
@@ -5351,7 +5364,7 @@ max_length_opt:
     if !strings.EqualFold($2.Name, "max") {
       return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $2.Name))
     }
-    $$ = NewStrVal($2.Name)
+    $$ = newStrVal(yylex, $2.Name)
   }
 
 
@@ -5550,7 +5563,7 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2.Name)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $2.Name)}
   }
 /* HASH is a reserved token (used by PARTITION BY HASH) but MariaDB allows it
  * inline as an index_type after USING, e.g. UNIQUE KEY k (k) USING HASH.
@@ -5567,11 +5580,11 @@ index_option:
   }
 | COMMENT_KEYWORD STRING
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $2)}
   }
 | WITH PARSER sql_id
   {
-    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.Name)}
+    $$ = &IndexOption{Name: $2, Value: newStrVal(yylex, $3.Name)}
   }
 | PAD_INDEX '=' on_off
   {
@@ -5583,7 +5596,7 @@ index_option:
   }
 | FILLFACTOR '=' STRING
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $3)}
   }
 | IGNORE_DUP_KEY '=' on_off
   {
@@ -5615,7 +5628,7 @@ index_option:
   }
 | M '=' STRING
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $3)}
   }
 | ID '=' vector_option_value
   {
@@ -5647,11 +5660,11 @@ on_off:
 index_distance_option_value:
   EUCLIDEAN
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 | COSINE
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 
 vector_option_value:
@@ -5665,7 +5678,7 @@ vector_option_value:
   }
 | STRING
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 
 // for MSSQL
@@ -8166,20 +8179,20 @@ value:
     // Keep numeric/money/interval casts so normalize can fold them to match PG's
     // read-back ('1'::numeric); drop the rest as before.
     if isFoldableValueCast($2) {
-      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+      $$ = &CastExpr{Expr: newStrVal(yylex, $1), Type: $2}
     } else {
-      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
+      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2, BackslashEscapes: backslashEscapes(yylex)}
     }
   }
 | UNICODE_STRING
   {
-    $$ = NewUnicodeStrVal($1)
+    $$ = newUnicodeStrVal(yylex, $1)
   }
 // For MySQL
 | sql_id STRING
   {
     // Ignoring _charset_name as a workaround
-    $$ = NewStrVal($2)
+    $$ = newStrVal(yylex, $2)
   }
 | HEX
   {
@@ -8345,7 +8358,7 @@ lock_opt:
   }
 | FOR ID ID '(' STRING ')' ',' TYPE
   {
-    $$ = " for xml path(" + String(NewStrVal($5)) + "), type"
+    $$ = " for xml path(" + String(newStrVal(yylex, $5)) + "), type"
   }
 | FOR JSON ID
   {
@@ -8545,11 +8558,11 @@ charset_or_character_set:
 charset_value:
   sql_id
   {
-    $$ = NewStrVal($1.Name)
+    $$ = newStrVal(yylex, $1.Name)
   }
 | STRING
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 | DEFAULT
   {
@@ -8728,9 +8741,9 @@ array_element:
   {
     // Preserve numeric/money/interval casts (see value:); drop the rest as before.
     if isFoldableValueCast($2) {
-      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+      $$ = &CastExpr{Expr: newStrVal(yylex, $1), Type: $2}
     } else {
-      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
+      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2, BackslashEscapes: backslashEscapes(yylex)}
     }
   }
 | typed_literal

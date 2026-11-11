@@ -23,6 +23,19 @@ func collationNamePart(yylex any, name Ident) string {
 	return name.Name
 }
 
+// backslashEscapes tells whether a string literal takes MySQL's backslash escapes
+func backslashEscapes(yylex any) bool {
+	return yylex.(*Tokenizer).mode == ParserModeMysql
+}
+
+func newStrVal(yylex any, s string) *SQLVal {
+	return &SQLVal{Type: StrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
+}
+
+func newUnicodeStrVal(yylex any, s string) *SQLVal {
+	return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
+}
+
 func setAllowComments(yylex any, allow bool) {
 	yylex.(*Tokenizer).AllowComments = allow
 }
@@ -11194,7 +11207,7 @@ yydefault:
 	case 474:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyDollar[1].columnType.Comment = NewStrVal(yyDollar[3].str)
+			yyDollar[1].columnType.Comment = newStrVal(yylex, yyDollar[3].str)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 475:
@@ -11350,62 +11363,62 @@ yydefault:
 	case 494:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: "date", Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: "date", Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 495:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: "time", Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: "time", Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 496:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: "timestamp", Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: "timestamp", Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 497:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: yyDollar[1].str, Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: yyDollar[1].str, Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 498:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: yyDollar[1].str, Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: yyDollar[1].str, Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 499:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: "json", Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: "json", Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 500:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: "jsonb", Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: "jsonb", Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 501:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &TypedLiteral{Type: "uuid", Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &TypedLiteral{Type: "uuid", Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 502:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
 			if yyDollar[2].convertType != nil {
-				yyVAL.expr = &CastExpr{Expr: NewStrVal(yyDollar[1].str), Type: yyDollar[2].convertType}
+				yyVAL.expr = &CastExpr{Expr: newStrVal(yylex, yyDollar[1].str), Type: yyDollar[2].convertType}
 			} else {
-				yyVAL.expr = NewStrVal(yyDollar[1].str)
+				yyVAL.expr = newStrVal(yylex, yyDollar[1].str)
 			}
 		}
 	case 503:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
 			// MySQL charset introducer syntax: _charset_name'string'
-			yyVAL.expr = NewStrVal(yyDollar[2].str)
+			yyVAL.expr = newStrVal(yylex, yyDollar[2].str)
 		}
 	case 504:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.expr = NewUnicodeStrVal(yyDollar[1].str)
+			yyVAL.expr = newUnicodeStrVal(yylex, yyDollar[1].str)
 		}
 	case 505:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -11474,12 +11487,12 @@ yydefault:
 	case 517:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.expr = &IntervalExpr{Expr: NewStrVal(yyDollar[2].str)}
+			yyVAL.expr = &IntervalExpr{Expr: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 518:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.expr = &IntervalExpr{Expr: NewStrVal(yyDollar[2].str), Unit: yyDollar[3].str}
+			yyVAL.expr = &IntervalExpr{Expr: newStrVal(yylex, yyDollar[2].str), Unit: yyDollar[3].str}
 		}
 	case 519:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -12502,7 +12515,7 @@ yydefault:
 			if !strings.EqualFold(yyDollar[2].ident.Name, "max") {
 				return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", yyDollar[2].ident.Name))
 			}
-			yyVAL.optVal = NewStrVal(yyDollar[2].ident.Name)
+			yyVAL.optVal = newStrVal(yylex, yyDollar[2].ident.Name)
 		}
 	case 727:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -12699,7 +12712,7 @@ yydefault:
 	case 765:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: NewStrVal(yyDollar[2].ident.Name)}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: newStrVal(yylex, yyDollar[2].ident.Name)}
 		}
 	case 766:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -12715,12 +12728,12 @@ yydefault:
 	case 768:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: NewStrVal(yyDollar[2].str)}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: newStrVal(yylex, yyDollar[2].str)}
 		}
 	case 769:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[2].str, Value: NewStrVal(yyDollar[3].ident.Name)}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[2].str, Value: newStrVal(yylex, yyDollar[3].ident.Name)}
 		}
 	case 770:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -12735,7 +12748,7 @@ yydefault:
 	case 772:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: NewStrVal(yyDollar[3].str)}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: newStrVal(yylex, yyDollar[3].str)}
 		}
 	case 773:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -12775,7 +12788,7 @@ yydefault:
 	case 780:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: NewStrVal(yyDollar[3].str)}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: newStrVal(yylex, yyDollar[3].str)}
 		}
 	case 781:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -12806,12 +12819,12 @@ yydefault:
 	case 786:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.optVal = NewStrVal(yyDollar[1].str)
+			yyVAL.optVal = newStrVal(yylex, yyDollar[1].str)
 		}
 	case 787:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.optVal = NewStrVal(yyDollar[1].str)
+			yyVAL.optVal = newStrVal(yylex, yyDollar[1].str)
 		}
 	case 788:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -12826,7 +12839,7 @@ yydefault:
 	case 790:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.optVal = NewStrVal(yyDollar[1].str)
+			yyVAL.optVal = newStrVal(yylex, yyDollar[1].str)
 		}
 	case 791:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -15596,21 +15609,21 @@ yydefault:
 			// Keep numeric/money/interval casts so normalize can fold them to match PG's
 			// read-back ('1'::numeric); drop the rest as before.
 			if isFoldableValueCast(yyDollar[2].convertType) {
-				yyVAL.expr = &CastExpr{Expr: NewStrVal(yyDollar[1].str), Type: yyDollar[2].convertType}
+				yyVAL.expr = &CastExpr{Expr: newStrVal(yylex, yyDollar[1].str), Type: yyDollar[2].convertType}
 			} else {
-				yyVAL.expr = &SQLVal{Type: StrVal, Val: yyDollar[1].str, DroppedCast: yyDollar[2].convertType}
+				yyVAL.expr = &SQLVal{Type: StrVal, Val: yyDollar[1].str, DroppedCast: yyDollar[2].convertType, BackslashEscapes: backslashEscapes(yylex)}
 			}
 		}
 	case 1321:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.expr = NewUnicodeStrVal(yyDollar[1].str)
+			yyVAL.expr = newUnicodeStrVal(yylex, yyDollar[1].str)
 		}
 	case 1322:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
 			// Ignoring _charset_name as a workaround
-			yyVAL.expr = NewStrVal(yyDollar[2].str)
+			yyVAL.expr = newStrVal(yylex, yyDollar[2].str)
 		}
 	case 1323:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -15795,7 +15808,7 @@ yydefault:
 	case 1359:
 		yyDollar = yyS[yypt-8 : yypt+1]
 		{
-			yyVAL.str = " for xml path(" + String(NewStrVal(yyDollar[5].str)) + "), type"
+			yyVAL.str = " for xml path(" + String(newStrVal(yylex, yyDollar[5].str)) + "), type"
 		}
 	case 1360:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -15991,12 +16004,12 @@ yydefault:
 	case 1399:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.expr = NewStrVal(yyDollar[1].ident.Name)
+			yyVAL.expr = newStrVal(yylex, yyDollar[1].ident.Name)
 		}
 	case 1400:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.expr = NewStrVal(yyDollar[1].str)
+			yyVAL.expr = newStrVal(yylex, yyDollar[1].str)
 		}
 	case 1401:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -16183,9 +16196,9 @@ yydefault:
 		{
 			// Preserve numeric/money/interval casts (see value:); drop the rest as before.
 			if isFoldableValueCast(yyDollar[2].convertType) {
-				yyVAL.expr = &CastExpr{Expr: NewStrVal(yyDollar[1].str), Type: yyDollar[2].convertType}
+				yyVAL.expr = &CastExpr{Expr: newStrVal(yylex, yyDollar[1].str), Type: yyDollar[2].convertType}
 			} else {
-				yyVAL.expr = &SQLVal{Type: StrVal, Val: yyDollar[1].str, DroppedCast: yyDollar[2].convertType}
+				yyVAL.expr = &SQLVal{Type: StrVal, Val: yyDollar[1].str, DroppedCast: yyDollar[2].convertType, BackslashEscapes: backslashEscapes(yylex)}
 			}
 		}
 	case 1441:

@@ -757,6 +757,10 @@ func (tkn *Tokenizer) Scan() (int, string) {
 				return tkn.scanBitLiteral()
 			}
 		}
+		if (ch == 'E' || ch == 'e') && tkn.lastChar == '\'' && tkn.mode == ParserModePostgres {
+			tkn.next()
+			return tkn.scanEscapeString()
+		}
 		if ch == 'N' {
 			if tkn.lastChar == '\'' {
 				if tkn.mode == ParserModeMssql {
@@ -1219,6 +1223,9 @@ exit:
 }
 
 func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
+	if tkn.mode != ParserModeMysql {
+		return tkn.scanStandardString(typ)
+	}
 	var buffer strings.Builder
 	for {
 		ch := tkn.lastChar
@@ -1275,6 +1282,98 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 	}
 
 	return typ, buffer.String()
+}
+
+// scanStandardString scans a string literal of the SQL standard, where only a doubled quote
+// stands for one quote
+func (tkn *Tokenizer) scanStandardString(typ int) (int, string) {
+	var buffer strings.Builder
+	for {
+		switch tkn.lastChar {
+		case eofChar:
+			return LEX_ERROR, buffer.String()
+		case '\'':
+			tkn.next()
+			if tkn.lastChar != '\'' {
+				return typ, buffer.String()
+			}
+		}
+		buffer.WriteRune(tkn.lastChar)
+		tkn.next()
+	}
+}
+
+// scanEscapeString scans a PostgreSQL escape string constant (E'...'), whose backslash escapes are
+// those of C
+func (tkn *Tokenizer) scanEscapeString() (int, string) {
+	var buffer strings.Builder
+	for {
+		ch := tkn.lastChar
+		switch ch {
+		case eofChar:
+			return LEX_ERROR, buffer.String()
+		case '\'':
+			tkn.next()
+			if tkn.lastChar != '\'' {
+				return STRING, buffer.String()
+			}
+		case '\\':
+			tkn.next()
+			switch esc := tkn.lastChar; esc {
+			case eofChar:
+				return LEX_ERROR, buffer.String()
+			case 'b':
+				buffer.WriteByte('\b')
+			case 'f':
+				buffer.WriteByte('\f')
+			case 'n':
+				buffer.WriteByte('\n')
+			case 'r':
+				buffer.WriteByte('\r')
+			case 't':
+				buffer.WriteByte('\t')
+			case '0', '1', '2', '3', '4', '5', '6', '7':
+				buffer.WriteRune(tkn.scanEscapeCode(8, 3))
+				continue
+			case 'x':
+				tkn.next()
+				if digitVal(tkn.lastChar) >= 16 {
+					buffer.WriteByte('x')
+					continue
+				}
+				buffer.WriteRune(tkn.scanEscapeCode(16, 2))
+				continue
+			case 'u', 'U':
+				tkn.next()
+				n := 4
+				if esc == 'U' {
+					n = 8
+				}
+				buffer.WriteRune(tkn.scanEscapeCode(16, n))
+				continue
+			default:
+				buffer.WriteRune(esc)
+			}
+			tkn.next()
+			continue
+		}
+		buffer.WriteRune(tkn.lastChar)
+		tkn.next()
+	}
+}
+
+// scanEscapeCode reads up to n digits of a character code in base
+func (tkn *Tokenizer) scanEscapeCode(base int, n int) rune {
+	var code rune
+	for range n {
+		d := digitVal(tkn.lastChar)
+		if d >= base {
+			break
+		}
+		code = code*rune(base) + rune(d)
+		tkn.next()
+	}
+	return code
 }
 
 // scanDollarQuotedString scans a PostgreSQL dollar-quoted string.

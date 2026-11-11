@@ -2555,6 +2555,9 @@ type SQLVal struct {
 	// DroppedCast is the cast that the parser dropped from a string literal ('x'::text), kept
 	// for the default column name and comparison key, which depend on it
 	DroppedCast *ConvertType
+	// BackslashEscapes writes a string with MySQL's backslash escapes. The other databases take a
+	// backslash in a string literally.
+	BackslashEscapes bool
 }
 
 // NewStrVal builds a new StrVal.
@@ -2694,16 +2697,16 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 				// The literal is written without its cast, but the name in it keeps its case only
 				// where it is quoted
 				buf.literalType = node.DroppedCast.Type
-				encodeSQLBytes(node.Val, buf)
+				encodeSQLBytes(node.Val, node.BackslashEscapes, buf)
 				return
 			}
-			buf.formatCastOperand(literalNode(node.Val), node.DroppedCast.Type)
+			buf.formatCastOperand(literalNode{val: node.Val, backslashEscapes: node.BackslashEscapes}, node.DroppedCast.Type)
 			return
 		}
-		encodeSQLBytes(node.Val, buf)
+		encodeSQLBytes(node.Val, node.BackslashEscapes, buf)
 	case UnicodeStrVal:
 		buf.WriteRune('N')
-		encodeSQLBytes(node.Val, buf)
+		encodeSQLBytes(node.Val, node.BackslashEscapes, buf)
 	case IntVal, FloatVal, HexNum:
 		buf.Printf("%s", node.Val)
 	case HexVal:
@@ -2720,13 +2723,18 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 }
 
 // literalNode formats a string literal
-type literalNode string
-
-func (node literalNode) Format(buf *nodeBuffer) {
-	encodeSQLBytes(string(node), buf)
+type literalNode struct {
+	val              string
+	backslashEscapes bool
 }
 
-func encodeSQLBytes(val string, buf *nodeBuffer) {
+func (node literalNode) Format(buf *nodeBuffer) {
+	encodeSQLBytes(node.val, node.backslashEscapes, buf)
+}
+
+// encodeSQLBytes writes a string literal, with MySQL's backslash escapes or, as the standard
+// writes it, with only the quote doubled
+func encodeSQLBytes(val string, backslashEscapes bool, buf *nodeBuffer) {
 	if buf.comparisonKey {
 		switch typeName := FoldASCII(buf.literalType); {
 		case typeName == "regclass" && !buf.untypedRegLiterals:
@@ -2740,8 +2748,13 @@ func encodeSQLBytes(val string, buf *nodeBuffer) {
 		buf.literalType = ""
 	}
 	buf.WriteByte('\'')
+	if !backslashEscapes {
+		buf.WriteString(strings.ReplaceAll(val, "'", "''"))
+		buf.WriteByte('\'')
+		return
+	}
 	for _, ch := range val {
-		if encodedChar := sqlEncodeMap[byte(ch)]; encodedChar == dontEscape {
+		if encodedChar := sqlEncodeMap[byte(ch)]; ch > 0xff || encodedChar == dontEscape {
 			buf.WriteRune(ch)
 		} else {
 			buf.WriteByte('\\')
@@ -3824,9 +3837,42 @@ func (n Ident) Format(buf *nodeBuffer) {
 	formatID(buf, n.Name)
 }
 
+// postgresReservedKeywords are the keywords that PostgreSQL does not take as a table or column name
+// unless quoted: the reserved ones and those that can name only a type or function
+var postgresReservedKeywords = func() map[string]bool {
+	words := map[string]bool{}
+	for _, word := range []string{
+		"all", "analyse", "analyze", "and", "any", "array", "as", "asc", "asymmetric", "authorization",
+		"binary", "both", "case", "cast", "check", "collate", "collation", "column", "concurrently",
+		"constraint", "create", "cross", "current_catalog", "current_date", "current_role",
+		"current_schema", "current_time", "current_timestamp", "current_user", "default", "deferrable",
+		"desc", "distinct", "do", "else", "end", "except", "false", "fetch", "for", "foreign", "freeze",
+		"from", "full", "grant", "group", "having", "ilike", "in", "initially", "inner", "intersect",
+		"into", "is", "isnull", "join", "lateral", "leading", "left", "like", "limit", "localtime",
+		"localtimestamp", "natural", "not", "notnull", "null", "offset", "on", "only", "or", "order",
+		"outer", "overlaps", "placing", "primary", "references", "returning", "right", "select",
+		"session_user", "similar", "some", "symmetric", "system_user", "table", "tablesample", "then",
+		"to", "trailing", "true", "union", "unique", "user", "using", "variadic", "verbose", "when",
+		"where", "window", "with",
+	} {
+		words[word] = true
+	}
+	return words
+}()
+
+// IsPostgresReservedKeyword reports whether PostgreSQL reads an unquoted name as a keyword where a
+// table or column name is expected
+func IsPostgresReservedKeyword(name string) bool {
+	return postgresReservedKeywords[name]
+}
+
 // formatPostgresID writes an unquoted identifier as is if PostgreSQL reads it so, and quotes it
 // otherwise, where formatID would quote it in MySQL's style
 func formatPostgresID(buf *nodeBuffer, name string) {
+	if postgresReservedKeywords[name] {
+		buf.writePostgresQuoted(name)
+		return
+	}
 	for i, c := range name {
 		if !(isNameStart(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
 			buf.writePostgresQuoted(name)

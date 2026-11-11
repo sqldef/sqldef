@@ -607,3 +607,16 @@ CommentOnColumnNamedKey:
     COMMENT ON COLUMN public.users.key IS 'user key';
   down: |
     COMMENT ON COLUMN public.users."key" IS NULL;
+
+UpdateCommentWithBackslash:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    COMMENT ON TABLE t IS 'a\b';
+  desired: |
+    CREATE TABLE t (id int);
+    COMMENT ON TABLE t IS 'a\b\c';
+  up: |
+    COMMENT ON TABLE public.t IS 'a\b\c';
+  down: |
+    COMMENT ON TABLE public.t IS 'a\b';

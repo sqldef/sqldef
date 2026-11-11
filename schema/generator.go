@@ -4054,10 +4054,10 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
-// quotedCollationName writes a collation with a PostgreSQL name quoted as written, as sqldef has
-// always written an index collation, and as the legacy mode writes identifiers
+// quotedCollationName writes an index collation. The legacy mode quotes a PostgreSQL name as written,
+// as sqldef has always written it, and the quote-aware mode keeps the quotes as written.
 func (d dialect) quotedCollationName(collation string) string {
-	if d.mode == GeneratorModePostgres {
+	if d.mode == GeneratorModePostgres && d.legacyIgnoreQuotes {
 		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
 			return d.forceEscapeSQLName(part.Name)
 		}), ".")
@@ -4101,9 +4101,12 @@ func (d dialect) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
 			return d.forceEscapeSQLName(name)
+		} else if folded := strings.ToLower(name); parser.IsPostgresReservedKeyword(folded) {
+			// A reserved word is a name only where quoted, as PostgreSQL may have exported it
+			return d.forceEscapeSQLName(folded)
 		} else {
 			// Originally unquoted: normalize to lowercase and don't quote
-			return strings.ToLower(name)
+			return folded
 		}
 	default:
 		if wasQuoted {
@@ -6935,11 +6938,12 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 // COLLATE clause from the DDL it exports whenever it names the collation the column already has, so
 // an omitted clause has to compare equal to one that restates it. "default" names the database
 // default, which the export never writes out either. An index on a materialized view has no column
-// definitions to resolve against, so its collation is compared as written. Names keep their case as
-// written, as quotedCollationName quotes them.
+// definitions to resolve against, so its collation is compared as written. The legacy mode keeps the
+// case of names as written, as quotedCollationName quotes them.
 func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
+	fold := !g.legacyIgnoreQuotes
 	if indexColumn.collation != "" {
-		return g.canonicalCollationFolding(indexColumn.collation, false)
+		return g.canonicalCollationFolding(indexColumn.collation, fold)
 	}
 	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
 		if column := g.findColumnByName(columns, colName.Name); column != nil {
@@ -6947,7 +6951,7 @@ func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn
 			if collation == "" {
 				collation = g.columnCollation(*column, g.desiredDomains)
 			}
-			return g.canonicalCollationFolding(collation, false)
+			return g.canonicalCollationFolding(collation, fold)
 		}
 	}
 	return ""
