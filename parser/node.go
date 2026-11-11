@@ -90,6 +90,16 @@ func (buf *nodeBuffer) inSchemas(schema Ident, schemas []string) bool {
 // PostgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
 // name. A quoted part such as "en_US.utf8" may contain a dot.
 func PostgresNameParts(name string) []Ident {
+	parts, ok := SplitPostgresName(name)
+	if !ok {
+		panic(fmt.Sprintf("unterminated quoted name: %s", name))
+	}
+	return parts
+}
+
+// SplitPostgresName is PostgresNameParts that reports a name with an unterminated quote instead of
+// panicking, for a name that may be stored without its quotes
+func SplitPostgresName(name string) ([]Ident, bool) {
 	var parts []Ident
 	for name != "" {
 		if rest, ok := strings.CutPrefix(name, `"`); ok {
@@ -97,7 +107,7 @@ func PostgresNameParts(name string) []Ident {
 			for {
 				i := strings.IndexByte(rest, '"')
 				if i < 0 {
-					panic(fmt.Sprintf("unterminated quoted name: %s", name))
+					return nil, false
 				}
 				part.WriteString(rest[:i])
 				rest = rest[i+1:]
@@ -119,7 +129,7 @@ func PostgresNameParts(name string) []Ident {
 		}
 		name = strings.TrimPrefix(name, ".")
 	}
-	return parts
+	return parts, true
 }
 
 // formatCastOperand formats the operand of a cast, recording the type of a literal operand
@@ -3321,10 +3331,10 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	// timezone modifier belong to the element type, so they have to be emitted
 	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
 	typeName, isArray := strings.CutSuffix(node.Type, "[]")
-	if (buf.comparisonKey || buf.dropSchemas) && strings.ContainsAny(typeName, `".`) {
+	parts, ok := SplitPostgresName(typeName)
+	if (buf.comparisonKey || buf.dropSchemas) && strings.ContainsAny(typeName, `".`) && ok {
 		// A name of PostgreSQL keeps its case where quoted, and PostgreSQL leaves out the schema
 		// on the search path
-		parts := PostgresNameParts(typeName)
 		if len(parts) > 1 && (buf.omitsSchema(parts[0]) || buf.inSchemas(parts[0], buf.omittedTypeSchemas)) {
 			parts = parts[1:]
 		}

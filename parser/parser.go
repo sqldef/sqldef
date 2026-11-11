@@ -53,20 +53,10 @@ func castTypeName(yylex any, name Ident) string {
 	case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb":
 		return name.Name
 	}
-	if isPlainIdentifier(name.Name) && !IsKeyword(name.Name) {
+	if needsNoQuotes(name.Name) && !IsKeyword(name.Name) {
 		return name.Name
 	}
 	return collationNamePart(yylex, name)
-}
-
-// isPlainIdentifier tells whether a name can be written without quotes, apart from keywords
-func isPlainIdentifier(name string) bool {
-	for i, r := range name {
-		if !(r >= 'a' && r <= 'z' || r == '_' || i > 0 && (r >= '0' && r <= '9' || r == '$')) {
-			return false
-		}
-	}
-	return name != ""
 }
 
 // castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,

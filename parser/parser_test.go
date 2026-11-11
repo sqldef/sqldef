@@ -2694,3 +2694,14 @@ func TestTypecastToQualifiedTypeWithLength(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateOrReplaceSkipsComments(t *testing.T) {
+	for sql, want := range map[string]string{
+		"CREATE /* c */ OR REPLACE VIEW v AS SELECT 1": "CREATE /* c */ OR REPLACE VIEW v AS SELECT 1",
+		"/* c */ CREATE VIEW v AS SELECT 1":            "/* c */ CREATE OR REPLACE VIEW v AS SELECT 1",
+	} {
+		if got := CreateOrReplace(sql, ParserModePostgres); got != want {
+			t.Errorf("CreateOrReplace(%q) = %q, want %q", sql, got, want)
+		}
+	}
+}

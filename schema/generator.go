@@ -2555,7 +2555,9 @@ func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName
 	slices.Reverse(dependents)
 	sorted := topologicalSort(dependents, viewDeps, g.viewKey)
 	if len(sorted) != len(dependents) {
-		// Views whose names compare equal in legacy mode collapse in the sort; drop them as listed
+		// Views whose names compare equal in legacy mode collapse in the sort; drop them in the
+		// reverse of their order
+		slices.Reverse(dependents)
 		sorted = dependents
 	}
 	// Drop the views that depend on others first
@@ -3489,9 +3491,7 @@ func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string 
 		return fmt.Sprintf("COMMENT ON %s IS NULL", objectClause)
 	}
 
-	// Escape the comment value (single quotes need to be doubled)
-	escapedComment := strings.ReplaceAll(comment.comment.Comment, "'", "''")
-	return fmt.Sprintf("COMMENT ON %s IS '%s'", objectClause, escapedComment)
+	return fmt.Sprintf("COMMENT ON %s IS %s", objectClause, StringConstant(comment.comment.Comment))
 }
 
 // buildFunctionSignature builds a function signature string for COMMENT ON FUNCTION.
