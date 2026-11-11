@@ -53,7 +53,7 @@ func castTypeName(yylex any, name Ident) string {
 	case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb":
 		return name.Name
 	}
-	if needsNoQuotes(name.Name) && !IsKeyword(name.Name) {
+	if needsNoQuotes(name.Name) && !IsKeyword(name.Name) && !IsPostgresReservedKeyword(name.Name) {
 		return name.Name
 	}
 	return collationNamePart(yylex, name)

@@ -2589,16 +2589,18 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 	var colNames []colRef
 	reads := false
 	// inScope tells whether the table is in the FROM of the query or of a query enclosing it, so
-	// that an unqualified name may be its column
-	var visit func(v reflect.Value, inScope bool)
-	visit = func(v reflect.Value, inScope bool) {
+	// that an unqualified name may be its column. own tells whether it is in the FROM of the query
+	// itself, which * and joins read.
+	var visit func(v reflect.Value, inScope, own bool)
+	visit = func(v reflect.Value, inScope, own bool) {
 		v = unwrapInterface(v)
 		if !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
 			return
 		}
 		switch node := v.Interface().(type) {
 		case *parser.Select:
-			inScope = inScope || g.fromHasTable(node.From, table)
+			own = g.fromHasTable(node.From, table)
+			inScope = inScope || own
 		case *parser.AliasedTableExpr:
 			if name, ok := node.Expr.(parser.TableName); ok && g.namesTable(name, table) {
 				// A column alias list renames the columns, which sqldef does not map to the table's
@@ -2612,28 +2614,28 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 			return
 		case *parser.StarExpr:
 			if node.TableName.Name.IsEmpty() {
-				reads = reads || inScope
+				reads = reads || own
 			} else {
 				colNames = append(colNames, colRef{col: &parser.ColName{Name: column, Qualifier: node.TableName}})
 			}
 			return
 		case *parser.JoinTableExpr:
 			// A natural join compares the columns of the same name
-			reads = reads || inScope && strings.HasPrefix(node.Join, "natural ")
+			reads = reads || own && strings.HasPrefix(node.Join, "natural ")
 		case parser.JoinCondition:
-			reads = reads || inScope && slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
+			reads = reads || own && slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
 		case *parser.FuncExpr:
 			// The * of count(*) reads no column, unlike a whole row such as count(t.*)
 			if len(node.Exprs) == 1 {
 				if star, ok := node.Exprs[0].(*parser.StarExpr); ok && star.TableName.Name.IsEmpty() {
-					visit(reflect.ValueOf(node.Over), inScope)
+					visit(reflect.ValueOf(node.Over), inScope, own)
 					return
 				}
 			}
 		}
-		visitChildren(v, func(child reflect.Value) { visit(child, inScope) })
+		visitChildren(v, func(child reflect.Value) { visit(child, inScope, own) })
 	}
-	visit(reflect.ValueOf(view.definition), false)
+	visit(reflect.ValueOf(view.definition), false, false)
 	namesTable := func(ident Ident) bool {
 		return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
 	}
@@ -4224,6 +4226,7 @@ func (g *Generator) forgetViewMetadata(view *View) {
 	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
 		return
 	}
+	indexes := view.indexes
 	view.indexes = nil
 	g.currentTriggers = slices.DeleteFunc(g.currentTriggers, func(trigger *Trigger) bool {
 		return g.qualifiedNamesEqual(trigger.tableName, view.name)
@@ -4232,10 +4235,16 @@ func (g *Generator) forgetViewMetadata(view *View) {
 		return priv.objectType == "TABLE" && g.qualifiedNamesEqual(priv.tableName, view.name)
 	})
 	g.currentComments = slices.DeleteFunc(g.currentComments, func(comment *Comment) bool {
+		parts := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
 		switch comment.comment.ObjectType {
 		case "OBJECT_VIEW", "OBJECT_TABLE", "OBJECT_COLUMN":
-			parts := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
 			return g.qualifiedNamesEqual(QualifiedName{Schema: parts[0], Name: parts[1]}, view.name)
+		case "OBJECT_TRIGGER":
+			return g.qualifiedNamesEqual(QualifiedName{Schema: parts[1], Name: parts[2]}, view.name)
+		case "OBJECT_INDEX":
+			return slices.ContainsFunc(indexes, func(index Index) bool {
+				return g.qualifiedNamesEqual(QualifiedName{Schema: parts[0], Name: parts[1]}, QualifiedName{Schema: view.name.Schema, Name: index.name})
+			})
 		}
 		return false
 	})

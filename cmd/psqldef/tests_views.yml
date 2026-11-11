@@ -1725,12 +1725,14 @@ ChangeColumnTypeReadByViewThroughUsingWithTrigger:
     CREATE VIEW j AS SELECT a.x FROM t a JOIN u USING (id);
     CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
     CREATE TRIGGER tr INSTEAD OF INSERT ON j FOR EACH ROW EXECUTE FUNCTION f();
+    COMMENT ON TRIGGER tr ON j IS 'c';
   desired: |
     CREATE TABLE t (id bigint, x int);
     CREATE TABLE u (id int);
     CREATE VIEW j AS SELECT a.x FROM t a JOIN u USING (id);
     CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
     CREATE TRIGGER tr INSTEAD OF INSERT ON j FOR EACH ROW EXECUTE FUNCTION f();
+    COMMENT ON TRIGGER tr ON j IS 'c';
 ChangeColumnTypeReadByViewsWithCTEsNamedLikeViews:
   legacy_ignore_quotes: false
   current: |
@@ -1886,3 +1888,19 @@ ChangeColumnTypeKeepsViewsReadingTableOfSameNameInOtherSchema:
 #   desired: |
 #     CREATE TABLE t (id bigint, y int);
 #     CREATE VIEW v AS SELECT a.x FROM t AS a(x, z);
+ChangeColumnTypeKeepsViewsJoiningOtherTablesUsingColumnOfSameNameInSubquery:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, x int);
+    CREATE TABLE u (tid int, x int);
+    CREATE TABLE w (x int);
+    CREATE VIEW v AS SELECT id FROM t WHERE id IN (SELECT u.tid FROM u JOIN w USING (x));
+  desired: |
+    CREATE TABLE t (id int, x bigint);
+    CREATE TABLE u (tid int, x int);
+    CREATE TABLE w (x int);
+    CREATE VIEW v AS SELECT id FROM t WHERE id IN (SELECT u.tid FROM u JOIN w USING (x));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN x TYPE bigint;
+  down: |
+    ALTER TABLE public.t ALTER COLUMN x TYPE integer;
