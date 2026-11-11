@@ -1758,3 +1758,28 @@ CastsToCharTypesAndPrecisionsInViews:
   desired: |
     CREATE TABLE t (c text, ts timestamp);
     CREATE VIEW v AS SELECT c::"char" AS a, c::pg_catalog."char" AS b, c::char AS d, c::pg_catalog.char AS h, ts::timestamptz(3) AS e, ts::timestamptz::timetz(2) AS f, c::bpchar(3) AS g FROM t;
+ChangeColumnTypeReadByViewsThroughCTEsOfTableNames:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, x int);
+    CREATE VIEW v AS WITH users AS (SELECT a.id, a.x FROM users a WHERE a.id > 0) SELECT x FROM users;
+    CREATE VIEW w AS WITH u AS (SELECT 1 AS id) SELECT x FROM public.users;
+  desired: |
+    CREATE TABLE users (id int, x bigint);
+    CREATE VIEW v AS WITH users AS (SELECT a.id, a.x FROM users a WHERE a.id > 0) SELECT x FROM users;
+    CREATE VIEW w AS WITH u AS (SELECT 1 AS id) SELECT x FROM public.users;
+ChangeColumnTypeReadByViewThroughScalarSubquery:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int);
+    CREATE TABLE orders (user_id int, amount int);
+    CREATE VIEW v AS SELECT u.id, (SELECT max(o.amount) FROM orders o WHERE o.user_id = u.id) AS m FROM users u;
+  desired: |
+    CREATE TABLE users (id int);
+    CREATE TABLE orders (user_id int, amount bigint);
+    CREATE VIEW v AS SELECT u.id, (SELECT max(o.amount) FROM orders o WHERE o.user_id = u.id) AS m FROM users u;
+CastsToCharWithCastFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (c text);
+    CREATE VIEW v AS SELECT CAST(c AS char) AS a, CAST(c AS char(2)) AS b FROM t;

@@ -2616,6 +2616,11 @@ var postgresTypeAliases = map[string]string{
 	"timetz":      "time with time zone",
 }
 
+// QuotePostgresIdent quotes a PostgreSQL identifier
+func QuotePostgresIdent(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
 // PostgresTypeName returns the name PostgreSQL writes for a type named by its internal name, such
 // as integer for int4
 func PostgresTypeName(name string) string {
@@ -3976,7 +3981,7 @@ func formatFuncName(buf *nodeBuffer, name Ident) {
 }
 
 func (buf *nodeBuffer) writePostgresQuoted(name string) {
-	buf.WriteString(`"` + strings.ReplaceAll(name, `"`, `""`) + `"`)
+	buf.WriteString(QuotePostgresIdent(name))
 }
 
 // equalString performs a case-insensitive compare with str.

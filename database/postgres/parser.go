@@ -1464,7 +1464,7 @@ func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 	}
 	quoted := util.TransformSlice(typeNames, func(name string) string {
 		if NewIdentWithQuoteDetected(name).Quoted {
-			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+			return parser.QuotePostgresIdent(name)
 		}
 		return name
 	})

@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"maps"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -515,99 +517,77 @@ func walkExprForFunctionCalls(expr parser.Expr, knownFunctions map[string]bool, 
 }
 
 // extractViewDependencies extracts all table/view names that a view depends on
-// by walking the SelectStatement AST and collecting TableName references.
+// by walking the SelectStatement AST and collecting the relations it selects from,
+// including those in subqueries anywhere in the statement.
 // Returns normalized names suitable for use as dependency graph keys.
 func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []string {
-	deps := make(map[string]bool)
-	extractDependenciesFromSelectStatement(stmt, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	e := dependencyExtractor{defaultSchema: defaultSchema, mode: mode, legacyIgnoreQuotes: legacyIgnoreQuotes, mysqlLowerCaseTableNames: mysqlLowerCaseTableNames, deps: map[string]bool{}}
+	e.visit(reflect.ValueOf(stmt), nil)
 
 	// Convert map to slice in deterministic order
 	var result []string
-	for dep := range util.CanonicalMapIter(deps) {
+	for dep := range util.CanonicalMapIter(e.deps) {
 		result = append(result, dep)
 	}
 	return result
 }
 
-// extractDependenciesFromSelectStatement recursively extracts table/view dependencies from a SelectStatement
-func extractDependenciesFromSelectStatement(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
-	switch s := stmt.(type) {
+type dependencyExtractor struct {
+	defaultSchema            string
+	mode                     GeneratorMode
+	legacyIgnoreQuotes       bool
+	mysqlLowerCaseTableNames int
+	deps                     map[string]bool
+}
+
+// visit collects the relations under an AST value. ctes holds the keys of the CTE names in scope,
+// which an unqualified name refers to instead of a relation.
+func (e *dependencyExtractor) visit(v reflect.Value, ctes map[string]bool) {
+	if !v.IsValid() || (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) && v.IsNil() {
+		return
+	}
+	switch node := v.Interface().(type) {
 	case *parser.Select:
-		if s.With == nil {
-			extractDependenciesFromTableExprs(s.From, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		if node.With == nil {
 			break
 		}
-		local := map[string]bool{}
-		extractDependenciesFromTableExprs(s.From, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, local)
-		extractDependenciesFromWith(s.With, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, local)
-		// A CTE shadows the relation of its name, so references to it are not dependencies
-		for _, cte := range s.With.CTEs {
-			delete(local, extractDependencyName(parser.TableName{Name: cte.Name}, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames))
+		scope := maps.Clone(ctes)
+		if scope == nil {
+			scope = map[string]bool{}
 		}
-		for dep := range local {
-			deps[dep] = true
+		if node.With.Recursive {
+			for _, cte := range node.With.CTEs {
+				scope[e.identKey(cte.Name)] = true
+			}
 		}
-	case *parser.Union:
-		// Recursively extract from both sides of the UNION
-		extractDependenciesFromSelectStatement(s.Left, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-		extractDependenciesFromSelectStatement(s.Right, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-	case *parser.ParenSelect:
-		// Unwrap parenthesized SELECT
-		extractDependenciesFromSelectStatement(s.Select, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-	}
-}
-
-// extractDependenciesFromWith extracts dependencies from WITH clause (CTEs)
-func extractDependenciesFromWith(with *parser.With, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
-	for _, cte := range with.CTEs {
-		extractDependenciesFromSelectStatement(cte.Definition, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-	}
-}
-
-// extractDependenciesFromTableExprs extracts table/view names from TableExprs
-func extractDependenciesFromTableExprs(exprs parser.TableExprs, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
-	for _, expr := range exprs {
-		extractDependenciesFromTableExpr(expr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-	}
-}
-
-// extractDependenciesFromTableExpr extracts table/view names from a single TableExpr
-func extractDependenciesFromTableExpr(expr parser.TableExpr, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
-	switch te := expr.(type) {
+		// A CTE is in scope in the CTEs after it and in the main query
+		for _, cte := range node.With.CTEs {
+			e.visit(reflect.ValueOf(cte.Definition), scope)
+			scope[e.identKey(cte.Name)] = true
+		}
+		withoutWith := *node
+		withoutWith.With = nil
+		visitChildren(reflect.ValueOf(withoutWith), func(child reflect.Value) { e.visit(child, scope) })
+		return
 	case *parser.AliasedTableExpr:
-		// Extract from the actual table expression
-		extractDependenciesFromSimpleTableExpr(te.Expr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-	case *parser.JoinTableExpr:
-		// Recursively extract from both sides of the JOIN
-		extractDependenciesFromTableExpr(te.LeftExpr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-		extractDependenciesFromTableExpr(te.RightExpr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
-	case *parser.ParenTableExpr:
-		// Recursively extract from parenthesized table expressions
-		extractDependenciesFromTableExprs(te.Exprs, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		if name, ok := node.Expr.(parser.TableName); ok && (!name.Schema.IsEmpty() || !ctes[e.identKey(name.Name)]) {
+			e.deps[e.relationKey(name)] = true
+		}
 	}
+	visitChildren(v, func(child reflect.Value) { e.visit(child, ctes) })
 }
 
-func extractDependencyName(name parser.TableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) string {
-	schema := name.Schema.Name
-	if schema == "" {
-		schema = defaultSchema
-	} else {
-		schema = normalizeIdentKey(name.Schema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-	}
-	tableName := normalizeIdentKey(name.Name, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-	if schema == "" {
-		return tableName
-	}
-	return schema + "." + tableName
+func (e *dependencyExtractor) identKey(ident parser.Ident) string {
+	return normalizeIdentKey(ident, e.mode, e.legacyIgnoreQuotes, e.mysqlLowerCaseTableNames)
 }
 
-// extractDependenciesFromSimpleTableExpr extracts table/view names from SimpleTableExpr
-func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
-	switch ste := expr.(type) {
-	case parser.TableName:
-		deps[extractDependencyName(ste, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
-	case *parser.Subquery:
-		// Recursively extract from subquery
-		extractDependenciesFromSelectStatement(ste.Select, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+func (e *dependencyExtractor) relationKey(name parser.TableName) string {
+	schema := e.defaultSchema
+	if !name.Schema.IsEmpty() {
+		schema = e.identKey(name.Schema)
 	}
+	if schema == "" {
+		return e.identKey(name.Name)
+	}
+	return schema + "." + e.identKey(name.Name)
 }

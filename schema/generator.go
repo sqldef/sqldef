@@ -2534,7 +2534,7 @@ func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName
 	}
 	for changed := true; changed; {
 		changed = false
-		for key, deps := range viewDeps {
+		for key, deps := range util.CanonicalMapIter(viewDeps) {
 			if !dropped[key] && slices.ContainsFunc(deps, func(dep string) bool { return dropped[dep] }) {
 				dropped[key] = true
 				changed = true
@@ -2549,7 +2549,8 @@ func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName
 	slices.Reverse(dependents)
 	sorted := topologicalSort(dependents, viewDeps, g.viewKey)
 	if len(sorted) != len(dependents) {
-		panic("cyclic view dependencies")
+		// Views whose names compare equal in legacy mode collapse in the sort; drop them as listed
+		sorted = dependents
 	}
 	// Drop the views that depend on others first
 	for _, view := range slices.Backward(sorted) {

@@ -18,7 +18,7 @@ func setParseTree(yylex any, stmt Statement) {
 // case-insensitively, so they keep them as written.
 func collationNamePart(yylex any, name Ident) string {
 	if yylex.(*Tokenizer).mode == ParserModePostgres && name.Quoted {
-		return `"` + strings.ReplaceAll(name.Name, `"`, `""`) + `"`
+		return QuotePostgresIdent(name.Name)
 	}
 	return name.Name
 }
@@ -15300,6 +15300,10 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
 			yyVAL.convertType = &ConvertType{Type: yyDollar[1].str, Length: yyDollar[2].optVal, Charset: yyDollar[3].str, Operator: CharacterSetStr}
+			if yyDollar[2].optVal == nil && yylex.(*Tokenizer).mode == ParserModePostgres {
+				// char has a length of 1 in PostgreSQL, as in a cast written with ::
+				yyVAL.convertType.Length = NewIntVal("1")
+			}
 		}
 	case 1246:
 		yyDollar = yyS[yypt-3 : yypt+1]

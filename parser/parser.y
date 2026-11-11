@@ -32,7 +32,7 @@ func setParseTree(yylex any, stmt Statement) {
 // case-insensitively, so they keep them as written.
 func collationNamePart(yylex any, name Ident) string {
   if yylex.(*Tokenizer).mode == ParserModePostgres && name.Quoted {
-    return `"` + strings.ReplaceAll(name.Name, `"`, `""`) + `"`
+    return QuotePostgresIdent(name.Name)
   }
   return name.Name
 }
@@ -7878,6 +7878,10 @@ convert_type:
 | CHAR length_opt charset_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2, Charset: $3, Operator: CharacterSetStr}
+    if $2 == nil && yylex.(*Tokenizer).mode == ParserModePostgres {
+      // char has a length of 1 in PostgreSQL, as in a cast written with ::
+      $$.Length = NewIntVal("1")
+    }
   }
 | CHAR length_opt ID
   {

@@ -108,7 +108,7 @@ func normalizeTypeName(typeName string, mode GeneratorMode) string {
 		name := strings.TrimRight(typeName, "[]")
 		return strings.Join(util.TransformSlice(parser.PostgresNameParts(name), func(part Ident) string {
 			if part.Quoted {
-				return `"` + strings.ReplaceAll(part.Name, `"`, `""`) + `"`
+				return parser.QuotePostgresIdent(part.Name)
 			}
 			return strings.ToLower(part.Name)
 		}), ".") + typeName[len(name):]
