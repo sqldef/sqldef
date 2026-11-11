@@ -2480,7 +2480,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 					key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 					g.recreatedViews[key] = recreatedView{view: depView, heldBack: !recreated}
 				}
-			} else if g.mode == GeneratorModePostgres {
+			} else if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
 				ddls = append(ddls, inputStatement{statement: parser.CreateOrReplace(desiredView.statement, parser.ParserModePostgres)})
 			} else {
 				ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
@@ -2510,7 +2510,9 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 // sqldef cannot write the casts of its literals back, which give its columns their types; the
 // same goes for CREATE OR REPLACE VIEW.
 func (g *Generator) recreateView(view View) statement {
-	if g.mode == GeneratorModePostgres {
+	// The desired DDL keeps the casts that the AST drops from literals. Legacy mode quotes every
+	// name, which the following statements on the view expect.
+	if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
 		return inputStatement{statement: view.statement}
 	}
 	return createViewStatement{d: g.dialect, view: view}

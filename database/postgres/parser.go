@@ -1455,15 +1455,17 @@ func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 	if len(typeNames) == 0 {
 		return ""
 	}
-	if typeNames[0] == "pg_catalog" {
+	// A keyword such as bit or char is resolved to a pg_catalog name, while the quoted name, which
+	// names another type, is not
+	resolved := typeNames[0] == "pg_catalog"
+	if resolved {
 		typeNames = typeNames[1:]
 	}
-	// The keyword char names bpchar, so the type "char" keeps its quotes
 	if len(typeNames) == 1 && typeNames[0] == "char" {
 		return `"char"`
 	}
 	quoted := util.TransformSlice(typeNames, func(name string) string {
-		if NewIdentWithQuoteDetected(name).Quoted {
+		if resolved && NewIdentWithQuoteDetected(name).Quoted || !resolved && parser.PostgresTypeNameNeedsQuotes(name) {
 			return parser.QuotePostgresIdent(name)
 		}
 		return name

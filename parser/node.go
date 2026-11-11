@@ -2637,6 +2637,18 @@ func QuoteString(s string, backslashEscapes bool) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
+// PostgresTypeNameNeedsQuotes reports whether PostgreSQL writes a type name quoted: a name that is
+// not a lowercase identifier, a reserved word, or a keyword that names another type unquoted
+func PostgresTypeNameNeedsQuotes(name string) bool {
+	switch name {
+	case "bit", "char", "character", "user", "current_user", "session_user", "current_role",
+		"current_catalog", "current_schema", "current_date", "current_time", "current_timestamp",
+		"localtime", "localtimestamp":
+		return true
+	}
+	return !needsNoQuotes(name) || IsPostgresReservedKeyword(name)
+}
+
 // QuotePostgresIdent quotes a PostgreSQL identifier
 func QuotePostgresIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
@@ -3346,11 +3358,15 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 			if i > 0 {
 				buf.WriteByte('.')
 			}
-			if buf.comparisonKey {
-				buf.writeIdentKey(part)
-			} else if part.Quoted && part.Name != FoldASCII(part.Name) {
+			switch {
+			case part.Quoted && part.Name == FoldASCII(part.Name) && PostgresTypeNameNeedsQuotes(part.Name):
+				// Such as "bit", which names another type than bit
 				buf.writePostgresQuoted(part.Name)
-			} else {
+			case buf.comparisonKey:
+				buf.writeIdentKey(part)
+			case part.Quoted && part.Name != FoldASCII(part.Name):
+				buf.writePostgresQuoted(part.Name)
+			default:
 				formatPostgresID(buf, FoldASCII(part.Name))
 			}
 		}

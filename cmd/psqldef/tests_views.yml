@@ -86,11 +86,10 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
   up: |
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     DROP VIEW "public"."foos_view";
-    CREATE VIEW foos_view AS
-      SELECT id, secret FROM foos WHERE secret = false;
+    CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
   down: |
     DROP VIEW "public"."foos_view";
-    CREATE VIEW foos_view AS SELECT 1 AS dummy;
+    CREATE VIEW "public"."foos_view" AS select 1 as dummy;
     ALTER TABLE "public"."foos" DROP COLUMN "secret";
 CreateMaterializedView:
   current: |
@@ -327,18 +326,9 @@ ReplaceViewWithChangeCondition:
       FROM hoge
         WHERE bar = 'baz';
   up: |
-    CREATE OR REPLACE VIEW v AS
-      SELECT
-        foo,
-        bar
-      FROM hoge
-        WHERE bar = 'baz';
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
   down: |
-    CREATE OR REPLACE VIEW v AS
-    SELECT
-      foo,
-      bar
-    FROM hoge;
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithAddColumnToTail:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -363,19 +353,10 @@ ReplaceViewWithAddColumnToTail:
       'x' as added
      FROM hoge;
   up: |
-    CREATE OR REPLACE VIEW v AS
-    SELECT
-      foo,
-      bar,
-      'x' as added
-     FROM hoge;
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW v AS
-    SELECT
-      foo,
-      bar
-    FROM hoge;
+    CREATE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithAddColumnToMiddle:
   current: |
     CREATE TABLE "hoge" (
@@ -401,19 +382,10 @@ ReplaceViewWithAddColumnToMiddle:
      FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW v AS
-    SELECT
-      foo,
-      'x' as added,
-      bar
-     FROM hoge;
+    CREATE VIEW "public"."v" AS select foo, 'x' as added, bar from hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW v AS
-    SELECT
-      foo,
-      bar
-    FROM hoge;
+    CREATE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithDropColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -435,14 +407,9 @@ ReplaceViewWithDropColumn:
     SELECT foo FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW v AS
-    SELECT foo FROM hoge;
+    CREATE VIEW "public"."v" AS select foo from hoge;
   down: |
-    CREATE OR REPLACE VIEW v AS
-    SELECT
-      foo,
-      bar
-    FROM hoge;
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithChangeColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -467,18 +434,10 @@ ReplaceViewWithChangeColumn:
     FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW v AS
-    SELECT
-      foo,
-      'x' as changed
-    FROM hoge;
+    CREATE VIEW "public"."v" AS select foo, 'x' as changed from hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW v AS
-    SELECT
-      foo,
-      bar
-    FROM hoge;
+    CREATE VIEW "public"."v" AS select foo, bar from hoge;
 CreateViewWithCastCase:
   desired: |
     create table hoge (amount text);
@@ -1154,9 +1113,9 @@ ChangeViewStringLiteralCaseInLegacyMode:
     CREATE TABLE t (a text);
     CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
   up: |
-    CREATE OR REPLACE VIEW v AS SELECT a FROM t WHERE a = 'active';
+    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'active';
   down: |
-    CREATE OR REPLACE VIEW v AS SELECT a FROM t WHERE a = 'Active';
+    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'Active';
 
 ChangeViewColumnToQuotedColumnDifferingInCase:
   legacy_ignore_quotes: false
