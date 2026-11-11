@@ -1269,6 +1269,13 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 	for _, columnConstraint := range columnDef.Constraints {
 		constraint := columnConstraint.Node.(*pgquery.Node_Constraint).Constraint
 		switch constraint.Contype {
+		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE, pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE,
+			pgquery.ConstrType_CONSTR_ATTR_DEFERRED, pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
+			if foreignKey == nil {
+				return nil, nil, fmt.Errorf("DEFERRABLE and INITIALLY on column %q are only supported after REFERENCES", columnDef.Colname)
+			}
+		}
+		switch constraint.Contype {
 		case pgquery.ConstrType_CONSTR_NULL:
 			columnType.NotNull = parser.NewBoolVal(false)
 		case pgquery.ConstrType_CONSTR_NOTNULL:

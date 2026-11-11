@@ -53,6 +53,13 @@ func abortParse(yylex yyLexer, err string) int {
   return 1
 }
 
+func newInlineUnique(name Ident, opts ConstraintOptions) *IndexDefinition {
+  return &IndexDefinition{
+    Info: &IndexInfo{Type: "unique", Name: name, Unique: true},
+    ConstraintOptions: &opts,
+  }
+}
+
 func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, columns Columns, lateral bool) (*AliasedTableExpr, error) {
   if as.IsEmpty() && columns != nil {
     return nil, fmt.Errorf("a column alias list requires a table alias")
@@ -4095,6 +4102,21 @@ column_definition_type:
 | column_definition_type UNIQUE
   {
     $1.KeyOpt = colKeyUnique
+    $$ = $1
+  }
+| column_definition_type UNIQUE deferrable_option
+  {
+    $1.InlineUniques = append($1.InlineUniques, newInlineUnique(NewIdent("", false), $3))
+    $$ = $1
+  }
+| column_definition_type CONSTRAINT sql_id UNIQUE
+  {
+    $1.InlineUniques = append($1.InlineUniques, newInlineUnique($3, ConstraintOptions{}))
+    $$ = $1
+  }
+| column_definition_type CONSTRAINT sql_id UNIQUE deferrable_option
+  {
+    $1.InlineUniques = append($1.InlineUniques, newInlineUnique($3, $5))
     $$ = $1
   }
 | column_definition_type CHECK not_for_replication_opt '(' expression ')' no_inherit_opt

@@ -214,6 +214,24 @@ func TestParseAlterTableUnsupportedSubtypeDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestParseColumnDeferrableWithoutReferencesDoesNotPanic(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParser()
+
+	for _, sql := range []string{
+		"CREATE TABLE t (i int UNIQUE DEFERRABLE);",
+		"CREATE TABLE t (i int PRIMARY KEY INITIALLY DEFERRED);",
+		"CREATE TABLE t (i int UNIQUE NOT DEFERRABLE);",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				_, err := postgresParser.Parse(sql)
+				require.Error(t, err)
+			})
+		})
+	}
+}
+
 func TestCreateFunctionWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParser()

@@ -1976,6 +1976,68 @@ RevertUniqueConstraintToNotDeferrable:
   down: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
     alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+InlineUniqueConstraintDeferrable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int,
+      sku text
+    );
+  desired: |
+    CREATE TABLE products (
+      id int,
+      sku text UNIQUE DEFERRABLE INITIALLY DEFERRED
+    );
+  up: |
+    ALTER TABLE public.products ADD UNIQUE (sku) DEFERRABLE INITIALLY DEFERRED;
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_sku_key;
+InlineNamedUniqueConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int,
+      sku text
+    );
+  desired: |
+    CREATE TABLE products (
+      id int,
+      sku text CONSTRAINT products_sku_uniq UNIQUE NOT NULL
+    );
+  up: |
+    ALTER TABLE public.products ALTER COLUMN sku SET NOT NULL;
+    ALTER TABLE public.products ADD CONSTRAINT products_sku_uniq UNIQUE (sku);
+  down: |
+    ALTER TABLE public.products ALTER COLUMN sku DROP NOT NULL;
+    ALTER TABLE public.products DROP CONSTRAINT products_sku_uniq;
+CreateTableWithInlineUniqueConstraintDeferrable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id int,
+      sku text CONSTRAINT products_sku_uniq UNIQUE DEFERRABLE
+    );
+InlineUniqueConstraintDeferrableWithPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE products (
+      id int PRIMARY KEY UNIQUE DEFERRABLE
+    );
+  up: |
+    ALTER TABLE public.products ADD UNIQUE (id) DEFERRABLE INITIALLY IMMEDIATE;
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_id_key;
+# FIXME: NOT DEFERRABLE on a column-level UNIQUE is a syntax error, because UNIQUE takes precedence over the NOT of NOT NULL
+# InlineUniqueConstraintNotDeferrable:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE products (
+#       sku text UNIQUE NOT DEFERRABLE
+#     );
 DropUniqueConstraint:
   current: |
     create table dummy(
