@@ -52,12 +52,25 @@ func newUnicodeStrVal(yylex any, s string) *SQLVal {
 
 // castTypeName returns the type a cast names with an identifier. A quoted name in lowercase names
 // the same type as the unquoted one, and an alias of a built-in type is resolved to the name
-// PostgreSQL writes, as the keyword spellings of the type are.
+// PostgreSQL writes, as the keyword spellings of the type are. The exception is "char", a type
+// other than the one the keyword char names.
 func castTypeName(yylex any, name Ident) string {
+  if name.Quoted && name.Name == "char" {
+    return `"char"`
+  }
   if !name.Quoted || name.Name == FoldASCII(name.Name) {
     return PostgresTypeName(FoldASCII(name.Name))
   }
   return collationNamePart(yylex, name)
+}
+
+// castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
+// it keeps the time zone of timestamptz(p) and timetz(p) after the precision.
+func castTypeWithLength(name string, length *SQLVal) *ConvertType {
+  if base, ok := strings.CutSuffix(name, " with time zone"); ok {
+    return &ConvertType{Type: base, Length: length, TimeZone: " with time zone"}
+  }
+  return &ConvertType{Type: name, Length: length}
 }
 
 func isPgCatalog(schema Ident) bool {
@@ -7975,6 +7988,10 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: castTypeName(yylex, $1)}
   }
+| sql_id '(' INTEGRAL ')'
+  {
+    $$ = castTypeWithLength(castTypeName(yylex, $1), NewIntVal($3))
+  }
 | sql_id '.' sql_id
   {
     if isPgCatalog($1) {
@@ -7990,6 +8007,10 @@ simple_convert_type:
       return abortParse(yylex, fmt.Sprintf("type %s.%s is supported only in pg_catalog", $1.Name, $3.Type))
     }
     $$ = $3
+    if strings.EqualFold($$.Type, "char") {
+      // A qualified name is not a keyword, so pg_catalog.char is the type "char"
+      $$ = &ConvertType{Type: `"char"`}
+    }
   }
 
 keyword_convert_type:
@@ -8061,6 +8082,14 @@ keyword_convert_type:
 | CHAR '(' INTEGRAL ')'
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+  }
+| BPCHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: "character", Length: NewIntVal($3)}
+  }
+| CHAR
+  {
+    $$ = &ConvertType{Type: $1, Length: NewIntVal("1")}
   }
 | CHARACTER '(' INTEGRAL ')'
   {

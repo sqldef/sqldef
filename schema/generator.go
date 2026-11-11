@@ -2525,45 +2525,34 @@ func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName
 		return append(ddls, statements...)
 	}
 	tableKey := normalizeNameKey(table, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	viewDeps := map[*View][]string{}
-	for _, view := range g.currentViews {
-		viewDeps[view] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	}
+	viewDeps := map[string][]string{}
 	dropped := map[string]bool{}
 	for _, view := range g.currentViews {
-		if slices.Contains(viewDeps[view], tableKey) && g.viewReadsColumn(view, table, column) {
-			dropped[g.viewKey(view)] = true
-		}
+		key := g.viewKey(view)
+		viewDeps[key] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		dropped[key] = slices.Contains(viewDeps[key], tableKey) && g.viewReadsColumn(view, table, column)
 	}
-	for changed := len(dropped) > 0; changed; {
+	for changed := true; changed; {
 		changed = false
-		for _, view := range g.currentViews {
-			if !dropped[g.viewKey(view)] && slices.ContainsFunc(viewDeps[view], func(dep string) bool { return dropped[dep] }) {
-				dropped[g.viewKey(view)] = true
+		for key, deps := range viewDeps {
+			if !dropped[key] && slices.ContainsFunc(deps, func(dep string) bool { return dropped[dep] }) {
+				dropped[key] = true
 				changed = true
 			}
 		}
 	}
-	if len(dropped) == 0 {
+	dependents := slices.DeleteFunc(slices.Clone(g.currentViews), func(view *View) bool { return !dropped[g.viewKey(view)] })
+	if len(dependents) == 0 {
 		return append(ddls, statements...)
 	}
-	var dependents []*View
-	for _, view := range g.currentViews {
-		if dropped[g.viewKey(view)] {
-			dependents = append(dependents, view)
-		}
+	// Sorted in reverse, so that dropping it backward keeps the order of independent views
+	slices.Reverse(dependents)
+	sorted := topologicalSort(dependents, viewDeps, g.viewKey)
+	if len(sorted) != len(dependents) {
+		panic("cyclic view dependencies")
 	}
 	// Drop the views that depend on others first
-	for len(dependents) > 0 {
-		i := slices.IndexFunc(dependents, func(view *View) bool {
-			key := g.viewKey(view)
-			return !slices.ContainsFunc(dependents, func(other *View) bool { return slices.Contains(viewDeps[other], key) })
-		})
-		if i < 0 {
-			panic("cyclic view dependencies")
-		}
-		view := dependents[i]
-		dependents = slices.Delete(dependents, i, i+1)
+	for _, view := range slices.Backward(sorted) {
 		ddls = append(ddls, g.dropView(view))
 		g.forgetViewMetadata(view)
 		g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == view })
@@ -2579,8 +2568,8 @@ func (g *Generator) viewKey(view *View) string {
 }
 
 // viewReadsColumn reports whether a view may read a column of a table it selects from: it names a
-// column of the name unqualified or qualified with the table's name or alias, joins USING it,
-// selects *, or reads a whole row of the table
+// column of the name unqualified or qualified with the table's name or alias, joins USING it or
+// naturally, selects *, or reads a whole row of the table
 func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
 	names := []Ident{table.Name}
 	var colNames []*parser.ColName
@@ -2605,6 +2594,9 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 				colNames = append(colNames, &parser.ColName{Name: column, Qualifier: node.TableName})
 			}
 			return
+		case *parser.JoinTableExpr:
+			// A natural join compares the columns of the same name
+			reads = reads || strings.HasPrefix(node.Join, "natural ")
 		case parser.JoinCondition:
 			reads = reads || slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
 		case *parser.FuncExpr:
@@ -3729,8 +3721,7 @@ func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (str
 	}
 
 	if column.comment != nil {
-		// TODO: Should this use StringConstant?
-		definition += fmt.Sprintf("COMMENT '%s' ", column.comment.raw)
+		definition += fmt.Sprintf("COMMENT %s ", stringLiteral(column.comment.raw, d.mode == GeneratorModeMysql))
 	}
 
 	if column.check != nil {
@@ -3981,7 +3972,7 @@ func (d dialect) generateIndexOptionDefinition(indexOptions []IndexOption) strin
 					optionDefinition = fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
 				} else if indexOption.optionName == "comment" {
 					indexOption.optionName = "COMMENT"
-					optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, indexOption.value.raw)
+					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, stringLiteral(indexOption.value.raw, true))
 				} else {
 					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
 				}
@@ -7533,7 +7524,7 @@ func formatDefaultLiteral(sqlVal *parser.SQLVal) (string, error) {
 	defaultVal := parseValue(sqlVal)
 	switch defaultVal.valueType {
 	case ValueTypeStr:
-		return StringConstant(defaultVal.strVal), nil
+		return stringLiteral(defaultVal.strVal, sqlVal.BackslashEscapes), nil
 	case ValueTypeBool:
 		return fmt.Sprintf("%t", defaultVal.bitVal), nil
 	case ValueTypeInt:
@@ -8249,5 +8240,13 @@ func isValidLock(lock string) bool {
 
 // Escape a string and add quotes to form a legal SQL string constant.
 func StringConstant(s string) string {
+	return stringLiteral(s, false)
+}
+
+// stringLiteral writes a string as SQL, escaping backslashes where they are escape characters, as in MySQL
+func stringLiteral(s string, backslashEscapes bool) string {
+	if backslashEscapes {
+		s = strings.ReplaceAll(s, `\`, `\\`)
+	}
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

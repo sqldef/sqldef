@@ -1731,3 +1731,30 @@ ChangeColumnTypeReadByViewThroughUsingWithTrigger:
     CREATE VIEW j AS SELECT a.x FROM t a JOIN u USING (id);
     CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
     CREATE TRIGGER tr INSTEAD OF INSERT ON j FOR EACH ROW EXECUTE FUNCTION f();
+ChangeColumnTypeReadByViewsWithCTEsNamedLikeViews:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, x int);
+    CREATE VIEW v AS WITH v AS (SELECT x FROM t) SELECT x FROM v;
+    CREATE VIEW w AS WITH RECURSIVE w AS (SELECT x AS n FROM t UNION ALL SELECT r.n + 1 FROM w r WHERE r.n < 3) SELECT n FROM w;
+  desired: |
+    CREATE TABLE t (id int, x bigint);
+    CREATE VIEW v AS WITH v AS (SELECT x FROM t) SELECT x FROM v;
+    CREATE VIEW w AS WITH RECURSIVE w AS (SELECT x AS n FROM t UNION ALL SELECT r.n + 1 FROM w r WHERE r.n < 3) SELECT n FROM w;
+# FIXME: PostgreSQL writes a natural join as JOIN USING the common columns, which sqldef cannot
+# compare without the column names of the tables, so the view is replaced on every run
+# ChangeColumnTypeReadByViewThroughNaturalJoin:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (id int, x int);
+#     CREATE TABLE u (id int, y int);
+#     CREATE VIEW j AS SELECT x, y FROM t NATURAL JOIN u;
+#   desired: |
+#     CREATE TABLE t (id bigint, x int);
+#     CREATE TABLE u (id int, y int);
+#     CREATE VIEW j AS SELECT x, y FROM t NATURAL JOIN u;
+CastsToCharTypesAndPrecisionsInViews:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (c text, ts timestamp);
+    CREATE VIEW v AS SELECT c::"char" AS a, c::pg_catalog."char" AS b, c::char AS d, c::pg_catalog.char AS h, ts::timestamptz(3) AS e, ts::timestamptz::timetz(2) AS f, c::bpchar(3) AS g FROM t;

@@ -1458,6 +1458,10 @@ func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 	if typeNames[0] == "pg_catalog" {
 		typeNames = typeNames[1:]
 	}
+	// The keyword char names bpchar, so the type "char" keeps its quotes
+	if len(typeNames) == 1 && typeNames[0] == "char" {
+		return `"char"`
+	}
 	quoted := util.TransformSlice(typeNames, func(name string) string {
 		if NewIdentWithQuoteDetected(name).Quoted {
 			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
@@ -1875,14 +1879,21 @@ func (p PostgresParser) castType(typeName *pgquery.TypeName, columnType parser.C
 			"type_node", fmt.Sprintf("%#v", typeName))
 		name = columnType.Type
 	}
+	// The generic parser keeps the time zone of a type with a precision apart, as in
+	// timestamp(3) with time zone
+	var timeZone string
+	if base, ok := strings.CutSuffix(name, " with time zone"); ok && columnType.Length != nil {
+		name, timeZone = base, " with time zone"
+	}
 	if columnType.Array {
 		name += "[]"
 	}
 	return &parser.ConvertType{
-		Type:    name,
-		Length:  columnType.Length,
-		Scale:   columnType.Scale,
-		Charset: columnType.Charset,
+		Type:     name,
+		Length:   columnType.Length,
+		Scale:    columnType.Scale,
+		Charset:  columnType.Charset,
+		TimeZone: timeZone,
 	}
 }
 
