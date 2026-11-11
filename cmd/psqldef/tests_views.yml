@@ -1680,9 +1680,9 @@ ChangeColumnTypeReadByViews:
     CREATE INDEX m1_id ON m1 (id);
     COMMENT ON VIEW v1 IS 'c';
   up: |
+    DROP MATERIALIZED VIEW public.m1;
     DROP VIEW public.v2;
     DROP VIEW public.v1;
-    DROP MATERIALIZED VIEW public.m1;
     ALTER TABLE public.t ALTER COLUMN v TYPE varchar(20);
     CREATE VIEW v1 AS SELECT id, v FROM t;
     CREATE VIEW v2 AS SELECT id FROM v1;
@@ -1690,9 +1690,9 @@ ChangeColumnTypeReadByViews:
     COMMENT ON VIEW public.v1 IS 'c';
     CREATE INDEX m1_id ON public.m1 (id);
   down: |
+    DROP MATERIALIZED VIEW public.m1;
     DROP VIEW public.v2;
     DROP VIEW public.v1;
-    DROP MATERIALIZED VIEW public.m1;
     ALTER TABLE public.t ALTER COLUMN v TYPE varchar(10);
     CREATE VIEW v1 AS SELECT id, v FROM t;
     CREATE VIEW v2 AS SELECT id FROM v1;
@@ -1700,17 +1700,34 @@ ChangeColumnTypeReadByViews:
     COMMENT ON VIEW public.v1 IS 'c';
     CREATE INDEX m1_id ON public.m1 (id);
 
-ChangeColumnTypeReadByViewIsHeldBackWithoutEnableDrop:
+ChangeColumnTypeKeepsViewsNotReadingIt:
   legacy_ignore_quotes: false
-  enable_drop: false
   current: |
     CREATE TABLE t (id int, v varchar(10));
-    CREATE VIEW v1 AS SELECT id, v FROM t;
+    CREATE TABLE u (id int, v varchar(10));
+    CREATE VIEW c AS SELECT count(*) AS n FROM t;
+    CREATE VIEW j AS SELECT u.v FROM t JOIN u ON t.id = u.id;
   desired: |
     CREATE TABLE t (id int, v varchar(20));
-    CREATE VIEW v1 AS SELECT id, v FROM t;
+    CREATE TABLE u (id int, v varchar(10));
+    CREATE VIEW c AS SELECT count(*) AS n FROM t;
+    CREATE VIEW j AS SELECT u.v FROM t JOIN u ON t.id = u.id;
   up: |
-    -- Skipped: DROP VIEW public.v1;
-    -- Skipped: ALTER TABLE public.t ALTER COLUMN v TYPE varchar(20);
-    -- Skipped: CREATE VIEW v1 AS SELECT id, v FROM t;
-  down: ""
+    ALTER TABLE public.t ALTER COLUMN v TYPE varchar(20);
+  down: |
+    ALTER TABLE public.t ALTER COLUMN v TYPE varchar(10);
+
+ChangeColumnTypeReadByViewThroughUsingWithTrigger:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, x int);
+    CREATE TABLE u (id int);
+    CREATE VIEW j AS SELECT a.x FROM t a JOIN u USING (id);
+    CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
+    CREATE TRIGGER tr INSTEAD OF INSERT ON j FOR EACH ROW EXECUTE FUNCTION f();
+  desired: |
+    CREATE TABLE t (id bigint, x int);
+    CREATE TABLE u (id int);
+    CREATE VIEW j AS SELECT a.x FROM t a JOIN u USING (id);
+    CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
+    CREATE TRIGGER tr INSTEAD OF INSERT ON j FOR EACH ROW EXECUTE FUNCTION f();

@@ -19,7 +19,6 @@ package parser
 import (
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,17 +70,16 @@ type keyLiteral struct {
 }
 
 func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
-	if buf.dropSchemas {
-		return true
-	}
-	if len(buf.omittedSchemas) == 0 {
-		return false
-	}
+	return buf.dropSchemas || buf.inSchemas(schema, buf.omittedSchemas)
+}
+
+// inSchemas reports whether a schema is one of schemas, which are written as PostgreSQL stores them
+func (buf *nodeBuffer) inSchemas(schema Ident, schemas []string) bool {
 	name := schema.Name
 	if !schema.Quoted || buf.foldQuoted {
 		name = FoldASCII(name)
 	}
-	for _, omitted := range buf.omittedSchemas {
+	for _, omitted := range schemas {
 		if name == omitted || (buf.foldQuoted && name == FoldASCII(omitted)) {
 			return true
 		}
@@ -122,14 +120,6 @@ func PostgresNameParts(name string) []Ident {
 		name = strings.TrimPrefix(name, ".")
 	}
 	return parts
-}
-
-func (buf *nodeBuffer) omitsTypeSchema(schema Ident) bool {
-	name := schema.Name
-	if !schema.Quoted || buf.foldQuoted {
-		name = FoldASCII(name)
-	}
-	return slices.Contains(buf.omittedTypeSchemas, name)
 }
 
 // formatCastOperand formats the operand of a cast, recording the type of a literal operand
@@ -3311,7 +3301,7 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 		// A name of PostgreSQL keeps its case where quoted, and PostgreSQL leaves out the schema
 		// on the search path
 		parts := PostgresNameParts(typeName)
-		if len(parts) > 1 && (buf.omitsSchema(parts[0]) || buf.omitsTypeSchema(parts[0])) {
+		if len(parts) > 1 && (buf.omitsSchema(parts[0]) || buf.inSchemas(parts[0], buf.omittedTypeSchemas)) {
 			parts = parts[1:]
 		}
 		for i, part := range parts {
@@ -3914,22 +3904,22 @@ func (n Ident) Format(buf *nodeBuffer) {
 }
 
 // postgresReservedKeywords are the keywords that PostgreSQL does not take as a table or column name
-// unless quoted: the reserved ones and those that can name only a type or function
+// unless quoted: the reserved ones and those that can name only a type or function. The ones that
+// call a function without parentheses, such as current_user, are left out, as the parser reads
+// them as names.
 var postgresReservedKeywords = func() map[string]bool {
 	words := map[string]bool{}
 	for _, word := range []string{
 		"all", "analyse", "analyze", "and", "any", "array", "as", "asc", "asymmetric", "authorization",
 		"binary", "both", "case", "cast", "check", "collate", "collation", "column", "concurrently",
-		"constraint", "create", "cross", "current_catalog", "current_date", "current_role",
-		"current_schema", "current_time", "current_timestamp", "current_user", "default", "deferrable",
-		"desc", "distinct", "do", "else", "end", "except", "false", "fetch", "for", "foreign", "freeze",
-		"from", "full", "grant", "group", "having", "ilike", "in", "initially", "inner", "intersect",
-		"into", "is", "isnull", "join", "lateral", "leading", "left", "like", "limit", "localtime",
-		"localtimestamp", "natural", "not", "notnull", "null", "offset", "on", "only", "or", "order",
-		"outer", "overlaps", "placing", "primary", "references", "returning", "right", "select",
-		"session_user", "similar", "some", "symmetric", "system_user", "table", "tablesample", "then",
-		"to", "trailing", "true", "union", "unique", "user", "using", "variadic", "verbose", "when",
-		"where", "window", "with",
+		"constraint", "create", "cross", "default", "deferrable", "desc", "distinct", "do", "else",
+		"end", "except", "false", "fetch", "for", "foreign", "freeze", "from", "full", "grant", "group",
+		"having", "ilike", "in", "initially", "inner", "intersect", "into", "is", "isnull", "join",
+		"lateral", "leading", "left", "like", "limit", "natural", "not", "notnull", "null", "offset",
+		"on", "only", "or", "order", "outer", "overlaps", "placing", "primary", "references",
+		"returning", "right", "select", "similar", "some", "symmetric", "table", "tablesample", "then",
+		"to", "trailing", "true", "union", "unique", "using", "variadic", "verbose", "when", "where",
+		"window", "with",
 	} {
 		words[word] = true
 	}

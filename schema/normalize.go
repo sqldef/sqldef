@@ -105,12 +105,13 @@ func isMariaDBJSONColumn(col Column) bool {
 func normalizeTypeName(typeName string, mode GeneratorMode) string {
 	if mode == GeneratorModePostgres && strings.Contains(typeName, `"`) {
 		// A quoted name keeps its case
-		return strings.Join(util.TransformSlice(parser.PostgresNameParts(typeName), func(part Ident) string {
+		name := strings.TrimRight(typeName, "[]")
+		return strings.Join(util.TransformSlice(parser.PostgresNameParts(name), func(part Ident) string {
 			if part.Quoted {
 				return `"` + strings.ReplaceAll(part.Name, `"`, `""`) + `"`
 			}
 			return strings.ToLower(part.Name)
-		}), ".")
+		}), ".") + typeName[len(name):]
 	}
 	// Normalize to lowercase for case-insensitive comparison
 	normalized := strings.ToLower(typeName)

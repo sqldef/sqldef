@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -1304,12 +1305,11 @@ func (tkn *Tokenizer) scanStandardString(typ int) (int, string) {
 }
 
 // scanEscapeString scans a PostgreSQL escape string constant (E'...'), whose backslash escapes are
-// those of C
+// those of C. An octal or hexadecimal escape gives a byte, and a Unicode escape gives a character.
 func (tkn *Tokenizer) scanEscapeString() (int, string) {
 	var buffer strings.Builder
 	for {
-		ch := tkn.lastChar
-		switch ch {
+		switch tkn.lastChar {
 		case eofChar:
 			return LEX_ERROR, buffer.String()
 		case '\'':
@@ -1333,23 +1333,24 @@ func (tkn *Tokenizer) scanEscapeString() (int, string) {
 			case 't':
 				buffer.WriteByte('\t')
 			case '0', '1', '2', '3', '4', '5', '6', '7':
-				buffer.WriteRune(tkn.scanEscapeCode(8, 3))
+				code, _ := tkn.scanEscapeCode(8, 1, 3)
+				buffer.WriteByte(byte(code))
 				continue
 			case 'x':
 				tkn.next()
-				if digitVal(tkn.lastChar) >= 16 {
+				if code, ok := tkn.scanEscapeCode(16, 1, 2); ok {
+					buffer.WriteByte(byte(code))
+				} else {
 					buffer.WriteByte('x')
-					continue
 				}
-				buffer.WriteRune(tkn.scanEscapeCode(16, 2))
 				continue
 			case 'u', 'U':
 				tkn.next()
-				n := 4
-				if esc == 'U' {
-					n = 8
+				r, ok := tkn.scanUnicodeEscape(esc)
+				if !ok {
+					return LEX_ERROR, buffer.String()
 				}
-				buffer.WriteRune(tkn.scanEscapeCode(16, n))
+				buffer.WriteRune(r)
 				continue
 			default:
 				buffer.WriteRune(esc)
@@ -1362,10 +1363,41 @@ func (tkn *Tokenizer) scanEscapeString() (int, string) {
 	}
 }
 
-// scanEscapeCode reads up to n digits of a character code in base
-func (tkn *Tokenizer) scanEscapeCode(base int, n int) rune {
+// scanUnicodeEscape reads the digits of a \uXXXX or \UXXXXXXXX escape, and the low surrogate that
+// follows a high one
+func (tkn *Tokenizer) scanUnicodeEscape(esc rune) (rune, bool) {
+	digits := 4
+	if esc == 'U' {
+		digits = 8
+	}
+	code, ok := tkn.scanEscapeCode(16, digits, digits)
+	if !ok || !utf16.IsSurrogate(code) {
+		return code, ok && utf8.ValidRune(code)
+	}
+	if tkn.lastChar != '\\' {
+		return 0, false
+	}
+	tkn.next()
+	if next := tkn.lastChar; next == 'u' || next == 'U' {
+		tkn.next()
+		digits = 4
+		if next == 'U' {
+			digits = 8
+		}
+		if low, ok := tkn.scanEscapeCode(16, digits, digits); ok {
+			if r := utf16.DecodeRune(code, low); r != utf8.RuneError {
+				return r, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// scanEscapeCode reads from min to max digits of a character code in base
+func (tkn *Tokenizer) scanEscapeCode(base int, minDigits int, maxDigits int) (rune, bool) {
 	var code rune
-	for range n {
+	n := 0
+	for ; n < maxDigits; n++ {
 		d := digitVal(tkn.lastChar)
 		if d >= base {
 			break
@@ -1373,7 +1405,7 @@ func (tkn *Tokenizer) scanEscapeCode(base int, n int) rune {
 		code = code*rune(base) + rune(d)
 		tkn.next()
 	}
-	return code
+	return code, n >= minDigits
 }
 
 // scanDollarQuotedString scans a PostgreSQL dollar-quoted string.

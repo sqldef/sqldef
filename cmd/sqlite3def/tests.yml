@@ -598,6 +598,7 @@ IndexColumnWithStringLiteralCollation:
     CREATE INDEX users_name ON users (name COLLATE 'NOCASE');
 
 ChangeViewWithBackslashAndDoubleQuoteLiterals:
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE t (id integer);
     CREATE VIEW v AS SELECT 'x\y' AS s FROM t;
@@ -605,8 +606,8 @@ ChangeViewWithBackslashAndDoubleQuoteLiterals:
     CREATE TABLE t (id integer);
     CREATE VIEW v AS SELECT 'x\y"z' AS s FROM t;
   up: |
-    DROP VIEW "v";
-    CREATE VIEW "v" AS select 'x\y"z' as s from t;
+    DROP VIEW v;
+    CREATE VIEW v AS select 'x\y"z' as s from t;
   down: |
-    DROP VIEW "v";
-    CREATE VIEW "v" AS select 'x\y' as s from t;
+    DROP VIEW v;
+    CREATE VIEW v AS select 'x\y' as s from t;

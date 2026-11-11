@@ -737,3 +737,11 @@ ChangeCaseOfQuotedCastType:
   down: |
     ALTER TABLE public.t DROP CONSTRAINT k;
     ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::"Mood" is not null);
+
+QuotedArrayAndQualifiedCastTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE SCHEMA s;
+    CREATE TYPE "Mood" AS ENUM ('a');
+    CREATE TYPE s.int4 AS ENUM ('a');
+    CREATE TABLE t (m text[], n text, CONSTRAINT k1 CHECK (m::"Mood"[] IS NOT NULL), CONSTRAINT k2 CHECK (n::s.int4 IS NOT NULL));

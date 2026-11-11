@@ -289,6 +289,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	foreignKeyDDLs := []statement{}
 	exclusionDDLs := []statement{}
 	viewDDLs := []statement{}
+	viewTriggerDDLs := []statement{}
 	ownerDDLs := []statement{} // Owners must come after CREATE VIEW, which resets them
 	metadataDDLs := []statement{}
 
@@ -430,7 +431,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, triggerDDLs...)
+			if g.findViewByName(g.desiredViews, desired.tableName) != nil {
+				// A view may be created or recreated among viewDDLs
+				viewTriggerDDLs = append(viewTriggerDDLs, triggerDDLs...)
+			} else {
+				interDDLs = append(interDDLs, triggerDDLs...)
+			}
 		case *Event:
 			eventDDLs, err := g.generateDDLsForCreateEvent(desired)
 			if err != nil {
@@ -508,6 +514,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, viewDDLs...)
+	ddls = append(ddls, viewTriggerDDLs...)
 	ddls = append(ddls, metadataDDLs...)
 	// After viewDDLs: a recreated view is owned by the connecting role until this runs.
 	ddls = append(ddls, ownerDDLs...)
@@ -2511,77 +2518,131 @@ func (g *Generator) recreateView(view View) statement {
 
 // appendColumnTypeChange appends the statements that change the type of a column. PostgreSQL
 // refuses to change the type of a column that a view reads, so the views that read it, and the
-// views that depend on those, are dropped first and created again from the desired schema.
+// views that depend on those, are dropped first and created again from the desired schema. Without
+// drops, the change is left to fail as before, since a view may only seem to read the column.
 func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName, column Ident, statements ...statement) []statement {
-	if g.mode != GeneratorModePostgres {
+	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
 		return append(ddls, statements...)
 	}
+	tableKey := normalizeNameKey(table, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	viewDeps := map[string][]string{}
+	for _, view := range g.currentViews {
+		viewDeps[g.viewKey(view)] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	}
+	var readers []string
+	for _, view := range g.currentViews {
+		if slices.Contains(viewDeps[g.viewKey(view)], tableKey) && g.viewReadsColumn(view, table, column) {
+			readers = append(readers, g.viewKey(view))
+		}
+	}
+	// g.currentViews is in the order of creation, so dropping it backward drops dependents first
 	var dependents []*View
-	for _, view := range g.findDependentViews(table) {
-		if g.viewReadsColumn(view, table, column) {
+	var recreateDDLs []statement
+	for _, view := range slices.Backward(g.currentViews) {
+		key := g.viewKey(view)
+		if slices.Contains(readers, key) || slices.ContainsFunc(readers, func(reader string) bool { return dependsOn(key, reader, viewDeps, map[string]bool{}) }) {
 			dependents = append(dependents, view)
-			dependents = append(dependents, g.findDependentViews(view.name)...)
+			recreateDDLs = append(recreateDDLs, g.dropView(view))
+			g.forgetViewMetadata(view)
 		}
 	}
 	if len(dependents) == 0 {
 		return append(ddls, statements...)
 	}
-	var recreateDDLs []statement
-	// findDependentViews lists the most dependent views last
-	for _, view := range slices.Backward(g.findDependentViews(table)) {
-		if !slices.Contains(dependents, view) {
-			continue
-		}
-		recreateDDLs = append(recreateDDLs, g.dropView(view))
-		g.forgetViewMetadata(view)
-	}
 	g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return slices.Contains(dependents, v) })
-	ddls, recreated := g.appendRecreateStatements(ddls, recreate{statements: append(recreateDDLs, statements...)})
+	ddls = append(ddls, recreateDDLs...)
 	for _, view := range dependents {
-		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-		g.recreatedViews[key] = recreatedView{view: view, heldBack: !recreated}
+		g.recreatedViews[g.viewKey(view)] = recreatedView{view: view}
 	}
-	return ddls
+	return append(ddls, statements...)
 }
 
-// viewReadsColumn reports whether a view may read a column of a table it depends on: it names a
-// column of the name, selects *, or names the table as a whole-row value
+func (g *Generator) viewKey(view *View) string {
+	return normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+}
+
+// viewReadsColumn reports whether a view may read a column of a table it selects from: it names a
+// column of the name unqualified or qualified with the table's name or alias, joins USING it,
+// selects *, or reads a whole row of the table
 func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
+	names := []Ident{table.Name}
+	collectTableAliases(reflect.ValueOf(view.definition), func(expr *parser.AliasedTableExpr) {
+		if name, ok := expr.Expr.(parser.TableName); ok && !expr.As.IsEmpty() && g.identsEqual(name.Name, table.Name) {
+			names = append(names, expr.As)
+		}
+	})
+	namesTable := func(ident Ident) bool {
+		return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
+	}
 	reads := false
 	var visit func(v reflect.Value)
 	visit = func(v reflect.Value) {
 		if reads || !v.IsValid() {
 			return
 		}
-		if v.CanInterface() {
-			switch node := v.Interface().(type) {
-			case *parser.ColName:
-				reads = node != nil && (g.identsEqual(node.Name, column) || g.identsEqual(node.Name, table.Name))
-				return
-			case *parser.StarExpr:
-				reads = node != nil
+		switch node := v.Interface().(type) {
+		case *parser.ColName:
+			if node != nil {
+				reads = node.Qualifier.Name.IsEmpty() && (g.identsEqual(node.Name, column) || namesTable(node.Name)) ||
+					namesTable(node.Qualifier.Name) && g.identsEqual(node.Name, column)
+			}
+			return
+		case *parser.StarExpr:
+			reads = node != nil && (node.TableName.Name.IsEmpty() || namesTable(node.TableName.Name))
+			return
+		case parser.JoinCondition:
+			if slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) }) {
+				reads = true
 				return
 			}
-		}
-		switch v.Kind() {
-		case reflect.Pointer, reflect.Interface:
-			if !v.IsNil() {
-				visit(v.Elem())
-			}
-		case reflect.Struct:
-			for i := range v.NumField() {
-				if v.Type().Field(i).IsExported() {
-					visit(v.Field(i))
+		case *parser.FuncExpr:
+			// The * of count(*) reads no column
+			if node != nil && len(node.Exprs) == 1 {
+				if _, ok := node.Exprs[0].(*parser.StarExpr); ok {
+					visit(reflect.ValueOf(node.Over))
+					return
 				}
 			}
-		case reflect.Slice, reflect.Array:
-			for i := range v.Len() {
-				visit(v.Index(i))
-			}
 		}
+		visitChildren(v, visit)
 	}
 	visit(reflect.ValueOf(view.definition))
 	return reads
+}
+
+// collectTableAliases calls found for every aliased table expression under v
+func collectTableAliases(v reflect.Value, found func(*parser.AliasedTableExpr)) {
+	var visit func(v reflect.Value)
+	visit = func(v reflect.Value) {
+		if !v.IsValid() {
+			return
+		}
+		if expr, ok := v.Interface().(*parser.AliasedTableExpr); ok && expr != nil {
+			found(expr)
+		}
+		visitChildren(v, visit)
+	}
+	visit(v)
+}
+
+// visitChildren calls visit for the exported fields and elements of an AST value
+func visitChildren(v reflect.Value, visit func(reflect.Value)) {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			visit(v.Elem())
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				visit(v.Field(i))
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			visit(v.Index(i))
+		}
+	}
 }
 
 // findDependentViews finds all views that reference the given view name in their definitions.
@@ -4111,6 +4172,9 @@ func (g *Generator) forgetViewMetadata(view *View) {
 		return
 	}
 	view.indexes = nil
+	g.currentTriggers = slices.DeleteFunc(g.currentTriggers, func(trigger *Trigger) bool {
+		return g.qualifiedNamesEqual(trigger.tableName, view.name)
+	})
 	g.currentPrivileges = slices.DeleteFunc(g.currentPrivileges, func(priv *GrantPrivilege) bool {
 		return priv.objectType == "TABLE" && g.qualifiedNamesEqual(priv.tableName, view.name)
 	})

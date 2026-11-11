@@ -61,6 +61,13 @@ func castTypeName(yylex any, name Ident) string {
   return collationNamePart(yylex, name)
 }
 
+func isPgCatalog(schema Ident) bool {
+  if schema.Quoted {
+    return schema.Name == "pg_catalog"
+  }
+  return strings.EqualFold(schema.Name, "pg_catalog")
+}
+
 func setAllowComments(yylex any, allow bool) {
   yylex.(*Tokenizer).AllowComments = allow
 }
@@ -502,7 +509,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <openJSONSchemaItem> openjson_schema_item
 %type <str> charset
 %type <str> set_session_or_global
-%type <convertType> convert_type simple_convert_type
+%type <convertType> convert_type simple_convert_type keyword_convert_type
 %type <columnType> column_type
 %type <str> type_modifier_list type_modifier spatial_keyword
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
@@ -7964,6 +7971,29 @@ convert_type:
   }
 
 simple_convert_type:
+  keyword_convert_type
+| sql_id
+  {
+    $$ = &ConvertType{Type: castTypeName(yylex, $1)}
+  }
+| sql_id '.' sql_id
+  {
+    if isPgCatalog($1) {
+      $$ = &ConvertType{Type: castTypeName(yylex, $3)}
+    } else {
+      $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)}
+    }
+  }
+| sql_id '.' keyword_convert_type
+  {
+    // A built-in type is written as a keyword, and a type of pg_catalog is written without its schema
+    if !isPgCatalog($1) {
+      return abortParse(yylex, fmt.Sprintf("type %s.%s is supported only in pg_catalog", $1.Name, $3.Type))
+    }
+    $$ = $3
+  }
+
+keyword_convert_type:
   BINARY
   {
     $$ = &ConvertType{Type: $1}
@@ -8097,18 +8127,6 @@ simple_convert_type:
 | VECTOR
   {
     $$ = &ConvertType{Type: $1}
-  }
-| sql_id
-  {
-    $$ = &ConvertType{Type: castTypeName(yylex, $1)}
-  }
-| sql_id '.' simple_convert_type
-  {
-    // PostgreSQL writes a type of pg_catalog without its schema
-    if !(!$1.Quoted && strings.EqualFold($1.Name, "pg_catalog") || $1.Quoted && $1.Name == "pg_catalog") {
-      $3.Type = collationNamePart(yylex, $1) + "." + $3.Type
-    }
-    $$ = $3
   }
 
 expression_opt:
