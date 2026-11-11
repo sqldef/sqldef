@@ -3334,6 +3334,8 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 			}
 			if buf.comparisonKey {
 				buf.writeIdentKey(part)
+			} else if part.Quoted && part.Name != FoldASCII(part.Name) {
+				buf.writePostgresQuoted(part.Name)
 			} else if part.Quoted {
 				formatPostgresID(buf, part.Name)
 			} else {

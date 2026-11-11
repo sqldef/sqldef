@@ -8044,7 +8044,10 @@ simple_convert_type:
       }
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + name, Length: $3.Length, Scale: $3.Scale}
     } else if strings.EqualFold($3.Type, "char") {
-      // A qualified name is not a keyword, so pg_catalog.char is the type "char"
+      // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
+      if String($3.Length) != "1" {
+        return abortParse(yylex, "type \"char\" takes no length")
+      }
       $$ = &ConvertType{Type: `"char"`}
     } else {
       $$ = $3
@@ -8120,6 +8123,10 @@ keyword_convert_type:
 | CHAR '(' INTEGRAL ')'
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+  }
+| BPCHAR
+  {
+    $$ = &ConvertType{Type: "bpchar"}
   }
 | BPCHAR '(' INTEGRAL ')'
   {

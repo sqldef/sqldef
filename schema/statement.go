@@ -447,9 +447,8 @@ func (s alterEventStatement) Render() string {
 	} else {
 		buf.WriteString(" ENABLE")
 	}
-	buf.WriteString(" COMMENT '")
-	buf.WriteString(event.comment) // empty string is valid: removes comment
-	buf.WriteString("'")
+	buf.WriteString(" COMMENT ")
+	buf.WriteString(parser.QuoteString(event.comment, true)) // empty string is valid: removes comment
 	if len(event.body) > 0 {
 		buf.WriteString(" DO ")
 		buf.WriteString(strings.Join(event.body, "\n"))

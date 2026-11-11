@@ -154,3 +154,20 @@ DropEvent:
     ON SCHEDULE EVERY 1 DAY
     DO DELETE FROM records;
   desired: ""
+
+AlterEventCommentWithQuoteAndBackslash:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    COMMENT 'it''s a\\b'
+    DO DELETE FROM records;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT 'it''s a\\b' DO delete from records;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
