@@ -1438,9 +1438,9 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	}
 }
 
-// getRawTypeName returns the type name of a cast as the generic parser gives it: without the
-// pg_catalog schema, with an internal name such as int4 resolved to integer, and quoted where the
-// name needs quotes. Other names, such as bpchar, are kept as is.
+// getRawTypeName returns the type name of a cast without the pg_catalog schema, with an internal
+// name such as int4 resolved to integer as the generic parser does, and quoted where the name needs
+// quotes. Other names, such as bpchar and varchar, are kept as is.
 func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 	if node == nil || node.Names == nil {
 		return ""

@@ -1793,20 +1793,13 @@ func (tkn *Tokenizer) scanCustomOp(firstChar rune) (int, string) {
 // CreateOrReplace returns a CREATE statement as CREATE OR REPLACE
 func CreateOrReplace(sql string, mode ParserMode) string {
 	tkn := NewTokenizer(sql, mode)
-	typ, _ := tkn.Scan()
-	for typ == COMMENT {
-		typ, _ = tkn.Scan()
-	}
+	typ, _ := tkn.scanSkippingComments()
 	if typ != CREATE {
 		panic(fmt.Sprintf("not a CREATE statement: %s", sql))
 	}
 	// The tokenizer has read one character past CREATE
 	end := tkn.Position - 1
-	typ, _ = tkn.Scan()
-	for typ == COMMENT {
-		typ, _ = tkn.Scan()
-	}
-	if typ == OR {
+	if typ, _ := tkn.scanSkippingComments(); typ == OR {
 		return sql
 	}
 	return sql[:end] + " OR REPLACE" + sql[end:]
