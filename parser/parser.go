@@ -50,8 +50,12 @@ func castTypeName(yylex any, name Ident) string {
 	switch name.Name {
 	case "varchar":
 		return "character varying"
-	case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb":
+	case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb", "bpchar":
 		return name.Name
+	case "user", "current_user", "session_user", "current_role", "current_catalog", "current_schema",
+		"current_date", "current_time", "current_timestamp", "localtime", "localtimestamp":
+		// Reserved words that are value functions
+		return collationNamePart(yylex, name)
 	}
 	if needsNoQuotes(name.Name) && !IsKeyword(name.Name) && !IsPostgresReservedKeyword(name.Name) {
 		return name.Name

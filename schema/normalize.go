@@ -100,9 +100,9 @@ func isMariaDBJSONColumn(col Column) bool {
 	return strings.EqualFold(colName.Name.Name, col.name.Name)
 }
 
-// normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases.
-// This is the central function for all type name normalization in the generator.
-func normalizeTypeName(typeName string, mode GeneratorMode) string {
+// normalizeQuotedTypeName keeps the case of the quoted parts of a type name written in SQL. ok is
+// false for a column's type name, which is stored without its quotes.
+func normalizeQuotedTypeName(typeName string) (string, bool) {
 	name := typeName
 	for {
 		base, ok := strings.CutSuffix(name, "[]")
@@ -111,14 +111,25 @@ func normalizeTypeName(typeName string, mode GeneratorMode) string {
 		}
 		name = base
 	}
-	if parts, ok := parser.SplitPostgresName(name); mode == GeneratorModePostgres && strings.Contains(typeName, `"`) && ok {
-		// A quoted name keeps its case
-		return strings.Join(util.TransformSlice(parts, func(part Ident) string {
-			if part.Quoted {
-				return parser.QuotePostgresIdent(part.Name)
-			}
-			return strings.ToLower(part.Name)
-		}), ".") + typeName[len(name):]
+	parts, ok := parser.SplitPostgresName(name)
+	if !ok {
+		return "", false
+	}
+	return strings.Join(util.TransformSlice(parts, func(part Ident) string {
+		if part.Quoted {
+			return parser.QuotePostgresIdent(part.Name)
+		}
+		return strings.ToLower(part.Name)
+	}), ".") + typeName[len(name):], true
+}
+
+// normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases.
+// This is the central function for all type name normalization in the generator.
+func normalizeTypeName(typeName string, mode GeneratorMode) string {
+	if mode == GeneratorModePostgres && strings.Contains(typeName, `"`) {
+		if normalized, ok := normalizeQuotedTypeName(typeName); ok {
+			return normalized
+		}
 	}
 	// Normalize to lowercase for case-insensitive comparison
 	normalized := strings.ToLower(typeName)

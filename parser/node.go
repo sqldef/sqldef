@@ -3331,8 +3331,12 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	// timezone modifier belong to the element type, so they have to be emitted
 	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
 	typeName, isArray := strings.CutSuffix(node.Type, "[]")
-	parts, ok := SplitPostgresName(typeName)
-	if (buf.comparisonKey || buf.dropSchemas) && strings.ContainsAny(typeName, `".`) && ok {
+	var parts []Ident
+	ok := false
+	if (buf.comparisonKey || buf.dropSchemas) && strings.ContainsAny(typeName, `".`) {
+		parts, ok = SplitPostgresName(typeName)
+	}
+	if ok {
 		// A name of PostgreSQL keeps its case where quoted, and PostgreSQL leaves out the schema
 		// on the search path
 		if len(parts) > 1 && (buf.omitsSchema(parts[0]) || buf.inSchemas(parts[0], buf.omittedTypeSchemas)) {

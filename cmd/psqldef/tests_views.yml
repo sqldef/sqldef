@@ -1856,7 +1856,8 @@ CastsToQuotedTypeNamesThatNeedQuotes:
     CREATE DOMAIN "my type" AS text;
     CREATE DOMAIN "order" AS text;
     CREATE TABLE t (c text);
-    CREATE VIEW v AS SELECT c::"my type" AS a, c::"order" AS b, c::"int4" AS d FROM t;
+    CREATE DOMAIN "user" AS text;
+    CREATE VIEW v AS SELECT c::"my type" AS a, c::"order" AS b, c::"int4" AS d, c::"user" AS e, c::"bpchar" AS f FROM t;
 ChangeColumnTypeKeepsViewsReadingTableOfSameNameInOtherSchema:
   legacy_ignore_quotes: false
   current: |
