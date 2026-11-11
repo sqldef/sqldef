@@ -8016,7 +8016,7 @@ simple_convert_type:
       // Keywords that the grammar renames or gives a length cannot be named so.
       name := strings.ToLower($3.Type)
       switch {
-      case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", $3.TimeZone != "":
+      case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", name == "real", $3.TimeZone != "":
         return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", $1.Name, $3.Type))
       }
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + name, Length: $3.Length, Scale: $3.Scale}

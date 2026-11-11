@@ -731,3 +731,10 @@ AddAndRenameEnumValuesWithQuotes:
   up: |
     ALTER TYPE public.mood ADD VALUE 'can''t';
   down: ""
+# FIXME: the generic parser drops the quotes of a schema-qualified column type, so the column is
+# altered to public.Mood, which PostgreSQL folds to public.mood
+# ColumnOfQualifiedQuotedEnumType:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TYPE "Mood" AS ENUM ('a');
+#     CREATE TABLE t (m public."Mood");

@@ -1471,3 +1471,16 @@ AddIndexWithCommentWithQuoteAndBackslash:
     ALTER TABLE users ADD KEY index_name (name) COMMENT 'it''s a\\b';
   down: |
     ALTER TABLE `users` DROP INDEX `index_name`;
+AddEnumColumnWithQuoteAndBackslash:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      e enum('it''s', 'a\\b'),
+      PRIMARY KEY (id)
+    );

@@ -1824,3 +1824,27 @@ CastToQuotedVarchar:
   desired: |
     CREATE TABLE t (c text);
     CREATE VIEW v AS SELECT c::"varchar" AS a, c::"varchar"(3) AS b FROM t;
+ChangeColumnTypeKeepsViewsReadingColumnOfSameNameOfOtherTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    CREATE TABLE u (id int);
+    CREATE VIEW v AS SELECT id FROM u WHERE EXISTS (SELECT 1 FROM t);
+  desired: |
+    CREATE TABLE t (id bigint);
+    CREATE TABLE u (id int);
+    CREATE VIEW v AS SELECT id FROM u WHERE EXISTS (SELECT 1 FROM t);
+  up: |
+    ALTER TABLE public.t ALTER COLUMN id TYPE bigint;
+  down: |
+    ALTER TABLE public.t ALTER COLUMN id TYPE integer;
+ChangeColumnTypeReadByCorrelatedSubquery:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, x int);
+    CREATE TABLE u (id int);
+    CREATE VIEW v AS SELECT id, (SELECT max(u.id) FROM u WHERE u.id < x) AS m FROM t;
+  desired: |
+    CREATE TABLE t (id int, x bigint);
+    CREATE TABLE u (id int);
+    CREATE VIEW v AS SELECT id, (SELECT max(u.id) FROM u WHERE u.id < x) AS m FROM t;

@@ -15463,7 +15463,7 @@ yydefault:
 				// Keywords that the grammar renames or gives a length cannot be named so.
 				name := strings.ToLower(yyDollar[3].convertType.Type)
 				switch {
-				case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", yyDollar[3].convertType.TimeZone != "":
+				case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", name == "real", yyDollar[3].convertType.TimeZone != "":
 					return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", yyDollar[1].ident.Name, yyDollar[3].convertType.Type))
 				}
 				yyVAL.convertType = &ConvertType{Type: collationNamePart(yylex, yyDollar[1].ident) + "." + name, Length: yyDollar[3].convertType.Length, Scale: yyDollar[3].convertType.Scale}

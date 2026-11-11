@@ -2575,57 +2575,82 @@ func (g *Generator) viewKey(view *View) string {
 }
 
 // viewReadsColumn reports whether a view may read a column of a table it selects from: it names a
-// column of the name unqualified or qualified with the table's name or alias, joins USING it or
-// naturally, selects *, or reads a whole row of the table
+// column of the name qualified with the table's name or alias, or unqualified in a query selecting
+// from the table or in its subqueries, joins USING it or naturally there, selects * there, or reads
+// a whole row of the table
 func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
 	names := []Ident{table.Name}
-	var colNames []*parser.ColName
+	type colRef struct {
+		col     *parser.ColName
+		inScope bool
+	}
+	var colNames []colRef
 	reads := false
-	var visit func(v reflect.Value)
-	visit = func(v reflect.Value) {
+	// inScope tells whether the table is in the FROM of the query or of a query enclosing it, so
+	// that an unqualified name may be its column
+	var visit func(v reflect.Value, inScope bool)
+	visit = func(v reflect.Value, inScope bool) {
 		if !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
 			return
 		}
 		switch node := v.Interface().(type) {
+		case *parser.Select:
+			inScope = inScope || g.fromHasTable(node.From, table)
 		case *parser.AliasedTableExpr:
 			if name, ok := node.Expr.(parser.TableName); ok && !node.As.IsEmpty() && g.identsEqual(name.Name, table.Name) {
 				names = append(names, node.As)
 			}
 		case *parser.ColName:
-			colNames = append(colNames, node)
+			colNames = append(colNames, colRef{col: node, inScope: inScope})
 			return
 		case *parser.StarExpr:
 			if node.TableName.Name.IsEmpty() {
-				reads = true
+				reads = reads || inScope
 			} else {
-				colNames = append(colNames, &parser.ColName{Name: column, Qualifier: node.TableName})
+				colNames = append(colNames, colRef{col: &parser.ColName{Name: column, Qualifier: node.TableName}})
 			}
 			return
 		case *parser.JoinTableExpr:
 			// A natural join compares the columns of the same name
-			reads = reads || strings.HasPrefix(node.Join, "natural ")
+			reads = reads || inScope && strings.HasPrefix(node.Join, "natural ")
 		case parser.JoinCondition:
-			reads = reads || slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
+			reads = reads || inScope && slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
 		case *parser.FuncExpr:
 			// The * of count(*) reads no column, unlike a whole row such as count(t.*)
 			if len(node.Exprs) == 1 {
 				if star, ok := node.Exprs[0].(*parser.StarExpr); ok && star.TableName.Name.IsEmpty() {
-					visit(reflect.ValueOf(node.Over))
+					visit(reflect.ValueOf(node.Over), inScope)
 					return
 				}
 			}
 		}
-		visitChildren(v, visit)
+		visitChildren(v, func(child reflect.Value) { visit(child, inScope) })
 	}
-	visit(reflect.ValueOf(view.definition))
+	visit(reflect.ValueOf(view.definition), false)
 	namesTable := func(ident Ident) bool {
 		return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
 	}
-	return reads || slices.ContainsFunc(colNames, func(col *parser.ColName) bool {
-		if col.Qualifier.Name.IsEmpty() {
-			return g.identsEqual(col.Name, column) || namesTable(col.Name)
+	return reads || slices.ContainsFunc(colNames, func(ref colRef) bool {
+		if ref.col.Qualifier.Name.IsEmpty() {
+			return ref.inScope && g.identsEqual(ref.col.Name, column) || namesTable(ref.col.Name)
 		}
-		return namesTable(col.Qualifier.Name) && g.identsEqual(col.Name, column)
+		return namesTable(ref.col.Qualifier.Name) && g.identsEqual(ref.col.Name, column)
+	})
+}
+
+// fromHasTable reports whether a FROM clause selects from a table, outside its subqueries
+func (g *Generator) fromHasTable(exprs parser.TableExprs, table QualifiedName) bool {
+	return slices.ContainsFunc(exprs, func(expr parser.TableExpr) bool {
+		switch expr := expr.(type) {
+		case *parser.AliasedTableExpr:
+			name, ok := expr.Expr.(parser.TableName)
+			return ok && g.identsEqual(name.Name, table.Name)
+		case *parser.JoinTableExpr:
+			return g.fromHasTable(parser.TableExprs{expr.LeftExpr, expr.RightExpr}, table)
+		case *parser.ParenTableExpr:
+			return g.fromHasTable(expr.Exprs, table)
+		}
+		return false
 	})
 }
 
@@ -3629,7 +3654,7 @@ func (d dialect) generateDataType(column Column) string {
 		case "enum", "set":
 			quotedValues := make([]string, len(column.enumValues))
 			for i, v := range column.enumValues {
-				quotedValues[i] = "'" + v + "'"
+				quotedValues[i] = stringLiteral(v, d.mode == GeneratorModeMysql)
 			}
 			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(quotedValues, ", "), suffix)
 		default:
