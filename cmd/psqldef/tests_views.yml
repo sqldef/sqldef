@@ -48,10 +48,10 @@ DependentMatviewWithDataRecreation:
   up: |
     DROP MATERIALIZED VIEW public.mv_dep;
     DROP VIEW public.v_base;
-    CREATE VIEW public.v_base AS select id from users;
-    CREATE MATERIALIZED VIEW public.mv_dep AS select id from v_base WITH DATA;
+    CREATE VIEW v_base AS SELECT id FROM users;
+    CREATE MATERIALIZED VIEW mv_dep AS SELECT id FROM v_base WITH DATA;
   down: |
-    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    CREATE OR REPLACE VIEW v_base AS SELECT id, name FROM users;
 
 ViewDDLsAreEmittedLastWithoutChangingDefinition:
   current: |
@@ -86,10 +86,11 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
   up: |
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
+    CREATE VIEW foos_view AS
+      SELECT id, secret FROM foos WHERE secret = false;
   down: |
     DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select 1 as dummy;
+    CREATE VIEW foos_view AS SELECT 1 AS dummy;
     ALTER TABLE "public"."foos" DROP COLUMN "secret";
 CreateMaterializedView:
   current: |
@@ -326,9 +327,18 @@ ReplaceViewWithChangeCondition:
       FROM hoge
         WHERE bar = 'baz';
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
+    CREATE OR REPLACE VIEW v AS
+      SELECT
+        foo,
+        bar
+      FROM hoge
+        WHERE bar = 'baz';
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE OR REPLACE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithAddColumnToTail:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -353,10 +363,19 @@ ReplaceViewWithAddColumnToTail:
       'x' as added
      FROM hoge;
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
+    CREATE OR REPLACE VIEW v AS
+    SELECT
+      foo,
+      bar,
+      'x' as added
+     FROM hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithAddColumnToMiddle:
   current: |
     CREATE TABLE "hoge" (
@@ -382,10 +401,19 @@ ReplaceViewWithAddColumnToMiddle:
      FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, 'x' as added, bar from hoge;
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      'x' as added,
+      bar
+     FROM hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithDropColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -407,9 +435,14 @@ ReplaceViewWithDropColumn:
     SELECT foo FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo from hoge;
+    CREATE VIEW v AS
+    SELECT foo FROM hoge;
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE OR REPLACE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithChangeColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -434,10 +467,18 @@ ReplaceViewWithChangeColumn:
     FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, 'x' as changed from hoge;
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      'x' as changed
+    FROM hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 CreateViewWithCastCase:
   desired: |
     create table hoge (amount text);
@@ -774,9 +815,9 @@ ViewWithIsNotDistinctFromChangedOperand:
     CREATE TABLE orders (id integer, status text);
     CREATE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'shipped';
   up: |
-    CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'shipped';
+    CREATE OR REPLACE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'shipped';
   down: |
-    CREATE OR REPLACE VIEW public.pending_orders AS select id from orders where status is not distinct from 'pending';
+    CREATE OR REPLACE VIEW pending_orders AS SELECT id FROM orders WHERE status IS NOT DISTINCT FROM 'pending';
 
 ViewReferencingColumnNamedKey:
   legacy_ignore_quotes: false
@@ -824,7 +865,7 @@ ViewRecreateIsHeldBackWithoutEnableDrop:
     CREATE VIEW v AS SELECT a FROM t;
   up: |
     -- Skipped: DROP VIEW public.v;
-    -- Skipped: CREATE VIEW public.v AS select a from t;
+    -- Skipped: CREATE VIEW v AS SELECT a FROM t;
   down: ""
 
 IndexOnMaterializedViewRecreateIsHeldBackWithoutEnableDrop:
@@ -953,9 +994,15 @@ ChangeViewWithCrossJoinLateralSubquery:
       FROM users u
       CROSS JOIN LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 2) p;
   up: |
-    CREATE OR REPLACE VIEW public.latest_posts AS select u.id, p.id as post_id from users as u cross join lateral (select id from posts where posts.user_id = u.id order by created_at desc limit 2) as p;
+    CREATE OR REPLACE VIEW latest_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u
+      CROSS JOIN LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 2) p;
   down: |
-    CREATE OR REPLACE VIEW public.latest_posts AS select u.id, p.id as post_id from users as u cross join lateral (select id from posts where posts.user_id = u.id order by created_at desc limit 1) as p;
+    CREATE OR REPLACE VIEW latest_posts AS
+      SELECT u.id, p.id AS post_id
+      FROM users u
+      CROSS JOIN LATERAL (SELECT id FROM posts WHERE posts.user_id = u.id ORDER BY created_at DESC LIMIT 1) p;
 
 ViewWithLeftJoinLateralAndCommaLateral:
   legacy_ignore_quotes: false
@@ -1068,10 +1115,9 @@ ChangeUnnestOfArrayToUnnestOfMultipleArrays:
     CREATE TABLE x (tags text[], tags2 text[]);
     CREATE VIEW v AS SELECT t.a FROM x, unnest(x.tags, x.tags2) AS t(a, b);
   up: |
-    CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(x.tags, x.tags2) as t(a, b);
+    CREATE OR REPLACE VIEW v AS SELECT t.a FROM x, unnest(x.tags, x.tags2) AS t(a, b);
   down: |
-    CREATE OR REPLACE VIEW public.v AS select t.a from x, unnest(ARRAY[x.tags, x.tags2]) as t(a);
-
+    CREATE OR REPLACE VIEW v AS SELECT t.a FROM x, unnest(ARRAY[x.tags, x.tags2]) AS t(a);
 
 # FIXME: Changing a select expression always drops and recreates the view, because the output column types are unknown. Only the ORDER BY of WITHIN GROUP changes here, so CREATE OR REPLACE VIEW would keep the dependent views.
 # ReplaceViewOnWithinGroupOrderChange:
@@ -1096,9 +1142,9 @@ ChangeViewStringLiteralCase:
     CREATE TABLE t (a text);
     CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
   up: |
-    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'active';
+    CREATE OR REPLACE VIEW v AS SELECT a FROM t WHERE a = 'active';
   down: |
-    CREATE OR REPLACE VIEW public.v AS select a from t where a = 'Active';
+    CREATE OR REPLACE VIEW v AS SELECT a FROM t WHERE a = 'Active';
 
 ChangeViewStringLiteralCaseInLegacyMode:
   current: |
@@ -1108,9 +1154,9 @@ ChangeViewStringLiteralCaseInLegacyMode:
     CREATE TABLE t (a text);
     CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'active';
+    CREATE OR REPLACE VIEW v AS SELECT a FROM t WHERE a = 'active';
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'Active';
+    CREATE OR REPLACE VIEW v AS SELECT a FROM t WHERE a = 'Active';
 
 ChangeViewColumnToQuotedColumnDifferingInCase:
   legacy_ignore_quotes: false
@@ -1122,10 +1168,10 @@ ChangeViewColumnToQuotedColumnDifferingInCase:
     CREATE VIEW v AS SELECT "A" FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select "A" from t;
+    CREATE VIEW v AS SELECT "A" FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select a from t;
+    CREATE VIEW v AS SELECT a FROM t;
 
 ChangeViewWhereToQuotedColumnDifferingInCase:
   legacy_ignore_quotes: false
@@ -1136,9 +1182,9 @@ ChangeViewWhereToQuotedColumnDifferingInCase:
     CREATE TABLE t (a text, "A" text);
     CREATE VIEW v AS SELECT a AS x FROM t WHERE "A" IS NULL;
   up: |
-    CREATE OR REPLACE VIEW public.v AS select a as x from t where "A" is null;
+    CREATE OR REPLACE VIEW v AS SELECT a AS x FROM t WHERE "A" IS NULL;
   down: |
-    CREATE OR REPLACE VIEW public.v AS select a as x from t where a is null;
+    CREATE OR REPLACE VIEW v AS SELECT a AS x FROM t WHERE a IS NULL;
 
 # FIXME: A view's literal holding a schema-qualified name is compared like a regclass name, without its schema, as sqldef may have written one without its cast
 # ChangeViewStringLiteralContainingDot:
@@ -1171,10 +1217,10 @@ ChangeWithinGroupOrderInView:
     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by b asc) as p from t;
+    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
+    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
 
 ViewWithTimezoneDefaultAliases:
   legacy_ignore_quotes: false
@@ -1257,10 +1303,10 @@ ChangeViewColumnFromFoldedConstantCastToAlias:
     CREATE VIEW v AS SELECT 1 AS x;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select 1 as x;
+    CREATE VIEW v AS SELECT 1 AS x;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select 1::integer;
+    CREATE VIEW v AS SELECT 1::integer;
 
 ViewWithVarcharLengthCastOnColumn:
   legacy_ignore_quotes: false
@@ -1278,10 +1324,10 @@ ChangeViewColumnVarcharCastLength:
     CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select b::varchar(10) as r from t;
+    CREATE VIEW v AS SELECT b::varchar(10) AS r FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select b::varchar(3) as r from t;
+    CREATE VIEW v AS SELECT b::varchar(3) AS r FROM t;
 
 ViewWithVarcharAndFloatCasts:
   legacy_ignore_quotes: false
@@ -1315,10 +1361,10 @@ ChangeOrderedSetAggregateDirectArgumentToArray:
     CREATE VIEW v AS SELECT percentile_cont(ARRAY[0.5]) WITHIN GROUP (ORDER BY a) AS p FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select percentile_cont(ARRAY[0.5]) within group (order by a asc) as p from t;
+    CREATE VIEW v AS SELECT percentile_cont(ARRAY[0.5]) WITHIN GROUP (ORDER BY a) AS p FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
+    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
 
 ViewWithCollateAndScalarSubqueryDefaultAliases:
   legacy_ignore_quotes: false
@@ -1442,10 +1488,10 @@ RecreateViewWithQuotedReservedWordsAndFunction:
     CREATE VIEW v AS SELECT "Twice"("order") AS "order" FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select "Twice"("order") as "order" from t;
+    CREATE VIEW v AS SELECT "Twice"("order") AS "order" FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select "order", "user" from t;
+    CREATE VIEW v AS SELECT "order", "user" FROM t;
 
 RecreateViewWithQuotedIdentifiers:
   legacy_ignore_quotes: false
@@ -1457,10 +1503,10 @@ RecreateViewWithQuotedIdentifiers:
     CREATE VIEW v AS SELECT "UserId" AS "Id" FROM "Users";
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select "UserId" as "Id" from "Users";
+    CREATE VIEW v AS SELECT "UserId" AS "Id" FROM "Users";
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select "UserId", name from "Users";
+    CREATE VIEW v AS SELECT "UserId", name FROM "Users";
 
 RenameViewOutputColumnAliasByQuotedCase:
   legacy_ignore_quotes: false
@@ -1472,10 +1518,10 @@ RenameViewOutputColumnAliasByQuotedCase:
     CREATE VIEW v AS SELECT a AS "X", b, 1 AS c FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select a as "X", b, 1 as c from t;
+    CREATE VIEW v AS SELECT a AS "X", b, 1 AS c FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select a as x, b from t;
+    CREATE VIEW v AS SELECT a AS x, b FROM t;
 
 ViewWithQuotedOutputAliasesInLegacyMode:
   desired: |
@@ -1492,10 +1538,10 @@ RenameViewOutputColumnByQuotedCase:
     CREATE VIEW v AS SELECT a AS "A" FROM t;
   up: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select a as "A" from t;
+    CREATE VIEW v AS SELECT a AS "A" FROM t;
   down: |
     DROP VIEW public.v;
-    CREATE VIEW public.v AS select a from t;
+    CREATE VIEW v AS SELECT a FROM t;
 
 # FIXME: View comparison leaves out every schema, as sqldef does not know the search path
 # ChangeViewTableToOneInOtherSchema:
@@ -1552,9 +1598,9 @@ RemoveTruncatingCastOfFunctionResultInView:
     CREATE TABLE t (id int, s text);
     CREATE VIEW v AS SELECT id FROM t WHERE lower(s) = 'abc';
   up: |
-    CREATE OR REPLACE VIEW public.v AS select id from t where lower(s) = 'abc';
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE lower(s) = 'abc';
   down: |
-    CREATE OR REPLACE VIEW public.v AS select id from t where lower(s)::varchar(3) = 'abc';
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE lower(s)::varchar(3) = 'abc';
 
 ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
   legacy_ignore_quotes: false
@@ -1566,10 +1612,10 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
     CREATE VIEW v1 AS SELECT id, val FROM t;
   up: |
     DROP VIEW public.v1;
-    CREATE VIEW public.v1 AS select id, val from t;
+    CREATE VIEW v1 AS SELECT id, val FROM t;
   down: |
     DROP VIEW public.v1;
-    CREATE VIEW public.v1 AS select id, "Val" from t;
+    CREATE VIEW v1 AS SELECT id, "Val" FROM t;
 
 # FIXME: Without column types, a view column that reads another column whose quoted name differs only in case is taken for the same column, and CREATE OR REPLACE fails on the type change
 # ChangeViewColumnTypeThroughQuotedNameDifferingInCase:
@@ -1581,15 +1627,14 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
 #     CREATE TABLE t (id int, "Val" int, val text);
 #     CREATE VIEW v2 AS SELECT id, val AS x FROM t;
 
-# FIXME: A view's regclass literal is written without its cast, and PostgreSQL's 'tt'::regclass for a literal written with its schema is compared as a different column
-# ChangeViewWithRegclassLiteralColumn:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE tt (id int);
-#     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt;
-#   desired: |
-#     CREATE TABLE tt (id int);
-#     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt WHERE id > 0;
+ChangeViewWithRegclassLiteralColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE tt (id int);
+    CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt;
+  desired: |
+    CREATE TABLE tt (id int);
+    CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt WHERE id > 0;
 
 # FIXME: PostgreSQL adds the (rc)::regclass cast that pg_table_size takes to w for a text column, which is unknown without the function's signature
 # ChangeViewReadByFunctionWithImplicitCast:
@@ -1602,3 +1647,70 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
 #     CREATE TABLE tt (id int);
 #     CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt WHERE id > 0;
 #     CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;
+
+ChangeViewWithLiteralTypedColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id, '2020-01-01'::date AS d FROM t;
+  desired: |
+    CREATE TABLE t (id int);
+    CREATE VIEW v AS SELECT id, '2020-01-01'::date AS d FROM t WHERE id > 0;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT id, '2020-01-01'::date AS d FROM t WHERE id > 0;
+  down: |
+    CREATE OR REPLACE VIEW v AS SELECT id, '2020-01-01'::date AS d FROM t;
+
+ChangeColumnTypeReadByViews:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, v varchar(10), w int);
+    CREATE VIEW v1 AS SELECT id, v FROM t;
+    CREATE VIEW v2 AS SELECT id FROM v1;
+    CREATE VIEW v3 AS SELECT w FROM t;
+    CREATE MATERIALIZED VIEW m1 AS SELECT * FROM t;
+    CREATE INDEX m1_id ON m1 (id);
+    COMMENT ON VIEW v1 IS 'c';
+  desired: |
+    CREATE TABLE t (id int, v varchar(20), w int);
+    CREATE VIEW v1 AS SELECT id, v FROM t;
+    CREATE VIEW v2 AS SELECT id FROM v1;
+    CREATE VIEW v3 AS SELECT w FROM t;
+    CREATE MATERIALIZED VIEW m1 AS SELECT * FROM t;
+    CREATE INDEX m1_id ON m1 (id);
+    COMMENT ON VIEW v1 IS 'c';
+  up: |
+    DROP VIEW public.v2;
+    DROP VIEW public.v1;
+    DROP MATERIALIZED VIEW public.m1;
+    ALTER TABLE public.t ALTER COLUMN v TYPE varchar(20);
+    CREATE VIEW v1 AS SELECT id, v FROM t;
+    CREATE VIEW v2 AS SELECT id FROM v1;
+    CREATE MATERIALIZED VIEW m1 AS SELECT * FROM t;
+    COMMENT ON VIEW public.v1 IS 'c';
+    CREATE INDEX m1_id ON public.m1 (id);
+  down: |
+    DROP VIEW public.v2;
+    DROP VIEW public.v1;
+    DROP MATERIALIZED VIEW public.m1;
+    ALTER TABLE public.t ALTER COLUMN v TYPE varchar(10);
+    CREATE VIEW v1 AS SELECT id, v FROM t;
+    CREATE VIEW v2 AS SELECT id FROM v1;
+    CREATE MATERIALIZED VIEW m1 AS SELECT * FROM t;
+    COMMENT ON VIEW public.v1 IS 'c';
+    CREATE INDEX m1_id ON public.m1 (id);
+
+ChangeColumnTypeReadByViewIsHeldBackWithoutEnableDrop:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE TABLE t (id int, v varchar(10));
+    CREATE VIEW v1 AS SELECT id, v FROM t;
+  desired: |
+    CREATE TABLE t (id int, v varchar(20));
+    CREATE VIEW v1 AS SELECT id, v FROM t;
+  up: |
+    -- Skipped: DROP VIEW public.v1;
+    -- Skipped: ALTER TABLE public.t ALTER COLUMN v TYPE varchar(20);
+    -- Skipped: CREATE VIEW v1 AS SELECT id, v FROM t;
+  down: ""

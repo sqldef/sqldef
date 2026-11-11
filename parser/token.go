@@ -1750,3 +1750,21 @@ func (tkn *Tokenizer) scanCustomOp(firstChar rune) (int, string) {
 
 	return CUSTOM_OP, op
 }
+
+// CreateOrReplace returns a CREATE statement as CREATE OR REPLACE
+func CreateOrReplace(sql string, mode ParserMode) string {
+	tkn := NewTokenizer(sql, mode)
+	typ, _ := tkn.Scan()
+	for typ == COMMENT {
+		typ, _ = tkn.Scan()
+	}
+	if typ != CREATE {
+		panic(fmt.Sprintf("not a CREATE statement: %s", sql))
+	}
+	// The tokenizer has read one character past CREATE
+	end := tkn.Position - 1
+	if typ, _ := tkn.Scan(); typ == OR {
+		return sql
+	}
+	return sql[:end] + " OR REPLACE" + sql[end:]
+}

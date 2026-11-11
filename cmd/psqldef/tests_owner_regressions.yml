@@ -82,10 +82,10 @@ OwnerSurvivesViewRecreate:
     ALTER TABLE v_users OWNER TO app_user;
   up: |
     DROP VIEW public.v_users;
-    CREATE VIEW public.v_users AS select id from users;
+    CREATE VIEW v_users AS SELECT id FROM users;
     ALTER VIEW public.v_users OWNER TO "app_user";
   down: |
-    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+    CREATE OR REPLACE VIEW v_users AS SELECT id, name FROM users;
 
 OwnerOnPartitionedTable:
   legacy_ignore_quotes: false
@@ -209,10 +209,10 @@ OwnerUndeclaredSurvivesViewRecreate:
     CREATE VIEW v_users AS SELECT id FROM users;
   up: |
     DROP VIEW public.v_users;
-    CREATE VIEW public.v_users AS select id from users;
+    CREATE VIEW v_users AS SELECT id FROM users;
     ALTER VIEW public.v_users OWNER TO "app_user";
   down: |
-    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+    CREATE OR REPLACE VIEW v_users AS SELECT id, name FROM users;
 
 OwnerAlterViewSpelling:
   legacy_ignore_quotes: false
@@ -267,16 +267,16 @@ OwnerDependentViewRecreationPreservesOwnersAndMetadata:
     DROP VIEW public.v_leaf;
     DROP VIEW public.v_dep;
     DROP VIEW public.v_base;
-    CREATE VIEW public.v_base AS select id from users;
+    CREATE VIEW v_base AS SELECT id FROM users;
     ALTER VIEW public.v_base OWNER TO "app_user";
-    CREATE VIEW public.v_dep AS select id from v_base;
+    CREATE VIEW v_dep AS SELECT id FROM v_base;
     ALTER VIEW public.v_dep OWNER TO "app_user";
-    CREATE VIEW public.v_leaf AS select id from v_dep;
+    CREATE VIEW v_leaf AS SELECT id FROM v_dep;
     ALTER VIEW public.v_leaf OWNER TO "app_user";
     COMMENT ON VIEW public.v_dep IS 'dependent';
     GRANT SELECT ON TABLE public.v_leaf TO "readonly_user";
   down: |
-    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    CREATE OR REPLACE VIEW v_base AS SELECT id, name FROM users;
 
 OwnerIfExistsMissingObjects:
   legacy_ignore_quotes: false
@@ -332,14 +332,14 @@ OwnerDependentMatviewRecreation:
   up: |
     DROP MATERIALIZED VIEW public.mv_dep;
     DROP VIEW public.v_base;
-    CREATE VIEW public.v_base AS select id from users;
+    CREATE VIEW v_base AS SELECT id FROM users;
     ALTER VIEW public.v_base OWNER TO "app_user";
-    CREATE MATERIALIZED VIEW public.mv_dep AS select id from v_base WITH NO DATA;
+    CREATE MATERIALIZED VIEW mv_dep AS SELECT id FROM v_base WITH NO DATA;
     ALTER MATERIALIZED VIEW public.mv_dep OWNER TO "app_user";
     GRANT SELECT ON TABLE public.mv_dep TO "readonly_user";
     CREATE UNIQUE INDEX mv_dep_id ON public.mv_dep (id);
   down: |
-    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    CREATE OR REPLACE VIEW v_base AS SELECT id, name FROM users;
 
 OwnerNewDependentViewDuringRecreation:
   legacy_ignore_quotes: false
@@ -357,12 +357,12 @@ OwnerNewDependentViewDuringRecreation:
     ALTER VIEW v_new OWNER TO app_user;
   up: |
     DROP VIEW public.v_base;
-    CREATE VIEW public.v_base AS select id from users;
+    CREATE VIEW v_base AS SELECT id FROM users;
     ALTER VIEW public.v_base OWNER TO "app_user";
     CREATE VIEW v_new AS SELECT id FROM v_base;
     ALTER VIEW v_new OWNER TO app_user;
   down: |
-    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    CREATE OR REPLACE VIEW v_base AS SELECT id, name FROM users;
     DROP VIEW public.v_new;
 
 OwnerRemovedDependentViewDuringRecreation:
@@ -382,10 +382,10 @@ OwnerRemovedDependentViewDuringRecreation:
   up: |
     DROP VIEW public.v_old;
     DROP VIEW public.v_base;
-    CREATE VIEW public.v_base AS select id from users;
+    CREATE VIEW v_base AS SELECT id FROM users;
     ALTER VIEW public.v_base OWNER TO "app_user";
   down: |
-    CREATE OR REPLACE VIEW public.v_base AS select id, name from users;
+    CREATE OR REPLACE VIEW v_base AS SELECT id, name FROM users;
     CREATE VIEW v_old AS SELECT id FROM v_base;
     ALTER VIEW v_old OWNER TO app_user;
 
@@ -445,8 +445,8 @@ OwnerQuotedViewRecreationWithPrivileges:
     GRANT SELECT ON "V.Users" TO readonly_user;
   up: |
     DROP VIEW public."V.Users";
-    CREATE VIEW public."V.Users" AS select id from users;
+    CREATE VIEW "V.Users" AS SELECT id FROM users;
     ALTER VIEW public."V.Users" OWNER TO "CamelCaseUser";
     GRANT SELECT ON TABLE public."V.Users" TO "readonly_user";
   down: |
-    CREATE OR REPLACE VIEW public."V.Users" AS select id, name from users;
+    CREATE OR REPLACE VIEW "V.Users" AS SELECT id, name FROM users;

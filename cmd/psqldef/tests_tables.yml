@@ -580,7 +580,7 @@ AddTruncatingVarcharCastsOfColumns:
     ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (n::character varying(3) <> 'abc');
     DROP POLICY p ON public.t;
     CREATE POLICY p ON t FOR SELECT USING (n::varchar(3) = 'x');
-    CREATE OR REPLACE VIEW public.v AS select id from t where n::varchar(3) = 'abc';
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE n::varchar(3) = 'abc';
     DROP INDEX public.i1;
     CREATE INDEX i1 ON public.t ((name::varchar(10)));
     DROP INDEX public.i2;
@@ -592,7 +592,7 @@ AddTruncatingVarcharCastsOfColumns:
     ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (n <> 'abc');
     DROP POLICY p ON public.t;
     CREATE POLICY p ON t FOR SELECT USING (n = 'x');
-    CREATE OR REPLACE VIEW public.v AS select id from t where n = 'abc';
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE n = 'abc';
     DROP INDEX public.i1;
     CREATE INDEX i1 ON public.t ((name::varchar(5)));
     DROP INDEX public.i2;

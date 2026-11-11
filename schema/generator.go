@@ -1127,7 +1127,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) || !g.haveSameColumnCollation(*renameFromColumn, desiredColumn) {
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*renameFromColumn, desiredColumn)}))
+						ddls = g.appendColumnTypeChange(ddls, currentTable.name, renameFromColumn.name,
+							g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*renameFromColumn, desiredColumn)}))
 					}
 
 					if !g.isPrimaryKey(*renameFromColumn, currentTable) {
@@ -1297,7 +1298,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// Serial types require changing both column type and sequence type
 					if isPostgresSerialType(currentColumn.typeName) && isPostgresSerialType(desiredColumn.typeName) {
 						underlyingType := getSerialUnderlyingType(desiredColumn.typeName)
-						ddls = append(ddls,
+						ddls = g.appendColumnTypeChange(ddls, currentTable.name, currentColumn.name,
 							g.alterTable(desired.table.name, alterColumnTypeAction{column: desiredColumn, serialType: underlyingType}),
 							alterSequenceStatement{d: g.dialect, table: desired.table.name, column: desiredColumn.name, underlyingType: underlyingType},
 						)
@@ -1308,7 +1309,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name}))
 						}
 						// Change type - use desiredColumn for escaping to match user's quote style
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
+						ddls = g.appendColumnTypeChange(ddls, currentTable.name, currentColumn.name,
+							g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
 					}
 				}
 
@@ -2401,7 +2403,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 			// The dependent view was dropped by the recreation of a view it depends on, which
 			// decided whether this CREATE runs too.
 			view.owner = previous.view.owner
-			recreateDDLs := []statement{createViewStatement{d: g.dialect, view: view}}
+			recreateDDLs := []statement{g.recreateView(view)}
 			if owner, ok := g.restoreViewOwner(&view); ok {
 				recreateDDLs = append(recreateDDLs, owner)
 			}
@@ -2458,7 +2460,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				}
 				recreateDDLs = append(recreateDDLs,
 					g.dropView(currentView),
-					createViewStatement{d: g.dialect, view: *desiredView},
+					g.recreateView(*desiredView),
 				)
 				g.forgetViewMetadata(currentView)
 				if owner, ok := g.restoreViewOwner(currentView); ok {
@@ -2471,6 +2473,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 					key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 					g.recreatedViews[key] = recreatedView{view: depView, heldBack: !recreated}
 				}
+			} else if g.mode == GeneratorModePostgres {
+				ddls = append(ddls, inputStatement{statement: parser.CreateOrReplace(desiredView.statement, parser.ParserModePostgres)})
 			} else {
 				ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
 			}
@@ -2493,6 +2497,91 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 	}
 
 	return ddls, nil
+}
+
+// recreateView creates a view that was dropped. PostgreSQL's view is created as written, as
+// sqldef cannot write the casts of its literals back, which give its columns their types; the
+// same goes for CREATE OR REPLACE VIEW.
+func (g *Generator) recreateView(view View) statement {
+	if g.mode == GeneratorModePostgres {
+		return inputStatement{statement: view.statement}
+	}
+	return createViewStatement{d: g.dialect, view: view}
+}
+
+// appendColumnTypeChange appends the statements that change the type of a column. PostgreSQL
+// refuses to change the type of a column that a view reads, so the views that read it, and the
+// views that depend on those, are dropped first and created again from the desired schema.
+func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName, column Ident, statements ...statement) []statement {
+	if g.mode != GeneratorModePostgres {
+		return append(ddls, statements...)
+	}
+	var dependents []*View
+	for _, view := range g.findDependentViews(table) {
+		if g.viewReadsColumn(view, table, column) {
+			dependents = append(dependents, view)
+			dependents = append(dependents, g.findDependentViews(view.name)...)
+		}
+	}
+	if len(dependents) == 0 {
+		return append(ddls, statements...)
+	}
+	var recreateDDLs []statement
+	// findDependentViews lists the most dependent views last
+	for _, view := range slices.Backward(g.findDependentViews(table)) {
+		if !slices.Contains(dependents, view) {
+			continue
+		}
+		recreateDDLs = append(recreateDDLs, g.dropView(view))
+		g.forgetViewMetadata(view)
+	}
+	g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return slices.Contains(dependents, v) })
+	ddls, recreated := g.appendRecreateStatements(ddls, recreate{statements: append(recreateDDLs, statements...)})
+	for _, view := range dependents {
+		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		g.recreatedViews[key] = recreatedView{view: view, heldBack: !recreated}
+	}
+	return ddls
+}
+
+// viewReadsColumn reports whether a view may read a column of a table it depends on: it names a
+// column of the name, selects *, or names the table as a whole-row value
+func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
+	reads := false
+	var visit func(v reflect.Value)
+	visit = func(v reflect.Value) {
+		if reads || !v.IsValid() {
+			return
+		}
+		if v.CanInterface() {
+			switch node := v.Interface().(type) {
+			case *parser.ColName:
+				reads = node != nil && (g.identsEqual(node.Name, column) || g.identsEqual(node.Name, table.Name))
+				return
+			case *parser.StarExpr:
+				reads = node != nil
+				return
+			}
+		}
+		switch v.Kind() {
+		case reflect.Pointer, reflect.Interface:
+			if !v.IsNil() {
+				visit(v.Elem())
+			}
+		case reflect.Struct:
+			for i := range v.NumField() {
+				if v.Type().Field(i).IsExported() {
+					visit(v.Field(i))
+				}
+			}
+		case reflect.Slice, reflect.Array:
+			for i := range v.Len() {
+				visit(v.Index(i))
+			}
+		}
+	}
+	visit(reflect.ValueOf(view.definition))
+	return reads
 }
 
 // findDependentViews finds all views that reference the given view name in their definitions.
