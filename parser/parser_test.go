@@ -2681,3 +2681,16 @@ func TestEscapeStringRejectsNul(t *testing.T) {
 		}
 	}
 }
+
+func TestTypecastToQualifiedTypeWithLength(t *testing.T) {
+	statement, err := ParseDDL(`CREATE VIEW v AS SELECT x::extensions.halfvec(3) AS a, x::pg_catalog.varbit(5) AS b FROM t`, ParserModePostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := String(statement)
+	for _, want := range []string{"::extensions.halfvec(3) as a", "::bit varying(5) as b"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("want substring %q, got %s", want, got)
+		}
+	}
+}

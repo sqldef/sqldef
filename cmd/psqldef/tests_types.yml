@@ -722,7 +722,7 @@ RenameEnumTypeWithSchemaQualifiedColumn:
     CREATE TYPE myschema.item_state AS ENUM ('active', 'inactive');
     ALTER TABLE public.items ALTER COLUMN status TYPE myschema.item_state USING status::text::myschema.item_state;
     DROP TYPE myschema.item_status;
-AddAndRenameEnumValuesWithQuotes:
+AddEnumValueWithQuote:
   legacy_ignore_quotes: false
   current: |
     CREATE TYPE mood AS ENUM ('ok', 'it''s');
@@ -738,3 +738,13 @@ AddAndRenameEnumValuesWithQuotes:
 #   desired: |
 #     CREATE TYPE "Mood" AS ENUM ('a');
 #     CREATE TABLE t (m public."Mood");
+RenameEnumValueToValueWithQuote:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('ok', 'pending');
+  desired: |
+    CREATE TYPE mood AS ENUM ('ok', 'it''s' /* @renamed from=pending */);
+  up: |
+    ALTER TYPE public.mood RENAME VALUE 'pending' TO 'it''s';
+  down: |
+    ALTER TYPE public.mood ADD VALUE 'pending';

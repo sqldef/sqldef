@@ -2649,10 +2649,7 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 // namesTable reports whether a table name in a query names a table, an unqualified one in the
 // default schema
 func (g *Generator) namesTable(name parser.TableName, table QualifiedName) bool {
-	key := func(name QualifiedName) string {
-		return normalizeNameKey(name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	}
-	return key(QualifiedName{Schema: name.Schema, Name: name.Name}) == key(table)
+	return g.qualifiedNamesEqual(QualifiedName{Schema: name.Schema, Name: name.Name}, table)
 }
 
 // fromHasTable reports whether a FROM clause selects from a table, outside its subqueries

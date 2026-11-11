@@ -8023,6 +8023,14 @@ simple_convert_type:
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)}
     }
   }
+| sql_id '.' sql_id '(' INTEGRAL ')'
+  {
+    if isPgCatalog($1) {
+      $$ = castTypeWithLength(castTypeName(yylex, $3), NewIntVal($5))
+    } else {
+      $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3), Length: NewIntVal($5)}
+    }
+  }
 | sql_id '.' keyword_convert_type
   {
     // A built-in type is written as a keyword, and a type of pg_catalog is written without its schema

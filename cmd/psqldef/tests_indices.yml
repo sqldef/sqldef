@@ -1756,3 +1756,9 @@ ChangeVarcharLengthCastOfFunctionResultInIndex:
   down: |
     DROP INDEX public.i;
     CREATE INDEX i ON public.t ((lower(s)::varchar(10)));
+PartialIndexWithCastToQualifiedType:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TABLE t (c text, m mood);
+    CREATE INDEX j ON t (c) WHERE m = 'a'::public.mood;
