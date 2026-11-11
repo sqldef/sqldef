@@ -2590,6 +2590,7 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 	// that an unqualified name may be its column
 	var visit func(v reflect.Value, inScope bool)
 	visit = func(v reflect.Value, inScope bool) {
+		v = unwrapInterface(v)
 		if !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
 			return
 		}
@@ -2597,8 +2598,12 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 		case *parser.Select:
 			inScope = inScope || g.fromHasTable(node.From, table)
 		case *parser.AliasedTableExpr:
-			if name, ok := node.Expr.(parser.TableName); ok && !node.As.IsEmpty() && g.namesTable(name, table) {
-				names = append(names, node.As)
+			if name, ok := node.Expr.(parser.TableName); ok && g.namesTable(name, table) {
+				// A column alias list renames the columns, which sqldef does not map to the table's
+				reads = reads || len(node.Columns) > 0
+				if !node.As.IsEmpty() {
+					names = append(names, node.As)
+				}
 			}
 		case *parser.ColName:
 			colNames = append(colNames, colRef{col: node, inScope: inScope})
@@ -2634,6 +2639,9 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 		if ref.col.Qualifier.Name.IsEmpty() {
 			return ref.inScope && g.identsEqual(ref.col.Name, column) || namesTable(ref.col.Name)
 		}
+		if !ref.col.Qualifier.Schema.IsEmpty() {
+			return g.namesTable(ref.col.Qualifier, table) && g.identsEqual(ref.col.Name, column)
+		}
 		return namesTable(ref.col.Qualifier.Name) && g.identsEqual(ref.col.Name, column)
 	})
 }
@@ -2661,6 +2669,17 @@ func (g *Generator) fromHasTable(exprs parser.TableExprs, table QualifiedName) b
 		}
 		return false
 	})
+}
+
+// unwrapInterface returns the value an interface holds, so that a node is visited once
+func unwrapInterface(v reflect.Value) reflect.Value {
+	for v.IsValid() && v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return reflect.Value{}
+		}
+		v = v.Elem()
+	}
+	return v
 }
 
 // visitChildren calls visit for the exported fields and elements of an AST value

@@ -2823,12 +2823,11 @@ func encodeSQLBytes(val string, backslashEscapes bool, buf *nodeBuffer) {
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
 		buf.literalType = ""
 	}
-	buf.WriteByte('\'')
 	if !backslashEscapes {
-		buf.WriteString(strings.ReplaceAll(val, "'", "''"))
-		buf.WriteByte('\'')
+		buf.WriteString(QuoteString(val, false))
 		return
 	}
+	buf.WriteByte('\'')
 	for _, ch := range val {
 		if encodedChar := sqlEncodeMap[byte(ch)]; ch > 0xff || encodedChar == dontEscape {
 			buf.WriteRune(ch)

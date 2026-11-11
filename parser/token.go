@@ -1333,12 +1333,19 @@ func (tkn *Tokenizer) scanEscapeString() (int, string) {
 			case 't':
 				buffer.WriteByte('\t')
 			case '0', '1', '2', '3', '4', '5', '6', '7':
+				// PostgreSQL rejects a NUL in a string
 				code, _ := tkn.scanEscapeCode(8, 1, 3)
+				if byte(code) == 0 {
+					return LEX_ERROR, buffer.String()
+				}
 				buffer.WriteByte(byte(code))
 				continue
 			case 'x':
 				tkn.next()
 				if code, ok := tkn.scanEscapeCode(16, 1, 2); ok {
+					if code == 0 {
+						return LEX_ERROR, buffer.String()
+					}
 					buffer.WriteByte(byte(code))
 				} else {
 					buffer.WriteByte('x')
@@ -1347,7 +1354,7 @@ func (tkn *Tokenizer) scanEscapeString() (int, string) {
 			case 'u', 'U':
 				tkn.next()
 				r, ok := tkn.scanUnicodeEscape(esc)
-				if !ok {
+				if !ok || r == 0 {
 					return LEX_ERROR, buffer.String()
 				}
 				buffer.WriteRune(r)

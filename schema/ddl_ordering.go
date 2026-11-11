@@ -543,7 +543,8 @@ type dependencyExtractor struct {
 // visit collects the relations under an AST value. ctes holds the keys of the CTE names in scope,
 // which an unqualified name refers to instead of a relation.
 func (e *dependencyExtractor) visit(v reflect.Value, ctes map[string]bool) {
-	if !v.IsValid() || (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) && v.IsNil() {
+	v = unwrapInterface(v)
+	if !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
 		return
 	}
 	switch node := v.Interface().(type) {

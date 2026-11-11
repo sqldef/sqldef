@@ -2673,3 +2673,11 @@ func TestTypecastToTypeOfOtherSchemaNamedByKeyword(t *testing.T) {
 		t.Fatal("want an error for a keyword the grammar renames")
 	}
 }
+
+func TestEscapeStringRejectsNul(t *testing.T) {
+	for _, sql := range []string{`SELECT E'a\0b'`, `SELECT E'a\x00b'`, `SELECT E'a\u0000b'`} {
+		if _, err := ParseDDL("CREATE VIEW v AS "+sql, ParserModePostgres); err == nil {
+			t.Errorf("want an error for %s", sql)
+		}
+	}
+}

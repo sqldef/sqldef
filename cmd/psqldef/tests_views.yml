@@ -1877,3 +1877,12 @@ ChangeColumnTypeKeepsViewsReadingTableOfSameNameInOtherSchema:
 #   legacy_ignore_quotes: false
 #   desired: |
 #     CREATE VIEW v AS SELECT CAST('1' AS bit) AS c;
+# FIXME: the generic parser does not parse a column alias list of a table in FROM
+# ChangeColumnTypeReadByViewThroughColumnAliasList:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (id int, y int);
+#     CREATE VIEW v AS SELECT a.x FROM t AS a(x, z);
+#   desired: |
+#     CREATE TABLE t (id bigint, y int);
+#     CREATE VIEW v AS SELECT a.x FROM t AS a(x, z);
