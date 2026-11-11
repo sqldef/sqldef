@@ -2524,13 +2524,19 @@ func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName
 	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
 		return append(ddls, statements...)
 	}
-	tableKey := normalizeNameKey(table, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	// The current views still name a table renamed in this run by its old name
+	tables := []QualifiedName{table}
+	if desired := g.findTableByName(g.desiredTables, table); desired != nil && !desired.renamedFrom.IsEmpty() {
+		tables = append(tables, g.normalizeOldObjectName(desired.renamedFrom, table))
+	}
 	viewDeps := map[string][]string{}
 	dropped := map[string]bool{}
 	for _, view := range g.currentViews {
 		key := g.viewKey(view)
 		viewDeps[key] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-		dropped[key] = slices.Contains(viewDeps[key], tableKey) && g.viewReadsColumn(view, table, column)
+		dropped[key] = slices.ContainsFunc(tables, func(t QualifiedName) bool {
+			return slices.Contains(viewDeps[key], normalizeNameKey(t, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)) && g.viewReadsColumn(view, t, column)
+		})
 	}
 	for changed := true; changed; {
 		changed = false
@@ -2601,9 +2607,9 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 		case parser.JoinCondition:
 			reads = reads || slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
 		case *parser.FuncExpr:
-			// The * of count(*) reads no column
+			// The * of count(*) reads no column, unlike a whole row such as count(t.*)
 			if len(node.Exprs) == 1 {
-				if _, ok := node.Exprs[0].(*parser.StarExpr); ok {
+				if star, ok := node.Exprs[0].(*parser.StarExpr); ok && star.TableName.Name.IsEmpty() {
 					visit(reflect.ValueOf(node.Over))
 					return
 				}

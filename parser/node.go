@@ -1353,7 +1353,7 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	if ct.EnumValues != nil {
 		quotedValues := make([]string, len(ct.EnumValues))
 		for i, v := range ct.EnumValues {
-			quotedValues[i] = "'" + v + "'"
+			quotedValues[i] = "'" + strings.ReplaceAll(v, "'", "''") + "'"
 		}
 		buf.Printf("(%s)", strings.Join(quotedValues, ", "))
 	}

@@ -2657,3 +2657,19 @@ func TestColumnCollateAfterOtherConstraints(t *testing.T) {
 		}
 	})
 }
+
+func TestTypecastToTypeOfOtherSchemaNamedByKeyword(t *testing.T) {
+	statement, err := ParseDDL("CREATE VIEW v AS SELECT x::extensions.vector(3) AS a, x::s.text AS b FROM t", ParserModePostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := String(statement)
+	for _, want := range []string{"::extensions.vector(3) as a", "::s.text as b"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("want substring %q, got %s", want, got)
+		}
+	}
+	if _, err := ParseDDL("CREATE VIEW v AS SELECT x::s.varchar(3) FROM t", ParserModePostgres); err == nil {
+		t.Fatal("want an error for a keyword the grammar renames")
+	}
+}

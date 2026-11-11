@@ -44,6 +44,10 @@ func castTypeName(yylex any, name Ident) string {
 	if name.Quoted && name.Name == "char" {
 		return `"char"`
 	}
+	if name.Quoted && name.Name == "varchar" {
+		// Named as the keyword varchar is
+		return "character varying"
+	}
 	if !name.Quoted || name.Name == FoldASCII(name.Name) {
 		return PostgresTypeName(FoldASCII(name.Name))
 	}
@@ -15455,12 +15459,19 @@ yydefault:
 		{
 			// A built-in type is written as a keyword, and a type of pg_catalog is written without its schema
 			if !isPgCatalog(yyDollar[1].ident) {
-				return abortParse(yylex, fmt.Sprintf("type %s.%s is supported only in pg_catalog", yyDollar[1].ident.Name, yyDollar[3].convertType.Type))
-			}
-			yyVAL.convertType = yyDollar[3].convertType
-			if strings.EqualFold(yyVAL.convertType.Type, "char") {
+				// A type of another schema, such as extensions.vector(3), is named by the keyword as written.
+				// Keywords that the grammar renames or gives a length cannot be named so.
+				name := strings.ToLower(yyDollar[3].convertType.Type)
+				switch {
+				case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", yyDollar[3].convertType.TimeZone != "":
+					return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", yyDollar[1].ident.Name, yyDollar[3].convertType.Type))
+				}
+				yyVAL.convertType = &ConvertType{Type: collationNamePart(yylex, yyDollar[1].ident) + "." + name, Length: yyDollar[3].convertType.Length, Scale: yyDollar[3].convertType.Scale}
+			} else if strings.EqualFold(yyDollar[3].convertType.Type, "char") {
 				// A qualified name is not a keyword, so pg_catalog.char is the type "char"
 				yyVAL.convertType = &ConvertType{Type: `"char"`}
+			} else {
+				yyVAL.convertType = yyDollar[3].convertType
 			}
 		}
 	case 1275:

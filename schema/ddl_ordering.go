@@ -548,33 +548,44 @@ func (e *dependencyExtractor) visit(v reflect.Value, ctes map[string]bool) {
 	}
 	switch node := v.Interface().(type) {
 	case *parser.Select:
-		if node.With == nil {
-			break
+		if node.With != nil {
+			withoutWith := *node
+			withoutWith.With = nil
+			e.visitWith(node.With, reflect.ValueOf(withoutWith), ctes)
+			return
 		}
-		scope := maps.Clone(ctes)
-		if scope == nil {
-			scope = map[string]bool{}
+	case *parser.Union:
+		if node.With != nil {
+			withoutWith := *node
+			withoutWith.With = nil
+			e.visitWith(node.With, reflect.ValueOf(withoutWith), ctes)
+			return
 		}
-		if node.With.Recursive {
-			for _, cte := range node.With.CTEs {
-				scope[e.identKey(cte.Name)] = true
-			}
-		}
-		// A CTE is in scope in the CTEs after it and in the main query
-		for _, cte := range node.With.CTEs {
-			e.visit(reflect.ValueOf(cte.Definition), scope)
-			scope[e.identKey(cte.Name)] = true
-		}
-		withoutWith := *node
-		withoutWith.With = nil
-		visitChildren(reflect.ValueOf(withoutWith), func(child reflect.Value) { e.visit(child, scope) })
-		return
 	case *parser.AliasedTableExpr:
 		if name, ok := node.Expr.(parser.TableName); ok && (!name.Schema.IsEmpty() || !ctes[e.identKey(name.Name)]) {
 			e.deps[e.relationKey(name)] = true
 		}
 	}
 	visitChildren(v, func(child reflect.Value) { e.visit(child, ctes) })
+}
+
+// visitWith visits the CTEs of a WITH clause and the query they are in
+func (e *dependencyExtractor) visitWith(with *parser.With, query reflect.Value, ctes map[string]bool) {
+	scope := maps.Clone(ctes)
+	if scope == nil {
+		scope = map[string]bool{}
+	}
+	if with.Recursive {
+		for _, cte := range with.CTEs {
+			scope[e.identKey(cte.Name)] = true
+		}
+	}
+	// A CTE is in scope in the CTEs after it and in the main query
+	for _, cte := range with.CTEs {
+		e.visit(reflect.ValueOf(cte.Definition), scope)
+		scope[e.identKey(cte.Name)] = true
+	}
+	visitChildren(query, func(child reflect.Value) { e.visit(child, scope) })
 }
 
 func (e *dependencyExtractor) identKey(ident parser.Ident) string {

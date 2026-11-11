@@ -1425,6 +1425,7 @@ AddShardRowIdBits:
     ALTER TABLE t SHARD_ROW_ID_BITS = 0;
     ALTER TABLE t PRE_SPLIT_REGIONS = 0;
 CommentsAndDefaultsWithBackslashesAndQuotes:
+  legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -1434,6 +1435,7 @@ CommentsAndDefaultsWithBackslashesAndQuotes:
       KEY index_name (name) COMMENT 'it''s a\\b'
     );
 ChangeDefaultAndCommentWithBackslashes:
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -1447,10 +1449,11 @@ ChangeDefaultAndCommentWithBackslashes:
       PRIMARY KEY (id)
     );
   up: |
-    ALTER TABLE `users` CHANGE COLUMN `path` `path` varchar(20) NOT NULL DEFAULT 'C:\\tmp' COMMENT 'a\\b';
+    ALTER TABLE users CHANGE COLUMN `path` path varchar(20) NOT NULL DEFAULT 'C:\\tmp' COMMENT 'a\\b';
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `path` `path` varchar(20) NOT NULL DEFAULT 'a' COMMENT 'a';
+    ALTER TABLE users CHANGE COLUMN `path` path varchar(20) NOT NULL DEFAULT 'a' COMMENT 'a';
 AddIndexWithCommentWithQuoteAndBackslash:
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -1465,6 +1468,6 @@ AddIndexWithCommentWithQuoteAndBackslash:
       KEY index_name (name) COMMENT 'it''s a\\b'
     );
   up: |
-    ALTER TABLE `users` ADD KEY `index_name` (`name`) COMMENT 'it''s a\\b';
+    ALTER TABLE users ADD KEY index_name (name) COMMENT 'it''s a\\b';
   down: |
     ALTER TABLE `users` DROP INDEX `index_name`;

@@ -341,7 +341,7 @@ type renameEnumValueStatement struct {
 }
 
 func (s renameEnumValueStatement) Render() string {
-	return fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'", s.d.escapeQualifiedName(s.typeName), s.from, s.to)
+	return fmt.Sprintf("ALTER TYPE %s RENAME VALUE %s TO %s", s.d.escapeQualifiedName(s.typeName), StringConstant(s.from), StringConstant(s.to))
 }
 
 // addEnumValueStatement adds a value to a PostgreSQL enum type.
@@ -353,7 +353,7 @@ type addEnumValueStatement struct {
 }
 
 func (s addEnumValueStatement) Render() string {
-	return fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", s.d.escapeQualifiedName(s.typeName), s.value)
+	return fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", s.d.escapeQualifiedName(s.typeName), StringConstant(s.value))
 }
 
 // alterDomainStatement changes one thing about a PostgreSQL domain.

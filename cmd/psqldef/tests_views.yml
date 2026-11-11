@@ -1783,3 +1783,44 @@ CastsToCharWithCastFunction:
   desired: |
     CREATE TABLE t (c text);
     CREATE VIEW v AS SELECT CAST(c AS char) AS a, CAST(c AS char(2)) AS b FROM t;
+ChangeColumnTypeReadByViewThroughWholeRow:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, x int);
+    CREATE VIEW v AS SELECT row_to_json(t.*) AS j FROM t;
+  desired: |
+    CREATE TABLE t (id int, x bigint);
+    CREATE VIEW v AS SELECT row_to_json(t.*) AS j FROM t;
+ChangeColumnTypeReadByViewWithCTENamedLikeViewInUnion:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, x int);
+    CREATE VIEW c AS WITH c AS (SELECT x FROM t) SELECT x FROM c UNION ALL SELECT x FROM c;
+  desired: |
+    CREATE TABLE t (id int, x bigint);
+    CREATE VIEW c AS WITH c AS (SELECT x FROM t) SELECT x FROM c UNION ALL SELECT x FROM c;
+RenameTableAndChangeColumnTypeReadByView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_t (id int, x int);
+    CREATE VIEW v AS SELECT id FROM old_t WHERE x > 0;
+  desired: |
+    CREATE TABLE new_t ( -- @renamed from=old_t
+      id int,
+      x bigint
+    );
+    CREATE VIEW v AS SELECT id FROM new_t WHERE x > 0;
+  up: |
+    ALTER TABLE public.old_t RENAME TO new_t;
+    DROP VIEW public.v;
+    ALTER TABLE public.new_t ALTER COLUMN x TYPE bigint;
+    CREATE VIEW v AS SELECT id FROM new_t WHERE x > 0;
+  down: |
+    CREATE TABLE old_t (id int, x int);
+    CREATE OR REPLACE VIEW v AS SELECT id FROM old_t WHERE x > 0;
+    DROP TABLE public.new_t;
+CastToQuotedVarchar:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (c text);
+    CREATE VIEW v AS SELECT c::"varchar" AS a, c::"varchar"(3) AS b FROM t;
