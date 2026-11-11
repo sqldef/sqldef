@@ -2525,34 +2525,51 @@ func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName
 		return append(ddls, statements...)
 	}
 	tableKey := normalizeNameKey(table, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-	viewDeps := map[string][]string{}
+	viewDeps := map[*View][]string{}
 	for _, view := range g.currentViews {
-		viewDeps[g.viewKey(view)] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		viewDeps[view] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 	}
-	var readers []string
+	dropped := map[string]bool{}
 	for _, view := range g.currentViews {
-		if slices.Contains(viewDeps[g.viewKey(view)], tableKey) && g.viewReadsColumn(view, table, column) {
-			readers = append(readers, g.viewKey(view))
+		if slices.Contains(viewDeps[view], tableKey) && g.viewReadsColumn(view, table, column) {
+			dropped[g.viewKey(view)] = true
 		}
 	}
-	// g.currentViews is in the order of creation, so dropping it backward drops dependents first
-	var dependents []*View
-	var recreateDDLs []statement
-	for _, view := range slices.Backward(g.currentViews) {
-		key := g.viewKey(view)
-		if slices.Contains(readers, key) || slices.ContainsFunc(readers, func(reader string) bool { return dependsOn(key, reader, viewDeps, map[string]bool{}) }) {
-			dependents = append(dependents, view)
-			recreateDDLs = append(recreateDDLs, g.dropView(view))
-			g.forgetViewMetadata(view)
+	for changed := len(dropped) > 0; changed; {
+		changed = false
+		for _, view := range g.currentViews {
+			if !dropped[g.viewKey(view)] && slices.ContainsFunc(viewDeps[view], func(dep string) bool { return dropped[dep] }) {
+				dropped[g.viewKey(view)] = true
+				changed = true
+			}
 		}
 	}
-	if len(dependents) == 0 {
+	if len(dropped) == 0 {
 		return append(ddls, statements...)
 	}
-	g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return slices.Contains(dependents, v) })
-	ddls = append(ddls, recreateDDLs...)
-	for _, view := range dependents {
+	var dependents []*View
+	for _, view := range g.currentViews {
+		if dropped[g.viewKey(view)] {
+			dependents = append(dependents, view)
+		}
+	}
+	// Drop the views that depend on others first
+	for len(dependents) > 0 {
+		i := slices.IndexFunc(dependents, func(view *View) bool {
+			key := g.viewKey(view)
+			return !slices.ContainsFunc(dependents, func(other *View) bool { return slices.Contains(viewDeps[other], key) })
+		})
+		if i < 0 {
+			panic("cyclic view dependencies")
+		}
+		view := dependents[i]
+		dependents = slices.Delete(dependents, i, i+1)
+		ddls = append(ddls, g.dropView(view))
+		g.forgetViewMetadata(view)
+		g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == view })
 		g.recreatedViews[g.viewKey(view)] = recreatedView{view: view}
+		slog.Warn("A view is dropped and created again to change the type of a column it reads. Privileges of roles that sqldef does not manage are not restored.",
+			"view", view.name.RawString(), "column", column.Name)
 	}
 	return append(ddls, statements...)
 }
@@ -2566,38 +2583,33 @@ func (g *Generator) viewKey(view *View) string {
 // selects *, or reads a whole row of the table
 func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
 	names := []Ident{table.Name}
-	collectTableAliases(reflect.ValueOf(view.definition), func(expr *parser.AliasedTableExpr) {
-		if name, ok := expr.Expr.(parser.TableName); ok && !expr.As.IsEmpty() && g.identsEqual(name.Name, table.Name) {
-			names = append(names, expr.As)
-		}
-	})
-	namesTable := func(ident Ident) bool {
-		return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
-	}
+	var colNames []*parser.ColName
 	reads := false
 	var visit func(v reflect.Value)
 	visit = func(v reflect.Value) {
-		if reads || !v.IsValid() {
+		if !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
 			return
 		}
 		switch node := v.Interface().(type) {
-		case *parser.ColName:
-			if node != nil {
-				reads = node.Qualifier.Name.IsEmpty() && (g.identsEqual(node.Name, column) || namesTable(node.Name)) ||
-					namesTable(node.Qualifier.Name) && g.identsEqual(node.Name, column)
+		case *parser.AliasedTableExpr:
+			if name, ok := node.Expr.(parser.TableName); ok && !node.As.IsEmpty() && g.identsEqual(name.Name, table.Name) {
+				names = append(names, node.As)
 			}
+		case *parser.ColName:
+			colNames = append(colNames, node)
 			return
 		case *parser.StarExpr:
-			reads = node != nil && (node.TableName.Name.IsEmpty() || namesTable(node.TableName.Name))
+			if node.TableName.Name.IsEmpty() {
+				reads = true
+			} else {
+				colNames = append(colNames, &parser.ColName{Name: column, Qualifier: node.TableName})
+			}
 			return
 		case parser.JoinCondition:
-			if slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) }) {
-				reads = true
-				return
-			}
+			reads = reads || slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
 		case *parser.FuncExpr:
 			// The * of count(*) reads no column
-			if node != nil && len(node.Exprs) == 1 {
+			if len(node.Exprs) == 1 {
 				if _, ok := node.Exprs[0].(*parser.StarExpr); ok {
 					visit(reflect.ValueOf(node.Over))
 					return
@@ -2607,22 +2619,15 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 		visitChildren(v, visit)
 	}
 	visit(reflect.ValueOf(view.definition))
-	return reads
-}
-
-// collectTableAliases calls found for every aliased table expression under v
-func collectTableAliases(v reflect.Value, found func(*parser.AliasedTableExpr)) {
-	var visit func(v reflect.Value)
-	visit = func(v reflect.Value) {
-		if !v.IsValid() {
-			return
-		}
-		if expr, ok := v.Interface().(*parser.AliasedTableExpr); ok && expr != nil {
-			found(expr)
-		}
-		visitChildren(v, visit)
+	namesTable := func(ident Ident) bool {
+		return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
 	}
-	visit(v)
+	return reads || slices.ContainsFunc(colNames, func(col *parser.ColName) bool {
+		if col.Qualifier.Name.IsEmpty() {
+			return g.identsEqual(col.Name, column) || namesTable(col.Name)
+		}
+		return namesTable(col.Qualifier.Name) && g.identsEqual(col.Name, column)
+	})
 }
 
 // visitChildren calls visit for the exported fields and elements of an AST value
@@ -6213,9 +6218,13 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (current.typeIdent.Quoted || desired.typeIdent.Quoted) {
-		// Quote-aware comparison for custom types (domains, etc.). Two unquoted names compare
-		// below, where an alias such as int4 resolves to its type.
+	// A quoted name in lowercase names the same type as the unquoted one
+	caseSensitive := func(column Column) bool {
+		return column.typeIdent.Quoted && column.typeIdent.Name != parser.FoldASCII(column.typeIdent.Name)
+	}
+	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (caseSensitive(current) || caseSensitive(desired)) {
+		// Quote-aware comparison for custom types (domains, etc.). Other names compare below,
+		// where an alias such as int4 resolves to its type.
 		//
 		// PostgreSQL's format_type returns the internal type name without quotes.
 		// For a domain created with CREATE DOMAIN "PositiveInt", it returns "PositiveInt".
@@ -6225,7 +6234,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		// - Quoted identifiers: use the exact name (case-sensitive)
 		// - Unquoted identifiers: lowercase the name
 		canonical := func(column Column) string {
-			if column.typeIdent.Quoted {
+			if caseSensitive(column) {
 				return column.typeIdent.Name
 			}
 			return strings.ToLower(column.typeName)

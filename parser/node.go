@@ -2616,6 +2616,15 @@ var postgresTypeAliases = map[string]string{
 	"timetz":      "time with time zone",
 }
 
+// PostgresTypeName returns the name PostgreSQL writes for a type named by its internal name, such
+// as integer for int4
+func PostgresTypeName(name string) string {
+	if canonical, ok := postgresTypeAliases[name]; ok {
+		return canonical
+	}
+	return name
+}
+
 // postgresFloatTypeName returns the type PostgreSQL makes of float(p): real up to 24 bits of
 // precision, and double precision above
 func postgresFloatTypeName(precision string) string {

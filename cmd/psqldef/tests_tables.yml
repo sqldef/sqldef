@@ -690,7 +690,8 @@ CastsToTypesNamedWithoutKeywords:
       CONSTRAINT k2 CHECK (m::public."Mood" IS NOT NULL),
       CONSTRAINT k3 CHECK (id::int8 > 0),
       CONSTRAINT k4 CHECK (n::pg_catalog.int4 > 0),
-      CONSTRAINT k5 CHECK (m::pg_catalog.text <> '')
+      CONSTRAINT k5 CHECK (m::pg_catalog.text <> ''),
+      CONSTRAINT k6 CHECK (id::"int8" > 0 AND m::pg_catalog."text" <> '')
     );
     CREATE INDEX t_n ON t ((n::int4));
     CREATE VIEW v AS SELECT id::float8 AS f, m::"Mood" AS mm, (n::text || '+00')::timestamptz::text AS ts FROM t;
@@ -733,7 +734,7 @@ ChangeCaseOfQuotedCastType:
     CREATE TABLE t (m text, CONSTRAINT k CHECK (m::"mood" IS NOT NULL));
   up: |
     ALTER TABLE public.t DROP CONSTRAINT k;
-    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::"mood" is not null);
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::mood is not null);
   down: |
     ALTER TABLE public.t DROP CONSTRAINT k;
     ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::"Mood" is not null);

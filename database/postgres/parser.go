@@ -1438,9 +1438,9 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	}
 }
 
-// getRawTypeName extracts the raw type name from a TypeName node with minimal normalization.
-// This preserves type names like "bpchar" instead of normalizing them to "character",
-// but still normalizes PostgreSQL internal names like "int4" to "integer" for consistency.
+// getRawTypeName returns the type name of a cast as the generic parser gives it: without the
+// pg_catalog schema, with an internal name such as int4 resolved to integer, and quoted where the
+// name needs quotes. Other names, such as bpchar, are kept as is.
 func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 	if node == nil || node.Names == nil {
 		return ""
@@ -1452,31 +1452,22 @@ func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 			typeNames = append(typeNames, n.String_.Sval)
 		}
 	}
-
-	// Get the last name, skipping schema prefix like "pg_catalog"
 	if len(typeNames) == 0 {
 		return ""
 	}
-
-	typeName := typeNames[len(typeNames)-1]
-
-	// Normalize PostgreSQL internal type names to SQL standard names
-	// but preserve types like "bpchar" that should not be normalized
-	switch typeName {
-	case "int2":
-		return "smallint"
-	case "int4":
-		return "integer"
-	case "int8":
-		return "bigint"
-	case "float4":
-		return "real"
-	case "float8":
-		return "double precision"
-	default:
-		// Keep the type name as-is (including "bpchar", "timetz", "timestamptz", etc.)
-		return typeName
+	if typeNames[0] == "pg_catalog" {
+		typeNames = typeNames[1:]
 	}
+	quoted := util.TransformSlice(typeNames, func(name string) string {
+		if NewIdentWithQuoteDetected(name).Quoted {
+			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+		}
+		return name
+	})
+	if len(quoted) == 1 {
+		return parser.PostgresTypeName(quoted[0])
+	}
+	return strings.Join(quoted, ".")
 }
 
 func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType, error) {

@@ -50,13 +50,12 @@ func newUnicodeStrVal(yylex any, s string) *SQLVal {
   return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
 }
 
-// castTypeName returns the type a cast names with an identifier. An unquoted alias of a built-in
-// type is resolved to the name PostgreSQL writes, as the keyword spellings of the type are.
+// castTypeName returns the type a cast names with an identifier. A quoted name in lowercase names
+// the same type as the unquoted one, and an alias of a built-in type is resolved to the name
+// PostgreSQL writes, as the keyword spellings of the type are.
 func castTypeName(yylex any, name Ident) string {
-  if !name.Quoted {
-    if canonical, ok := postgresTypeAliases[strings.ToLower(name.Name)]; ok {
-      return canonical
-    }
+  if !name.Quoted || name.Name == FoldASCII(name.Name) {
+    return PostgresTypeName(FoldASCII(name.Name))
   }
   return collationNamePart(yylex, name)
 }
