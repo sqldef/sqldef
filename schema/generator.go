@@ -2597,7 +2597,7 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 		case *parser.Select:
 			inScope = inScope || g.fromHasTable(node.From, table)
 		case *parser.AliasedTableExpr:
-			if name, ok := node.Expr.(parser.TableName); ok && !node.As.IsEmpty() && g.identsEqual(name.Name, table.Name) {
+			if name, ok := node.Expr.(parser.TableName); ok && !node.As.IsEmpty() && g.namesTable(name, table) {
 				names = append(names, node.As)
 			}
 		case *parser.ColName:
@@ -2638,13 +2638,22 @@ func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Iden
 	})
 }
 
+// namesTable reports whether a table name in a query names a table, an unqualified one in the
+// default schema
+func (g *Generator) namesTable(name parser.TableName, table QualifiedName) bool {
+	key := func(name QualifiedName) string {
+		return normalizeNameKey(name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	}
+	return key(QualifiedName{Schema: name.Schema, Name: name.Name}) == key(table)
+}
+
 // fromHasTable reports whether a FROM clause selects from a table, outside its subqueries
 func (g *Generator) fromHasTable(exprs parser.TableExprs, table QualifiedName) bool {
 	return slices.ContainsFunc(exprs, func(expr parser.TableExpr) bool {
 		switch expr := expr.(type) {
 		case *parser.AliasedTableExpr:
 			name, ok := expr.Expr.(parser.TableName)
-			return ok && g.identsEqual(name.Name, table.Name)
+			return ok && g.namesTable(name, table)
 		case *parser.JoinTableExpr:
 			return g.fromHasTable(parser.TableExprs{expr.LeftExpr, expr.RightExpr}, table)
 		case *parser.ParenTableExpr:
@@ -3654,7 +3663,7 @@ func (d dialect) generateDataType(column Column) string {
 		case "enum", "set":
 			quotedValues := make([]string, len(column.enumValues))
 			for i, v := range column.enumValues {
-				quotedValues[i] = stringLiteral(v, d.mode == GeneratorModeMysql)
+				quotedValues[i] = parser.QuoteString(v, d.mode == GeneratorModeMysql)
 			}
 			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(quotedValues, ", "), suffix)
 		default:
@@ -3753,7 +3762,7 @@ func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (str
 	}
 
 	if column.comment != nil {
-		definition += fmt.Sprintf("COMMENT %s ", stringLiteral(column.comment.raw, d.mode == GeneratorModeMysql))
+		definition += fmt.Sprintf("COMMENT %s ", parser.QuoteString(column.comment.raw, d.mode == GeneratorModeMysql))
 	}
 
 	if column.check != nil {
@@ -4004,7 +4013,7 @@ func (d dialect) generateIndexOptionDefinition(indexOptions []IndexOption) strin
 					optionDefinition = fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
 				} else if indexOption.optionName == "comment" {
 					indexOption.optionName = "COMMENT"
-					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, stringLiteral(indexOption.value.raw, true))
+					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, parser.QuoteString(indexOption.value.raw, true))
 				} else {
 					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
 				}
@@ -7556,7 +7565,7 @@ func formatDefaultLiteral(sqlVal *parser.SQLVal) (string, error) {
 	defaultVal := parseValue(sqlVal)
 	switch defaultVal.valueType {
 	case ValueTypeStr:
-		return stringLiteral(defaultVal.strVal, sqlVal.BackslashEscapes), nil
+		return parser.QuoteString(defaultVal.strVal, sqlVal.BackslashEscapes), nil
 	case ValueTypeBool:
 		return fmt.Sprintf("%t", defaultVal.bitVal), nil
 	case ValueTypeInt:
@@ -8272,13 +8281,5 @@ func isValidLock(lock string) bool {
 
 // Escape a string and add quotes to form a legal SQL string constant.
 func StringConstant(s string) string {
-	return stringLiteral(s, false)
-}
-
-// stringLiteral writes a string as SQL, escaping backslashes where they are escape characters, as in MySQL
-func stringLiteral(s string, backslashEscapes bool) string {
-	if backslashEscapes {
-		s = strings.ReplaceAll(s, `\`, `\\`)
-	}
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	return parser.QuoteString(s, false)
 }

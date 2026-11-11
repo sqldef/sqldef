@@ -1848,3 +1848,32 @@ ChangeColumnTypeReadByCorrelatedSubquery:
     CREATE TABLE t (id int, x bigint);
     CREATE TABLE u (id int);
     CREATE VIEW v AS SELECT id, (SELECT max(u.id) FROM u WHERE u.id < x) AS m FROM t;
+CastsToQuotedTypeNamesThatNeedQuotes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN "my type" AS text;
+    CREATE DOMAIN "order" AS text;
+    CREATE TABLE t (c text);
+    CREATE VIEW v AS SELECT c::"my type" AS a, c::"order" AS b, c::"int4" AS d FROM t;
+ChangeColumnTypeKeepsViewsReadingTableOfSameNameInOtherSchema:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA s2;
+    CREATE TABLE t (id int, c int);
+    CREATE TABLE s2.t (id int, c int);
+    CREATE VIEW v AS SELECT t1.id, t2.c FROM public.t t1 JOIN s2.t t2 ON t1.id = t2.id;
+  desired: |
+    CREATE SCHEMA s2;
+    CREATE TABLE t (id int, c bigint);
+    CREATE TABLE s2.t (id int, c int);
+    CREATE VIEW v AS SELECT t1.id, t2.c FROM public.t t1 JOIN s2.t t2 ON t1.id = t2.id;
+  up: |
+    ALTER TABLE public.t ALTER COLUMN c TYPE bigint;
+  down: |
+    ALTER TABLE public.t ALTER COLUMN c TYPE integer;
+# FIXME: CAST(x AS bit) is compared with the cast, while PostgreSQL writes '1'::bit(1), whose cast
+# of a literal is left out of the comparison, so the view is replaced on every run
+# CastFunctionToBitWithoutLength:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE VIEW v AS SELECT CAST('1' AS bit) AS c;

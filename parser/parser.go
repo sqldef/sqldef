@@ -36,22 +36,37 @@ func newUnicodeStrVal(yylex any, s string) *SQLVal {
 	return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
 }
 
-// castTypeName returns the type a cast names with an identifier. A quoted name in lowercase names
-// the same type as the unquoted one, and an alias of a built-in type is resolved to the name
-// PostgreSQL writes, as the keyword spellings of the type are. The exception is "char", a type
-// other than the one the keyword char names.
+// castTypeName returns the type a cast names with an identifier. An alias of a built-in type is
+// resolved to the name PostgreSQL writes, as the keyword spellings of the type are. A quoted name
+// keeps its quotes unless it is a lowercase name that means the same unquoted: not one that needs
+// quotes, nor a keyword such as char or bit that names another type or gives a length.
 func castTypeName(yylex any, name Ident) string {
-	if name.Quoted && name.Name == "char" {
-		return `"char"`
-	}
-	if name.Quoted && name.Name == "varchar" {
-		// Named as the keyword varchar is
-		return "character varying"
-	}
-	if !name.Quoted || name.Name == FoldASCII(name.Name) {
+	if !name.Quoted {
 		return PostgresTypeName(FoldASCII(name.Name))
 	}
+	if _, ok := postgresTypeAliases[name.Name]; ok {
+		return PostgresTypeName(name.Name)
+	}
+	switch name.Name {
+	case "varchar":
+		return "character varying"
+	case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb":
+		return name.Name
+	}
+	if isPlainIdentifier(name.Name) && !IsKeyword(name.Name) {
+		return name.Name
+	}
 	return collationNamePart(yylex, name)
+}
+
+// isPlainIdentifier tells whether a name can be written without quotes, apart from keywords
+func isPlainIdentifier(name string) bool {
+	for i, r := range name {
+		if !(r >= 'a' && r <= 'z' || r == '_' || i > 0 && (r >= '0' && r <= '9' || r == '$')) {
+			return false
+		}
+	}
+	return name != ""
 }
 
 // castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
@@ -10453,7 +10468,7 @@ yydefault:
 	case 326:
 		yyDollar = yyS[yypt-3 : yypt+1]
 		{
-			yyVAL.str = fmt.Sprintf("'%s'@'%s'", yyDollar[1].str, yyDollar[3].str)
+			yyVAL.str = QuoteString(yyDollar[1].str, backslashEscapes(yylex)) + "@" + QuoteString(yyDollar[3].str, backslashEscapes(yylex))
 		}
 	case 327:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -12454,12 +12469,12 @@ yydefault:
 	case 692:
 		yyDollar = yyS[yypt-6 : yypt+1]
 		{
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].str, EnumValues: yyDollar[3].strs, Charset: yyDollar[5].str, Collate: yyDollar[6].str}
+			yyVAL.columnType = ColumnType{Type: yyDollar[1].str, EnumValues: yyDollar[3].strs, Charset: yyDollar[5].str, Collate: yyDollar[6].str, EnumBackslashEscapes: backslashEscapes(yylex)}
 		}
 	case 693:
 		yyDollar = yyS[yypt-6 : yypt+1]
 		{
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].str, EnumValues: yyDollar[3].strs, Charset: yyDollar[5].str, Collate: yyDollar[6].str}
+			yyVAL.columnType = ColumnType{Type: yyDollar[1].str, EnumValues: yyDollar[3].strs, Charset: yyDollar[5].str, Collate: yyDollar[6].str, EnumBackslashEscapes: backslashEscapes(yylex)}
 		}
 	case 694:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -13649,7 +13664,7 @@ yydefault:
 	case 916:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		{
-			yyVAL.str = "'" + yyDollar[1].str + "'"
+			yyVAL.str = QuoteString(yyDollar[1].str, backslashEscapes(yylex))
 		}
 	case 917:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -15667,7 +15682,7 @@ yydefault:
 	case 1311:
 		yyDollar = yyS[yypt-2 : yypt+1]
 		{
-			yyVAL.str = " separator '" + yyDollar[2].str + "'"
+			yyVAL.str = " separator " + QuoteString(yyDollar[2].str, backslashEscapes(yylex))
 		}
 	case 1312:
 		yyDollar = yyS[yypt-1 : yypt+1]

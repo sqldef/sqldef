@@ -50,22 +50,37 @@ func newUnicodeStrVal(yylex any, s string) *SQLVal {
   return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
 }
 
-// castTypeName returns the type a cast names with an identifier. A quoted name in lowercase names
-// the same type as the unquoted one, and an alias of a built-in type is resolved to the name
-// PostgreSQL writes, as the keyword spellings of the type are. The exception is "char", a type
-// other than the one the keyword char names.
+// castTypeName returns the type a cast names with an identifier. An alias of a built-in type is
+// resolved to the name PostgreSQL writes, as the keyword spellings of the type are. A quoted name
+// keeps its quotes unless it is a lowercase name that means the same unquoted: not one that needs
+// quotes, nor a keyword such as char or bit that names another type or gives a length.
 func castTypeName(yylex any, name Ident) string {
-  if name.Quoted && name.Name == "char" {
-    return `"char"`
-  }
-  if name.Quoted && name.Name == "varchar" {
-    // Named as the keyword varchar is
-    return "character varying"
-  }
-  if !name.Quoted || name.Name == FoldASCII(name.Name) {
+  if !name.Quoted {
     return PostgresTypeName(FoldASCII(name.Name))
   }
+  if _, ok := postgresTypeAliases[name.Name]; ok {
+    return PostgresTypeName(name.Name)
+  }
+  switch name.Name {
+  case "varchar":
+    return "character varying"
+  case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb":
+    return name.Name
+  }
+  if isPlainIdentifier(name.Name) && !IsKeyword(name.Name) {
+    return name.Name
+  }
   return collationNamePart(yylex, name)
+}
+
+// isPlainIdentifier tells whether a name can be written without quotes, apart from keywords
+func isPlainIdentifier(name string) bool {
+  for i, r := range name {
+    if !(r >= 'a' && r <= 'z' || r == '_' || i > 0 && (r >= '0' && r <= '9' || r == '$')) {
+      return false
+    }
+  }
+  return name != ""
 }
 
 // castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
@@ -3374,7 +3389,7 @@ event_comment_opt:
 event_definer_user:
   STRING ID STRING
   {
-    $$ = fmt.Sprintf("'%s'@'%s'", $1, $3)
+    $$ = QuoteString($1, backslashEscapes(yylex)) + "@" + QuoteString($3, backslashEscapes(yylex))
   }
 | sql_id ID sql_id
   {
@@ -5253,12 +5268,12 @@ char_type:
   }
 | ENUM '(' enum_values ')' charset_opt collate_opt
   {
-    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6}
+    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6, EnumBackslashEscapes: backslashEscapes(yylex)}
   }
 // need set_values / SetValues ?
 | SET '(' enum_values ')' charset_opt collate_opt
   {
-    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6}
+    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6, EnumBackslashEscapes: backslashEscapes(yylex)}
   }
 
 varying_opt:
@@ -6394,7 +6409,7 @@ table_opt_value:
   }
 | STRING
   {
-    $$ = "'" + $1 + "'"
+    $$ = QuoteString($1, backslashEscapes(yylex))
   }
 | INTEGRAL
   {
@@ -8188,7 +8203,7 @@ separator_opt:
   }
 | SEPARATOR STRING
   {
-    $$ = " separator '"+$2+"'"
+    $$ = " separator " + QuoteString($2, backslashEscapes(yylex))
   }
 
 when_expression_list:

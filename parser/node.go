@@ -1250,6 +1250,8 @@ type ColumnType struct {
 
 	// Enum values
 	EnumValues []string
+	// EnumBackslashEscapes tells whether a backslash in EnumValues is written escaped, as in MySQL
+	EnumBackslashEscapes bool
 
 	// Key specification
 	KeyOpt ColumnKeyOption
@@ -1353,7 +1355,7 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	if ct.EnumValues != nil {
 		quotedValues := make([]string, len(ct.EnumValues))
 		for i, v := range ct.EnumValues {
-			quotedValues[i] = "'" + strings.ReplaceAll(v, "'", "''") + "'"
+			quotedValues[i] = QuoteString(v, ct.EnumBackslashEscapes)
 		}
 		buf.Printf("(%s)", strings.Join(quotedValues, ", "))
 	}
@@ -2614,6 +2616,15 @@ var postgresTypeAliases = map[string]string{
 	"varbit":      "bit varying",
 	"timestamptz": "timestamp with time zone",
 	"timetz":      "time with time zone",
+}
+
+// QuoteString writes a string as an SQL literal, escaping backslashes where they are escape
+// characters, as in MySQL
+func QuoteString(s string, backslashEscapes bool) string {
+	if backslashEscapes {
+		s = strings.ReplaceAll(s, `\`, `\\`)
+	}
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // QuotePostgresIdent quotes a PostgreSQL identifier
