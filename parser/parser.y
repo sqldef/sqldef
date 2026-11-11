@@ -50,6 +50,17 @@ func newUnicodeStrVal(yylex any, s string) *SQLVal {
   return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
 }
 
+// castTypeName returns the type a cast names with an identifier. An unquoted alias of a built-in
+// type is resolved to the name PostgreSQL writes, as the keyword spellings of the type are.
+func castTypeName(yylex any, name Ident) string {
+  if !name.Quoted {
+    if canonical, ok := postgresTypeAliases[strings.ToLower(name.Name)]; ok {
+      return canonical
+    }
+  }
+  return collationNamePart(yylex, name)
+}
+
 func setAllowComments(yylex any, allow bool) {
   yylex.(*Tokenizer).AllowComments = allow
 }
@@ -8086,6 +8097,18 @@ simple_convert_type:
 | VECTOR
   {
     $$ = &ConvertType{Type: $1}
+  }
+| sql_id
+  {
+    $$ = &ConvertType{Type: castTypeName(yylex, $1)}
+  }
+| sql_id '.' simple_convert_type
+  {
+    // PostgreSQL writes a type of pg_catalog without its schema
+    if !(!$1.Quoted && strings.EqualFold($1.Name, "pg_catalog") || $1.Quoted && $1.Name == "pg_catalog") {
+      $3.Type = collationNamePart(yylex, $1) + "." + $3.Type
+    }
+    $$ = $3
   }
 
 expression_opt:

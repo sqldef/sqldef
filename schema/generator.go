@@ -4058,7 +4058,7 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 // as sqldef has always written it, and the quote-aware mode keeps the quotes as written.
 func (d dialect) quotedCollationName(collation string) string {
 	if d.mode == GeneratorModePostgres && d.legacyIgnoreQuotes {
-		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+		return strings.Join(util.TransformSlice(parser.PostgresNameParts(collation), func(part Ident) string {
 			return d.forceEscapeSQLName(part.Name)
 		}), ".")
 	}
@@ -5936,7 +5936,7 @@ func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool
 // folds, so it manages only a quoted name.
 func (g *Generator) managedCollation(collation string) string {
 	if g.legacyIgnoreQuotes && collation != "" {
-		if parts := postgresNameParts(collation); !parts[len(parts)-1].Quoted {
+		if parts := parser.PostgresNameParts(collation); !parts[len(parts)-1].Quoted {
 			return ""
 		}
 	}
@@ -5951,7 +5951,7 @@ func (g *Generator) sameCollations(a, b string) bool {
 	if a == b {
 		return true
 	}
-	partsA, partsB := postgresNameParts(a), postgresNameParts(b)
+	partsA, partsB := parser.PostgresNameParts(a), parser.PostgresNameParts(b)
 	if len(partsA) == 0 || len(partsB) == 0 || (len(partsA) == 1) == (len(partsB) == 1) {
 		return false
 	}
@@ -5985,7 +5985,7 @@ func (g *Generator) canonicalCollationFolding(collation string, fold bool) strin
 	if g.mode != GeneratorModePostgres {
 		return collation
 	}
-	parts := util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+	parts := util.TransformSlice(parser.PostgresNameParts(collation), func(part Ident) string {
 		if fold && (!part.Quoted || g.legacyIgnoreQuotes) {
 			return parser.FoldASCII(part.Name)
 		}
@@ -6002,41 +6002,6 @@ func (g *Generator) canonicalCollationFolding(collation string, fold bool) strin
 		return ""
 	}
 	return strings.Join(util.TransformSlice(parts, g.forceEscapeSQLName), ".")
-}
-
-// postgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
-// name. A quoted part such as "en_US.utf8" may contain a dot.
-func postgresNameParts(name string) []Ident {
-	var parts []Ident
-	for name != "" {
-		if rest, ok := strings.CutPrefix(name, `"`); ok {
-			var part strings.Builder
-			for {
-				i := strings.IndexByte(rest, '"')
-				if i < 0 {
-					panic(fmt.Sprintf("unterminated quoted name: %s", name))
-				}
-				part.WriteString(rest[:i])
-				rest = rest[i+1:]
-				if !strings.HasPrefix(rest, `"`) {
-					break
-				}
-				part.WriteByte('"')
-				rest = rest[1:]
-			}
-			parts = append(parts, Ident{Name: part.String(), Quoted: true})
-			name = rest
-		} else {
-			end := strings.IndexByte(name, '.')
-			if end < 0 {
-				end = len(name)
-			}
-			parts = append(parts, Ident{Name: name[:end]})
-			name = name[end:]
-		}
-		name = strings.TrimPrefix(name, ".")
-	}
-	return parts
 }
 
 // withKeptCollation returns the desired column with the current collation when it omits one, as
@@ -6095,8 +6060,9 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (!current.typeIdent.IsEmpty() || !desired.typeIdent.IsEmpty()) {
-		// Quote-aware comparison for custom types (domains, etc.)
+	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (current.typeIdent.Quoted || desired.typeIdent.Quoted) {
+		// Quote-aware comparison for custom types (domains, etc.). Two unquoted names compare
+		// below, where an alias such as int4 resolves to its type.
 		//
 		// PostgreSQL's format_type returns the internal type name without quotes.
 		// For a domain created with CREATE DOMAIN "PositiveInt", it returns "PositiveInt".
@@ -6105,14 +6071,13 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		// The canonical form for comparison is:
 		// - Quoted identifiers: use the exact name (case-sensitive)
 		// - Unquoted identifiers: lowercase the name
-		currentCanonical := current.typeIdent.Name
-		desiredCanonical := desired.typeIdent.Name
-		if !current.typeIdent.Quoted {
-			currentCanonical = strings.ToLower(currentCanonical)
+		canonical := func(column Column) string {
+			if column.typeIdent.Quoted {
+				return column.typeIdent.Name
+			}
+			return strings.ToLower(column.typeName)
 		}
-		if !desired.typeIdent.Quoted {
-			desiredCanonical = strings.ToLower(desiredCanonical)
-		}
+		currentCanonical, desiredCanonical := canonical(current), canonical(desired)
 		slog.Debug("haveSameDataType quote-aware comparison",
 			"column", current.name.Name,
 			"current.typeIdent", current.typeIdent,
@@ -6517,8 +6482,9 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 		DropQualifiers: dropQualifiers,
 		OmittedSchemas: []string{"pg_catalog"},
 		// pg_get_viewdef() leaves out every schema on the search path, which sqldef does not know
-		DropSchemas: dropQualifiers,
-		NoOpCast:    g.noOpCast,
+		DropSchemas:        dropQualifiers,
+		OmittedTypeSchemas: []string{g.defaultSchema},
+		NoOpCast:           g.noOpCast,
 	}
 }
 

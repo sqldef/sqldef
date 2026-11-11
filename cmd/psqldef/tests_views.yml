@@ -1591,7 +1591,7 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
 #     CREATE TABLE tt (id int);
 #     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt WHERE id > 0;
 
-# FIXME: The generic parser does not parse a cast of a column to a type without a keyword, such as the (rc)::regclass that PostgreSQL adds to w for a text column
+# FIXME: PostgreSQL adds the (rc)::regclass cast that pg_table_size takes to w for a text column, which is unknown without the function's signature
 # ChangeViewReadByFunctionWithImplicitCast:
 #   legacy_ignore_quotes: false
 #   current: |

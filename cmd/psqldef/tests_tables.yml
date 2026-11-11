@@ -676,3 +676,64 @@ ReservedWordNamesInIndexAndView:
     CREATE TABLE "order" (id int, "select" int);
     CREATE INDEX o_i ON "order" ("select") WHERE "select" <> 2;
     CREATE VIEW v AS SELECT o."select", 'a\b' AS s2 FROM "order" o;
+
+CastsToTypesNamedWithoutKeywords:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TYPE "Mood" AS ENUM ('A', 'B');
+    CREATE TABLE t (
+      id int,
+      m text,
+      n bigint,
+      CONSTRAINT k1 CHECK (m::mood IS NOT NULL),
+      CONSTRAINT k2 CHECK (m::public."Mood" IS NOT NULL),
+      CONSTRAINT k3 CHECK (id::int8 > 0),
+      CONSTRAINT k4 CHECK (n::pg_catalog.int4 > 0),
+      CONSTRAINT k5 CHECK (m::pg_catalog.text <> '')
+    );
+    CREATE INDEX t_n ON t ((n::int4));
+    CREATE VIEW v AS SELECT id::float8 AS f, m::"Mood" AS mm, (n::text || '+00')::timestamptz::text AS ts FROM t;
+
+ChangeCastToTypeNamedWithoutKeyword:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TYPE mood2 AS ENUM ('a', 'b');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::mood IS NOT NULL));
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TYPE mood2 AS ENUM ('a', 'b');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::mood2 IS NOT NULL));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::mood2 is not null);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::mood is not null);
+
+ColumnTypesNamedByTheirAliases:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a integer, b bigint, c double precision, d real, e smallint, f boolean, g timestamp with time zone);
+  desired: |
+    CREATE TABLE t (a int4, b int8, c float8, d float4, e int2, f bool, g timestamptz);
+  up: ""
+  down: ""
+
+ChangeCaseOfQuotedCastType:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE "Mood" AS ENUM ('a');
+    CREATE TYPE mood AS ENUM ('a');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::"Mood" IS NOT NULL));
+  desired: |
+    CREATE TYPE "Mood" AS ENUM ('a');
+    CREATE TYPE mood AS ENUM ('a');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::"mood" IS NOT NULL));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::"mood" is not null);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::"Mood" is not null);

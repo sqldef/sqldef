@@ -103,6 +103,15 @@ func isMariaDBJSONColumn(col Column) bool {
 // normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases.
 // This is the central function for all type name normalization in the generator.
 func normalizeTypeName(typeName string, mode GeneratorMode) string {
+	if mode == GeneratorModePostgres && strings.Contains(typeName, `"`) {
+		// A quoted name keeps its case
+		return strings.Join(util.TransformSlice(parser.PostgresNameParts(typeName), func(part Ident) string {
+			if part.Quoted {
+				return `"` + strings.ReplaceAll(part.Name, `"`, `""`) + `"`
+			}
+			return strings.ToLower(part.Name)
+		}), ".")
+	}
 	// Normalize to lowercase for case-insensitive comparison
 	normalized := strings.ToLower(typeName)
 
@@ -386,7 +395,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 				return recur(e.Expr, mode)
 			}
 
-			normalizedTypeStr := normalizeTypeName(typeStr, mode)
+			normalizedTypeStr := normalizeTypeName(e.Type.Type, mode)
 
 			// Remove date/timestamp casts from string literals
 			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints

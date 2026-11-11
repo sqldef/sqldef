@@ -19,6 +19,7 @@ package parser
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,6 +50,8 @@ type nodeBuffer struct {
 	omittedSchemas []string
 	// dropSchemas leaves out every schema of table and function names
 	dropSchemas bool
+	// omittedTypeSchemas are left out of type names besides omittedSchemas
+	omittedTypeSchemas []string
 	// noOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	noOpCast                  NoOpCastFunc
 	unknownTypesCaseSensitive bool
@@ -84,6 +87,49 @@ func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
 		}
 	}
 	return false
+}
+
+// PostgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
+// name. A quoted part such as "en_US.utf8" may contain a dot.
+func PostgresNameParts(name string) []Ident {
+	var parts []Ident
+	for name != "" {
+		if rest, ok := strings.CutPrefix(name, `"`); ok {
+			var part strings.Builder
+			for {
+				i := strings.IndexByte(rest, '"')
+				if i < 0 {
+					panic(fmt.Sprintf("unterminated quoted name: %s", name))
+				}
+				part.WriteString(rest[:i])
+				rest = rest[i+1:]
+				if !strings.HasPrefix(rest, `"`) {
+					break
+				}
+				part.WriteByte('"')
+				rest = rest[1:]
+			}
+			parts = append(parts, Ident{Name: part.String(), Quoted: true})
+			name = rest
+		} else {
+			end := strings.IndexByte(name, '.')
+			if end < 0 {
+				end = len(name)
+			}
+			parts = append(parts, Ident{Name: name[:end]})
+			name = name[end:]
+		}
+		name = strings.TrimPrefix(name, ".")
+	}
+	return parts
+}
+
+func (buf *nodeBuffer) omitsTypeSchema(schema Ident) bool {
+	name := schema.Name
+	if !schema.Quoted || buf.foldQuoted {
+		name = FoldASCII(name)
+	}
+	return slices.Contains(buf.omittedTypeSchemas, name)
 }
 
 // formatCastOperand formats the operand of a cast, recording the type of a literal operand
@@ -311,6 +357,8 @@ type ComparisonOptions struct {
 	// DropSchemas leaves out every schema of table and function names, as sqldef does not know the
 	// search path, which may hold other schemas than the default one
 	DropSchemas bool
+	// OmittedTypeSchemas are left out of type names besides OmittedSchemas
+	OmittedTypeSchemas []string
 	// UnknownTypesCaseSensitive compares the case of a literal of a type that is neither a string
 	// type nor one whose constants PostgreSQL is known to rewrite, such as an enum
 	UnknownTypesCaseSensitive bool
@@ -329,7 +377,7 @@ type ComparisonOptions struct {
 type NoOpCastFunc func(col *ColName, t *ConvertType) bool
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, reduceLiteralNames: o.ReduceLiteralNames}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, omittedTypeSchemas: o.OmittedTypeSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, reduceLiteralNames: o.ReduceLiteralNames}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -2565,6 +2613,19 @@ func NewStrVal(in string) *SQLVal {
 	return &SQLVal{Type: StrVal, Val: in}
 }
 
+// postgresTypeAliases maps the internal names of PostgreSQL's built-in types to the names it writes
+var postgresTypeAliases = map[string]string{
+	"int2":        "smallint",
+	"int4":        "integer",
+	"int8":        "bigint",
+	"float4":      "real",
+	"float8":      "double precision",
+	"bool":        "boolean",
+	"varbit":      "bit varying",
+	"timestamptz": "timestamp with time zone",
+	"timetz":      "time with time zone",
+}
+
 // postgresFloatTypeName returns the type PostgreSQL makes of float(p): real up to 24 bits of
 // precision, and double precision above
 func postgresFloatTypeName(precision string) string {
@@ -3246,7 +3307,22 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	// timezone modifier belong to the element type, so they have to be emitted
 	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
 	typeName, isArray := strings.CutSuffix(node.Type, "[]")
-	buf.Printf("%s", typeName)
+	if buf.comparisonKey && strings.ContainsAny(typeName, `".`) {
+		// A name of PostgreSQL keeps its case where quoted, and PostgreSQL leaves out the schema
+		// on the search path
+		parts := PostgresNameParts(typeName)
+		if len(parts) > 1 && (buf.omitsSchema(parts[0]) || buf.omitsTypeSchema(parts[0])) {
+			parts = parts[1:]
+		}
+		for i, part := range parts {
+			if i > 0 {
+				buf.WriteByte('.')
+			}
+			buf.writeIdentKey(part)
+		}
+	} else {
+		buf.Printf("%s", typeName)
+	}
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)
 		if node.Scale != nil {
