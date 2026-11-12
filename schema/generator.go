@@ -7445,13 +7445,13 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if !g.areSameWhereClause(exclusionA.where, exclusionB.where) {
+	if !g.areSameWhereClause(g.typed(exclusionA.where, exclusionB.where)) {
 		return false
 	}
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.operator != b.operator || !g.sameNormalizedExpr(a.expression, b.expression) {
+		if a.operator != b.operator || !g.sameNormalizedExpr(g.typed(a.expression, b.expression)) {
 			return false
 		}
 	}

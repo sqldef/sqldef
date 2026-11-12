@@ -40,8 +40,6 @@ type typeContext struct {
 	knownCasts map[*parser.CastExpr]bool
 	// depth counts the resolutions in progress, as resolving a view resolves the views it reads
 	depth int
-	// mark marks the casts in the places where PostgreSQL adds none of its own as resolved
-	mark bool
 	// unresolved counts the expressions whose types are unknown
 	unresolved int
 	// ctes are the name keys of the common table expressions in scope of the query being
@@ -276,17 +274,17 @@ type typedForms[T any] struct {
 
 // resolveForms resolves the types of an expression, or of a query, in both forms
 func resolveForms[T any](tc *typeContext, resolve func() T) typedForms[T] {
-	mark, unresolved := tc.mark, tc.unresolved
+	unresolved := tc.unresolved
 	tc.depth++
 	defer func() {
-		tc.mark, tc.unresolved = mark, unresolved
+		tc.unresolved = unresolved
 		// The casts are needed only while the trees that hold them are built
 		if tc.depth--; tc.depth == 0 {
 			clear(tc.knownCasts)
 		}
 	}()
 	var forms typedForms[T]
-	tc.mark, tc.unresolved = true, 0
+	tc.unresolved = 0
 	forms.marked = resolve()
 	forms.full = tc.unresolved == 0
 	// The forms differ only in the casts marked as resolved
@@ -531,7 +529,7 @@ func (tc *typeContext) withCasts(args []parser.Expr, types []exprType, params []
 			continue
 		}
 		if t := tc.resolver.Type(params[i]); t != nil && t.Display != "" {
-			result[i] = &parser.CastExpr{Expr: result[i], Type: &parser.ConvertType{Type: t.Display}, Resolved: tc.mark}
+			result[i] = &parser.CastExpr{Expr: result[i], Type: &parser.ConvertType{Type: t.Display}, Resolved: true}
 		}
 	}
 	return result
@@ -548,7 +546,7 @@ func (tc *typeContext) markResolved(expr parser.Expr) parser.Expr {
 		}
 		inner = paren.Expr
 	}
-	if cast, ok := inner.(*parser.CastExpr); ok && tc.mark && tc.knownCasts[cast] {
+	if cast, ok := inner.(*parser.CastExpr); ok && tc.knownCasts[cast] {
 		cast.Resolved = true
 	}
 	return expr
@@ -782,6 +780,12 @@ func (g *Generator) resolveTableExpressionTypes(tc *typeContext, table *Table) {
 		}
 		add(index.where)
 	}
+	for _, exclusion := range table.exclusions {
+		for _, pair := range exclusion.exclusions {
+			add(pair.expression)
+		}
+		add(exclusion.where)
+	}
 	for _, policy := range table.policies {
 		add(policy.using)
 		add(policy.withCheck)
@@ -865,9 +869,8 @@ func (tc *typeContext) setRelations(tables []*Table, views []*View) {
 
 // viewOutput holds the resolved columns of a view, once known
 type viewOutput struct {
-	resolving bool
-	known     bool
-	columns   []relationColumn
+	known   bool
+	columns []relationColumn
 }
 
 // viewColumns resolves the definition of a view, and returns its output columns
@@ -875,7 +878,8 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 	if out, ok := tc.viewOutputs[view]; ok {
 		return out.columns, out.known
 	}
-	out := &viewOutput{resolving: true}
+	// A view that reads itself while it is resolved finds its columns unknown
+	out := &viewOutput{}
 	tc.viewOutputs[view] = out
 	outerCollated, outerCTEs := tc.collated, tc.ctes
 	tc.collated, tc.ctes = false, nil
@@ -894,7 +898,6 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 		tc.g.viewColumnTypes[view.definition] = out.columns
 	}
 	tc.collated, tc.ctes = outerCollated, outerCTEs
-	out.resolving = false
 	return out.columns, out.known
 }
 
@@ -1052,7 +1055,8 @@ type cteColumns struct {
 }
 
 // withCTEs adds the common table expressions of a WITH clause to those in scope. Each one sees
-// those before it, and itself with unknown columns where the WITH clause is recursive.
+// those before it, and where the WITH clause is recursive, itself and those after it with unknown
+// columns.
 func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) map[string]cteColumns {
 	if with == nil {
 		return ctes
@@ -1061,11 +1065,13 @@ func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) m
 	if result == nil {
 		result = map[string]cteColumns{}
 	}
+	if with.Recursive {
+		for _, cte := range with.CTEs {
+			result[tc.identKey(cte.Name)] = cteColumns{}
+		}
+	}
 	for _, cte := range with.CTEs {
 		key := tc.identKey(cte.Name)
-		if with.Recursive {
-			result[key] = cteColumns{}
-		}
 		definition := tc.resolveSelect(cte.Definition, nil, result)
 		columns, known := tc.outputColumns(cte.Definition, definition, false)
 		// The column names of a CTE rename its leading columns
@@ -1127,9 +1133,6 @@ func (tc *typeContext) relationColumns(name QualifiedName) ([]relationColumn, bo
 	}
 	for _, view := range tc.views {
 		if tc.g.qualifiedNamesEqual(view.name, name) {
-			if out, ok := tc.viewOutputs[view]; ok && out.resolving {
-				return nil, false
-			}
 			return tc.viewColumns(view)
 		}
 	}

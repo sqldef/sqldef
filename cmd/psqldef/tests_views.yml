@@ -2131,3 +2131,18 @@ AppendColumnToViewOfUnionWithStringLiteral:
   down: |
     DROP VIEW public.u;
     CREATE VIEW u AS SELECT 'a' AS x FROM t UNION SELECT s FROM t;
+
+# FIXME: PostgreSQL reorders the CTEs of WITH RECURSIVE so that each follows those it reads
+# AppendColumnToViewWithRecursiveCTEReadingLaterOne:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE b (x text);
+#     CREATE VIEW v AS WITH RECURSIVE a AS (SELECT x FROM b), b AS (SELECT 1 AS x) SELECT x FROM a;
+#   desired: |
+#     CREATE TABLE b (x text);
+#     CREATE VIEW v AS WITH RECURSIVE a AS (SELECT x FROM b), b AS (SELECT 1 AS x) SELECT x, 2 AS y FROM a;
+#   up: |
+#     CREATE OR REPLACE VIEW v AS WITH RECURSIVE a AS (SELECT x FROM b), b AS (SELECT 1 AS x) SELECT x, 2 AS y FROM a;
+#   down: |
+#     DROP VIEW public.v;
+#     CREATE VIEW v AS WITH RECURSIVE a AS (SELECT x FROM b), b AS (SELECT 1 AS x) SELECT x FROM a;

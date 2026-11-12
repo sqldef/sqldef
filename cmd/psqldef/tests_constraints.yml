@@ -3211,3 +3211,13 @@ CheckWithParenthesesInsideOtherNodes:
       CONSTRAINT t_tz CHECK ((((ts + interval '1 day')) AT TIME ZONE 'UTC') > now()),
       CONSTRAINT t_sub CHECK (substring(((a + b))::text from 1 for 2) <> 'x' AND coalesce(((a)), (b)) > 0)
     );
+
+ExclusionWithWhereOnDomainColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN posint AS integer;
+    CREATE TABLE t (
+      c posint,
+      r int4range,
+      EXCLUDE USING gist (r WITH &&) WHERE (c > 0)
+    );
