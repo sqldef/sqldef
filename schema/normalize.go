@@ -316,7 +316,7 @@ func isFoldableValueCastTypeName(typeStr string) bool {
 	switch parser.PostgresTypeName(typeStr) {
 	case "numeric", "decimal", "real", "double precision",
 		"integer", "int", "bigint", "smallint",
-		"money", "smallmoney", "interval":
+		"money", "smallmoney", "interval", "boolean":
 		return true
 	}
 	return false

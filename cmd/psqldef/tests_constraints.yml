@@ -3231,3 +3231,11 @@ CheckWithImplicitCastsToBitAndBpcharOfDomains:
       f flags CHECK ((f & B'00000001') = B'00000001'),
       c code CHECK (c || c <> 'xxxx')
     );
+
+CheckWithBooleanLiteralCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN yes AS boolean CHECK (VALUE = 't'::boolean);
+    CREATE TABLE t (
+      flag boolean CONSTRAINT c CHECK (flag = 't'::boolean OR flag = 'no'::bool)
+    );

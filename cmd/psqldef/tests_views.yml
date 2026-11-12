@@ -2200,3 +2200,17 @@ ViewWithLiteralsCastToTypeAliases:
   desired: |
     CREATE TABLE t (id integer);
     CREATE VIEW v AS SELECT '1'::int4 AS i, '1.5'::float8 AS f, 't'::bool AS b, 'yes'::boolean AS y, '2'::pg_catalog.int8 AS l FROM t;
+
+AppendColumnToViewWithCastToArrayOfCharacter:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (c char[]);
+    CREATE VIEW v AS SELECT c::char[] AS c, '{a}'::char[] AS d FROM t;
+  desired: |
+    CREATE TABLE t (c char[]);
+    CREATE VIEW v AS SELECT c::char[] AS c, '{a}'::char[] AS d, 1 AS e FROM t;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT c::char[] AS c, '{a}'::char[] AS d, 1 AS e FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT c::char[] AS c, '{a}'::char[] AS d FROM t;

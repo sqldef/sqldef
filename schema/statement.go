@@ -49,7 +49,7 @@ func renderStatements(statements []statement, mode parser.ParserMode) []string {
 	return util.TransformSlice(statements, func(s statement) string {
 		ddl := s.Render()
 		// A line comment at the end would take in the semicolon written after the statement
-		if !s.Skipped() && parser.EndsWithLineComment(ddl, mode) {
+		if !s.Skipped() && strings.ContainsAny(ddl, "-#") && parser.EndsWithLineComment(ddl, mode) {
 			ddl += "\n"
 		}
 		return ddl

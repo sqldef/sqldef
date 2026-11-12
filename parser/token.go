@@ -1457,7 +1457,7 @@ func (tkn *Tokenizer) scanDollarQuotedString() (int, string) {
 		if tkn.lastChar == '$' {
 			// Check if this is the start of the closing delimiter
 			savedPos := tkn.bufPos
-			savedChar := tkn.lastChar
+			savedChar, savedSize := tkn.lastChar, tkn.lastSize
 			savedPosition := tkn.Position
 
 			var potentialDelim strings.Builder
@@ -1482,7 +1482,7 @@ func (tkn *Tokenizer) scanDollarQuotedString() (int, string) {
 			// Not the closing delimiter, restore and include in content
 			buffer.WriteString(potentialDelim.String()[:potentialDelim.Len()-1])
 			tkn.bufPos = savedPos
-			tkn.lastChar = savedChar
+			tkn.lastChar, tkn.lastSize = savedChar, savedSize
 			tkn.Position = savedPosition
 			buffer.WriteRune(tkn.lastChar)
 			tkn.next()
@@ -1643,14 +1643,14 @@ func (tkn *Tokenizer) scanSkippingComments() (int, string) {
 // without consuming any characters. This is used for context-aware tokenization.
 func (tkn *Tokenizer) peekToken() (int, string) {
 	// Save current state and restore on exit
-	savedLastChar := tkn.lastChar
+	savedLastChar, savedLastSize := tkn.lastChar, tkn.lastSize
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
 	savedPeeking := tkn.peeking
 
 	defer func() {
 		tkn.peeking = savedPeeking
-		tkn.lastChar = savedLastChar
+		tkn.lastChar, tkn.lastSize = savedLastChar, savedLastSize
 		tkn.Position = savedPosition
 		tkn.bufPos = savedBufPos
 	}()
@@ -1667,7 +1667,7 @@ type peekedToken struct {
 
 // peekTokens returns the next n tokens without consuming input.
 func (tkn *Tokenizer) peekTokens(n int) []peekedToken {
-	savedLastChar := tkn.lastChar
+	savedLastChar, savedLastSize := tkn.lastChar, tkn.lastSize
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
 	savedPeeking := tkn.peeking
@@ -1675,7 +1675,7 @@ func (tkn *Tokenizer) peekTokens(n int) []peekedToken {
 
 	defer func() {
 		tkn.peeking = savedPeeking
-		tkn.lastChar = savedLastChar
+		tkn.lastChar, tkn.lastSize = savedLastChar, savedLastSize
 		tkn.Position = savedPosition
 		tkn.bufPos = savedBufPos
 		tkn.lastIdentifierQuoted = savedQuoted

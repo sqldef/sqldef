@@ -171,7 +171,7 @@ func (tc *typeContext) castType(t *parser.ConvertType) (exprType, bool) {
 	if t.Length != nil {
 		length = t.Length.Val
 	} else {
-		length = defaultLength(strings.ToLower(t.Type))
+		length = defaultLength(strings.ToLower(base))
 	}
 	if t.Scale != nil {
 		scale = t.Scale.Val
@@ -254,10 +254,8 @@ func (tc *typeContext) tableScope(table *Table) columnScope {
 				return exprType{}, false
 			}
 		}
-		for _, column := range table.columns {
-			if tc.g.identsEqual(column.name, col.Name) {
-				return tc.columnType(column)
-			}
+		if column := tc.g.findColumnByName(table.columns, col.Name); column != nil {
+			return tc.columnType(column)
 		}
 		return exprType{}, false
 	}

@@ -2718,22 +2718,6 @@ func (g *Generator) namesTable(name parser.TableName, table QualifiedName) bool 
 	return g.qualifiedNamesEqual(QualifiedName{Schema: name.Schema, Name: name.Name}, table)
 }
 
-// fromHasTable reports whether a FROM clause selects from a table, outside its subqueries
-func (g *Generator) fromHasTable(exprs parser.TableExprs, table QualifiedName) bool {
-	return slices.ContainsFunc(exprs, func(expr parser.TableExpr) bool {
-		switch expr := expr.(type) {
-		case *parser.AliasedTableExpr:
-			name, ok := expr.Expr.(parser.TableName)
-			return ok && g.namesTable(name, table)
-		case *parser.JoinTableExpr:
-			return g.fromHasTable(parser.TableExprs{expr.LeftExpr, expr.RightExpr}, table)
-		case *parser.ParenTableExpr:
-			return g.fromHasTable(expr.Exprs, table)
-		}
-		return false
-	})
-}
-
 // unwrapInterface returns the value an interface holds, so that a node is visited once
 func unwrapInterface(v reflect.Value) reflect.Value {
 	for v.IsValid() && v.Kind() == reflect.Interface {
@@ -5142,7 +5126,7 @@ func findViewQuoteAware(views []*View, name QualifiedName, defaultSchema string,
 
 // findColumnByName finds a column using quote-aware comparison
 func (g *Generator) findColumnByName(columns map[string]*Column, name Ident) *Column {
-	for _, column := range columns {
+	for _, column := range util.CanonicalMapIter(columns) {
 		if g.identsEqual(column.name, name) {
 			return column
 		}
