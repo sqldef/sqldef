@@ -2260,3 +2260,16 @@ ViewWithLiteralsCastToBpcharWithLength:
   desired: |
     CREATE TABLE t (id integer);
     CREATE VIEW v AS SELECT 'x'::bpchar(3) AS b, 'y'::"bpchar"(2) AS c FROM t;
+
+ChangeViewByRegroupingAndOr:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id integer, x boolean, a integer, b integer);
+    CREATE VIEW v AS SELECT id FROM t WHERE x AND (a, b) <> (1, 2);
+  desired: |
+    CREATE TABLE t (id integer, x boolean, a integer, b integer);
+    CREATE VIEW v AS SELECT id FROM t WHERE x AND a <> 1 OR b <> 2;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE x AND a <> 1 OR b <> 2;
+  down: |
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE x AND (a, b) <> (1, 2);

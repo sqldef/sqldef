@@ -2470,7 +2470,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// every identifier
 		var sameDefinitions bool
 		if g.mode == GeneratorModePostgres {
-			sameDefinitions = parser.SameForComparison(currentNormalizedAST, desiredNormalizedAST, g.viewComparisonOptions())
+			// Normalization drops parentheses, which canonicalParens puts back where the tree needs them
+			sameDefinitions = parser.SameForComparison(treeWithCanonicalParens(currentNormalizedAST), treeWithCanonicalParens(desiredNormalizedAST), g.viewComparisonOptions())
 		} else {
 			sameDefinitions = strings.EqualFold(parser.String(currentNormalizedAST), parser.String(desiredNormalizedAST))
 		}

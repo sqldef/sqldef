@@ -3248,3 +3248,16 @@ CheckWithIsDistinctFromOfOtherTypes:
       n numeric CHECK (a IS DISTINCT FROM n),
       m numeric CHECK (a IS NOT DISTINCT FROM m OR m IS NULL)
     );
+
+ChangeCheckByDroppingDateCastOfColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (ts timestamp, d date, CONSTRAINT c CHECK (ts::date > d));
+  desired: |
+    CREATE TABLE t (ts timestamp, d date, CONSTRAINT c CHECK (ts > d));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (ts > d);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (ts::date > d);

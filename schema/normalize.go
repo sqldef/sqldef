@@ -408,8 +408,6 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		// - date, timestamp without time zone: Removed when cast from string literals
 		// - time, time without time zone: Kept but normalized (PostgreSQL preserves these for precision)
 		if e.Type != nil {
-			typeStr := strings.ToLower(e.Type.Type)
-
 			if isUnsizedStringCastType(e.Type) && !e.Resolved && forComparison {
 				return recur(e.Expr, mode)
 			}
@@ -419,7 +417,9 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			// Remove date/timestamp casts from string literals
 			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints
 			if normalizedTypeStr == "date" || normalizedTypeStr == "timestamp" {
-				return recur(e.Expr, mode)
+				if val, ok := e.Expr.(*parser.SQLVal); ok && val.Type == parser.StrVal {
+					return recur(e.Expr, mode)
+				}
 			}
 
 			// Remove redundant array typecasts on ARRAY constructors
@@ -431,9 +431,8 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			// Empty arrays (ARRAY[]) need the typecast or PostgreSQL can't determine the type.
 			normalizedExpr := recur(e.Expr, mode)
 			if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
-				if strings.HasSuffix(typeStr, "[]") && len(arrayConstructor.Elements) > 0 {
-					// Non-empty array with array typecast: strip the redundant typecast
-					return normalizedExpr
+				if _, isArrayType := arrayElementType(e.Type); isArrayType && len(arrayConstructor.Elements) > 0 {
+					return recur(castArrayElements(arrayConstructor, e.Type, mode), mode)
 				}
 			}
 
@@ -2295,7 +2294,8 @@ func expandRowComparison(e *parser.ComparisonExpr, op string, mode GeneratorMode
 			expanded = &parser.OrExpr{Left: expanded, Right: field}
 		}
 	}
-	return expanded, true
+	// The expansion stands for a single comparison, so it keeps its own precedence
+	return &parser.ParenExpr{Expr: expanded}, true
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
@@ -2486,6 +2486,21 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 	}
 	// An operator inside another node keeps parentheses, so that the key tells apart what it binds to
 	return mapChildExprs(expr, operand)
+}
+
+// treeWithCanonicalParens applies canonicalParens to every expression of an AST
+func treeWithCanonicalParens[T any](tree T) T {
+	exprType := reflect.TypeFor[parser.Expr]()
+	value := reflect.ValueOf(&tree).Elem()
+	value.Set(copyTree(value, func(v reflect.Value) (reflect.Value, bool) {
+		if v.Kind() != reflect.Interface || v.Type() != exprType || v.IsNil() {
+			return reflect.Value{}, false
+		}
+		mapped := reflect.New(exprType).Elem()
+		mapped.Set(reflect.ValueOf(canonicalParens(v.Interface().(parser.Expr))))
+		return mapped, true
+	}))
+	return tree
 }
 
 // mapChildExprs returns a copy of an expression with f applied to the expressions it holds
