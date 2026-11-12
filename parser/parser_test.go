@@ -2727,6 +2727,8 @@ func TestReplaceViewName(t *testing.T) {
 		`CREATE VIEW v AS SELECT 1`:                                                                `CREATE VIEW "public"."v" AS SELECT 1`,
 		`create or replace view public."V" (a) as select 1`:                                        `create or replace view "public"."v" (a) as select 1`,
 		`CREATE MATERIALIZED VIEW IF NOT EXISTS s.v WITH (fillfactor=70) AS SELECT 1 WITH NO DATA`: `CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."v" WITH (fillfactor=70) AS SELECT 1 WITH NO DATA`,
+		`CREATE VIEW tablespace.tablespace AS SELECT 1`:                                            `CREATE VIEW "public"."v" AS SELECT 1`,
+		`CREATE MATERIALIZED VIEW v TABLESPACE pg_default AS SELECT 1`:                             `CREATE MATERIALIZED VIEW "public"."v" TABLESPACE pg_default AS SELECT 1`,
 		`CREATE /* c */ VIEW /* c */ v/* c */AS SELECT 1`:                                          `CREATE /* c */ VIEW "public"."v"/* c */AS SELECT 1`,
 	} {
 		if got := ReplaceViewName(sql, ParserModePostgres, `"public"."v"`); got != expected {

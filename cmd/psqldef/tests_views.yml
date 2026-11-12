@@ -2117,3 +2117,17 @@ ChangeViewOverCTEWithFewerColumnNames:
   down: |
     DROP VIEW public.v;
     CREATE VIEW v AS WITH t(a) AS (SELECT 1, 'x') SELECT a FROM t;
+
+AppendColumnToViewOfUnionWithStringLiteral:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s varchar(5));
+    CREATE VIEW u AS SELECT 'a' AS x FROM t UNION SELECT s FROM t;
+  desired: |
+    CREATE TABLE t (s varchar(5));
+    CREATE VIEW u AS SELECT 'a' AS x, 1 AS y FROM t UNION SELECT s, 2 FROM t;
+  up: |
+    CREATE OR REPLACE VIEW u AS SELECT 'a' AS x, 1 AS y FROM t UNION SELECT s, 2 FROM t;
+  down: |
+    DROP VIEW public.u;
+    CREATE VIEW u AS SELECT 'a' AS x FROM t UNION SELECT s FROM t;

@@ -1658,7 +1658,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 		return &parser.Union{
 			Type:    s.Type,
 			Left:    normalizeViewDefinition(s.Left, mode, tableLookup),
-			Right:   normalizeViewDefinition(s.Right, mode, tableLookup),
+			Right:   withoutOutputAliases(normalizeViewDefinition(s.Right, mode, tableLookup)),
 			OrderBy: normalizeOrderBy(s.OrderBy, mode),
 			Limit:   s.Limit,
 			Lock:    s.Lock,
@@ -1673,6 +1673,30 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 	default:
 		return stmt
 	}
+}
+
+// withoutOutputAliases drops the aliases of a query whose output columns a set operation names
+// after its first query, as PostgreSQL writes those names into the other queries
+func withoutOutputAliases(stmt parser.SelectStatement) parser.SelectStatement {
+	switch s := stmt.(type) {
+	case *parser.Select:
+		stripped := *s
+		stripped.SelectExprs = util.TransformSlice(s.SelectExprs, func(expr parser.SelectExpr) parser.SelectExpr {
+			if aliased, ok := expr.(*parser.AliasedExpr); ok {
+				return &parser.AliasedExpr{Expr: aliased.Expr}
+			}
+			return expr
+		})
+		return &stripped
+	case *parser.Union:
+		stripped := *s
+		stripped.Left = withoutOutputAliases(s.Left)
+		stripped.Right = withoutOutputAliases(s.Right)
+		return &stripped
+	case *parser.ParenSelect:
+		return &parser.ParenSelect{Select: withoutOutputAliases(s.Select)}
+	}
+	return stmt
 }
 
 // hasStarExpr checks if there's a StarExpr in the SELECT list.

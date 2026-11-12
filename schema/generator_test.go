@@ -705,7 +705,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: unwrap redundant set operand parentheses",
 			mode:     GeneratorModePostgres,
 			input:    `(SELECT 1 AS id) UNION ALL (SELECT 2 AS id)`,
-			expected: `select 1 as id union all select 2 as id`,
+			expected: `select 1 as id union all select 2`,
 		},
 		{
 			name:     "PostgreSQL: preserve ordered limited set operand parentheses",
@@ -717,7 +717,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: preserve grouped set operation parentheses",
 			mode:     GeneratorModePostgres,
 			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
-			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
+			expected: `select 1 as id except (select 2 union select 3)`,
 		},
 		{
 			name:     "PostgreSQL: strip an alias equal to the default output name",

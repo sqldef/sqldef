@@ -1834,19 +1834,23 @@ func ReplaceViewName(sql string, mode ParserMode, name string) string {
 	}
 	start := tkn.Position - 1
 	end := start
+	prev := 0
 	for {
 		typ, val := tkn.scanSkippingComments()
-		if typ == ID && strings.EqualFold(val, "tablespace") {
+		// A materialized view names its tablespace after its name, unless the name goes on after a dot
+		if typ == ID && end > start && prev != '.' && strings.EqualFold(val, "tablespace") {
 			typ = 0
 		}
-		switch typ {
-		case IF, NOT, EXISTS:
+		if end == start && (typ == IF || typ == NOT || typ == EXISTS) {
 			start = tkn.Position - 1
 			end = start
 			continue
+		}
+		switch typ {
 		case '(', AS, WITH, USING, 0:
 			return sql[:start] + " " + name + sql[end:]
 		}
 		end = tkn.Position - 1
+		prev = typ
 	}
 }

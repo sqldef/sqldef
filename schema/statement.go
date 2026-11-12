@@ -45,8 +45,15 @@ func rawStatements(ddls []string) []statement {
 	return util.TransformSlice(ddls, func(ddl string) statement { return rawStatement(ddl) })
 }
 
-func renderStatements(statements []statement) []string {
-	return util.TransformSlice(statements, statement.Render)
+func renderStatements(statements []statement, mode parser.ParserMode) []string {
+	return util.TransformSlice(statements, func(s statement) string {
+		ddl := s.Render()
+		// A line comment at the end would take in the semicolon written after the statement
+		if !s.Skipped() && parser.EndsWithLineComment(ddl, mode) {
+			ddl += "\n"
+		}
+		return ddl
+	})
 }
 
 // skipped is a statement heldBack holds back. It is still emitted, as a comment, so that

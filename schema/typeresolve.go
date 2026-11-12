@@ -681,7 +681,7 @@ func typeNames(types []exprType) []string {
 // scalar subquery has the type of its one column.
 func (tc *typeContext) resolveSubquery(e *parser.Subquery, scope columnScope) (parser.Expr, exprType) {
 	resolved := &parser.Subquery{Select: tc.resolveSelect(e.Select, scope, tc.ctes)}
-	columns, ok := tc.outputColumns(e.Select, resolved.Select)
+	columns, ok := tc.outputColumns(e.Select, resolved.Select, false)
 	if !ok || len(columns) != 1 {
 		return resolved, exprType{}
 	}
@@ -883,7 +883,7 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 		return tc.resolveSelect(view.definition, nil, nil)
 	})
 	tc.g.typedViewDefinitions[view.definition] = forms
-	out.columns, out.known = tc.outputColumns(view.definition, forms.marked)
+	out.columns, out.known = tc.outputColumns(view.definition, forms.marked, false)
 	// PostgreSQL cannot replace a view with columns of other collations, which only dropping it
 	// is sure to avoid
 	if tc.collated {
@@ -908,18 +908,19 @@ func allColumnTypesKnown(columns []relationColumn) bool {
 }
 
 // outputColumns returns the names and types of the output columns of a query, from the query as
-// written and as resolved
-func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]relationColumn, bool) {
+// written and as resolved. A query under a set operation leaves the type of its columns unknown,
+// as the set operation resolves it with the other queries.
+func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement, underSetOperation bool) ([]relationColumn, bool) {
 	switch s := stmt.(type) {
 	case *parser.ParenSelect:
-		return tc.outputColumns(s.Select, typed.(*parser.ParenSelect).Select)
+		return tc.outputColumns(s.Select, typed.(*parser.ParenSelect).Select, underSetOperation)
 	case *parser.Union:
 		t := typed.(*parser.Union)
-		left, ok := tc.outputColumns(s.Left, t.Left)
+		left, ok := tc.outputColumns(s.Left, t.Left, true)
 		if !ok {
 			return nil, false
 		}
-		right, ok := tc.outputColumns(s.Right, t.Right)
+		right, ok := tc.outputColumns(s.Right, t.Right, true)
 		if !ok || len(left) != len(right) {
 			return nil, false
 		}
@@ -950,7 +951,7 @@ func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]rela
 				typ = tc.g.exprTypes[expr]
 			}
 			// PostgreSQL makes an output column of unknown type text
-			if typ.name == pgcatalog.Unknown {
+			if typ.name == pgcatalog.Unknown && !underSetOperation {
 				typ = exprType{name: "text"}
 			}
 			columns = append(columns, relationColumn{name: name, typ: typ})
@@ -1066,7 +1067,7 @@ func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) m
 			result[key] = cteColumns{}
 		}
 		definition := tc.resolveSelect(cte.Definition, nil, result)
-		columns, known := tc.outputColumns(cte.Definition, definition)
+		columns, known := tc.outputColumns(cte.Definition, definition, false)
 		// The column names of a CTE rename its leading columns
 		if known && len(cte.Columns) > len(columns) {
 			known = false

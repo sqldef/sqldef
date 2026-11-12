@@ -759,3 +759,17 @@ ColumnNamedLikeValueKeyword:
   down: |
     ALTER TABLE public.t DROP COLUMN "current_date";
     ALTER TABLE public.t DROP COLUMN "user";
+
+CreateTableEndingWithLineComment:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id integer) -- trailing
+    ;
+    CREATE TABLE u (id integer);
+  up: |
+    CREATE TABLE t (id integer) -- trailing
+    ;
+    CREATE TABLE u (id integer);
+  down: |
+    DROP TABLE public.t;
+    DROP TABLE public.u;
