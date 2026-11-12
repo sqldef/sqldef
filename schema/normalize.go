@@ -343,6 +343,14 @@ func normalizeCheckExprForOutput(expr parser.Expr, mode GeneratorMode) parser.Ex
 	return normalizeCheckExprWith(expr, mode, false)
 }
 
+// normalizeBitLiteral rewrites B'0101' as '0101'::bit, the way PostgreSQL stores it
+func normalizeBitLiteral(val *parser.SQLVal, mode GeneratorMode) parser.Expr {
+	if mode != GeneratorModePostgres || val.Type != parser.BitVal {
+		return val
+	}
+	return &parser.SQLVal{Type: parser.StrVal, Val: val.Val, DroppedCast: &parser.ConvertType{Type: "bit"}}
+}
+
 // normalizeTrimFunction canonicalizes parser implementations that represent TRIM
 // or PostgreSQL's trim-family functions as a function call. PostgreSQL parser
 // implementations may emit these functions either qualified or unqualified, so
@@ -392,6 +400,11 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 	}
 
 	switch e := expr.(type) {
+	case *parser.SQLVal:
+		if forComparison {
+			return normalizeBitLiteral(e, mode)
+		}
+		return expr
 	case *parser.IntervalExpr:
 		if mode == GeneratorModePostgres {
 			return normalizeExpr(e, mode)
@@ -796,6 +809,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	}
 
 	switch e := expr.(type) {
+	case *parser.SQLVal:
+		return normalizeBitLiteral(e, mode)
 	case *parser.ColName:
 		// Normalize column name and qualifier while preserving quoting:
 		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted

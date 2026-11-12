@@ -3112,3 +3112,26 @@ CheckWithRowComparisons:
       CONSTRAINT t_eq CHECK ((a, b) = (1, 'x') OR (a, b) <> (2, 'y')),
       CONSTRAINT t_lt CHECK ((a, b) < (3, 'z'))
     );
+
+CheckWithCommonTypesOfDomainsAndNullif:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN dt AS text;
+    CREATE TABLE t (
+      d dt,
+      i integer,
+      b bigint,
+      CONSTRAINT t_coalesce CHECK (COALESCE(d, 'x') <> ''),
+      CONSTRAINT t_case CHECK (CASE WHEN i > 0 THEN d ELSE 'y' END <> ''),
+      CONSTRAINT t_nullif CHECK (NULLIF(i, 1.5) > b)
+    );
+
+CheckWithCastsToBitAndCharacterWithoutLength:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      b bit,
+      c character,
+      CONSTRAINT t_b CHECK (b::bit <> B'0' AND b::bit(1) <> B'1'),
+      CONSTRAINT t_c CHECK (c::char <> 'x' AND c::character(1) <> 'y')
+    );

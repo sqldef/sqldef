@@ -1848,3 +1848,25 @@ ChangeCollatedColumnToQuotedChar:
     ALTER TABLE public.t ALTER COLUMN a TYPE "char";
   down: |
     ALTER TABLE public.t ALTER COLUMN a TYPE text COLLATE "C";
+
+ChangeBitColumnLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (b bit(4));
+  desired: |
+    CREATE TABLE t (b bit(8));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN b TYPE bit(8);
+  down: |
+    ALTER TABLE public.t ALTER COLUMN b TYPE bit(4);
+
+ColumnsOfCharacterAndBitWithoutLength:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (c character, d char, b bit);
+
+# FIXME: the parser does not read bpchar as a column type
+# ColumnOfBpcharWithoutLength:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TABLE t (p bpchar);

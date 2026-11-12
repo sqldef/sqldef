@@ -6367,6 +6367,10 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		}
 	}
 
+	if g.mode == GeneratorModePostgres {
+		currentLength, desiredLength = postgresTypeLength(current), postgresTypeLength(desired)
+	}
+
 	// Normalize default precision/scale for numeric/decimal types.
 	if g.mode == GeneratorModeMssql || g.mode == GeneratorModeMysql {
 		normalizedType := normalizeTypeName(current.typeName, g.mode)
@@ -6415,6 +6419,20 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	return true
 }
 
+// postgresTypeLength returns the length of a PostgreSQL column type, which the parser reads as a
+// display width for bit(n), and which is 1 for character and bit written without one
+func postgresTypeLength(column Column) *Value {
+	switch {
+	case column.length != nil:
+		return column.length
+	case column.displayWidth != nil:
+		return column.displayWidth
+	case !column.typeIdent.Quoted && defaultLength(strings.ToLower(column.typeName)) != "":
+		return &Value{valueType: ValueTypeInt, intVal: 1, raw: "1"}
+	}
+	return nil
+}
+
 func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
 	if checkA == nil && checkB == nil {
 		return true
@@ -6442,7 +6460,9 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 		opts := g.comparisonOptions(false)
 		opts.UnknownTypesCaseSensitive = true
 		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
-		slog.Debug("Generator#areSameCheckExprs", "a", parser.ComparisonKey(normalizedA, opts), "b", parser.ComparisonKey(normalizedB, opts))
+		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+			slog.Debug("Generator#areSameCheckExprs", "a", parser.ComparisonKey(normalizedA, opts), "b", parser.ComparisonKey(normalizedB, opts))
+		}
 		return parser.SameForComparison(normalizedA, normalizedB, opts)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)

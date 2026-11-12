@@ -92,6 +92,7 @@ func TestCommonType(t *testing.T) {
 		{[]string{"unknown", "unknown"}, "text"},
 		{[]string{"public.posint", "public.posint"}, "public.posint"},
 		{[]string{"public.posint", "int4"}, "int4"},
+		{[]string{"public.posint", "unknown"}, "int4"},
 	}
 	for _, tt := range tests {
 		got, ok := r.CommonType(tt.types)

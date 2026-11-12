@@ -41,10 +41,15 @@ type typeContext struct {
 	mark bool
 	// unresolved counts the expressions whose types are unknown
 	unresolved int
+	// collatedDomains are the keys of the domains with a collation of their own or their base's
+	collatedDomains map[string]bool
+	// collated is set when an expression reads a column, a cast or a COLLATE clause with a
+	// collation that may differ from the default of its type, which the types do not tell apart
+	collated bool
 }
 
 func (g *Generator) newTypeContext(types []*Type, domains []*Domain, functions []*Function) *typeContext {
-	tc := &typeContext{g: g, userFunctions: map[string]bool{}, knownCasts: map[*parser.CastExpr]bool{}}
+	tc := &typeContext{g: g, userFunctions: map[string]bool{}, knownCasts: map[*parser.CastExpr]bool{}, collatedDomains: map[string]bool{}}
 	var userTypes []*pgcatalog.Type
 	for _, t := range types {
 		if len(t.enumValues) == 0 {
@@ -67,6 +72,14 @@ func (g *Generator) newTypeContext(types []*Type, domains []*Domain, functions [
 		tc.resolver = pgcatalog.NewResolver(append(append([]*pgcatalog.Type{}, userTypes...), domainTypes...))
 		if len(domainTypes) == len(domains) {
 			break
+		}
+	}
+	for range domains {
+		for _, domain := range domains {
+			base, _ := tc.typeOfName(domain.baseType)
+			if domain.collation != "" || tc.collatedDomains[base] {
+				tc.collatedDomains[tc.userTypeKey(domain.name)] = true
+			}
 		}
 	}
 	for _, function := range functions {
@@ -140,9 +153,14 @@ func (tc *typeContext) castType(t *parser.ConvertType) (exprType, bool) {
 	if !ok {
 		return exprType{}, false
 	}
+	if tc.collatedDomains[typ] {
+		tc.collated = true
+	}
 	var length, scale string
 	if t.Length != nil {
 		length = t.Length.Val
+	} else {
+		length = defaultLength(strings.ToLower(t.Type))
 	}
 	if t.Scale != nil {
 		scale = t.Scale.Val
@@ -172,11 +190,14 @@ func (tc *typeContext) columnType(column *Column) (exprType, bool) {
 		}
 	}
 	var length, scale string
-	if column.length != nil {
+	switch {
+	case column.length != nil:
 		length = column.length.raw
-	} else if typ == "bpchar" && name != "bpchar" {
-		// character means character(1)
-		length = "1"
+	case column.displayWidth != nil:
+		// The parser reads the length of bit(n) as a display width
+		length = column.displayWidth.raw
+	default:
+		length = defaultLength(name)
 	}
 	if column.scale != nil {
 		scale = column.scale.raw
@@ -188,6 +209,16 @@ func (tc *typeContext) columnType(column *Column) (exprType, bool) {
 		}
 	}
 	return exprType{name: typ, mod: mod}, true
+}
+
+// defaultLength returns the length of a type written without one: character and bit, as
+// keywords, mean character(1) and bit(1), while bpchar and "bit" have no length
+func defaultLength(written string) string {
+	switch written {
+	case "char", "character", "nchar", "national character", "bit":
+		return "1"
+	}
+	return ""
 }
 
 // typeModifier returns the type modifier of a length and a scale, the same however it was written
@@ -305,6 +336,7 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 		}
 		return cast, to
 	case *parser.CollateExpr:
+		tc.collated = true
 		inner, t := tc.resolve(e.Expr, scope)
 		return &parser.CollateExpr{Expr: inner, Charset: e.Charset}, t
 	case *parser.AndExpr:
@@ -416,6 +448,8 @@ func (tc *typeContext) literalType(val *parser.SQLVal) exprType {
 		return exprType{name: "numeric"}
 	case parser.ValBool:
 		return boolType
+	case parser.BitVal:
+		return exprType{name: "bit"}
 	}
 	return exprType{}
 }
@@ -545,7 +579,11 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 		if !ok {
 			return &resolved, exprType{}
 		}
-		params, result = call.Params, types[0]
+		// The result has the type of the first argument converted for the operator
+		params, result = call.Params, exprType{name: call.Params[0]}
+		if result.name == types[0].name {
+			result = types[0]
+		}
 	default:
 		// A function named like a type is a cast where no function takes the argument
 		if _, isType := pgcatalog.BuiltinTypeName(name); isType {
@@ -767,8 +805,9 @@ func (g *Generator) viewForms(definition parser.SelectStatement) typedForms[pars
 
 // relationColumn is an output column of a relation
 type relationColumn struct {
-	name Ident
-	typ  exprType
+	name     Ident
+	typ      exprType
+	collated bool
 }
 
 // relation is a table, a view or another relation in the FROM clause of a query, which a column
@@ -800,50 +839,25 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 	}
 	out := &viewOutput{resolving: true}
 	tc.viewOutputs[view] = out
+	outerCollated := tc.collated
+	tc.collated = false
 	forms := resolveForms(tc, func() parser.SelectStatement {
 		return tc.resolveSelect(view.definition, nil, nil)
 	})
 	tc.g.typedViewDefinitions[view.definition] = forms
 	out.columns, out.known = tc.outputColumns(view.definition, forms.marked)
-	if out.known && allColumnTypesKnown(out.columns) {
+	// PostgreSQL cannot replace a view with columns of other collations, which only dropping it
+	// is sure to avoid
+	if tc.collated {
+		for i := range out.columns {
+			out.columns[i].collated = true
+		}
+	} else if out.known && allColumnTypesKnown(out.columns) {
 		tc.g.viewColumnTypes[view.definition] = out.columns
 	}
+	tc.collated = outerCollated
 	out.resolving = false
 	return out.columns, out.known
-}
-
-// hasCollate reports whether an expression has a COLLATE clause, which may change the collation
-// of the column that it gives, unknown to its type
-func hasCollate(node any) bool {
-	found := false
-	var visit func(v reflect.Value)
-	visit = func(v reflect.Value) {
-		if found {
-			return
-		}
-		switch v.Kind() {
-		case reflect.Interface, reflect.Pointer:
-			if !v.IsNil() {
-				if _, ok := v.Interface().(*parser.CollateExpr); ok {
-					found = true
-					return
-				}
-				visit(v.Elem())
-			}
-		case reflect.Struct:
-			for i := range v.NumField() {
-				if v.Type().Field(i).IsExported() {
-					visit(v.Field(i))
-				}
-			}
-		case reflect.Slice:
-			for i := range v.Len() {
-				visit(v.Index(i))
-			}
-		}
-	}
-	visit(reflect.ValueOf(node))
-	return found
 }
 
 func allColumnTypesKnown(columns []relationColumn) bool {
@@ -894,7 +908,7 @@ func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]rela
 				name, _ = selectExprOutputName(aliased.Expr, GeneratorModePostgres)
 			}
 			var typ exprType
-			if expr := t.SelectExprs[i].(*parser.AliasedExpr).Expr; hashableExpr(expr) && !hasCollate(expr) {
+			if expr := t.SelectExprs[i].(*parser.AliasedExpr).Expr; hashableExpr(expr) {
 				typ = tc.g.exprTypes[expr]
 			}
 			// PostgreSQL makes an output column of unknown type text
@@ -1010,7 +1024,7 @@ func (tc *typeContext) relationColumns(name QualifiedName) ([]relationColumn, bo
 		columns := make([]relationColumn, 0, len(table.columns))
 		for _, column := range getSortedColumns(table.columns) {
 			t, _ := tc.columnType(column)
-			columns = append(columns, relationColumn{name: column.name, typ: t})
+			columns = append(columns, relationColumn{name: column.name, typ: t, collated: column.collate != "" || tc.collatedDomains[t.name]})
 		}
 		return columns, true
 	}
@@ -1038,24 +1052,26 @@ func (tc *typeContext) relationScope(relations []relation, outer columnScope) co
 					return exprType{}, false
 				}
 				if column, ok := tc.relationColumn(rel, col.Name); ok && column.typ.name != "" {
+					tc.collated = tc.collated || column.collated
 					return column.typ, true
 				}
 				return exprType{}, false
 			}
 		} else {
-			var found []exprType
+			var found []relationColumn
 			for _, rel := range relations {
 				if !rel.known {
 					return exprType{}, false
 				}
 				if column, ok := tc.relationColumn(rel, col.Name); ok {
-					found = append(found, column.typ)
+					found = append(found, column)
 				}
 			}
 			switch len(found) {
 			case 0:
 			case 1:
-				return found[0], found[0].name != ""
+				tc.collated = tc.collated || found[0].collated
+				return found[0].typ, found[0].typ.name != ""
 			default:
 				return exprType{}, false
 			}

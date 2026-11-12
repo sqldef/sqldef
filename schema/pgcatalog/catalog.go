@@ -682,6 +682,11 @@ func (r *Resolver) call(c candidate, args []string) (*Call, bool) {
 // CommonType chooses the type that values of the given types are converted to where one type is
 // needed, as select_common_type() does for CASE, COALESCE and the like
 func (r *Resolver) CommonType(types []string) (string, bool) {
+	// Values of one type keep it, even a domain; anything else, unknown included, reduces
+	// domains to their base types
+	if len(types) > 0 && types[0] != Unknown && r.Known(types[0]) && !slices.ContainsFunc(types, func(t string) bool { return t != types[0] }) {
+		return types[0], true
+	}
 	common := ""
 	for _, t := range types {
 		if t == Unknown {
@@ -690,26 +695,16 @@ func (r *Resolver) CommonType(types []string) (string, bool) {
 		if !r.Known(t) {
 			return "", false
 		}
-		if common == "" {
+		t = r.BaseType(t)
+		if common == "" || t == common {
 			common = t
 			continue
 		}
-		if t == common {
-			continue
-		}
-		// Values of one domain keep it; a mix reduces domains to their base types
-		if r.BaseType(t) == r.BaseType(common) {
-			common = r.BaseType(common)
-			continue
-		}
-		commonBase, tBase := r.BaseType(common), r.BaseType(t)
-		if r.category(commonBase) != r.category(tBase) {
+		if r.category(common) != r.category(t) {
 			return "", false
 		}
-		if !r.preferred(commonBase) && r.CanCoerceImplicitly(commonBase, tBase) && !r.CanCoerceImplicitly(tBase, commonBase) {
-			common = tBase
-		} else {
-			common = commonBase
+		if !r.preferred(common) && r.CanCoerceImplicitly(common, t) && !r.CanCoerceImplicitly(t, common) {
+			common = t
 		}
 	}
 	if common == "" {
