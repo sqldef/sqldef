@@ -3430,9 +3430,8 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 }
 
 func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstraint, expression parser.Expr) bool {
-	normalizedExpr := normalizeCheckExpr(expression, g.mode)
 	for _, c := range constraints {
-		if parser.SameForComparison(normalizeCheckExpr(c.expression, g.mode), normalizedExpr, g.comparisonOptions(false)) {
+		if g.areSameCheckExprs(g.typed(c.expression, expression)) {
 			return true
 		}
 	}

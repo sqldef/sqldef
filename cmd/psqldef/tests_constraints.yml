@@ -3095,3 +3095,10 @@ ChangeCheckGroupingOfOrAndAnd:
   down: |
     ALTER TABLE public.t DROP CONSTRAINT k;
     ALTER TABLE public.t ADD CONSTRAINT k CHECK ((a OR b) AND c);
+CheckWithInListsOfMixedNumbers:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      n numeric CHECK (n IN (1, 2.5)),
+      f double precision CHECK (f IN (1, 2))
+    );

@@ -642,6 +642,13 @@ func (g *Generator) resolveExpressionTypes() {
 		for _, table := range tc.tables {
 			g.resolveTableExpressionTypes(tc, table)
 		}
+		domains := g.desiredDomains
+		if tc == current {
+			domains = g.currentDomains
+		}
+		for _, domain := range domains {
+			g.resolveDomainExpressionTypes(tc, domain)
+		}
 		for _, view := range tc.views {
 			tc.viewColumns(view)
 		}
@@ -675,6 +682,26 @@ func (g *Generator) resolveTableExpressionTypes(tc *typeContext, table *Table) {
 	for _, policy := range table.policies {
 		add(policy.using)
 		add(policy.withCheck)
+	}
+}
+
+// resolveDomainExpressionTypes resolves the types of the constraints of a domain, where VALUE has
+// the base type of the domain
+func (g *Generator) resolveDomainExpressionTypes(tc *typeContext, domain *Domain) {
+	base, ok := tc.typeOfName(domain.baseType)
+	scope := func(col *parser.ColName) (exprType, bool) {
+		if ok && col.Qualifier.IsEmpty() && !col.Name.Quoted && parser.FoldASCII(col.Name.Name) == "value" {
+			return exprType{name: base}, true
+		}
+		return exprType{}, false
+	}
+	for _, constraint := range domain.constraints {
+		if hashableExpr(constraint.expression) {
+			g.typedExprs[constraint.expression] = resolveForms(tc, func() parser.Expr {
+				resolved, _ := tc.resolve(constraint.expression, scope)
+				return resolved
+			})
+		}
 	}
 }
 

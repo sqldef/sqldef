@@ -619,7 +619,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
-%type <expr> array_element
+%type <expr> array_element numeric_array_element
 %type <str> sql_security
 %type <overExpr> over_expression window_spec
 %token <str> OVER
@@ -8862,6 +8862,22 @@ array_element:
   {
     $$ = NewFloatVal($1)
   }
+| numeric_array_element TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| numeric_array_element TYPECAST DOUBLE PRECISION array_opt
+  {
+    t := "double precision"
+    if $5 {
+      t += "[]"
+    }
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
+  }
 | current_timestamp
   {
     $$ = $1
@@ -8901,6 +8917,16 @@ array_element:
 | column_name
   {
     $$ = $1
+  }
+
+numeric_array_element:
+  INTEGRAL
+  {
+    $$ = NewIntVal($1)
+  }
+| FLOAT
+  {
+    $$ = NewFloatVal($1)
   }
 
 bool_option_name_list:

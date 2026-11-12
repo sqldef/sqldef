@@ -304,3 +304,13 @@ DomainWithMultipleSameTypeConstraints:
       CONSTRAINT min_bound CHECK (VALUE >= 0)
       CONSTRAINT max_bound CHECK (VALUE <= 1000)
       CONSTRAINT not_42 CHECK (VALUE <> 42);
+ColumnOfNotNullDomain:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN nn_text AS text NOT NULL;
+    CREATE TABLE t (n nn_text, m nn_text NOT NULL);
+DomainCheckWithImplicitCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN d1 AS integer CHECK (round(VALUE, 1) > 0 AND VALUE + 0.5 > 1);
+    CREATE DOMAIN d2 AS varchar(10) CHECK (VALUE <> '' AND length(VALUE) < 5);
