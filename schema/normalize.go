@@ -2280,7 +2280,7 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 	keyedValues := util.TransformSlice(values, func(v T) keyed {
 		return keyed{key: parser.String(canonicalParens(v)), value: v}
 	})
-	slices.SortFunc(keyedValues, func(a, b keyed) int { return cmp.Compare(a.key, b.key) })
+	slices.SortStableFunc(keyedValues, func(a, b keyed) int { return cmp.Compare(a.key, b.key) })
 	keyedValues = slices.CompactFunc(keyedValues, func(a, b keyed) bool { return a.key == b.key })
 	return util.TransformSlice(keyedValues, func(k keyed) T { return k.value })
 }

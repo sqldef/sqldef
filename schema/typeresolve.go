@@ -286,12 +286,60 @@ func resolveForms[T any](tc *typeContext, resolve func() T) typedForms[T] {
 		}
 	}()
 	var forms typedForms[T]
-	tc.mark, tc.unresolved = false, 0
-	forms.plain = resolve()
 	tc.mark, tc.unresolved = true, 0
 	forms.marked = resolve()
 	forms.full = tc.unresolved == 0
+	// The forms differ only in the casts marked as resolved
+	forms.plain = withoutResolvedCasts(forms.marked)
 	return forms
+}
+
+// withoutResolvedCasts returns a copy of a tree whose casts are not marked as resolved
+func withoutResolvedCasts[T any](tree T) T {
+	var copyValue func(v reflect.Value) reflect.Value
+	copyValue = func(v reflect.Value) reflect.Value {
+		switch v.Kind() {
+		case reflect.Interface:
+			if v.IsNil() {
+				return v
+			}
+			copied := reflect.New(v.Type()).Elem()
+			copied.Set(copyValue(v.Elem()))
+			return copied
+		case reflect.Pointer:
+			if v.IsNil() || v.Elem().Kind() != reflect.Struct {
+				return v
+			}
+			copied := reflect.New(v.Elem().Type())
+			copied.Elem().Set(copyValue(v.Elem()))
+			if cast, ok := copied.Interface().(*parser.CastExpr); ok {
+				cast.Resolved = false
+			}
+			return copied
+		case reflect.Struct:
+			copied := reflect.New(v.Type()).Elem()
+			copied.Set(v)
+			for i := range v.NumField() {
+				if v.Type().Field(i).IsExported() {
+					copied.Field(i).Set(copyValue(v.Field(i)))
+				}
+			}
+			return copied
+		case reflect.Slice:
+			if v.IsNil() {
+				return v
+			}
+			copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+			for i := range v.Len() {
+				copied.Index(i).Set(copyValue(v.Index(i)))
+			}
+			return copied
+		}
+		return v
+	}
+	value := reflect.ValueOf(&tree).Elem()
+	value.Set(copyValue(value))
+	return tree
 }
 
 // typedPair returns the forms of two expressions to compare: the marked ones where both are known
@@ -1049,10 +1097,10 @@ func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) m
 		}
 		definition := tc.resolveSelect(cte.Definition, nil, result)
 		columns, known := tc.outputColumns(cte.Definition, definition)
-		if known && len(cte.Columns) > 0 {
-			if len(cte.Columns) != len(columns) {
-				continue
-			}
+		// The column names of a CTE rename its leading columns
+		if known && len(cte.Columns) > len(columns) {
+			known = false
+		} else if known {
 			for i, name := range cte.Columns {
 				columns[i].name = name
 			}

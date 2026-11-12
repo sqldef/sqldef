@@ -86,9 +86,13 @@ func castTypeWithLength(name string, length *SQLVal) *ConvertType {
   return &ConvertType{Type: name, Length: length}
 }
 
-// implicitLength is the length of character and bit written as keywords without one, which a
-// qualified name of the same type does not have
-var implicitLength = NewIntVal("1")
+// withImplicitLength gives a cast type the length of character and bit written as keywords
+// without one, which a qualified name of the same type does not have
+func withImplicitLength(t *ConvertType) *ConvertType {
+  t.Length = NewIntVal("1")
+  t.ImplicitLength = true
+  return t
+}
 
 // arrayCastType returns the type of a cast written with [] after it
 func arrayCastType(t *ConvertType, array BoolVal) *ConvertType {
@@ -2541,6 +2545,10 @@ common_table_expr:
   table_id AS '(' select_statement ')'
   {
     $$ = &CommonTableExpr{Name: $1, Definition: $4}
+  }
+| table_id '(' column_list ')' AS '(' select_statement ')'
+  {
+    $$ = &CommonTableExpr{Name: $1, Columns: $3, Definition: $7}
   }
 
 select_statement:
@@ -7917,7 +7925,7 @@ convert_type:
     $$ = &ConvertType{Type: $1, Length: $2, Charset: $3, Operator: CharacterSetStr}
     if $2 == nil && yylex.(*Tokenizer).mode == ParserModePostgres {
       // char has a length of 1 in PostgreSQL, as in a cast written with ::
-      $$.Length = implicitLength
+      $$ = withImplicitLength($$)
     }
   }
 | CHAR length_opt ID
@@ -7986,7 +7994,7 @@ convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: $2}
     if $2 == nil && strings.EqualFold($1, "bit") && yylex.(*Tokenizer).mode == ParserModePostgres {
-      $$.Length = implicitLength
+      $$ = withImplicitLength($$)
     }
   }
 | DATETIME2 length_opt
@@ -8068,12 +8076,12 @@ named_convert_type:
         return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", $1.Name, $3.Type))
       }
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + name, Length: $3.Length, Scale: $3.Scale}
-      if $3.Length == implicitLength {
+      if $3.ImplicitLength {
         $$.Length = nil
       }
     } else if strings.EqualFold($3.Type, "char") {
       // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
-      if $3.Length != implicitLength {
+      if !$3.ImplicitLength {
         return abortParse(yylex, "type \"char\" takes no length")
       }
       $$ = &ConvertType{Type: `"char"`}
@@ -8081,7 +8089,7 @@ named_convert_type:
       // pg_catalog.bit is the type "bit", which has no length unless one is written, and which
       // PostgreSQL writes as bit(n) with one
       $$ = $3
-      if $3.Length == implicitLength {
+      if $3.ImplicitLength {
         $$ = &ConvertType{Type: `"bit"`}
       }
     } else {
@@ -8111,7 +8119,7 @@ keyword_convert_type:
     $$ = &ConvertType{Type: $1}
     // The keyword bit means bit(1)
     if strings.EqualFold($1, "bit") {
-      $$.Length = implicitLength
+      $$ = withImplicitLength($$)
     }
   }
 | bool_type
@@ -8173,7 +8181,7 @@ keyword_convert_type:
   }
 | CHAR
   {
-    $$ = &ConvertType{Type: $1, Length: implicitLength}
+    $$ = withImplicitLength(&ConvertType{Type: $1})
   }
 | CHARACTER '(' INTEGRAL ')'
   {

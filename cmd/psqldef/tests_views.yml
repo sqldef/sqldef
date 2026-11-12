@@ -2060,3 +2060,17 @@ ChangeViewColumnCastLengthInLegacyMode:
   down: |
     DROP VIEW "public"."v";
     CREATE VIEW "public"."v" AS select b::varchar(3) as c from t;
+
+ChangeViewOverCTEWithFewerColumnNames:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS WITH t(a) AS (SELECT 1, 'x') SELECT a FROM t;
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE VIEW v AS WITH t(a) AS (SELECT 1, 'x') SELECT a, 2 AS b FROM t;
+  up: |
+    CREATE OR REPLACE VIEW v AS WITH t(a) AS (SELECT 1, 'x') SELECT a, 2 AS b FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS WITH t(a) AS (SELECT 1, 'x') SELECT a FROM t;

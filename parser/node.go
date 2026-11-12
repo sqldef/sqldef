@@ -729,7 +729,7 @@ type CommonTableExpr struct {
 
 // Format formats the node.
 func (node *CommonTableExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v AS (%v)", node.Name, node.Definition)
+	buf.Printf("%v%v AS (%v)", node.Name, node.Columns, node.Definition)
 }
 
 // Stream represents a SELECT statement.
@@ -3349,6 +3349,9 @@ type ConvertType struct {
 	// (e.g. " with time zone"), emitted after the length so a cast such as
 	// timestamp(0) with time zone round-trips. Empty for other types.
 	TimeZone string
+	// ImplicitLength is set where Length is the 1 that character and bit written as keywords
+	// have without one
+	ImplicitLength bool
 }
 
 // this string is "character set" and this comment is required
