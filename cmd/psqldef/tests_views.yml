@@ -2214,3 +2214,14 @@ AppendColumnToViewWithCastToArrayOfCharacter:
   down: |
     DROP VIEW public.v;
     CREATE VIEW v AS SELECT c::char[] AS c, '{a}'::char[] AS d FROM t;
+
+ChangeColumnTypeReadByViewReplacedToReadAnotherTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE u (c integer);
+    CREATE VIEW v AS SELECT c FROM t;
+    CREATE TABLE t (c integer);
+  desired: |
+    CREATE TABLE u (c integer);
+    CREATE VIEW v AS SELECT c FROM u;
+    CREATE TABLE t (c bigint);

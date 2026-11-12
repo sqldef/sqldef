@@ -310,18 +310,6 @@ func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
 	return NewIdentWithQuoteDetected(name)
 }
 
-// isFoldableValueCastTypeName matches the scalar types whose typed-literal and
-// read-back cast spellings converge. Array ("numeric[]") and time types are excluded.
-func isFoldableValueCastTypeName(typeStr string) bool {
-	switch parser.PostgresTypeName(typeStr) {
-	case "numeric", "decimal", "real", "double precision",
-		"integer", "int", "bigint", "smallint",
-		"money", "smallmoney", "interval", "boolean":
-		return true
-	}
-	return false
-}
-
 // normalizedCheckCastType names a cast type kept in a CHECK, with its length and scale in PostgreSQL
 func normalizedCheckCastType(convertType *parser.ConvertType, normalizedTypeStr string, mode GeneratorMode) *parser.ConvertType {
 	if mode != GeneratorModePostgres {
@@ -402,7 +390,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 	case *parser.CastExpr:
 		// Numeric/money/interval casts fold to a value-independent form, so reuse the
 		// value-context path; otherwise CHECK keeps its own cast simplification below.
-		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
+		if mode == GeneratorModePostgres && e.Type != nil && parser.IsFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
 			if !forComparison {
 				return &parser.CastExpr{Expr: recur(e.Expr, mode), Type: e.Type, Resolved: e.Resolved}
 			}
@@ -651,7 +639,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.TypedLiteral:
-		if mode == GeneratorModePostgres && isFoldableValueCastTypeName(normalizeTypeName(e.Type, mode)) {
+		if mode == GeneratorModePostgres && parser.IsFoldableValueCastTypeName(normalizeTypeName(e.Type, mode)) {
 			return normalizeExpr(e, mode)
 		}
 		// Strip the prefix for temporal/json/uuid: pg_get_constraintdef emits typed

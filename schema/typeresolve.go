@@ -412,6 +412,8 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 		right, rt := tc.resolve(e.Right, scope)
 		resolved := &parser.ComparisonExpr{Operator: e.Operator, Left: left, Right: right, Escape: e.Escape, All: e.All, Any: e.Any}
 		if e.Escape != nil || e.Any || e.All {
+			// The casts of the operands of these comparisons are not modeled
+			tc.unresolved++
 			return resolved, boolType
 		}
 		if op, ok := comparisonOperators[e.Operator]; ok {

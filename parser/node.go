@@ -2685,10 +2685,13 @@ func NewStringCast(val *SQLVal, t *ConvertType) Expr {
 // (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
 // numeric/money/interval/boolean need this; dropping the rest preserves historical behavior.
 func isFoldableValueCast(t *ConvertType) bool {
-	if t == nil {
-		return false
-	}
-	switch PostgresTypeName(strings.ToLower(t.Type)) {
+	return t != nil && IsFoldableValueCastTypeName(strings.ToLower(t.Type))
+}
+
+// IsFoldableValueCastTypeName matches the scalar types whose typed-literal and read-back cast
+// spellings converge. Array ("numeric[]") and time types are excluded.
+func IsFoldableValueCastTypeName(typeName string) bool {
+	switch PostgresTypeName(typeName) {
 	case "numeric", "decimal", "real", "double precision",
 		"integer", "int", "bigint", "smallint",
 		"money", "smallmoney", "interval", "boolean":
