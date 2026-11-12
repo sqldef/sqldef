@@ -1285,6 +1285,49 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	assert.Equal(t, nothingModified, apply)
 }
 
+// TestPsqldefManageFunctionWithTargetSchema covers manage.function together with
+// target_schema. The rules reach the schemas target_schema names, so a function
+// living there is diffed even though current_schema() is public. Without that the
+// two scopes do not intersect on a database whose functions live in the schema
+// target_schema names, and manage.function manages nothing while the apply still
+// succeeds.
+func TestPsqldefManageFunctionWithTargetSchema(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		CREATE SCHEMA schema_a;
+		CREATE FUNCTION schema_a.app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+		CREATE FUNCTION schema_a.app_stale() RETURNS integer AS $$ BEGIN RETURN 2; END; $$ LANGUAGE plpgsql;
+		CREATE FUNCTION schema_a.other_fn() RETURNS integer AS $$ BEGIN RETURN 3; END; $$ LANGUAGE plpgsql;
+		CREATE FUNCTION public.app_outside() RETURNS integer AS $$ BEGIN RETURN 4; END; $$ LANGUAGE plpgsql;
+	`)
+
+	config := "target_schema: schema_a\nmanage: {function: [{target: app_.*}]}"
+
+	// Both app_ functions in schema_a are managed. other_fn is in that schema but
+	// matches no rule, and app_outside matches a rule but lives in public, which
+	// target_schema does not name.
+	export := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", config)...)
+	assert.Contains(t, export, "app_touch")
+	assert.Contains(t, export, "app_stale")
+	assert.NotContains(t, export, "other_fn")
+	assert.NotContains(t, export, "app_outside")
+
+	// A managed function missing from desired is a drop candidate, and the DROP is
+	// held back without drop:true on the rule. The unmanaged functions stay out of
+	// the diff either way.
+	tu.WriteFile("schema.sql", tu.StripHeredoc(`
+		CREATE SCHEMA schema_a;
+		CREATE FUNCTION schema_a.app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+		`,
+	))
+
+	dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--dry-run", "--file", "schema.sql", "--config-inline", config)...)
+	assert.Contains(t, dryRun, `-- Skipped: DROP FUNCTION "schema_a"."app_stale";`)
+	assert.NotContains(t, dryRun, "other_fn")
+	assert.NotContains(t, dryRun, "app_outside")
+}
+
 func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 	resetTestDatabase()
 
