@@ -172,3 +172,8 @@ PolicyRecreateIsHeldBackWithoutEnableDrop:
     -- Skipped: DROP POLICY p ON public.t;
     -- Skipped: CREATE POLICY p ON t USING (owner <> current_user);
   down: ""
+PolicyWithImplicitCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id bigint, n numeric, f double precision);
+    CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO PUBLIC USING (n > 1 AND f > 1) WITH CHECK (round(id, 2) > 0);

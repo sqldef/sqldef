@@ -3004,3 +3004,94 @@ UnnamedUniqueConstraintDeclaredTwiceInCreateTableAndWithAlterTable:
     ALTER TABLE t ADD UNIQUE (a);
   down: |
     DROP TABLE public.t;
+CheckWithCastsOfColumnsToTheirOwnTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer CHECK (i::int4 > 0),
+      b bigint CHECK (b::int8 > 0),
+      v varchar(10) CHECK (v::varchar(10) <> 'a'),
+      c char(3) CHECK (c::char(3) <> 'abc'),
+      n numeric(10, 2) CHECK (n::numeric(10, 2) > 0),
+      w varchar CHECK (w::varchar <> 'a')
+    );
+CheckWithImplicitCastsOfFunctionAndOperatorArguments:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer,
+      b bigint,
+      n numeric,
+      f double precision,
+      v varchar(10),
+      CONSTRAINT c1 CHECK (round(i, 2) > 0),
+      CONSTRAINT c2 CHECK (sqrt(i) > 1 AND f > 1 AND f > 1.5),
+      CONSTRAINT c3 CHECK (i + 1.5 > 2 AND n > 2),
+      CONSTRAINT c4 CHECK (COALESCE(i, b) > 0 AND GREATEST(i, b) > 0 AND NULLIF(i, 1.5) > 0),
+      CONSTRAINT c5 CHECK (CASE WHEN i > 0 THEN i ELSE b END > 0),
+      CONSTRAINT c6 CHECK (substr(v, 1, 2) <> 'ab' AND length(v) < 10),
+      CONSTRAINT c7 CHECK (i < 5000000000)
+    );
+CheckOnDomainColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN posint AS integer;
+    CREATE DOMAIN smallposint AS posint;
+    CREATE DOMAIN name_t AS text;
+    CREATE TABLE t (
+      p posint CHECK (p > 0),
+      s smallposint CHECK (s::smallposint < 100 AND abs(s) > 0),
+      n name_t CHECK (length(n) < 10 AND n <> '')
+    );
+ChangeCheckRemovingCastThatIsNotImplicit:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (i::numeric / 3 > 1));
+  desired: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (i / 3 > 1));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (i / 3 > 1);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (i::numeric / 3 > 1);
+ChangeCheckFunctionArgument:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (round(i, 2) > 0));
+  desired: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (round(i, 3) > 0));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (round(i, 3) > 0);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (round(i, 2) > 0);
+CheckCallingUserFunctionNamedLikeBuiltin:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION round(i integer, d integer) RETURNS integer LANGUAGE sql IMMUTABLE AS 'SELECT i';
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (round(i, 2) > 0));
+CheckWithArithmeticInComparisons:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer,
+      n numeric,
+      a boolean,
+      b boolean,
+      CONSTRAINT c1 CHECK (i + 1 > 2 AND n / 3 > 1 AND -i < 0),
+      CONSTRAINT c2 CHECK ((a OR b) AND i > 0)
+    );
+ChangeCheckGroupingOfOrAndAnd:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a boolean, b boolean, c boolean, CONSTRAINT k CHECK ((a OR b) AND c));
+  desired: |
+    CREATE TABLE t (a boolean, b boolean, c boolean, CONSTRAINT k CHECK (a OR b AND c));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (a OR b AND c);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK ((a OR b) AND c);

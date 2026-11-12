@@ -401,6 +401,9 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		// Numeric/money/interval casts fold to a value-independent form, so reuse the
 		// value-context path; otherwise CHECK keeps its own cast simplification below.
 		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
+			if !forComparison {
+				return &parser.CastExpr{Expr: recur(e.Expr, mode), Type: e.Type}
+			}
 			return normalizeExpr(e, mode)
 		}
 		// Remove certain casts that PostgreSQL simplifies
@@ -2330,4 +2333,78 @@ func isPostgresSerialType(typeName string) bool {
 
 func getSerialUnderlyingType(typeName string) string {
 	return postgresSerialTypes[strings.ToLower(typeName)]
+}
+
+// canonicalParens puts parentheses around exactly the operands that are operator expressions,
+// which is where PostgreSQL writes them back. The tree already holds the grouping that the
+// parentheses written in the schema gave it.
+func canonicalParens(expr parser.Expr) parser.Expr {
+	operand := func(e parser.Expr) parser.Expr {
+		e = canonicalParens(e)
+		switch e.(type) {
+		case *parser.BinaryExpr, *parser.ComparisonExpr, *parser.ConcatExpr, *parser.AndExpr,
+			*parser.OrExpr, *parser.NotExpr, *parser.IsExpr, *parser.RangeCond:
+			return &parser.ParenExpr{Expr: e}
+		}
+		return e
+	}
+	switch e := expr.(type) {
+	case *parser.ParenExpr:
+		return canonicalParens(e.Expr)
+	case *parser.BinaryExpr:
+		return &parser.BinaryExpr{Operator: e.Operator, Left: operand(e.Left), Right: operand(e.Right)}
+	case *parser.ComparisonExpr:
+		resolved := *e
+		resolved.Left = operand(e.Left)
+		if !e.Any && !e.All {
+			resolved.Right = operand(e.Right)
+		}
+		return &resolved
+	case *parser.ConcatExpr:
+		return &parser.ConcatExpr{Left: operand(e.Left), Right: operand(e.Right)}
+	case *parser.UnaryExpr:
+		return &parser.UnaryExpr{Operator: e.Operator, Expr: operand(e.Expr)}
+	case *parser.AndExpr:
+		left, right := canonicalParens(e.Left), canonicalParens(e.Right)
+		if _, ok := left.(*parser.OrExpr); ok {
+			left = &parser.ParenExpr{Expr: left}
+		}
+		if _, ok := right.(*parser.OrExpr); ok {
+			right = &parser.ParenExpr{Expr: right}
+		}
+		return &parser.AndExpr{Left: left, Right: right}
+	case *parser.OrExpr:
+		return &parser.OrExpr{Left: canonicalParens(e.Left), Right: canonicalParens(e.Right)}
+	case *parser.NotExpr:
+		return &parser.NotExpr{Expr: operand(e.Expr)}
+	case *parser.IsExpr:
+		return &parser.IsExpr{Operator: e.Operator, Expr: operand(e.Expr)}
+	case *parser.RangeCond:
+		return &parser.RangeCond{Operator: e.Operator, Left: operand(e.Left), From: operand(e.From), To: operand(e.To)}
+	case *parser.CastExpr:
+		return &parser.CastExpr{Expr: canonicalParens(e.Expr), Type: e.Type}
+	case *parser.FuncExpr:
+		resolved := *e
+		resolved.Exprs = make(parser.SelectExprs, len(e.Exprs))
+		for i, arg := range e.Exprs {
+			if aliased, ok := arg.(*parser.AliasedExpr); ok {
+				arg = &parser.AliasedExpr{Expr: canonicalParens(aliased.Expr), As: aliased.As}
+			}
+			resolved.Exprs[i] = arg
+		}
+		return &resolved
+	case *parser.CaseExpr:
+		resolved := &parser.CaseExpr{Whens: make([]*parser.When, len(e.Whens))}
+		if e.Expr != nil {
+			resolved.Expr = canonicalParens(e.Expr)
+		}
+		for i, when := range e.Whens {
+			resolved.Whens[i] = &parser.When{Cond: canonicalParens(when.Cond), Val: canonicalParens(when.Val)}
+		}
+		if e.Else != nil {
+			resolved.Else = canonicalParens(e.Else)
+		}
+		return resolved
+	}
+	return expr
 }

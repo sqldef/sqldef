@@ -1762,3 +1762,11 @@ PartialIndexWithCastToQualifiedType:
     CREATE TYPE mood AS ENUM ('a', 'b');
     CREATE TABLE t (c text, m mood);
     CREATE INDEX j ON t (c) WHERE m = 'a'::public.mood;
+IndexesWithImplicitCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN name_t AS text;
+    CREATE TABLE t (i integer, n name_t, v varchar(10), f double precision);
+    CREATE INDEX t_sqrt ON t (sqrt(i));
+    CREATE INDEX t_lower ON t (lower(n));
+    CREATE INDEX t_round ON t (round(i, 1)) WHERE f > 1 AND i + 0.5 > 1;

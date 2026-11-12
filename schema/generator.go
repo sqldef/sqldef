@@ -96,6 +96,12 @@ type Generator struct {
 	currentTables []*Table
 	// desiredSizedVarcharColumns are the desired columns of type character varying(n), for noOpCast
 	desiredSizedVarcharColumns map[string][]*Column
+	// typedExprs are the expressions of the tables with the casts that resolving their types
+	// implies, which the comparisons take
+	typedExprs map[parser.Expr]parser.Expr
+	typedViews map[parser.SelectStatement]parser.SelectStatement
+	// exprTypes are the resolved types of the output columns of the views
+	exprTypes map[parser.Expr]exprType
 
 	desiredViews []*View
 	currentViews []*View
@@ -258,6 +264,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	if mode == GeneratorModePostgres {
 		generator.desiredSizedVarcharColumns = sizedVarcharColumns(desiredAggregated.Tables, mode)
+		generator.resolveExpressionTypes()
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -2362,8 +2369,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// Literals compare as written, so that a column whose literal PostgreSQL rewrote is recreated
 		// rather than replaced by one without its cast
 		opts.ReduceLiteralNames = false
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
+		currentNormalized := normalizeViewColumnsFromDefinition(g.typedView(currentView.definition), g.mode, opts)
+		desiredNormalized := normalizeViewColumnsFromDefinition(g.typedView(desiredView.definition), g.mode, opts)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2431,8 +2438,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
-		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
+		currentNormalizedAST := normalizeViewDefinition(g.typedView(currentView.definition), g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(g.typedView(desiredView.definition), g.mode, tableLookup)
 		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 			slog.Debug("Comparing view definitions",
 				"current_before_norm", parser.String(currentView.definition),
@@ -6398,7 +6405,7 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		return false
 	}
 
-	return g.areSameCheckExprs(checkA.definition, checkB.definition) &&
+	return g.areSameCheckExprs(g.typed(checkA.definition), g.typed(checkB.definition)) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
 }
@@ -6416,7 +6423,7 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	if g.mode == GeneratorModePostgres {
 		opts := g.comparisonOptions(false)
 		opts.UnknownTypesCaseSensitive = true
-		return parser.SameForComparison(normalizedA, normalizedB, opts)
+		return parser.SameForComparison(canonicalParens(normalizedA), canonicalParens(normalizedB), opts)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
 }
@@ -7200,8 +7207,8 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		normalizedA = g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
-		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
+		normalizedA = g.formatIndexExprForComparison(g.typed(indexA.columns[i].columnExpr))
+		normalizedB = g.formatIndexExprForComparison(g.typed(indexB.columns[i].columnExpr))
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
@@ -7219,7 +7226,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 			return false
 		}
 	}
-	if !g.areSameWhereClause(indexA.where, indexB.where) {
+	if !g.areSameWhereClause(g.typed(indexA.where), g.typed(indexB.where)) {
 		return false
 	}
 
@@ -7472,10 +7479,10 @@ func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if !g.areSamePolicyExprs(policyA.using, policyB.using) {
+	if !g.areSamePolicyExprs(g.typed(policyA.using), g.typed(policyB.using)) {
 		return false
 	}
-	if !g.areSamePolicyExprs(policyA.withCheck, policyB.withCheck) {
+	if !g.areSamePolicyExprs(g.typed(policyA.withCheck), g.typed(policyB.withCheck)) {
 		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {

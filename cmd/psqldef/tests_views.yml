@@ -1595,17 +1595,16 @@ ChangeViewWithRegclassLiteralColumn:
     CREATE TABLE tt (id int);
     CREATE VIEW v AS SELECT id, 'public.tt'::regclass AS rc FROM tt WHERE id > 0;
 
-# FIXME: PostgreSQL adds the (rc)::regclass cast that pg_table_size takes to w for a text column, which is unknown without the function's signature
-# ChangeViewReadByFunctionWithImplicitCast:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE tt (id int);
-#     CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt;
-#     CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;
-#   desired: |
-#     CREATE TABLE tt (id int);
-#     CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt WHERE id > 0;
-#     CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;
+ChangeViewReadByFunctionWithImplicitCast:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE tt (id int);
+    CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt;
+    CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;
+  desired: |
+    CREATE TABLE tt (id int);
+    CREATE VIEW v AS SELECT id, 'public.tt'::text AS rc FROM tt WHERE id > 0;
+    CREATE VIEW w AS SELECT v.id, pg_table_size(v.rc) AS sz FROM v;
 
 ChangeViewWithLiteralTypedColumn:
   legacy_ignore_quotes: false
@@ -1864,3 +1863,28 @@ ChangeColumnTypeKeepsViewsJoiningOtherTablesUsingColumnOfSameNameInSubquery:
     ALTER TABLE public.t ALTER COLUMN x TYPE bigint;
   down: |
     ALTER TABLE public.t ALTER COLUMN x TYPE integer;
+ViewsWithImplicitCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN posint AS integer;
+    CREATE TABLE a (id int, x varchar(10), d posint);
+    CREATE TABLE b (id bigint, y text, n numeric);
+    CREATE VIEW v AS
+      SELECT a.id, lower(a.x) AS lx, b.n + a.id AS s, COALESCE(a.id, b.id) AS c,
+        CASE WHEN a.d > 0 THEN a.id ELSE b.id END AS k, d + 1 AS e
+      FROM a JOIN b ON a.id = b.id AND a.x = b.y
+      WHERE a.d > 1 AND round(b.n, 1) > 0;
+    CREATE VIEW w AS SELECT s + 1 AS t, sqrt(c) AS q, round(e, 2) AS r FROM v;
+    CREATE VIEW u AS WITH a AS (SELECT 1.5 AS id) SELECT id + 1 AS z FROM a;
+ChangeViewRemovingCastThatIsNotImplicit:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (i int);
+    CREATE VIEW v AS SELECT i FROM t WHERE i::numeric / 3 > 1;
+  desired: |
+    CREATE TABLE t (i int);
+    CREATE VIEW v AS SELECT i FROM t WHERE i / 3 > 1;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT i FROM t WHERE i / 3 > 1;
+  down: |
+    CREATE OR REPLACE VIEW v AS SELECT i FROM t WHERE i::numeric / 3 > 1;

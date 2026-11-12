@@ -1,0 +1,4045 @@
+T	_aclitem	aclitem[]	A	0	b	aclitem
+T	_bit	bit[]	A	0	b	bit
+T	_bool	boolean[]	A	0	b	bool
+T	_box	box[]	A	0	b	box
+T	_bpchar	character[]	A	0	b	bpchar
+T	_bytea	bytea[]	A	0	b	bytea
+T	_char	"char"[]	A	0	b	char
+T	_cid	cid[]	A	0	b	cid
+T	_cidr	cidr[]	A	0	b	cidr
+T	_circle	circle[]	A	0	b	circle
+T	_cstring	cstring[]	A	0	b	cstring
+T	_date	date[]	A	0	b	date
+T	_datemultirange	datemultirange[]	A	0	b	datemultirange
+T	_daterange	daterange[]	A	0	b	daterange
+T	_float4	real[]	A	0	b	float4
+T	_float8	double precision[]	A	0	b	float8
+T	_gtsvector	gtsvector[]	A	0	b	gtsvector
+T	_inet	inet[]	A	0	b	inet
+T	_int2	smallint[]	A	0	b	int2
+T	_int2vector	int2vector[]	A	0	b	int2vector
+T	_int4	integer[]	A	0	b	int4
+T	_int4multirange	int4multirange[]	A	0	b	int4multirange
+T	_int4range	int4range[]	A	0	b	int4range
+T	_int8	bigint[]	A	0	b	int8
+T	_int8multirange	int8multirange[]	A	0	b	int8multirange
+T	_int8range	int8range[]	A	0	b	int8range
+T	_interval	interval[]	A	0	b	interval
+T	_json	json[]	A	0	b	json
+T	_jsonb	jsonb[]	A	0	b	jsonb
+T	_jsonpath	jsonpath[]	A	0	b	jsonpath
+T	_line	line[]	A	0	b	line
+T	_lseg	lseg[]	A	0	b	lseg
+T	_macaddr	macaddr[]	A	0	b	macaddr
+T	_macaddr8	macaddr8[]	A	0	b	macaddr8
+T	_money	money[]	A	0	b	money
+T	_name	name[]	A	0	b	name
+T	_numeric	numeric[]	A	0	b	numeric
+T	_nummultirange	nummultirange[]	A	0	b	nummultirange
+T	_numrange	numrange[]	A	0	b	numrange
+T	_oid	oid[]	A	0	b	oid
+T	_oidvector	oidvector[]	A	0	b	oidvector
+T	_path	path[]	A	0	b	path
+T	_pg_aggregate	pg_aggregate[]	A	0	b	pg_aggregate
+T	_pg_am	pg_am[]	A	0	b	pg_am
+T	_pg_amop	pg_amop[]	A	0	b	pg_amop
+T	_pg_amproc	pg_amproc[]	A	0	b	pg_amproc
+T	_pg_attrdef	pg_attrdef[]	A	0	b	pg_attrdef
+T	_pg_attribute	pg_attribute[]	A	0	b	pg_attribute
+T	_pg_auth_members	pg_auth_members[]	A	0	b	pg_auth_members
+T	_pg_authid	pg_authid[]	A	0	b	pg_authid
+T	_pg_available_extension_versions	pg_available_extension_versions[]	A	0	b	pg_available_extension_versions
+T	_pg_available_extensions	pg_available_extensions[]	A	0	b	pg_available_extensions
+T	_pg_backend_memory_contexts	pg_backend_memory_contexts[]	A	0	b	pg_backend_memory_contexts
+T	_pg_cast	pg_cast[]	A	0	b	pg_cast
+T	_pg_class	pg_class[]	A	0	b	pg_class
+T	_pg_collation	pg_collation[]	A	0	b	pg_collation
+T	_pg_config	pg_config[]	A	0	b	pg_config
+T	_pg_constraint	pg_constraint[]	A	0	b	pg_constraint
+T	_pg_conversion	pg_conversion[]	A	0	b	pg_conversion
+T	_pg_cursors	pg_cursors[]	A	0	b	pg_cursors
+T	_pg_database	pg_database[]	A	0	b	pg_database
+T	_pg_db_role_setting	pg_db_role_setting[]	A	0	b	pg_db_role_setting
+T	_pg_default_acl	pg_default_acl[]	A	0	b	pg_default_acl
+T	_pg_depend	pg_depend[]	A	0	b	pg_depend
+T	_pg_description	pg_description[]	A	0	b	pg_description
+T	_pg_enum	pg_enum[]	A	0	b	pg_enum
+T	_pg_event_trigger	pg_event_trigger[]	A	0	b	pg_event_trigger
+T	_pg_extension	pg_extension[]	A	0	b	pg_extension
+T	_pg_file_settings	pg_file_settings[]	A	0	b	pg_file_settings
+T	_pg_foreign_data_wrapper	pg_foreign_data_wrapper[]	A	0	b	pg_foreign_data_wrapper
+T	_pg_foreign_server	pg_foreign_server[]	A	0	b	pg_foreign_server
+T	_pg_foreign_table	pg_foreign_table[]	A	0	b	pg_foreign_table
+T	_pg_group	pg_group[]	A	0	b	pg_group
+T	_pg_hba_file_rules	pg_hba_file_rules[]	A	0	b	pg_hba_file_rules
+T	_pg_ident_file_mappings	pg_ident_file_mappings[]	A	0	b	pg_ident_file_mappings
+T	_pg_index	pg_index[]	A	0	b	pg_index
+T	_pg_indexes	pg_indexes[]	A	0	b	pg_indexes
+T	_pg_inherits	pg_inherits[]	A	0	b	pg_inherits
+T	_pg_init_privs	pg_init_privs[]	A	0	b	pg_init_privs
+T	_pg_language	pg_language[]	A	0	b	pg_language
+T	_pg_largeobject	pg_largeobject[]	A	0	b	pg_largeobject
+T	_pg_largeobject_metadata	pg_largeobject_metadata[]	A	0	b	pg_largeobject_metadata
+T	_pg_locks	pg_locks[]	A	0	b	pg_locks
+T	_pg_lsn	pg_lsn[]	A	0	b	pg_lsn
+T	_pg_matviews	pg_matviews[]	A	0	b	pg_matviews
+T	_pg_namespace	pg_namespace[]	A	0	b	pg_namespace
+T	_pg_opclass	pg_opclass[]	A	0	b	pg_opclass
+T	_pg_operator	pg_operator[]	A	0	b	pg_operator
+T	_pg_opfamily	pg_opfamily[]	A	0	b	pg_opfamily
+T	_pg_parameter_acl	pg_parameter_acl[]	A	0	b	pg_parameter_acl
+T	_pg_partitioned_table	pg_partitioned_table[]	A	0	b	pg_partitioned_table
+T	_pg_policies	pg_policies[]	A	0	b	pg_policies
+T	_pg_policy	pg_policy[]	A	0	b	pg_policy
+T	_pg_prepared_statements	pg_prepared_statements[]	A	0	b	pg_prepared_statements
+T	_pg_prepared_xacts	pg_prepared_xacts[]	A	0	b	pg_prepared_xacts
+T	_pg_proc	pg_proc[]	A	0	b	pg_proc
+T	_pg_publication	pg_publication[]	A	0	b	pg_publication
+T	_pg_publication_namespace	pg_publication_namespace[]	A	0	b	pg_publication_namespace
+T	_pg_publication_rel	pg_publication_rel[]	A	0	b	pg_publication_rel
+T	_pg_publication_tables	pg_publication_tables[]	A	0	b	pg_publication_tables
+T	_pg_range	pg_range[]	A	0	b	pg_range
+T	_pg_replication_origin	pg_replication_origin[]	A	0	b	pg_replication_origin
+T	_pg_replication_origin_status	pg_replication_origin_status[]	A	0	b	pg_replication_origin_status
+T	_pg_replication_slots	pg_replication_slots[]	A	0	b	pg_replication_slots
+T	_pg_rewrite	pg_rewrite[]	A	0	b	pg_rewrite
+T	_pg_roles	pg_roles[]	A	0	b	pg_roles
+T	_pg_rules	pg_rules[]	A	0	b	pg_rules
+T	_pg_seclabel	pg_seclabel[]	A	0	b	pg_seclabel
+T	_pg_seclabels	pg_seclabels[]	A	0	b	pg_seclabels
+T	_pg_sequence	pg_sequence[]	A	0	b	pg_sequence
+T	_pg_sequences	pg_sequences[]	A	0	b	pg_sequences
+T	_pg_settings	pg_settings[]	A	0	b	pg_settings
+T	_pg_shadow	pg_shadow[]	A	0	b	pg_shadow
+T	_pg_shdepend	pg_shdepend[]	A	0	b	pg_shdepend
+T	_pg_shdescription	pg_shdescription[]	A	0	b	pg_shdescription
+T	_pg_shmem_allocations	pg_shmem_allocations[]	A	0	b	pg_shmem_allocations
+T	_pg_shseclabel	pg_shseclabel[]	A	0	b	pg_shseclabel
+T	_pg_snapshot	pg_snapshot[]	A	0	b	pg_snapshot
+T	_pg_stat_activity	pg_stat_activity[]	A	0	b	pg_stat_activity
+T	_pg_stat_all_indexes	pg_stat_all_indexes[]	A	0	b	pg_stat_all_indexes
+T	_pg_stat_all_tables	pg_stat_all_tables[]	A	0	b	pg_stat_all_tables
+T	_pg_stat_archiver	pg_stat_archiver[]	A	0	b	pg_stat_archiver
+T	_pg_stat_bgwriter	pg_stat_bgwriter[]	A	0	b	pg_stat_bgwriter
+T	_pg_stat_database	pg_stat_database[]	A	0	b	pg_stat_database
+T	_pg_stat_database_conflicts	pg_stat_database_conflicts[]	A	0	b	pg_stat_database_conflicts
+T	_pg_stat_gssapi	pg_stat_gssapi[]	A	0	b	pg_stat_gssapi
+T	_pg_stat_io	pg_stat_io[]	A	0	b	pg_stat_io
+T	_pg_stat_progress_analyze	pg_stat_progress_analyze[]	A	0	b	pg_stat_progress_analyze
+T	_pg_stat_progress_basebackup	pg_stat_progress_basebackup[]	A	0	b	pg_stat_progress_basebackup
+T	_pg_stat_progress_cluster	pg_stat_progress_cluster[]	A	0	b	pg_stat_progress_cluster
+T	_pg_stat_progress_copy	pg_stat_progress_copy[]	A	0	b	pg_stat_progress_copy
+T	_pg_stat_progress_create_index	pg_stat_progress_create_index[]	A	0	b	pg_stat_progress_create_index
+T	_pg_stat_progress_vacuum	pg_stat_progress_vacuum[]	A	0	b	pg_stat_progress_vacuum
+T	_pg_stat_recovery_prefetch	pg_stat_recovery_prefetch[]	A	0	b	pg_stat_recovery_prefetch
+T	_pg_stat_replication	pg_stat_replication[]	A	0	b	pg_stat_replication
+T	_pg_stat_replication_slots	pg_stat_replication_slots[]	A	0	b	pg_stat_replication_slots
+T	_pg_stat_slru	pg_stat_slru[]	A	0	b	pg_stat_slru
+T	_pg_stat_ssl	pg_stat_ssl[]	A	0	b	pg_stat_ssl
+T	_pg_stat_subscription	pg_stat_subscription[]	A	0	b	pg_stat_subscription
+T	_pg_stat_subscription_stats	pg_stat_subscription_stats[]	A	0	b	pg_stat_subscription_stats
+T	_pg_stat_sys_indexes	pg_stat_sys_indexes[]	A	0	b	pg_stat_sys_indexes
+T	_pg_stat_sys_tables	pg_stat_sys_tables[]	A	0	b	pg_stat_sys_tables
+T	_pg_stat_user_functions	pg_stat_user_functions[]	A	0	b	pg_stat_user_functions
+T	_pg_stat_user_indexes	pg_stat_user_indexes[]	A	0	b	pg_stat_user_indexes
+T	_pg_stat_user_tables	pg_stat_user_tables[]	A	0	b	pg_stat_user_tables
+T	_pg_stat_wal	pg_stat_wal[]	A	0	b	pg_stat_wal
+T	_pg_stat_wal_receiver	pg_stat_wal_receiver[]	A	0	b	pg_stat_wal_receiver
+T	_pg_stat_xact_all_tables	pg_stat_xact_all_tables[]	A	0	b	pg_stat_xact_all_tables
+T	_pg_stat_xact_sys_tables	pg_stat_xact_sys_tables[]	A	0	b	pg_stat_xact_sys_tables
+T	_pg_stat_xact_user_functions	pg_stat_xact_user_functions[]	A	0	b	pg_stat_xact_user_functions
+T	_pg_stat_xact_user_tables	pg_stat_xact_user_tables[]	A	0	b	pg_stat_xact_user_tables
+T	_pg_statio_all_indexes	pg_statio_all_indexes[]	A	0	b	pg_statio_all_indexes
+T	_pg_statio_all_sequences	pg_statio_all_sequences[]	A	0	b	pg_statio_all_sequences
+T	_pg_statio_all_tables	pg_statio_all_tables[]	A	0	b	pg_statio_all_tables
+T	_pg_statio_sys_indexes	pg_statio_sys_indexes[]	A	0	b	pg_statio_sys_indexes
+T	_pg_statio_sys_sequences	pg_statio_sys_sequences[]	A	0	b	pg_statio_sys_sequences
+T	_pg_statio_sys_tables	pg_statio_sys_tables[]	A	0	b	pg_statio_sys_tables
+T	_pg_statio_user_indexes	pg_statio_user_indexes[]	A	0	b	pg_statio_user_indexes
+T	_pg_statio_user_sequences	pg_statio_user_sequences[]	A	0	b	pg_statio_user_sequences
+T	_pg_statio_user_tables	pg_statio_user_tables[]	A	0	b	pg_statio_user_tables
+T	_pg_statistic	pg_statistic[]	A	0	b	pg_statistic
+T	_pg_statistic_ext	pg_statistic_ext[]	A	0	b	pg_statistic_ext
+T	_pg_statistic_ext_data	pg_statistic_ext_data[]	A	0	b	pg_statistic_ext_data
+T	_pg_stats	pg_stats[]	A	0	b	pg_stats
+T	_pg_stats_ext	pg_stats_ext[]	A	0	b	pg_stats_ext
+T	_pg_stats_ext_exprs	pg_stats_ext_exprs[]	A	0	b	pg_stats_ext_exprs
+T	_pg_subscription	pg_subscription[]	A	0	b	pg_subscription
+T	_pg_subscription_rel	pg_subscription_rel[]	A	0	b	pg_subscription_rel
+T	_pg_tables	pg_tables[]	A	0	b	pg_tables
+T	_pg_tablespace	pg_tablespace[]	A	0	b	pg_tablespace
+T	_pg_timezone_abbrevs	pg_timezone_abbrevs[]	A	0	b	pg_timezone_abbrevs
+T	_pg_timezone_names	pg_timezone_names[]	A	0	b	pg_timezone_names
+T	_pg_transform	pg_transform[]	A	0	b	pg_transform
+T	_pg_trigger	pg_trigger[]	A	0	b	pg_trigger
+T	_pg_ts_config	pg_ts_config[]	A	0	b	pg_ts_config
+T	_pg_ts_config_map	pg_ts_config_map[]	A	0	b	pg_ts_config_map
+T	_pg_ts_dict	pg_ts_dict[]	A	0	b	pg_ts_dict
+T	_pg_ts_parser	pg_ts_parser[]	A	0	b	pg_ts_parser
+T	_pg_ts_template	pg_ts_template[]	A	0	b	pg_ts_template
+T	_pg_type	pg_type[]	A	0	b	pg_type
+T	_pg_user	pg_user[]	A	0	b	pg_user
+T	_pg_user_mapping	pg_user_mapping[]	A	0	b	pg_user_mapping
+T	_pg_user_mappings	pg_user_mappings[]	A	0	b	pg_user_mappings
+T	_pg_views	pg_views[]	A	0	b	pg_views
+T	_point	point[]	A	0	b	point
+T	_polygon	polygon[]	A	0	b	polygon
+T	_record	record[]	P	0	p	
+T	_refcursor	refcursor[]	A	0	b	refcursor
+T	_regclass	regclass[]	A	0	b	regclass
+T	_regcollation	regcollation[]	A	0	b	regcollation
+T	_regconfig	regconfig[]	A	0	b	regconfig
+T	_regdictionary	regdictionary[]	A	0	b	regdictionary
+T	_regnamespace	regnamespace[]	A	0	b	regnamespace
+T	_regoper	regoper[]	A	0	b	regoper
+T	_regoperator	regoperator[]	A	0	b	regoperator
+T	_regproc	regproc[]	A	0	b	regproc
+T	_regprocedure	regprocedure[]	A	0	b	regprocedure
+T	_regrole	regrole[]	A	0	b	regrole
+T	_regtype	regtype[]	A	0	b	regtype
+T	_text	text[]	A	0	b	text
+T	_tid	tid[]	A	0	b	tid
+T	_time	time without time zone[]	A	0	b	time
+T	_timestamp	timestamp without time zone[]	A	0	b	timestamp
+T	_timestamptz	timestamp with time zone[]	A	0	b	timestamptz
+T	_timetz	time with time zone[]	A	0	b	timetz
+T	_tsmultirange	tsmultirange[]	A	0	b	tsmultirange
+T	_tsquery	tsquery[]	A	0	b	tsquery
+T	_tsrange	tsrange[]	A	0	b	tsrange
+T	_tstzmultirange	tstzmultirange[]	A	0	b	tstzmultirange
+T	_tstzrange	tstzrange[]	A	0	b	tstzrange
+T	_tsvector	tsvector[]	A	0	b	tsvector
+T	_txid_snapshot	txid_snapshot[]	A	0	b	txid_snapshot
+T	_uuid	uuid[]	A	0	b	uuid
+T	_varbit	bit varying[]	A	0	b	varbit
+T	_varchar	character varying[]	A	0	b	varchar
+T	_xid	xid[]	A	0	b	xid
+T	_xid8	xid8[]	A	0	b	xid8
+T	_xml	xml[]	A	0	b	xml
+T	aclitem	aclitem	U	0	b	
+T	any	"any"	P	0	p	
+T	anyarray	anyarray	P	0	p	
+T	anycompatible	anycompatible	P	0	p	
+T	anycompatiblearray	anycompatiblearray	P	0	p	
+T	anycompatiblemultirange	anycompatiblemultirange	P	0	p	
+T	anycompatiblenonarray	anycompatiblenonarray	P	0	p	
+T	anycompatiblerange	anycompatiblerange	P	0	p	
+T	anyelement	anyelement	P	0	p	
+T	anyenum	anyenum	P	0	p	
+T	anymultirange	anymultirange	P	0	p	
+T	anynonarray	anynonarray	P	0	p	
+T	anyrange	anyrange	P	0	p	
+T	bit	bit	V	0	b	
+T	bool	boolean	B	1	b	
+T	box	box	G	0	b	
+T	bpchar	character	S	0	b	
+T	bytea	bytea	U	0	b	
+T	char	"char"	Z	0	b	
+T	cid	cid	U	0	b	
+T	cidr	cidr	I	0	b	
+T	circle	circle	G	0	b	
+T	cstring	cstring	P	0	p	
+T	date	date	D	0	b	
+T	datemultirange	datemultirange	R	0	m	
+T	daterange	daterange	R	0	r	
+T	event_trigger	event_trigger	P	0	p	
+T	fdw_handler	fdw_handler	P	0	p	
+T	float4	real	N	0	b	
+T	float8	double precision	N	1	b	
+T	gtsvector	gtsvector	U	0	b	
+T	index_am_handler	index_am_handler	P	0	p	
+T	inet	inet	I	1	b	
+T	int2	smallint	N	0	b	
+T	int2vector	int2vector	A	0	b	int2
+T	int4	integer	N	0	b	
+T	int4multirange	int4multirange	R	0	m	
+T	int4range	int4range	R	0	r	
+T	int8	bigint	N	0	b	
+T	int8multirange	int8multirange	R	0	m	
+T	int8range	int8range	R	0	r	
+T	internal	internal	P	0	p	
+T	interval	interval	T	1	b	
+T	json	json	U	0	b	
+T	jsonb	jsonb	U	0	b	
+T	jsonpath	jsonpath	U	0	b	
+T	language_handler	language_handler	P	0	p	
+T	line	line	G	0	b	
+T	lseg	lseg	G	0	b	
+T	macaddr	macaddr	U	0	b	
+T	macaddr8	macaddr8	U	0	b	
+T	money	money	N	0	b	
+T	name	name	S	0	b	
+T	numeric	numeric	N	0	b	
+T	nummultirange	nummultirange	R	0	m	
+T	numrange	numrange	R	0	r	
+T	oid	oid	N	1	b	
+T	oidvector	oidvector	A	0	b	oid
+T	path	path	G	0	b	
+T	pg_aggregate	pg_aggregate	C	0	c	
+T	pg_am	pg_am	C	0	c	
+T	pg_amop	pg_amop	C	0	c	
+T	pg_amproc	pg_amproc	C	0	c	
+T	pg_attrdef	pg_attrdef	C	0	c	
+T	pg_attribute	pg_attribute	C	0	c	
+T	pg_auth_members	pg_auth_members	C	0	c	
+T	pg_authid	pg_authid	C	0	c	
+T	pg_available_extension_versions	pg_available_extension_versions	C	0	c	
+T	pg_available_extensions	pg_available_extensions	C	0	c	
+T	pg_backend_memory_contexts	pg_backend_memory_contexts	C	0	c	
+T	pg_brin_bloom_summary	pg_brin_bloom_summary	Z	0	b	
+T	pg_brin_minmax_multi_summary	pg_brin_minmax_multi_summary	Z	0	b	
+T	pg_cast	pg_cast	C	0	c	
+T	pg_class	pg_class	C	0	c	
+T	pg_collation	pg_collation	C	0	c	
+T	pg_config	pg_config	C	0	c	
+T	pg_constraint	pg_constraint	C	0	c	
+T	pg_conversion	pg_conversion	C	0	c	
+T	pg_cursors	pg_cursors	C	0	c	
+T	pg_database	pg_database	C	0	c	
+T	pg_db_role_setting	pg_db_role_setting	C	0	c	
+T	pg_ddl_command	pg_ddl_command	P	0	p	
+T	pg_default_acl	pg_default_acl	C	0	c	
+T	pg_depend	pg_depend	C	0	c	
+T	pg_dependencies	pg_dependencies	Z	0	b	
+T	pg_description	pg_description	C	0	c	
+T	pg_enum	pg_enum	C	0	c	
+T	pg_event_trigger	pg_event_trigger	C	0	c	
+T	pg_extension	pg_extension	C	0	c	
+T	pg_file_settings	pg_file_settings	C	0	c	
+T	pg_foreign_data_wrapper	pg_foreign_data_wrapper	C	0	c	
+T	pg_foreign_server	pg_foreign_server	C	0	c	
+T	pg_foreign_table	pg_foreign_table	C	0	c	
+T	pg_group	pg_group	C	0	c	
+T	pg_hba_file_rules	pg_hba_file_rules	C	0	c	
+T	pg_ident_file_mappings	pg_ident_file_mappings	C	0	c	
+T	pg_index	pg_index	C	0	c	
+T	pg_indexes	pg_indexes	C	0	c	
+T	pg_inherits	pg_inherits	C	0	c	
+T	pg_init_privs	pg_init_privs	C	0	c	
+T	pg_language	pg_language	C	0	c	
+T	pg_largeobject	pg_largeobject	C	0	c	
+T	pg_largeobject_metadata	pg_largeobject_metadata	C	0	c	
+T	pg_locks	pg_locks	C	0	c	
+T	pg_lsn	pg_lsn	U	0	b	
+T	pg_matviews	pg_matviews	C	0	c	
+T	pg_mcv_list	pg_mcv_list	Z	0	b	
+T	pg_namespace	pg_namespace	C	0	c	
+T	pg_ndistinct	pg_ndistinct	Z	0	b	
+T	pg_node_tree	pg_node_tree	Z	0	b	
+T	pg_opclass	pg_opclass	C	0	c	
+T	pg_operator	pg_operator	C	0	c	
+T	pg_opfamily	pg_opfamily	C	0	c	
+T	pg_parameter_acl	pg_parameter_acl	C	0	c	
+T	pg_partitioned_table	pg_partitioned_table	C	0	c	
+T	pg_policies	pg_policies	C	0	c	
+T	pg_policy	pg_policy	C	0	c	
+T	pg_prepared_statements	pg_prepared_statements	C	0	c	
+T	pg_prepared_xacts	pg_prepared_xacts	C	0	c	
+T	pg_proc	pg_proc	C	0	c	
+T	pg_publication	pg_publication	C	0	c	
+T	pg_publication_namespace	pg_publication_namespace	C	0	c	
+T	pg_publication_rel	pg_publication_rel	C	0	c	
+T	pg_publication_tables	pg_publication_tables	C	0	c	
+T	pg_range	pg_range	C	0	c	
+T	pg_replication_origin	pg_replication_origin	C	0	c	
+T	pg_replication_origin_status	pg_replication_origin_status	C	0	c	
+T	pg_replication_slots	pg_replication_slots	C	0	c	
+T	pg_rewrite	pg_rewrite	C	0	c	
+T	pg_roles	pg_roles	C	0	c	
+T	pg_rules	pg_rules	C	0	c	
+T	pg_seclabel	pg_seclabel	C	0	c	
+T	pg_seclabels	pg_seclabels	C	0	c	
+T	pg_sequence	pg_sequence	C	0	c	
+T	pg_sequences	pg_sequences	C	0	c	
+T	pg_settings	pg_settings	C	0	c	
+T	pg_shadow	pg_shadow	C	0	c	
+T	pg_shdepend	pg_shdepend	C	0	c	
+T	pg_shdescription	pg_shdescription	C	0	c	
+T	pg_shmem_allocations	pg_shmem_allocations	C	0	c	
+T	pg_shseclabel	pg_shseclabel	C	0	c	
+T	pg_snapshot	pg_snapshot	U	0	b	
+T	pg_stat_activity	pg_stat_activity	C	0	c	
+T	pg_stat_all_indexes	pg_stat_all_indexes	C	0	c	
+T	pg_stat_all_tables	pg_stat_all_tables	C	0	c	
+T	pg_stat_archiver	pg_stat_archiver	C	0	c	
+T	pg_stat_bgwriter	pg_stat_bgwriter	C	0	c	
+T	pg_stat_database	pg_stat_database	C	0	c	
+T	pg_stat_database_conflicts	pg_stat_database_conflicts	C	0	c	
+T	pg_stat_gssapi	pg_stat_gssapi	C	0	c	
+T	pg_stat_io	pg_stat_io	C	0	c	
+T	pg_stat_progress_analyze	pg_stat_progress_analyze	C	0	c	
+T	pg_stat_progress_basebackup	pg_stat_progress_basebackup	C	0	c	
+T	pg_stat_progress_cluster	pg_stat_progress_cluster	C	0	c	
+T	pg_stat_progress_copy	pg_stat_progress_copy	C	0	c	
+T	pg_stat_progress_create_index	pg_stat_progress_create_index	C	0	c	
+T	pg_stat_progress_vacuum	pg_stat_progress_vacuum	C	0	c	
+T	pg_stat_recovery_prefetch	pg_stat_recovery_prefetch	C	0	c	
+T	pg_stat_replication	pg_stat_replication	C	0	c	
+T	pg_stat_replication_slots	pg_stat_replication_slots	C	0	c	
+T	pg_stat_slru	pg_stat_slru	C	0	c	
+T	pg_stat_ssl	pg_stat_ssl	C	0	c	
+T	pg_stat_subscription	pg_stat_subscription	C	0	c	
+T	pg_stat_subscription_stats	pg_stat_subscription_stats	C	0	c	
+T	pg_stat_sys_indexes	pg_stat_sys_indexes	C	0	c	
+T	pg_stat_sys_tables	pg_stat_sys_tables	C	0	c	
+T	pg_stat_user_functions	pg_stat_user_functions	C	0	c	
+T	pg_stat_user_indexes	pg_stat_user_indexes	C	0	c	
+T	pg_stat_user_tables	pg_stat_user_tables	C	0	c	
+T	pg_stat_wal	pg_stat_wal	C	0	c	
+T	pg_stat_wal_receiver	pg_stat_wal_receiver	C	0	c	
+T	pg_stat_xact_all_tables	pg_stat_xact_all_tables	C	0	c	
+T	pg_stat_xact_sys_tables	pg_stat_xact_sys_tables	C	0	c	
+T	pg_stat_xact_user_functions	pg_stat_xact_user_functions	C	0	c	
+T	pg_stat_xact_user_tables	pg_stat_xact_user_tables	C	0	c	
+T	pg_statio_all_indexes	pg_statio_all_indexes	C	0	c	
+T	pg_statio_all_sequences	pg_statio_all_sequences	C	0	c	
+T	pg_statio_all_tables	pg_statio_all_tables	C	0	c	
+T	pg_statio_sys_indexes	pg_statio_sys_indexes	C	0	c	
+T	pg_statio_sys_sequences	pg_statio_sys_sequences	C	0	c	
+T	pg_statio_sys_tables	pg_statio_sys_tables	C	0	c	
+T	pg_statio_user_indexes	pg_statio_user_indexes	C	0	c	
+T	pg_statio_user_sequences	pg_statio_user_sequences	C	0	c	
+T	pg_statio_user_tables	pg_statio_user_tables	C	0	c	
+T	pg_statistic	pg_statistic	C	0	c	
+T	pg_statistic_ext	pg_statistic_ext	C	0	c	
+T	pg_statistic_ext_data	pg_statistic_ext_data	C	0	c	
+T	pg_stats	pg_stats	C	0	c	
+T	pg_stats_ext	pg_stats_ext	C	0	c	
+T	pg_stats_ext_exprs	pg_stats_ext_exprs	C	0	c	
+T	pg_subscription	pg_subscription	C	0	c	
+T	pg_subscription_rel	pg_subscription_rel	C	0	c	
+T	pg_tables	pg_tables	C	0	c	
+T	pg_tablespace	pg_tablespace	C	0	c	
+T	pg_timezone_abbrevs	pg_timezone_abbrevs	C	0	c	
+T	pg_timezone_names	pg_timezone_names	C	0	c	
+T	pg_transform	pg_transform	C	0	c	
+T	pg_trigger	pg_trigger	C	0	c	
+T	pg_ts_config	pg_ts_config	C	0	c	
+T	pg_ts_config_map	pg_ts_config_map	C	0	c	
+T	pg_ts_dict	pg_ts_dict	C	0	c	
+T	pg_ts_parser	pg_ts_parser	C	0	c	
+T	pg_ts_template	pg_ts_template	C	0	c	
+T	pg_type	pg_type	C	0	c	
+T	pg_user	pg_user	C	0	c	
+T	pg_user_mapping	pg_user_mapping	C	0	c	
+T	pg_user_mappings	pg_user_mappings	C	0	c	
+T	pg_views	pg_views	C	0	c	
+T	point	point	G	0	b	
+T	polygon	polygon	G	0	b	
+T	record	record	P	0	p	
+T	refcursor	refcursor	U	0	b	
+T	regclass	regclass	N	0	b	
+T	regcollation	regcollation	N	0	b	
+T	regconfig	regconfig	N	0	b	
+T	regdictionary	regdictionary	N	0	b	
+T	regnamespace	regnamespace	N	0	b	
+T	regoper	regoper	N	0	b	
+T	regoperator	regoperator	N	0	b	
+T	regproc	regproc	N	0	b	
+T	regprocedure	regprocedure	N	0	b	
+T	regrole	regrole	N	0	b	
+T	regtype	regtype	N	0	b	
+T	table_am_handler	table_am_handler	P	0	p	
+T	text	text	S	1	b	
+T	tid	tid	U	0	b	
+T	time	time without time zone	D	0	b	
+T	timestamp	timestamp without time zone	D	0	b	
+T	timestamptz	timestamp with time zone	D	1	b	
+T	timetz	time with time zone	D	0	b	
+T	trigger	trigger	P	0	p	
+T	tsm_handler	tsm_handler	P	0	p	
+T	tsmultirange	tsmultirange	R	0	m	
+T	tsquery	tsquery	U	0	b	
+T	tsrange	tsrange	R	0	r	
+T	tstzmultirange	tstzmultirange	R	0	m	
+T	tstzrange	tstzrange	R	0	r	
+T	tsvector	tsvector	U	0	b	
+T	txid_snapshot	txid_snapshot	U	0	b	
+T	unknown	unknown	X	0	p	
+T	uuid	uuid	U	0	b	
+T	varbit	bit varying	V	1	b	
+T	varchar	character varying	S	0	b	
+T	void	void	P	0	p	
+T	xid	xid	U	0	b	
+T	xid8	xid8	U	0	b	
+T	xml	xml	U	0	b	
+C	bit	bit	i
+C	bit	int4	e
+C	bit	int8	e
+C	bit	varbit	i
+C	bool	bpchar	a
+C	bool	int4	e
+C	bool	text	a
+C	bool	varchar	a
+C	box	circle	e
+C	box	lseg	e
+C	box	point	e
+C	box	polygon	a
+C	bpchar	bpchar	i
+C	bpchar	char	a
+C	bpchar	name	i
+C	bpchar	text	i
+C	bpchar	varchar	i
+C	bpchar	xml	e
+C	char	bpchar	a
+C	char	int4	e
+C	char	text	i
+C	char	varchar	a
+C	cidr	bpchar	a
+C	cidr	inet	i
+C	cidr	text	a
+C	cidr	varchar	a
+C	circle	box	e
+C	circle	point	e
+C	circle	polygon	e
+C	date	timestamp	i
+C	date	timestamptz	i
+C	daterange	datemultirange	e
+C	float4	float8	i
+C	float4	int2	a
+C	float4	int4	a
+C	float4	int8	a
+C	float4	numeric	a
+C	float8	float4	a
+C	float8	int2	a
+C	float8	int4	a
+C	float8	int8	a
+C	float8	numeric	a
+C	inet	bpchar	a
+C	inet	cidr	a
+C	inet	text	a
+C	inet	varchar	a
+C	int2	float4	i
+C	int2	float8	i
+C	int2	int4	i
+C	int2	int8	i
+C	int2	numeric	i
+C	int2	oid	i
+C	int2	regclass	i
+C	int2	regcollation	i
+C	int2	regconfig	i
+C	int2	regdictionary	i
+C	int2	regnamespace	i
+C	int2	regoper	i
+C	int2	regoperator	i
+C	int2	regproc	i
+C	int2	regprocedure	i
+C	int2	regrole	i
+C	int2	regtype	i
+C	int4	bit	e
+C	int4	bool	e
+C	int4	char	e
+C	int4	float4	i
+C	int4	float8	i
+C	int4	int2	a
+C	int4	int8	i
+C	int4	money	a
+C	int4	numeric	i
+C	int4	oid	i
+C	int4	regclass	i
+C	int4	regcollation	i
+C	int4	regconfig	i
+C	int4	regdictionary	i
+C	int4	regnamespace	i
+C	int4	regoper	i
+C	int4	regoperator	i
+C	int4	regproc	i
+C	int4	regprocedure	i
+C	int4	regrole	i
+C	int4	regtype	i
+C	int4range	int4multirange	e
+C	int8	bit	e
+C	int8	float4	i
+C	int8	float8	i
+C	int8	int2	a
+C	int8	int4	a
+C	int8	money	a
+C	int8	numeric	i
+C	int8	oid	i
+C	int8	regclass	i
+C	int8	regcollation	i
+C	int8	regconfig	i
+C	int8	regdictionary	i
+C	int8	regnamespace	i
+C	int8	regoper	i
+C	int8	regoperator	i
+C	int8	regproc	i
+C	int8	regprocedure	i
+C	int8	regrole	i
+C	int8	regtype	i
+C	int8range	int8multirange	e
+C	interval	interval	i
+C	interval	time	a
+C	json	jsonb	a
+C	jsonb	bool	e
+C	jsonb	float4	e
+C	jsonb	float8	e
+C	jsonb	int2	e
+C	jsonb	int4	e
+C	jsonb	int8	e
+C	jsonb	json	a
+C	jsonb	numeric	e
+C	lseg	point	e
+C	macaddr	macaddr8	i
+C	macaddr8	macaddr	i
+C	money	numeric	a
+C	name	bpchar	a
+C	name	text	i
+C	name	varchar	a
+C	numeric	float4	i
+C	numeric	float8	i
+C	numeric	int2	a
+C	numeric	int4	a
+C	numeric	int8	a
+C	numeric	money	a
+C	numeric	numeric	i
+C	numrange	nummultirange	e
+C	oid	int4	a
+C	oid	int8	a
+C	oid	regclass	i
+C	oid	regcollation	i
+C	oid	regconfig	i
+C	oid	regdictionary	i
+C	oid	regnamespace	i
+C	oid	regoper	i
+C	oid	regoperator	i
+C	oid	regproc	i
+C	oid	regprocedure	i
+C	oid	regrole	i
+C	oid	regtype	i
+C	path	polygon	a
+C	pg_dependencies	bytea	i
+C	pg_dependencies	text	i
+C	pg_mcv_list	bytea	i
+C	pg_mcv_list	text	i
+C	pg_ndistinct	bytea	i
+C	pg_ndistinct	text	i
+C	pg_node_tree	text	i
+C	point	box	a
+C	polygon	box	e
+C	polygon	circle	e
+C	polygon	path	a
+C	polygon	point	e
+C	regclass	int4	a
+C	regclass	int8	a
+C	regclass	oid	i
+C	regcollation	int4	a
+C	regcollation	int8	a
+C	regcollation	oid	i
+C	regconfig	int4	a
+C	regconfig	int8	a
+C	regconfig	oid	i
+C	regdictionary	int4	a
+C	regdictionary	int8	a
+C	regdictionary	oid	i
+C	regnamespace	int4	a
+C	regnamespace	int8	a
+C	regnamespace	oid	i
+C	regoper	int4	a
+C	regoper	int8	a
+C	regoper	oid	i
+C	regoper	regoperator	i
+C	regoperator	int4	a
+C	regoperator	int8	a
+C	regoperator	oid	i
+C	regoperator	regoper	i
+C	regproc	int4	a
+C	regproc	int8	a
+C	regproc	oid	i
+C	regproc	regprocedure	i
+C	regprocedure	int4	a
+C	regprocedure	int8	a
+C	regprocedure	oid	i
+C	regprocedure	regproc	i
+C	regrole	int4	a
+C	regrole	int8	a
+C	regrole	oid	i
+C	regtype	int4	a
+C	regtype	int8	a
+C	regtype	oid	i
+C	text	bpchar	i
+C	text	char	a
+C	text	name	i
+C	text	regclass	i
+C	text	varchar	i
+C	text	xml	e
+C	time	interval	i
+C	time	time	i
+C	time	timetz	i
+C	timestamp	date	a
+C	timestamp	time	a
+C	timestamp	timestamp	i
+C	timestamp	timestamptz	i
+C	timestamptz	date	a
+C	timestamptz	time	a
+C	timestamptz	timestamp	a
+C	timestamptz	timestamptz	i
+C	timestamptz	timetz	a
+C	timetz	time	a
+C	timetz	timetz	i
+C	tsrange	tsmultirange	e
+C	tstzrange	tstzmultirange	e
+C	varbit	bit	i
+C	varbit	varbit	i
+C	varchar	bpchar	i
+C	varchar	char	a
+C	varchar	name	i
+C	varchar	regclass	i
+C	varchar	text	i
+C	varchar	varchar	i
+C	varchar	xml	e
+C	xid8	xid	e
+C	xml	bpchar	a
+C	xml	text	a
+C	xml	varchar	a
+F	abbrev	cidr	text	0	0	0
+F	abbrev	inet	text	0	0	0
+F	abs	float4	float4	0	0	0
+F	abs	float8	float8	0	0	0
+F	abs	int2	int2	0	0	0
+F	abs	int4	int4	0	0	0
+F	abs	int8	int8	0	0	0
+F	abs	numeric	numeric	0	0	0
+F	aclcontains	_aclitem,aclitem	bool	0	0	0
+F	acldefault	char,oid	_aclitem	0	0	0
+F	aclexplode	_aclitem	record	0	0	1
+F	aclinsert	_aclitem,aclitem	_aclitem	0	0	0
+F	aclitemeq	aclitem,aclitem	bool	0	0	0
+F	aclremove	_aclitem,aclitem	_aclitem	0	0	0
+F	acos	float8	float8	0	0	0
+F	acosd	float8	float8	0	0	0
+F	acosh	float8	float8	0	0	0
+F	age	timestamp	interval	0	0	0
+F	age	timestamp,timestamp	interval	0	0	0
+F	age	timestamptz	interval	0	0	0
+F	age	timestamptz,timestamptz	interval	0	0	0
+F	age	xid	int4	0	0	0
+F	amvalidate	oid	bool	0	0	0
+F	any_value	anyelement	anyelement	0	0	0
+F	any_value_transfn	anyelement,anyelement	anyelement	0	0	0
+F	anyarray_send	anyarray	bytea	0	0	0
+F	anycompatiblearray_send	anycompatiblearray	bytea	0	0	0
+F	anytextcat	anynonarray,text	text	0	0	0
+F	area	box	float8	0	0	0
+F	area	circle	float8	0	0	0
+F	area	path	float8	0	0	0
+F	array_agg	anyarray	anyarray	0	0	0
+F	array_agg	anynonarray	anyarray	0	0	0
+F	array_append	anycompatiblearray,anycompatible	anycompatiblearray	0	0	0
+F	array_cat	anycompatiblearray,anycompatiblearray	anycompatiblearray	0	0	0
+F	array_dims	anyarray	text	0	0	0
+F	array_eq	anyarray,anyarray	bool	0	0	0
+F	array_fill	anyelement,_int4	anyarray	0	0	0
+F	array_fill	anyelement,_int4,_int4	anyarray	0	0	0
+F	array_ge	anyarray,anyarray	bool	0	0	0
+F	array_gt	anyarray,anyarray	bool	0	0	0
+F	array_larger	anyarray,anyarray	anyarray	0	0	0
+F	array_le	anyarray,anyarray	bool	0	0	0
+F	array_length	anyarray,int4	int4	0	0	0
+F	array_lower	anyarray,int4	int4	0	0	0
+F	array_lt	anyarray,anyarray	bool	0	0	0
+F	array_ndims	anyarray	int4	0	0	0
+F	array_ne	anyarray,anyarray	bool	0	0	0
+F	array_position	anycompatiblearray,anycompatible	int4	0	0	0
+F	array_position	anycompatiblearray,anycompatible,int4	int4	0	0	0
+F	array_positions	anycompatiblearray,anycompatible	_int4	0	0	0
+F	array_prepend	anycompatible,anycompatiblearray	anycompatiblearray	0	0	0
+F	array_remove	anycompatiblearray,anycompatible	anycompatiblearray	0	0	0
+F	array_replace	anycompatiblearray,anycompatible,anycompatible	anycompatiblearray	0	0	0
+F	array_sample	anyarray,int4	anyarray	0	0	0
+F	array_send	anyarray	bytea	0	0	0
+F	array_shuffle	anyarray	anyarray	0	0	0
+F	array_smaller	anyarray,anyarray	anyarray	0	0	0
+F	array_to_json	anyarray	json	0	0	0
+F	array_to_json	anyarray,bool	json	0	0	0
+F	array_to_string	anyarray,text	text	0	0	0
+F	array_to_string	anyarray,text,text	text	0	0	0
+F	array_to_tsvector	_text	tsvector	0	0	0
+F	array_upper	anyarray,int4	int4	0	0	0
+F	arraycontained	anyarray,anyarray	bool	0	0	0
+F	arraycontains	anyarray,anyarray	bool	0	0	0
+F	arrayoverlap	anyarray,anyarray	bool	0	0	0
+F	ascii	text	int4	0	0	0
+F	asin	float8	float8	0	0	0
+F	asind	float8	float8	0	0	0
+F	asinh	float8	float8	0	0	0
+F	atan	float8	float8	0	0	0
+F	atan2	float8,float8	float8	0	0	0
+F	atan2d	float8,float8	float8	0	0	0
+F	atand	float8	float8	0	0	0
+F	atanh	float8	float8	0	0	0
+F	avg	float4	float8	0	0	0
+F	avg	float8	float8	0	0	0
+F	avg	int2	numeric	0	0	0
+F	avg	int4	numeric	0	0	0
+F	avg	int8	numeric	0	0	0
+F	avg	interval	interval	0	0	0
+F	avg	numeric	numeric	0	0	0
+F	binary_upgrade_create_empty_extension	text,text,bool,text,_oid,_text,_text	void	0	0	0
+F	binary_upgrade_set_missing_value	oid,text,text	void	0	0	0
+F	binary_upgrade_set_next_array_pg_type_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_heap_pg_class_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_heap_relfilenode	oid	void	0	0	0
+F	binary_upgrade_set_next_index_pg_class_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_index_relfilenode	oid	void	0	0	0
+F	binary_upgrade_set_next_multirange_array_pg_type_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_multirange_pg_type_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_pg_authid_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_pg_enum_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_pg_tablespace_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_pg_type_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_toast_pg_class_oid	oid	void	0	0	0
+F	binary_upgrade_set_next_toast_relfilenode	oid	void	0	0	0
+F	binary_upgrade_set_record_init_privs	bool	void	0	0	0
+F	bit	bit,int4,bool	bit	0	0	0
+F	bit	int4,int4	bit	0	0	0
+F	bit	int8,int4	bit	0	0	0
+F	bit_and	bit	bit	0	0	0
+F	bit_and	int2	int2	0	0	0
+F	bit_and	int4	int4	0	0	0
+F	bit_and	int8	int8	0	0	0
+F	bit_count	bit	int8	0	0	0
+F	bit_count	bytea	int8	0	0	0
+F	bit_length	bit	int4	0	0	0
+F	bit_length	bytea	int4	0	0	0
+F	bit_length	text	int4	0	0	0
+F	bit_or	bit	bit	0	0	0
+F	bit_or	int2	int2	0	0	0
+F	bit_or	int4	int4	0	0	0
+F	bit_or	int8	int8	0	0	0
+F	bit_send	bit	bytea	0	0	0
+F	bit_xor	bit	bit	0	0	0
+F	bit_xor	int2	int2	0	0	0
+F	bit_xor	int4	int4	0	0	0
+F	bit_xor	int8	int8	0	0	0
+F	bitand	bit,bit	bit	0	0	0
+F	bitcat	varbit,varbit	varbit	0	0	0
+F	bitcmp	bit,bit	int4	0	0	0
+F	biteq	bit,bit	bool	0	0	0
+F	bitge	bit,bit	bool	0	0	0
+F	bitgt	bit,bit	bool	0	0	0
+F	bitle	bit,bit	bool	0	0	0
+F	bitlt	bit,bit	bool	0	0	0
+F	bitne	bit,bit	bool	0	0	0
+F	bitnot	bit	bit	0	0	0
+F	bitor	bit,bit	bit	0	0	0
+F	bitshiftleft	bit,int4	bit	0	0	0
+F	bitshiftright	bit,int4	bit	0	0	0
+F	bittypmodin	_cstring	int4	0	0	0
+F	bitxor	bit,bit	bit	0	0	0
+F	bool	int4	bool	0	0	0
+F	bool	jsonb	bool	0	0	0
+F	bool_and	bool	bool	0	0	0
+F	bool_or	bool	bool	0	0	0
+F	booland_statefunc	bool,bool	bool	0	0	0
+F	booleq	bool,bool	bool	0	0	0
+F	boolge	bool,bool	bool	0	0	0
+F	boolgt	bool,bool	bool	0	0	0
+F	boolle	bool,bool	bool	0	0	0
+F	boollt	bool,bool	bool	0	0	0
+F	boolne	bool,bool	bool	0	0	0
+F	boolor_statefunc	bool,bool	bool	0	0	0
+F	boolsend	bool	bytea	0	0	0
+F	bound_box	box,box	box	0	0	0
+F	box	circle	box	0	0	0
+F	box	point	box	0	0	0
+F	box	point,point	box	0	0	0
+F	box	polygon	box	0	0	0
+F	box_above	box,box	bool	0	0	0
+F	box_above_eq	box,box	bool	0	0	0
+F	box_add	box,point	box	0	0	0
+F	box_below	box,box	bool	0	0	0
+F	box_below_eq	box,box	bool	0	0	0
+F	box_center	box	point	0	0	0
+F	box_contain	box,box	bool	0	0	0
+F	box_contain_pt	box,point	bool	0	0	0
+F	box_contained	box,box	bool	0	0	0
+F	box_distance	box,box	float8	0	0	0
+F	box_div	box,point	box	0	0	0
+F	box_eq	box,box	bool	0	0	0
+F	box_ge	box,box	bool	0	0	0
+F	box_gt	box,box	bool	0	0	0
+F	box_intersect	box,box	box	0	0	0
+F	box_le	box,box	bool	0	0	0
+F	box_left	box,box	bool	0	0	0
+F	box_lt	box,box	bool	0	0	0
+F	box_mul	box,point	box	0	0	0
+F	box_overabove	box,box	bool	0	0	0
+F	box_overbelow	box,box	bool	0	0	0
+F	box_overlap	box,box	bool	0	0	0
+F	box_overleft	box,box	bool	0	0	0
+F	box_overright	box,box	bool	0	0	0
+F	box_right	box,box	bool	0	0	0
+F	box_same	box,box	bool	0	0	0
+F	box_send	box	bytea	0	0	0
+F	box_sub	box,point	box	0	0	0
+F	bpchar	bpchar,int4,bool	bpchar	0	0	0
+F	bpchar	char	bpchar	0	0	0
+F	bpchar	name	bpchar	0	0	0
+F	bpchar_larger	bpchar,bpchar	bpchar	0	0	0
+F	bpchar_pattern_ge	bpchar,bpchar	bool	0	0	0
+F	bpchar_pattern_gt	bpchar,bpchar	bool	0	0	0
+F	bpchar_pattern_le	bpchar,bpchar	bool	0	0	0
+F	bpchar_pattern_lt	bpchar,bpchar	bool	0	0	0
+F	bpchar_smaller	bpchar,bpchar	bpchar	0	0	0
+F	bpcharcmp	bpchar,bpchar	int4	0	0	0
+F	bpchareq	bpchar,bpchar	bool	0	0	0
+F	bpcharge	bpchar,bpchar	bool	0	0	0
+F	bpchargt	bpchar,bpchar	bool	0	0	0
+F	bpchariclike	bpchar,text	bool	0	0	0
+F	bpcharicnlike	bpchar,text	bool	0	0	0
+F	bpcharicregexeq	bpchar,text	bool	0	0	0
+F	bpcharicregexne	bpchar,text	bool	0	0	0
+F	bpcharle	bpchar,bpchar	bool	0	0	0
+F	bpcharlike	bpchar,text	bool	0	0	0
+F	bpcharlt	bpchar,bpchar	bool	0	0	0
+F	bpcharne	bpchar,bpchar	bool	0	0	0
+F	bpcharnlike	bpchar,text	bool	0	0	0
+F	bpcharregexeq	bpchar,text	bool	0	0	0
+F	bpcharregexne	bpchar,text	bool	0	0	0
+F	bpcharsend	bpchar	bytea	0	0	0
+F	bpchartypmodin	_cstring	int4	0	0	0
+F	brin_bloom_summary_send	pg_brin_bloom_summary	bytea	0	0	0
+F	brin_desummarize_range	regclass,int8	void	0	0	0
+F	brin_minmax_multi_summary_send	pg_brin_minmax_multi_summary	bytea	0	0	0
+F	brin_summarize_new_values	regclass	int4	0	0	0
+F	brin_summarize_range	regclass,int8	int4	0	0	0
+F	broadcast	inet	inet	0	0	0
+F	btarraycmp	anyarray,anyarray	int4	0	0	0
+F	btboolcmp	bool,bool	int4	0	0	0
+F	btbpchar_pattern_cmp	bpchar,bpchar	int4	0	0	0
+F	btcharcmp	char,char	int4	0	0	0
+F	btequalimage	oid	bool	0	0	0
+F	btfloat48cmp	float4,float8	int4	0	0	0
+F	btfloat4cmp	float4,float4	int4	0	0	0
+F	btfloat84cmp	float8,float4	int4	0	0	0
+F	btfloat8cmp	float8,float8	int4	0	0	0
+F	btint24cmp	int2,int4	int4	0	0	0
+F	btint28cmp	int2,int8	int4	0	0	0
+F	btint2cmp	int2,int2	int4	0	0	0
+F	btint42cmp	int4,int2	int4	0	0	0
+F	btint48cmp	int4,int8	int4	0	0	0
+F	btint4cmp	int4,int4	int4	0	0	0
+F	btint82cmp	int8,int2	int4	0	0	0
+F	btint84cmp	int8,int4	int4	0	0	0
+F	btint8cmp	int8,int8	int4	0	0	0
+F	btnamecmp	name,name	int4	0	0	0
+F	btnametextcmp	name,text	int4	0	0	0
+F	btoidcmp	oid,oid	int4	0	0	0
+F	btoidvectorcmp	oidvector,oidvector	int4	0	0	0
+F	btrecordcmp	record,record	int4	0	0	0
+F	btrecordimagecmp	record,record	int4	0	0	0
+F	btrim	bytea,bytea	bytea	0	0	0
+F	btrim	text	text	0	0	0
+F	btrim	text,text	text	0	0	0
+F	bttext_pattern_cmp	text,text	int4	0	0	0
+F	bttextcmp	text,text	int4	0	0	0
+F	bttextnamecmp	text,name	int4	0	0	0
+F	bttidcmp	tid,tid	int4	0	0	0
+F	btvarstrequalimage	oid	bool	0	0	0
+F	byteacat	bytea,bytea	bytea	0	0	0
+F	byteacmp	bytea,bytea	int4	0	0	0
+F	byteaeq	bytea,bytea	bool	0	0	0
+F	byteage	bytea,bytea	bool	0	0	0
+F	byteagt	bytea,bytea	bool	0	0	0
+F	byteale	bytea,bytea	bool	0	0	0
+F	bytealike	bytea,bytea	bool	0	0	0
+F	bytealt	bytea,bytea	bool	0	0	0
+F	byteane	bytea,bytea	bool	0	0	0
+F	byteanlike	bytea,bytea	bool	0	0	0
+F	byteasend	bytea	bytea	0	0	0
+F	cardinality	anyarray	int4	0	0	0
+F	cash_cmp	money,money	int4	0	0	0
+F	cash_div_cash	money,money	float8	0	0	0
+F	cash_div_flt4	money,float4	money	0	0	0
+F	cash_div_flt8	money,float8	money	0	0	0
+F	cash_div_int2	money,int2	money	0	0	0
+F	cash_div_int4	money,int4	money	0	0	0
+F	cash_div_int8	money,int8	money	0	0	0
+F	cash_eq	money,money	bool	0	0	0
+F	cash_ge	money,money	bool	0	0	0
+F	cash_gt	money,money	bool	0	0	0
+F	cash_le	money,money	bool	0	0	0
+F	cash_lt	money,money	bool	0	0	0
+F	cash_mi	money,money	money	0	0	0
+F	cash_mul_flt4	money,float4	money	0	0	0
+F	cash_mul_flt8	money,float8	money	0	0	0
+F	cash_mul_int2	money,int2	money	0	0	0
+F	cash_mul_int4	money,int4	money	0	0	0
+F	cash_mul_int8	money,int8	money	0	0	0
+F	cash_ne	money,money	bool	0	0	0
+F	cash_pl	money,money	money	0	0	0
+F	cash_send	money	bytea	0	0	0
+F	cash_words	money	text	0	0	0
+F	cashlarger	money,money	money	0	0	0
+F	cashsmaller	money,money	money	0	0	0
+F	cbrt	float8	float8	0	0	0
+F	ceil	float8	float8	0	0	0
+F	ceil	numeric	numeric	0	0	0
+F	ceiling	float8	float8	0	0	0
+F	ceiling	numeric	numeric	0	0	0
+F	center	box	point	0	0	0
+F	center	circle	point	0	0	0
+F	char	int4	char	0	0	0
+F	char	text	char	0	0	0
+F	char_length	bpchar	int4	0	0	0
+F	char_length	text	int4	0	0	0
+F	character_length	bpchar	int4	0	0	0
+F	character_length	text	int4	0	0	0
+F	chareq	char,char	bool	0	0	0
+F	charge	char,char	bool	0	0	0
+F	chargt	char,char	bool	0	0	0
+F	charle	char,char	bool	0	0	0
+F	charlt	char,char	bool	0	0	0
+F	charne	char,char	bool	0	0	0
+F	charsend	char	bytea	0	0	0
+F	chr	int4	text	0	0	0
+F	cideq	cid,cid	bool	0	0	0
+F	cidr	inet	cidr	0	0	0
+F	cidr_send	cidr	bytea	0	0	0
+F	cidsend	cid	bytea	0	0	0
+F	circle	box	circle	0	0	0
+F	circle	point,float8	circle	0	0	0
+F	circle	polygon	circle	0	0	0
+F	circle_above	circle,circle	bool	0	0	0
+F	circle_add_pt	circle,point	circle	0	0	0
+F	circle_below	circle,circle	bool	0	0	0
+F	circle_center	circle	point	0	0	0
+F	circle_contain	circle,circle	bool	0	0	0
+F	circle_contain_pt	circle,point	bool	0	0	0
+F	circle_contained	circle,circle	bool	0	0	0
+F	circle_distance	circle,circle	float8	0	0	0
+F	circle_div_pt	circle,point	circle	0	0	0
+F	circle_eq	circle,circle	bool	0	0	0
+F	circle_ge	circle,circle	bool	0	0	0
+F	circle_gt	circle,circle	bool	0	0	0
+F	circle_le	circle,circle	bool	0	0	0
+F	circle_left	circle,circle	bool	0	0	0
+F	circle_lt	circle,circle	bool	0	0	0
+F	circle_mul_pt	circle,point	circle	0	0	0
+F	circle_ne	circle,circle	bool	0	0	0
+F	circle_overabove	circle,circle	bool	0	0	0
+F	circle_overbelow	circle,circle	bool	0	0	0
+F	circle_overlap	circle,circle	bool	0	0	0
+F	circle_overleft	circle,circle	bool	0	0	0
+F	circle_overright	circle,circle	bool	0	0	0
+F	circle_right	circle,circle	bool	0	0	0
+F	circle_same	circle,circle	bool	0	0	0
+F	circle_send	circle	bytea	0	0	0
+F	circle_sub_pt	circle,point	circle	0	0	0
+F	clock_timestamp		timestamptz	0	0	0
+F	close_ls	line,lseg	point	0	0	0
+F	close_lseg	lseg,lseg	point	0	0	0
+F	close_pb	point,box	point	0	0	0
+F	close_pl	point,line	point	0	0	0
+F	close_ps	point,lseg	point	0	0	0
+F	close_sb	lseg,box	point	0	0	0
+F	col_description	oid,int4	text	0	0	0
+F	concat	any	text	1	0	0
+F	concat_ws	text,any	text	1	0	0
+F	convert	bytea,name,name	bytea	0	0	0
+F	convert_from	bytea,name	text	0	0	0
+F	convert_to	text,name	bytea	0	0	0
+F	corr	float8,float8	float8	0	0	0
+F	cos	float8	float8	0	0	0
+F	cosd	float8	float8	0	0	0
+F	cosh	float8	float8	0	0	0
+F	cot	float8	float8	0	0	0
+F	cotd	float8	float8	0	0	0
+F	count		int8	0	0	0
+F	count	any	int8	0	0	0
+F	covar_pop	float8,float8	float8	0	0	0
+F	covar_samp	float8,float8	float8	0	0	0
+F	cume_dist		float8	0	0	0
+F	cume_dist	any	float8	1	0	0
+F	current_database		name	0	0	0
+F	current_query		text	0	0	0
+F	current_schema		name	0	0	0
+F	current_schemas	bool	_name	0	0	0
+F	current_setting	text	text	0	0	0
+F	current_setting	text,bool	text	0	0	0
+F	current_user		name	0	0	0
+F	currtid2	text,tid	tid	0	0	0
+F	currval	regclass	int8	0	0	0
+F	cursor_to_xml	refcursor,int4,bool,bool,text	xml	0	0	0
+F	cursor_to_xmlschema	refcursor,bool,bool,text	xml	0	0	0
+F	database_to_xml	bool,bool,text	xml	0	0	0
+F	database_to_xml_and_xmlschema	bool,bool,text	xml	0	0	0
+F	database_to_xmlschema	bool,bool,text	xml	0	0	0
+F	date	timestamp	date	0	0	0
+F	date	timestamptz	date	0	0	0
+F	date_add	timestamptz,interval	timestamptz	0	0	0
+F	date_add	timestamptz,interval,text	timestamptz	0	0	0
+F	date_bin	interval,timestamp,timestamp	timestamp	0	0	0
+F	date_bin	interval,timestamptz,timestamptz	timestamptz	0	0	0
+F	date_cmp	date,date	int4	0	0	0
+F	date_cmp_timestamp	date,timestamp	int4	0	0	0
+F	date_cmp_timestamptz	date,timestamptz	int4	0	0	0
+F	date_eq	date,date	bool	0	0	0
+F	date_eq_timestamp	date,timestamp	bool	0	0	0
+F	date_eq_timestamptz	date,timestamptz	bool	0	0	0
+F	date_ge	date,date	bool	0	0	0
+F	date_ge_timestamp	date,timestamp	bool	0	0	0
+F	date_ge_timestamptz	date,timestamptz	bool	0	0	0
+F	date_gt	date,date	bool	0	0	0
+F	date_gt_timestamp	date,timestamp	bool	0	0	0
+F	date_gt_timestamptz	date,timestamptz	bool	0	0	0
+F	date_larger	date,date	date	0	0	0
+F	date_le	date,date	bool	0	0	0
+F	date_le_timestamp	date,timestamp	bool	0	0	0
+F	date_le_timestamptz	date,timestamptz	bool	0	0	0
+F	date_lt	date,date	bool	0	0	0
+F	date_lt_timestamp	date,timestamp	bool	0	0	0
+F	date_lt_timestamptz	date,timestamptz	bool	0	0	0
+F	date_mi	date,date	int4	0	0	0
+F	date_mi_interval	date,interval	timestamp	0	0	0
+F	date_mii	date,int4	date	0	0	0
+F	date_ne	date,date	bool	0	0	0
+F	date_ne_timestamp	date,timestamp	bool	0	0	0
+F	date_ne_timestamptz	date,timestamptz	bool	0	0	0
+F	date_part	text,date	float8	0	0	0
+F	date_part	text,interval	float8	0	0	0
+F	date_part	text,time	float8	0	0	0
+F	date_part	text,timestamp	float8	0	0	0
+F	date_part	text,timestamptz	float8	0	0	0
+F	date_part	text,timetz	float8	0	0	0
+F	date_pl_interval	date,interval	timestamp	0	0	0
+F	date_pli	date,int4	date	0	0	0
+F	date_send	date	bytea	0	0	0
+F	date_smaller	date,date	date	0	0	0
+F	date_subtract	timestamptz,interval	timestamptz	0	0	0
+F	date_subtract	timestamptz,interval,text	timestamptz	0	0	0
+F	date_trunc	text,interval	interval	0	0	0
+F	date_trunc	text,timestamp	timestamp	0	0	0
+F	date_trunc	text,timestamptz	timestamptz	0	0	0
+F	date_trunc	text,timestamptz,text	timestamptz	0	0	0
+F	datemultirange		datemultirange	0	0	0
+F	datemultirange	_daterange	datemultirange	1	0	0
+F	datemultirange	daterange	datemultirange	0	0	0
+F	daterange	date,date	daterange	0	0	0
+F	daterange	date,date,text	daterange	0	0	0
+F	daterange_canonical	daterange	daterange	0	0	0
+F	daterange_subdiff	date,date	float8	0	0	0
+F	datetime_pl	date,time	timestamp	0	0	0
+F	datetimetz_pl	date,timetz	timestamptz	0	0	0
+F	dcbrt	float8	float8	0	0	0
+F	decode	text,text	bytea	0	0	0
+F	degrees	float8	float8	0	0	0
+F	dense_rank		int8	0	0	0
+F	dense_rank	any	int8	1	0	0
+F	dexp	float8	float8	0	0	0
+F	diagonal	box	lseg	0	0	0
+F	diameter	circle	float8	0	0	0
+F	dist_bp	box,point	float8	0	0	0
+F	dist_bs	box,lseg	float8	0	0	0
+F	dist_cpoint	circle,point	float8	0	0	0
+F	dist_cpoly	circle,polygon	float8	0	0	0
+F	dist_lp	line,point	float8	0	0	0
+F	dist_ls	line,lseg	float8	0	0	0
+F	dist_pathp	path,point	float8	0	0	0
+F	dist_pb	point,box	float8	0	0	0
+F	dist_pc	point,circle	float8	0	0	0
+F	dist_pl	point,line	float8	0	0	0
+F	dist_polyc	polygon,circle	float8	0	0	0
+F	dist_polyp	polygon,point	float8	0	0	0
+F	dist_ppath	point,path	float8	0	0	0
+F	dist_ppoly	point,polygon	float8	0	0	0
+F	dist_ps	point,lseg	float8	0	0	0
+F	dist_sb	lseg,box	float8	0	0	0
+F	dist_sl	lseg,line	float8	0	0	0
+F	dist_sp	lseg,point	float8	0	0	0
+F	div	numeric,numeric	numeric	0	0	0
+F	dlog1	float8	float8	0	0	0
+F	dlog10	float8	float8	0	0	0
+F	dpow	float8,float8	float8	0	0	0
+F	dround	float8	float8	0	0	0
+F	dsqrt	float8	float8	0	0	0
+F	dtrunc	float8	float8	0	0	0
+F	elem_contained_by_multirange	anyelement,anymultirange	bool	0	0	0
+F	elem_contained_by_range	anyelement,anyrange	bool	0	0	0
+F	encode	bytea,text	text	0	0	0
+F	enum_cmp	anyenum,anyenum	int4	0	0	0
+F	enum_eq	anyenum,anyenum	bool	0	0	0
+F	enum_first	anyenum	anyenum	0	0	0
+F	enum_ge	anyenum,anyenum	bool	0	0	0
+F	enum_gt	anyenum,anyenum	bool	0	0	0
+F	enum_larger	anyenum,anyenum	anyenum	0	0	0
+F	enum_last	anyenum	anyenum	0	0	0
+F	enum_le	anyenum,anyenum	bool	0	0	0
+F	enum_lt	anyenum,anyenum	bool	0	0	0
+F	enum_ne	anyenum,anyenum	bool	0	0	0
+F	enum_range	anyenum	anyarray	0	0	0
+F	enum_range	anyenum,anyenum	anyarray	0	0	0
+F	enum_send	anyenum	bytea	0	0	0
+F	enum_smaller	anyenum,anyenum	anyenum	0	0	0
+F	erf	float8	float8	0	0	0
+F	erfc	float8	float8	0	0	0
+F	every	bool	bool	0	0	0
+F	exp	float8	float8	0	0	0
+F	exp	numeric	numeric	0	0	0
+F	extract	text,date	numeric	0	0	0
+F	extract	text,interval	numeric	0	0	0
+F	extract	text,time	numeric	0	0	0
+F	extract	text,timestamp	numeric	0	0	0
+F	extract	text,timestamptz	numeric	0	0	0
+F	extract	text,timetz	numeric	0	0	0
+F	factorial	int8	numeric	0	0	0
+F	family	inet	int4	0	0	0
+F	first_value	anyelement	anyelement	0	0	0
+F	float4	float8	float4	0	0	0
+F	float4	int2	float4	0	0	0
+F	float4	int4	float4	0	0	0
+F	float4	int8	float4	0	0	0
+F	float4	jsonb	float4	0	0	0
+F	float4	numeric	float4	0	0	0
+F	float48div	float4,float8	float8	0	0	0
+F	float48eq	float4,float8	bool	0	0	0
+F	float48ge	float4,float8	bool	0	0	0
+F	float48gt	float4,float8	bool	0	0	0
+F	float48le	float4,float8	bool	0	0	0
+F	float48lt	float4,float8	bool	0	0	0
+F	float48mi	float4,float8	float8	0	0	0
+F	float48mul	float4,float8	float8	0	0	0
+F	float48ne	float4,float8	bool	0	0	0
+F	float48pl	float4,float8	float8	0	0	0
+F	float4_accum	_float8,float4	_float8	0	0	0
+F	float4abs	float4	float4	0	0	0
+F	float4div	float4,float4	float4	0	0	0
+F	float4eq	float4,float4	bool	0	0	0
+F	float4ge	float4,float4	bool	0	0	0
+F	float4gt	float4,float4	bool	0	0	0
+F	float4larger	float4,float4	float4	0	0	0
+F	float4le	float4,float4	bool	0	0	0
+F	float4lt	float4,float4	bool	0	0	0
+F	float4mi	float4,float4	float4	0	0	0
+F	float4mul	float4,float4	float4	0	0	0
+F	float4ne	float4,float4	bool	0	0	0
+F	float4pl	float4,float4	float4	0	0	0
+F	float4send	float4	bytea	0	0	0
+F	float4smaller	float4,float4	float4	0	0	0
+F	float4um	float4	float4	0	0	0
+F	float4up	float4	float4	0	0	0
+F	float8	float4	float8	0	0	0
+F	float8	int2	float8	0	0	0
+F	float8	int4	float8	0	0	0
+F	float8	int8	float8	0	0	0
+F	float8	jsonb	float8	0	0	0
+F	float8	numeric	float8	0	0	0
+F	float84div	float8,float4	float8	0	0	0
+F	float84eq	float8,float4	bool	0	0	0
+F	float84ge	float8,float4	bool	0	0	0
+F	float84gt	float8,float4	bool	0	0	0
+F	float84le	float8,float4	bool	0	0	0
+F	float84lt	float8,float4	bool	0	0	0
+F	float84mi	float8,float4	float8	0	0	0
+F	float84mul	float8,float4	float8	0	0	0
+F	float84ne	float8,float4	bool	0	0	0
+F	float84pl	float8,float4	float8	0	0	0
+F	float8_accum	_float8,float8	_float8	0	0	0
+F	float8_avg	_float8	float8	0	0	0
+F	float8_combine	_float8,_float8	_float8	0	0	0
+F	float8_corr	_float8	float8	0	0	0
+F	float8_covar_pop	_float8	float8	0	0	0
+F	float8_covar_samp	_float8	float8	0	0	0
+F	float8_regr_accum	_float8,float8,float8	_float8	0	0	0
+F	float8_regr_avgx	_float8	float8	0	0	0
+F	float8_regr_avgy	_float8	float8	0	0	0
+F	float8_regr_combine	_float8,_float8	_float8	0	0	0
+F	float8_regr_intercept	_float8	float8	0	0	0
+F	float8_regr_r2	_float8	float8	0	0	0
+F	float8_regr_slope	_float8	float8	0	0	0
+F	float8_regr_sxx	_float8	float8	0	0	0
+F	float8_regr_sxy	_float8	float8	0	0	0
+F	float8_regr_syy	_float8	float8	0	0	0
+F	float8_stddev_pop	_float8	float8	0	0	0
+F	float8_stddev_samp	_float8	float8	0	0	0
+F	float8_var_pop	_float8	float8	0	0	0
+F	float8_var_samp	_float8	float8	0	0	0
+F	float8abs	float8	float8	0	0	0
+F	float8div	float8,float8	float8	0	0	0
+F	float8eq	float8,float8	bool	0	0	0
+F	float8ge	float8,float8	bool	0	0	0
+F	float8gt	float8,float8	bool	0	0	0
+F	float8larger	float8,float8	float8	0	0	0
+F	float8le	float8,float8	bool	0	0	0
+F	float8lt	float8,float8	bool	0	0	0
+F	float8mi	float8,float8	float8	0	0	0
+F	float8mul	float8,float8	float8	0	0	0
+F	float8ne	float8,float8	bool	0	0	0
+F	float8pl	float8,float8	float8	0	0	0
+F	float8send	float8	bytea	0	0	0
+F	float8smaller	float8,float8	float8	0	0	0
+F	float8um	float8	float8	0	0	0
+F	float8up	float8	float8	0	0	0
+F	floor	float8	float8	0	0	0
+F	floor	numeric	numeric	0	0	0
+F	flt4_mul_cash	float4,money	money	0	0	0
+F	flt8_mul_cash	float8,money	money	0	0	0
+F	fmgr_c_validator	oid	void	0	0	0
+F	fmgr_internal_validator	oid	void	0	0	0
+F	fmgr_sql_validator	oid	void	0	0	0
+F	format	text	text	0	0	0
+F	format	text,any	text	1	0	0
+F	format_type	oid,int4	text	0	0	0
+F	gcd	int4,int4	int4	0	0	0
+F	gcd	int8,int8	int8	0	0	0
+F	gcd	numeric,numeric	numeric	0	0	0
+F	gen_random_uuid		uuid	0	0	0
+F	generate_series	int4,int4	int4	0	0	1
+F	generate_series	int4,int4,int4	int4	0	0	1
+F	generate_series	int8,int8	int8	0	0	1
+F	generate_series	int8,int8,int8	int8	0	0	1
+F	generate_series	numeric,numeric	numeric	0	0	1
+F	generate_series	numeric,numeric,numeric	numeric	0	0	1
+F	generate_series	timestamp,timestamp,interval	timestamp	0	0	1
+F	generate_series	timestamptz,timestamptz,interval	timestamptz	0	0	1
+F	generate_series	timestamptz,timestamptz,interval,text	timestamptz	0	0	1
+F	generate_subscripts	anyarray,int4	int4	0	0	1
+F	generate_subscripts	anyarray,int4,bool	int4	0	0	1
+F	get_bit	bit,int4	int4	0	0	0
+F	get_bit	bytea,int8	int4	0	0	0
+F	get_byte	bytea,int4	int4	0	0	0
+F	get_current_ts_config		regconfig	0	0	0
+F	getdatabaseencoding		name	0	0	0
+F	getpgusername		name	0	0	0
+F	gin_clean_pending_list	regclass	int8	0	0	0
+F	gin_cmp_tslexeme	text,text	int4	0	0	0
+F	gin_compare_jsonb	text,text	int4	0	0	0
+F	has_any_column_privilege	name,oid,text	bool	0	0	0
+F	has_any_column_privilege	name,text,text	bool	0	0	0
+F	has_any_column_privilege	oid,oid,text	bool	0	0	0
+F	has_any_column_privilege	oid,text	bool	0	0	0
+F	has_any_column_privilege	oid,text,text	bool	0	0	0
+F	has_any_column_privilege	text,text	bool	0	0	0
+F	has_column_privilege	name,oid,int2,text	bool	0	0	0
+F	has_column_privilege	name,oid,text,text	bool	0	0	0
+F	has_column_privilege	name,text,int2,text	bool	0	0	0
+F	has_column_privilege	name,text,text,text	bool	0	0	0
+F	has_column_privilege	oid,int2,text	bool	0	0	0
+F	has_column_privilege	oid,oid,int2,text	bool	0	0	0
+F	has_column_privilege	oid,oid,text,text	bool	0	0	0
+F	has_column_privilege	oid,text,int2,text	bool	0	0	0
+F	has_column_privilege	oid,text,text	bool	0	0	0
+F	has_column_privilege	oid,text,text,text	bool	0	0	0
+F	has_column_privilege	text,int2,text	bool	0	0	0
+F	has_column_privilege	text,text,text	bool	0	0	0
+F	has_database_privilege	name,oid,text	bool	0	0	0
+F	has_database_privilege	name,text,text	bool	0	0	0
+F	has_database_privilege	oid,oid,text	bool	0	0	0
+F	has_database_privilege	oid,text	bool	0	0	0
+F	has_database_privilege	oid,text,text	bool	0	0	0
+F	has_database_privilege	text,text	bool	0	0	0
+F	has_foreign_data_wrapper_privilege	name,oid,text	bool	0	0	0
+F	has_foreign_data_wrapper_privilege	name,text,text	bool	0	0	0
+F	has_foreign_data_wrapper_privilege	oid,oid,text	bool	0	0	0
+F	has_foreign_data_wrapper_privilege	oid,text	bool	0	0	0
+F	has_foreign_data_wrapper_privilege	oid,text,text	bool	0	0	0
+F	has_foreign_data_wrapper_privilege	text,text	bool	0	0	0
+F	has_function_privilege	name,oid,text	bool	0	0	0
+F	has_function_privilege	name,text,text	bool	0	0	0
+F	has_function_privilege	oid,oid,text	bool	0	0	0
+F	has_function_privilege	oid,text	bool	0	0	0
+F	has_function_privilege	oid,text,text	bool	0	0	0
+F	has_function_privilege	text,text	bool	0	0	0
+F	has_language_privilege	name,oid,text	bool	0	0	0
+F	has_language_privilege	name,text,text	bool	0	0	0
+F	has_language_privilege	oid,oid,text	bool	0	0	0
+F	has_language_privilege	oid,text	bool	0	0	0
+F	has_language_privilege	oid,text,text	bool	0	0	0
+F	has_language_privilege	text,text	bool	0	0	0
+F	has_parameter_privilege	name,text,text	bool	0	0	0
+F	has_parameter_privilege	oid,text,text	bool	0	0	0
+F	has_parameter_privilege	text,text	bool	0	0	0
+F	has_schema_privilege	name,oid,text	bool	0	0	0
+F	has_schema_privilege	name,text,text	bool	0	0	0
+F	has_schema_privilege	oid,oid,text	bool	0	0	0
+F	has_schema_privilege	oid,text	bool	0	0	0
+F	has_schema_privilege	oid,text,text	bool	0	0	0
+F	has_schema_privilege	text,text	bool	0	0	0
+F	has_sequence_privilege	name,oid,text	bool	0	0	0
+F	has_sequence_privilege	name,text,text	bool	0	0	0
+F	has_sequence_privilege	oid,oid,text	bool	0	0	0
+F	has_sequence_privilege	oid,text	bool	0	0	0
+F	has_sequence_privilege	oid,text,text	bool	0	0	0
+F	has_sequence_privilege	text,text	bool	0	0	0
+F	has_server_privilege	name,oid,text	bool	0	0	0
+F	has_server_privilege	name,text,text	bool	0	0	0
+F	has_server_privilege	oid,oid,text	bool	0	0	0
+F	has_server_privilege	oid,text	bool	0	0	0
+F	has_server_privilege	oid,text,text	bool	0	0	0
+F	has_server_privilege	text,text	bool	0	0	0
+F	has_table_privilege	name,oid,text	bool	0	0	0
+F	has_table_privilege	name,text,text	bool	0	0	0
+F	has_table_privilege	oid,oid,text	bool	0	0	0
+F	has_table_privilege	oid,text	bool	0	0	0
+F	has_table_privilege	oid,text,text	bool	0	0	0
+F	has_table_privilege	text,text	bool	0	0	0
+F	has_tablespace_privilege	name,oid,text	bool	0	0	0
+F	has_tablespace_privilege	name,text,text	bool	0	0	0
+F	has_tablespace_privilege	oid,oid,text	bool	0	0	0
+F	has_tablespace_privilege	oid,text	bool	0	0	0
+F	has_tablespace_privilege	oid,text,text	bool	0	0	0
+F	has_tablespace_privilege	text,text	bool	0	0	0
+F	has_type_privilege	name,oid,text	bool	0	0	0
+F	has_type_privilege	name,text,text	bool	0	0	0
+F	has_type_privilege	oid,oid,text	bool	0	0	0
+F	has_type_privilege	oid,text	bool	0	0	0
+F	has_type_privilege	oid,text,text	bool	0	0	0
+F	has_type_privilege	text,text	bool	0	0	0
+F	hash_aclitem	aclitem	int4	0	0	0
+F	hash_aclitem_extended	aclitem,int8	int8	0	0	0
+F	hash_array	anyarray	int4	0	0	0
+F	hash_array_extended	anyarray,int8	int8	0	0	0
+F	hash_multirange	anymultirange	int4	0	0	0
+F	hash_multirange_extended	anymultirange,int8	int8	0	0	0
+F	hash_numeric	numeric	int4	0	0	0
+F	hash_numeric_extended	numeric,int8	int8	0	0	0
+F	hash_range	anyrange	int4	0	0	0
+F	hash_range_extended	anyrange,int8	int8	0	0	0
+F	hash_record	record	int4	0	0	0
+F	hash_record_extended	record,int8	int8	0	0	0
+F	hashbpchar	bpchar	int4	0	0	0
+F	hashbpcharextended	bpchar,int8	int8	0	0	0
+F	hashchar	char	int4	0	0	0
+F	hashcharextended	char,int8	int8	0	0	0
+F	hashenum	anyenum	int4	0	0	0
+F	hashenumextended	anyenum,int8	int8	0	0	0
+F	hashfloat4	float4	int4	0	0	0
+F	hashfloat4extended	float4,int8	int8	0	0	0
+F	hashfloat8	float8	int4	0	0	0
+F	hashfloat8extended	float8,int8	int8	0	0	0
+F	hashinet	inet	int4	0	0	0
+F	hashinetextended	inet,int8	int8	0	0	0
+F	hashint2	int2	int4	0	0	0
+F	hashint2extended	int2,int8	int8	0	0	0
+F	hashint4	int4	int4	0	0	0
+F	hashint4extended	int4,int8	int8	0	0	0
+F	hashint8	int8	int4	0	0	0
+F	hashint8extended	int8,int8	int8	0	0	0
+F	hashmacaddr	macaddr	int4	0	0	0
+F	hashmacaddr8	macaddr8	int4	0	0	0
+F	hashmacaddr8extended	macaddr8,int8	int8	0	0	0
+F	hashmacaddrextended	macaddr,int8	int8	0	0	0
+F	hashname	name	int4	0	0	0
+F	hashnameextended	name,int8	int8	0	0	0
+F	hashoid	oid	int4	0	0	0
+F	hashoidextended	oid,int8	int8	0	0	0
+F	hashoidvector	oidvector	int4	0	0	0
+F	hashoidvectorextended	oidvector,int8	int8	0	0	0
+F	hashtext	text	int4	0	0	0
+F	hashtextextended	text,int8	int8	0	0	0
+F	hashtid	tid	int4	0	0	0
+F	hashtidextended	tid,int8	int8	0	0	0
+F	height	box	float8	0	0	0
+F	host	inet	text	0	0	0
+F	hostmask	inet	inet	0	0	0
+F	in_range	date,date,interval,bool,bool	bool	0	0	0
+F	in_range	float4,float4,float8,bool,bool	bool	0	0	0
+F	in_range	float8,float8,float8,bool,bool	bool	0	0	0
+F	in_range	int2,int2,int2,bool,bool	bool	0	0	0
+F	in_range	int2,int2,int4,bool,bool	bool	0	0	0
+F	in_range	int2,int2,int8,bool,bool	bool	0	0	0
+F	in_range	int4,int4,int2,bool,bool	bool	0	0	0
+F	in_range	int4,int4,int4,bool,bool	bool	0	0	0
+F	in_range	int4,int4,int8,bool,bool	bool	0	0	0
+F	in_range	int8,int8,int8,bool,bool	bool	0	0	0
+F	in_range	interval,interval,interval,bool,bool	bool	0	0	0
+F	in_range	numeric,numeric,numeric,bool,bool	bool	0	0	0
+F	in_range	time,time,interval,bool,bool	bool	0	0	0
+F	in_range	timestamp,timestamp,interval,bool,bool	bool	0	0	0
+F	in_range	timestamptz,timestamptz,interval,bool,bool	bool	0	0	0
+F	in_range	timetz,timetz,interval,bool,bool	bool	0	0	0
+F	inet_client_addr		inet	0	0	0
+F	inet_client_port		int4	0	0	0
+F	inet_merge	inet,inet	cidr	0	0	0
+F	inet_same_family	inet,inet	bool	0	0	0
+F	inet_send	inet	bytea	0	0	0
+F	inet_server_addr		inet	0	0	0
+F	inet_server_port		int4	0	0	0
+F	inetand	inet,inet	inet	0	0	0
+F	inetmi	inet,inet	int8	0	0	0
+F	inetmi_int8	inet,int8	inet	0	0	0
+F	inetnot	inet	inet	0	0	0
+F	inetor	inet,inet	inet	0	0	0
+F	inetpl	inet,int8	inet	0	0	0
+F	initcap	text	text	0	0	0
+F	int2	float4	int2	0	0	0
+F	int2	float8	int2	0	0	0
+F	int2	int4	int2	0	0	0
+F	int2	int8	int2	0	0	0
+F	int2	jsonb	int2	0	0	0
+F	int2	numeric	int2	0	0	0
+F	int24div	int2,int4	int4	0	0	0
+F	int24eq	int2,int4	bool	0	0	0
+F	int24ge	int2,int4	bool	0	0	0
+F	int24gt	int2,int4	bool	0	0	0
+F	int24le	int2,int4	bool	0	0	0
+F	int24lt	int2,int4	bool	0	0	0
+F	int24mi	int2,int4	int4	0	0	0
+F	int24mul	int2,int4	int4	0	0	0
+F	int24ne	int2,int4	bool	0	0	0
+F	int24pl	int2,int4	int4	0	0	0
+F	int28div	int2,int8	int8	0	0	0
+F	int28eq	int2,int8	bool	0	0	0
+F	int28ge	int2,int8	bool	0	0	0
+F	int28gt	int2,int8	bool	0	0	0
+F	int28le	int2,int8	bool	0	0	0
+F	int28lt	int2,int8	bool	0	0	0
+F	int28mi	int2,int8	int8	0	0	0
+F	int28mul	int2,int8	int8	0	0	0
+F	int28ne	int2,int8	bool	0	0	0
+F	int28pl	int2,int8	int8	0	0	0
+F	int2_avg_accum	_int8,int2	_int8	0	0	0
+F	int2_avg_accum_inv	_int8,int2	_int8	0	0	0
+F	int2_mul_cash	int2,money	money	0	0	0
+F	int2_sum	int8,int2	int8	0	0	0
+F	int2abs	int2	int2	0	0	0
+F	int2and	int2,int2	int2	0	0	0
+F	int2div	int2,int2	int2	0	0	0
+F	int2eq	int2,int2	bool	0	0	0
+F	int2ge	int2,int2	bool	0	0	0
+F	int2gt	int2,int2	bool	0	0	0
+F	int2int4_sum	_int8	int8	0	0	0
+F	int2larger	int2,int2	int2	0	0	0
+F	int2le	int2,int2	bool	0	0	0
+F	int2lt	int2,int2	bool	0	0	0
+F	int2mi	int2,int2	int2	0	0	0
+F	int2mod	int2,int2	int2	0	0	0
+F	int2mul	int2,int2	int2	0	0	0
+F	int2ne	int2,int2	bool	0	0	0
+F	int2not	int2	int2	0	0	0
+F	int2or	int2,int2	int2	0	0	0
+F	int2pl	int2,int2	int2	0	0	0
+F	int2send	int2	bytea	0	0	0
+F	int2shl	int2,int4	int2	0	0	0
+F	int2shr	int2,int4	int2	0	0	0
+F	int2smaller	int2,int2	int2	0	0	0
+F	int2um	int2	int2	0	0	0
+F	int2up	int2	int2	0	0	0
+F	int2vectorsend	int2vector	bytea	0	0	0
+F	int2xor	int2,int2	int2	0	0	0
+F	int4	bit	int4	0	0	0
+F	int4	bool	int4	0	0	0
+F	int4	char	int4	0	0	0
+F	int4	float4	int4	0	0	0
+F	int4	float8	int4	0	0	0
+F	int4	int2	int4	0	0	0
+F	int4	int8	int4	0	0	0
+F	int4	jsonb	int4	0	0	0
+F	int4	numeric	int4	0	0	0
+F	int42div	int4,int2	int4	0	0	0
+F	int42eq	int4,int2	bool	0	0	0
+F	int42ge	int4,int2	bool	0	0	0
+F	int42gt	int4,int2	bool	0	0	0
+F	int42le	int4,int2	bool	0	0	0
+F	int42lt	int4,int2	bool	0	0	0
+F	int42mi	int4,int2	int4	0	0	0
+F	int42mul	int4,int2	int4	0	0	0
+F	int42ne	int4,int2	bool	0	0	0
+F	int42pl	int4,int2	int4	0	0	0
+F	int48div	int4,int8	int8	0	0	0
+F	int48eq	int4,int8	bool	0	0	0
+F	int48ge	int4,int8	bool	0	0	0
+F	int48gt	int4,int8	bool	0	0	0
+F	int48le	int4,int8	bool	0	0	0
+F	int48lt	int4,int8	bool	0	0	0
+F	int48mi	int4,int8	int8	0	0	0
+F	int48mul	int4,int8	int8	0	0	0
+F	int48ne	int4,int8	bool	0	0	0
+F	int48pl	int4,int8	int8	0	0	0
+F	int4_avg_accum	_int8,int4	_int8	0	0	0
+F	int4_avg_accum_inv	_int8,int4	_int8	0	0	0
+F	int4_avg_combine	_int8,_int8	_int8	0	0	0
+F	int4_mul_cash	int4,money	money	0	0	0
+F	int4_sum	int8,int4	int8	0	0	0
+F	int4abs	int4	int4	0	0	0
+F	int4and	int4,int4	int4	0	0	0
+F	int4div	int4,int4	int4	0	0	0
+F	int4eq	int4,int4	bool	0	0	0
+F	int4ge	int4,int4	bool	0	0	0
+F	int4gt	int4,int4	bool	0	0	0
+F	int4inc	int4	int4	0	0	0
+F	int4larger	int4,int4	int4	0	0	0
+F	int4le	int4,int4	bool	0	0	0
+F	int4lt	int4,int4	bool	0	0	0
+F	int4mi	int4,int4	int4	0	0	0
+F	int4mod	int4,int4	int4	0	0	0
+F	int4mul	int4,int4	int4	0	0	0
+F	int4multirange		int4multirange	0	0	0
+F	int4multirange	_int4range	int4multirange	1	0	0
+F	int4multirange	int4range	int4multirange	0	0	0
+F	int4ne	int4,int4	bool	0	0	0
+F	int4not	int4	int4	0	0	0
+F	int4or	int4,int4	int4	0	0	0
+F	int4pl	int4,int4	int4	0	0	0
+F	int4range	int4,int4	int4range	0	0	0
+F	int4range	int4,int4,text	int4range	0	0	0
+F	int4range_canonical	int4range	int4range	0	0	0
+F	int4range_subdiff	int4,int4	float8	0	0	0
+F	int4send	int4	bytea	0	0	0
+F	int4shl	int4,int4	int4	0	0	0
+F	int4shr	int4,int4	int4	0	0	0
+F	int4smaller	int4,int4	int4	0	0	0
+F	int4um	int4	int4	0	0	0
+F	int4up	int4	int4	0	0	0
+F	int4xor	int4,int4	int4	0	0	0
+F	int8	bit	int8	0	0	0
+F	int8	float4	int8	0	0	0
+F	int8	float8	int8	0	0	0
+F	int8	int2	int8	0	0	0
+F	int8	int4	int8	0	0	0
+F	int8	jsonb	int8	0	0	0
+F	int8	numeric	int8	0	0	0
+F	int8	oid	int8	0	0	0
+F	int82div	int8,int2	int8	0	0	0
+F	int82eq	int8,int2	bool	0	0	0
+F	int82ge	int8,int2	bool	0	0	0
+F	int82gt	int8,int2	bool	0	0	0
+F	int82le	int8,int2	bool	0	0	0
+F	int82lt	int8,int2	bool	0	0	0
+F	int82mi	int8,int2	int8	0	0	0
+F	int82mul	int8,int2	int8	0	0	0
+F	int82ne	int8,int2	bool	0	0	0
+F	int82pl	int8,int2	int8	0	0	0
+F	int84div	int8,int4	int8	0	0	0
+F	int84eq	int8,int4	bool	0	0	0
+F	int84ge	int8,int4	bool	0	0	0
+F	int84gt	int8,int4	bool	0	0	0
+F	int84le	int8,int4	bool	0	0	0
+F	int84lt	int8,int4	bool	0	0	0
+F	int84mi	int8,int4	int8	0	0	0
+F	int84mul	int8,int4	int8	0	0	0
+F	int84ne	int8,int4	bool	0	0	0
+F	int84pl	int8,int4	int8	0	0	0
+F	int8_avg	_int8	numeric	0	0	0
+F	int8_mul_cash	int8,money	money	0	0	0
+F	int8_sum	numeric,int8	numeric	0	0	0
+F	int8abs	int8	int8	0	0	0
+F	int8and	int8,int8	int8	0	0	0
+F	int8dec	int8	int8	0	0	0
+F	int8dec_any	int8,any	int8	0	0	0
+F	int8div	int8,int8	int8	0	0	0
+F	int8eq	int8,int8	bool	0	0	0
+F	int8ge	int8,int8	bool	0	0	0
+F	int8gt	int8,int8	bool	0	0	0
+F	int8inc	int8	int8	0	0	0
+F	int8inc_any	int8,any	int8	0	0	0
+F	int8inc_float8_float8	int8,float8,float8	int8	0	0	0
+F	int8larger	int8,int8	int8	0	0	0
+F	int8le	int8,int8	bool	0	0	0
+F	int8lt	int8,int8	bool	0	0	0
+F	int8mi	int8,int8	int8	0	0	0
+F	int8mod	int8,int8	int8	0	0	0
+F	int8mul	int8,int8	int8	0	0	0
+F	int8multirange		int8multirange	0	0	0
+F	int8multirange	_int8range	int8multirange	1	0	0
+F	int8multirange	int8range	int8multirange	0	0	0
+F	int8ne	int8,int8	bool	0	0	0
+F	int8not	int8	int8	0	0	0
+F	int8or	int8,int8	int8	0	0	0
+F	int8pl	int8,int8	int8	0	0	0
+F	int8pl_inet	int8,inet	inet	0	0	0
+F	int8range	int8,int8	int8range	0	0	0
+F	int8range	int8,int8,text	int8range	0	0	0
+F	int8range_canonical	int8range	int8range	0	0	0
+F	int8range_subdiff	int8,int8	float8	0	0	0
+F	int8send	int8	bytea	0	0	0
+F	int8shl	int8,int4	int8	0	0	0
+F	int8shr	int8,int4	int8	0	0	0
+F	int8smaller	int8,int8	int8	0	0	0
+F	int8um	int8	int8	0	0	0
+F	int8up	int8	int8	0	0	0
+F	int8xor	int8,int8	int8	0	0	0
+F	integer_pl_date	int4,date	date	0	0	0
+F	inter_lb	line,box	bool	0	0	0
+F	inter_sb	lseg,box	bool	0	0	0
+F	inter_sl	lseg,line	bool	0	0	0
+F	interval	interval,int4	interval	0	0	0
+F	interval	time	interval	0	0	0
+F	interval_accum	_interval,interval	_interval	0	0	0
+F	interval_accum_inv	_interval,interval	_interval	0	0	0
+F	interval_avg	_interval	interval	0	0	0
+F	interval_cmp	interval,interval	int4	0	0	0
+F	interval_combine	_interval,_interval	_interval	0	0	0
+F	interval_div	interval,float8	interval	0	0	0
+F	interval_eq	interval,interval	bool	0	0	0
+F	interval_ge	interval,interval	bool	0	0	0
+F	interval_gt	interval,interval	bool	0	0	0
+F	interval_hash	interval	int4	0	0	0
+F	interval_hash_extended	interval,int8	int8	0	0	0
+F	interval_larger	interval,interval	interval	0	0	0
+F	interval_le	interval,interval	bool	0	0	0
+F	interval_lt	interval,interval	bool	0	0	0
+F	interval_mi	interval,interval	interval	0	0	0
+F	interval_mul	interval,float8	interval	0	0	0
+F	interval_ne	interval,interval	bool	0	0	0
+F	interval_pl	interval,interval	interval	0	0	0
+F	interval_pl_date	interval,date	timestamp	0	0	0
+F	interval_pl_time	interval,time	time	0	0	0
+F	interval_pl_timestamp	interval,timestamp	timestamp	0	0	0
+F	interval_pl_timestamptz	interval,timestamptz	timestamptz	0	0	0
+F	interval_pl_timetz	interval,timetz	timetz	0	0	0
+F	interval_send	interval	bytea	0	0	0
+F	interval_smaller	interval,interval	interval	0	0	0
+F	interval_um	interval	interval	0	0	0
+F	intervaltypmodin	_cstring	int4	0	0	0
+F	is_normalized	text,text	bool	0	1	0
+F	isclosed	path	bool	0	0	0
+F	isempty	anymultirange	bool	0	0	0
+F	isempty	anyrange	bool	0	0	0
+F	isfinite	date	bool	0	0	0
+F	isfinite	interval	bool	0	0	0
+F	isfinite	timestamp	bool	0	0	0
+F	isfinite	timestamptz	bool	0	0	0
+F	ishorizontal	line	bool	0	0	0
+F	ishorizontal	lseg	bool	0	0	0
+F	ishorizontal	point,point	bool	0	0	0
+F	isopen	path	bool	0	0	0
+F	isparallel	line,line	bool	0	0	0
+F	isparallel	lseg,lseg	bool	0	0	0
+F	isperp	line,line	bool	0	0	0
+F	isperp	lseg,lseg	bool	0	0	0
+F	isvertical	line	bool	0	0	0
+F	isvertical	lseg	bool	0	0	0
+F	isvertical	point,point	bool	0	0	0
+F	json_agg	anyelement	json	0	0	0
+F	json_agg_strict	anyelement	json	0	0	0
+F	json_array_element	json,int4	json	0	0	0
+F	json_array_element_text	json,int4	text	0	0	0
+F	json_array_elements	json	json	0	0	1
+F	json_array_elements_text	json	text	0	0	1
+F	json_array_length	json	int4	0	0	0
+F	json_build_array		json	0	0	0
+F	json_build_array	any	json	1	0	0
+F	json_build_object		json	0	0	0
+F	json_build_object	any	json	1	0	0
+F	json_each	json	record	0	0	1
+F	json_each_text	json	record	0	0	1
+F	json_extract_path	json,_text	json	1	0	0
+F	json_extract_path_text	json,_text	text	1	0	0
+F	json_object	_text	json	0	0	0
+F	json_object	_text,_text	json	0	0	0
+F	json_object_agg	any,any	json	0	0	0
+F	json_object_agg_strict	any,any	json	0	0	0
+F	json_object_agg_unique	any,any	json	0	0	0
+F	json_object_agg_unique_strict	any,any	json	0	0	0
+F	json_object_field	json,text	json	0	0	0
+F	json_object_field_text	json,text	text	0	0	0
+F	json_object_keys	json	text	0	0	1
+F	json_populate_record	anyelement,json,bool	anyelement	0	1	0
+F	json_populate_recordset	anyelement,json,bool	anyelement	0	1	1
+F	json_send	json	bytea	0	0	0
+F	json_strip_nulls	json	json	0	0	0
+F	json_to_record	json	record	0	0	0
+F	json_to_recordset	json	record	0	0	1
+F	json_to_tsvector	json,jsonb	tsvector	0	0	0
+F	json_to_tsvector	regconfig,json,jsonb	tsvector	0	0	0
+F	json_typeof	json	text	0	0	0
+F	jsonb_agg	anyelement	jsonb	0	0	0
+F	jsonb_agg_strict	anyelement	jsonb	0	0	0
+F	jsonb_array_element	jsonb,int4	jsonb	0	0	0
+F	jsonb_array_element_text	jsonb,int4	text	0	0	0
+F	jsonb_array_elements	jsonb	jsonb	0	0	1
+F	jsonb_array_elements_text	jsonb	text	0	0	1
+F	jsonb_array_length	jsonb	int4	0	0	0
+F	jsonb_build_array		jsonb	0	0	0
+F	jsonb_build_array	any	jsonb	1	0	0
+F	jsonb_build_object		jsonb	0	0	0
+F	jsonb_build_object	any	jsonb	1	0	0
+F	jsonb_cmp	jsonb,jsonb	int4	0	0	0
+F	jsonb_concat	jsonb,jsonb	jsonb	0	0	0
+F	jsonb_contained	jsonb,jsonb	bool	0	0	0
+F	jsonb_contains	jsonb,jsonb	bool	0	0	0
+F	jsonb_delete	jsonb,_text	jsonb	1	0	0
+F	jsonb_delete	jsonb,int4	jsonb	0	0	0
+F	jsonb_delete	jsonb,text	jsonb	0	0	0
+F	jsonb_delete_path	jsonb,_text	jsonb	0	0	0
+F	jsonb_each	jsonb	record	0	0	1
+F	jsonb_each_text	jsonb	record	0	0	1
+F	jsonb_eq	jsonb,jsonb	bool	0	0	0
+F	jsonb_exists	jsonb,text	bool	0	0	0
+F	jsonb_exists_all	jsonb,_text	bool	0	0	0
+F	jsonb_exists_any	jsonb,_text	bool	0	0	0
+F	jsonb_extract_path	jsonb,_text	jsonb	1	0	0
+F	jsonb_extract_path_text	jsonb,_text	text	1	0	0
+F	jsonb_ge	jsonb,jsonb	bool	0	0	0
+F	jsonb_gt	jsonb,jsonb	bool	0	0	0
+F	jsonb_hash	jsonb	int4	0	0	0
+F	jsonb_hash_extended	jsonb,int8	int8	0	0	0
+F	jsonb_insert	jsonb,_text,jsonb,bool	jsonb	0	1	0
+F	jsonb_le	jsonb,jsonb	bool	0	0	0
+F	jsonb_lt	jsonb,jsonb	bool	0	0	0
+F	jsonb_ne	jsonb,jsonb	bool	0	0	0
+F	jsonb_object	_text	jsonb	0	0	0
+F	jsonb_object	_text,_text	jsonb	0	0	0
+F	jsonb_object_agg	any,any	jsonb	0	0	0
+F	jsonb_object_agg_strict	any,any	jsonb	0	0	0
+F	jsonb_object_agg_unique	any,any	jsonb	0	0	0
+F	jsonb_object_agg_unique_strict	any,any	jsonb	0	0	0
+F	jsonb_object_field	jsonb,text	jsonb	0	0	0
+F	jsonb_object_field_text	jsonb,text	text	0	0	0
+F	jsonb_object_keys	jsonb	text	0	0	1
+F	jsonb_path_exists	jsonb,jsonpath,jsonb,bool	bool	0	2	0
+F	jsonb_path_exists_opr	jsonb,jsonpath	bool	0	0	0
+F	jsonb_path_exists_tz	jsonb,jsonpath,jsonb,bool	bool	0	2	0
+F	jsonb_path_match	jsonb,jsonpath,jsonb,bool	bool	0	2	0
+F	jsonb_path_match_opr	jsonb,jsonpath	bool	0	0	0
+F	jsonb_path_match_tz	jsonb,jsonpath,jsonb,bool	bool	0	2	0
+F	jsonb_path_query	jsonb,jsonpath,jsonb,bool	jsonb	0	2	1
+F	jsonb_path_query_array	jsonb,jsonpath,jsonb,bool	jsonb	0	2	0
+F	jsonb_path_query_array_tz	jsonb,jsonpath,jsonb,bool	jsonb	0	2	0
+F	jsonb_path_query_first	jsonb,jsonpath,jsonb,bool	jsonb	0	2	0
+F	jsonb_path_query_first_tz	jsonb,jsonpath,jsonb,bool	jsonb	0	2	0
+F	jsonb_path_query_tz	jsonb,jsonpath,jsonb,bool	jsonb	0	2	1
+F	jsonb_populate_record	anyelement,jsonb	anyelement	0	0	0
+F	jsonb_populate_recordset	anyelement,jsonb	anyelement	0	0	1
+F	jsonb_pretty	jsonb	text	0	0	0
+F	jsonb_send	jsonb	bytea	0	0	0
+F	jsonb_set	jsonb,_text,jsonb,bool	jsonb	0	1	0
+F	jsonb_set_lax	jsonb,_text,jsonb,bool,text	jsonb	0	2	0
+F	jsonb_strip_nulls	jsonb	jsonb	0	0	0
+F	jsonb_to_record	jsonb	record	0	0	0
+F	jsonb_to_recordset	jsonb	record	0	0	1
+F	jsonb_to_tsvector	jsonb,jsonb	tsvector	0	0	0
+F	jsonb_to_tsvector	regconfig,jsonb,jsonb	tsvector	0	0	0
+F	jsonb_typeof	jsonb	text	0	0	0
+F	jsonpath_send	jsonpath	bytea	0	0	0
+F	justify_days	interval	interval	0	0	0
+F	justify_hours	interval	interval	0	0	0
+F	justify_interval	interval	interval	0	0	0
+F	lag	anycompatible,int4,anycompatible	anycompatible	0	0	0
+F	lag	anyelement	anyelement	0	0	0
+F	lag	anyelement,int4	anyelement	0	0	0
+F	last_value	anyelement	anyelement	0	0	0
+F	lastval		int8	0	0	0
+F	lcm	int4,int4	int4	0	0	0
+F	lcm	int8,int8	int8	0	0	0
+F	lcm	numeric,numeric	numeric	0	0	0
+F	lead	anycompatible,int4,anycompatible	anycompatible	0	0	0
+F	lead	anyelement	anyelement	0	0	0
+F	lead	anyelement,int4	anyelement	0	0	0
+F	left	text,int4	text	0	0	0
+F	length	bit	int4	0	0	0
+F	length	bpchar	int4	0	0	0
+F	length	bytea	int4	0	0	0
+F	length	bytea,name	int4	0	0	0
+F	length	lseg	float8	0	0	0
+F	length	path	float8	0	0	0
+F	length	text	int4	0	0	0
+F	length	tsvector	int4	0	0	0
+F	like	bytea,bytea	bool	0	0	0
+F	like	name,text	bool	0	0	0
+F	like	text,text	bool	0	0	0
+F	like_escape	bytea,bytea	bytea	0	0	0
+F	like_escape	text,text	text	0	0	0
+F	line	point,point	line	0	0	0
+F	line_distance	line,line	float8	0	0	0
+F	line_eq	line,line	bool	0	0	0
+F	line_horizontal	line	bool	0	0	0
+F	line_interpt	line,line	point	0	0	0
+F	line_intersect	line,line	bool	0	0	0
+F	line_parallel	line,line	bool	0	0	0
+F	line_perp	line,line	bool	0	0	0
+F	line_send	line	bytea	0	0	0
+F	line_vertical	line	bool	0	0	0
+F	ln	float8	float8	0	0	0
+F	ln	numeric	numeric	0	0	0
+F	lo_close	int4	int4	0	0	0
+F	lo_creat	int4	oid	0	0	0
+F	lo_create	oid	oid	0	0	0
+F	lo_export	oid,text	int4	0	0	0
+F	lo_from_bytea	oid,bytea	oid	0	0	0
+F	lo_get	oid	bytea	0	0	0
+F	lo_get	oid,int8,int4	bytea	0	0	0
+F	lo_import	text	oid	0	0	0
+F	lo_import	text,oid	oid	0	0	0
+F	lo_lseek	int4,int4,int4	int4	0	0	0
+F	lo_lseek64	int4,int8,int4	int8	0	0	0
+F	lo_open	oid,int4	int4	0	0	0
+F	lo_put	oid,int8,bytea	void	0	0	0
+F	lo_tell	int4	int4	0	0	0
+F	lo_tell64	int4	int8	0	0	0
+F	lo_truncate	int4,int4	int4	0	0	0
+F	lo_truncate64	int4,int8	int4	0	0	0
+F	lo_unlink	oid	int4	0	0	0
+F	log	float8	float8	0	0	0
+F	log	numeric	numeric	0	0	0
+F	log	numeric,numeric	numeric	0	0	0
+F	log10	float8	float8	0	0	0
+F	log10	numeric	numeric	0	0	0
+F	loread	int4,int4	bytea	0	0	0
+F	lower	anymultirange	anyelement	0	0	0
+F	lower	anyrange	anyelement	0	0	0
+F	lower	text	text	0	0	0
+F	lower_inc	anymultirange	bool	0	0	0
+F	lower_inc	anyrange	bool	0	0	0
+F	lower_inf	anymultirange	bool	0	0	0
+F	lower_inf	anyrange	bool	0	0	0
+F	lowrite	int4,bytea	int4	0	0	0
+F	lpad	text,int4	text	0	0	0
+F	lpad	text,int4,text	text	0	0	0
+F	lseg	box	lseg	0	0	0
+F	lseg	point,point	lseg	0	0	0
+F	lseg_center	lseg	point	0	0	0
+F	lseg_distance	lseg,lseg	float8	0	0	0
+F	lseg_eq	lseg,lseg	bool	0	0	0
+F	lseg_ge	lseg,lseg	bool	0	0	0
+F	lseg_gt	lseg,lseg	bool	0	0	0
+F	lseg_horizontal	lseg	bool	0	0	0
+F	lseg_interpt	lseg,lseg	point	0	0	0
+F	lseg_intersect	lseg,lseg	bool	0	0	0
+F	lseg_le	lseg,lseg	bool	0	0	0
+F	lseg_length	lseg	float8	0	0	0
+F	lseg_lt	lseg,lseg	bool	0	0	0
+F	lseg_ne	lseg,lseg	bool	0	0	0
+F	lseg_parallel	lseg,lseg	bool	0	0	0
+F	lseg_perp	lseg,lseg	bool	0	0	0
+F	lseg_send	lseg	bytea	0	0	0
+F	lseg_vertical	lseg	bool	0	0	0
+F	ltrim	bytea,bytea	bytea	0	0	0
+F	ltrim	text	text	0	0	0
+F	ltrim	text,text	text	0	0	0
+F	macaddr	macaddr8	macaddr	0	0	0
+F	macaddr8	macaddr	macaddr8	0	0	0
+F	macaddr8_and	macaddr8,macaddr8	macaddr8	0	0	0
+F	macaddr8_cmp	macaddr8,macaddr8	int4	0	0	0
+F	macaddr8_eq	macaddr8,macaddr8	bool	0	0	0
+F	macaddr8_ge	macaddr8,macaddr8	bool	0	0	0
+F	macaddr8_gt	macaddr8,macaddr8	bool	0	0	0
+F	macaddr8_le	macaddr8,macaddr8	bool	0	0	0
+F	macaddr8_lt	macaddr8,macaddr8	bool	0	0	0
+F	macaddr8_ne	macaddr8,macaddr8	bool	0	0	0
+F	macaddr8_not	macaddr8	macaddr8	0	0	0
+F	macaddr8_or	macaddr8,macaddr8	macaddr8	0	0	0
+F	macaddr8_send	macaddr8	bytea	0	0	0
+F	macaddr8_set7bit	macaddr8	macaddr8	0	0	0
+F	macaddr_and	macaddr,macaddr	macaddr	0	0	0
+F	macaddr_cmp	macaddr,macaddr	int4	0	0	0
+F	macaddr_eq	macaddr,macaddr	bool	0	0	0
+F	macaddr_ge	macaddr,macaddr	bool	0	0	0
+F	macaddr_gt	macaddr,macaddr	bool	0	0	0
+F	macaddr_le	macaddr,macaddr	bool	0	0	0
+F	macaddr_lt	macaddr,macaddr	bool	0	0	0
+F	macaddr_ne	macaddr,macaddr	bool	0	0	0
+F	macaddr_not	macaddr	macaddr	0	0	0
+F	macaddr_or	macaddr,macaddr	macaddr	0	0	0
+F	macaddr_send	macaddr	bytea	0	0	0
+F	make_date	int4,int4,int4	date	0	0	0
+F	make_interval	int4,int4,int4,int4,int4,int4,float8	interval	0	7	0
+F	make_time	int4,int4,float8	time	0	0	0
+F	make_timestamp	int4,int4,int4,int4,int4,float8	timestamp	0	0	0
+F	make_timestamptz	int4,int4,int4,int4,int4,float8	timestamptz	0	0	0
+F	make_timestamptz	int4,int4,int4,int4,int4,float8,text	timestamptz	0	0	0
+F	makeaclitem	oid,oid,text,bool	aclitem	0	0	0
+F	masklen	inet	int4	0	0	0
+F	max	anyarray	anyarray	0	0	0
+F	max	anyenum	anyenum	0	0	0
+F	max	bpchar	bpchar	0	0	0
+F	max	date	date	0	0	0
+F	max	float4	float4	0	0	0
+F	max	float8	float8	0	0	0
+F	max	inet	inet	0	0	0
+F	max	int2	int2	0	0	0
+F	max	int4	int4	0	0	0
+F	max	int8	int8	0	0	0
+F	max	interval	interval	0	0	0
+F	max	money	money	0	0	0
+F	max	numeric	numeric	0	0	0
+F	max	oid	oid	0	0	0
+F	max	pg_lsn	pg_lsn	0	0	0
+F	max	text	text	0	0	0
+F	max	tid	tid	0	0	0
+F	max	time	time	0	0	0
+F	max	timestamp	timestamp	0	0	0
+F	max	timestamptz	timestamptz	0	0	0
+F	max	timetz	timetz	0	0	0
+F	max	xid8	xid8	0	0	0
+F	md5	bytea	text	0	0	0
+F	md5	text	text	0	0	0
+F	min	anyarray	anyarray	0	0	0
+F	min	anyenum	anyenum	0	0	0
+F	min	bpchar	bpchar	0	0	0
+F	min	date	date	0	0	0
+F	min	float4	float4	0	0	0
+F	min	float8	float8	0	0	0
+F	min	inet	inet	0	0	0
+F	min	int2	int2	0	0	0
+F	min	int4	int4	0	0	0
+F	min	int8	int8	0	0	0
+F	min	interval	interval	0	0	0
+F	min	money	money	0	0	0
+F	min	numeric	numeric	0	0	0
+F	min	oid	oid	0	0	0
+F	min	pg_lsn	pg_lsn	0	0	0
+F	min	text	text	0	0	0
+F	min	tid	tid	0	0	0
+F	min	time	time	0	0	0
+F	min	timestamp	timestamp	0	0	0
+F	min	timestamptz	timestamptz	0	0	0
+F	min	timetz	timetz	0	0	0
+F	min	xid8	xid8	0	0	0
+F	min_scale	numeric	int4	0	0	0
+F	mod	int2,int2	int2	0	0	0
+F	mod	int4,int4	int4	0	0	0
+F	mod	int8,int8	int8	0	0	0
+F	mod	numeric,numeric	numeric	0	0	0
+F	mode	anyelement	anyelement	0	0	0
+F	money	int4	money	0	0	0
+F	money	int8	money	0	0	0
+F	money	numeric	money	0	0	0
+F	mul_d_interval	float8,interval	interval	0	0	0
+F	multirange	anyrange	anymultirange	0	0	0
+F	multirange_adjacent_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_adjacent_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_after_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_after_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_before_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_before_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_cmp	anymultirange,anymultirange	int4	0	0	0
+F	multirange_contained_by_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_contained_by_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_contains_elem	anymultirange,anyelement	bool	0	0	0
+F	multirange_contains_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_contains_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_eq	anymultirange,anymultirange	bool	0	0	0
+F	multirange_ge	anymultirange,anymultirange	bool	0	0	0
+F	multirange_gt	anymultirange,anymultirange	bool	0	0	0
+F	multirange_intersect	anymultirange,anymultirange	anymultirange	0	0	0
+F	multirange_intersect_agg_transfn	anymultirange,anymultirange	anymultirange	0	0	0
+F	multirange_le	anymultirange,anymultirange	bool	0	0	0
+F	multirange_lt	anymultirange,anymultirange	bool	0	0	0
+F	multirange_minus	anymultirange,anymultirange	anymultirange	0	0	0
+F	multirange_ne	anymultirange,anymultirange	bool	0	0	0
+F	multirange_overlaps_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_overlaps_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_overleft_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_overleft_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_overright_multirange	anymultirange,anymultirange	bool	0	0	0
+F	multirange_overright_range	anymultirange,anyrange	bool	0	0	0
+F	multirange_send	anymultirange	bytea	0	0	0
+F	multirange_union	anymultirange,anymultirange	anymultirange	0	0	0
+F	mxid_age	xid	int4	0	0	0
+F	name	bpchar	name	0	0	0
+F	name	text	name	0	0	0
+F	name	varchar	name	0	0	0
+F	nameconcatoid	name,oid	name	0	0	0
+F	nameeq	name,name	bool	0	0	0
+F	nameeqtext	name,text	bool	0	0	0
+F	namege	name,name	bool	0	0	0
+F	namegetext	name,text	bool	0	0	0
+F	namegt	name,name	bool	0	0	0
+F	namegttext	name,text	bool	0	0	0
+F	nameiclike	name,text	bool	0	0	0
+F	nameicnlike	name,text	bool	0	0	0
+F	nameicregexeq	name,text	bool	0	0	0
+F	nameicregexne	name,text	bool	0	0	0
+F	namele	name,name	bool	0	0	0
+F	nameletext	name,text	bool	0	0	0
+F	namelike	name,text	bool	0	0	0
+F	namelt	name,name	bool	0	0	0
+F	namelttext	name,text	bool	0	0	0
+F	namene	name,name	bool	0	0	0
+F	namenetext	name,text	bool	0	0	0
+F	namenlike	name,text	bool	0	0	0
+F	nameregexeq	name,text	bool	0	0	0
+F	nameregexne	name,text	bool	0	0	0
+F	namesend	name	bytea	0	0	0
+F	netmask	inet	inet	0	0	0
+F	network	inet	cidr	0	0	0
+F	network_cmp	inet,inet	int4	0	0	0
+F	network_eq	inet,inet	bool	0	0	0
+F	network_ge	inet,inet	bool	0	0	0
+F	network_gt	inet,inet	bool	0	0	0
+F	network_larger	inet,inet	inet	0	0	0
+F	network_le	inet,inet	bool	0	0	0
+F	network_lt	inet,inet	bool	0	0	0
+F	network_ne	inet,inet	bool	0	0	0
+F	network_overlap	inet,inet	bool	0	0	0
+F	network_smaller	inet,inet	inet	0	0	0
+F	network_sub	inet,inet	bool	0	0	0
+F	network_subeq	inet,inet	bool	0	0	0
+F	network_sup	inet,inet	bool	0	0	0
+F	network_supeq	inet,inet	bool	0	0	0
+F	nextval	regclass	int8	0	0	0
+F	normalize	text,text	text	0	1	0
+F	notlike	bytea,bytea	bool	0	0	0
+F	notlike	name,text	bool	0	0	0
+F	notlike	text,text	bool	0	0	0
+F	now		timestamptz	0	0	0
+F	npoints	path	int4	0	0	0
+F	npoints	polygon	int4	0	0	0
+F	nth_value	anyelement,int4	anyelement	0	0	0
+F	ntile	int4	int4	0	0	0
+F	num_nonnulls	any	int4	1	0	0
+F	num_nulls	any	int4	1	0	0
+F	numeric	float4	numeric	0	0	0
+F	numeric	float8	numeric	0	0	0
+F	numeric	int2	numeric	0	0	0
+F	numeric	int4	numeric	0	0	0
+F	numeric	int8	numeric	0	0	0
+F	numeric	jsonb	numeric	0	0	0
+F	numeric	money	numeric	0	0	0
+F	numeric	numeric,int4	numeric	0	0	0
+F	numeric_abs	numeric	numeric	0	0	0
+F	numeric_add	numeric,numeric	numeric	0	0	0
+F	numeric_cmp	numeric,numeric	int4	0	0	0
+F	numeric_div	numeric,numeric	numeric	0	0	0
+F	numeric_div_trunc	numeric,numeric	numeric	0	0	0
+F	numeric_eq	numeric,numeric	bool	0	0	0
+F	numeric_exp	numeric	numeric	0	0	0
+F	numeric_ge	numeric,numeric	bool	0	0	0
+F	numeric_gt	numeric,numeric	bool	0	0	0
+F	numeric_inc	numeric	numeric	0	0	0
+F	numeric_larger	numeric,numeric	numeric	0	0	0
+F	numeric_le	numeric,numeric	bool	0	0	0
+F	numeric_ln	numeric	numeric	0	0	0
+F	numeric_log	numeric,numeric	numeric	0	0	0
+F	numeric_lt	numeric,numeric	bool	0	0	0
+F	numeric_mod	numeric,numeric	numeric	0	0	0
+F	numeric_mul	numeric,numeric	numeric	0	0	0
+F	numeric_ne	numeric,numeric	bool	0	0	0
+F	numeric_pl_pg_lsn	numeric,pg_lsn	pg_lsn	0	0	0
+F	numeric_power	numeric,numeric	numeric	0	0	0
+F	numeric_send	numeric	bytea	0	0	0
+F	numeric_smaller	numeric,numeric	numeric	0	0	0
+F	numeric_sqrt	numeric	numeric	0	0	0
+F	numeric_sub	numeric,numeric	numeric	0	0	0
+F	numeric_uminus	numeric	numeric	0	0	0
+F	numeric_uplus	numeric	numeric	0	0	0
+F	numerictypmodin	_cstring	int4	0	0	0
+F	nummultirange		nummultirange	0	0	0
+F	nummultirange	_numrange	nummultirange	1	0	0
+F	nummultirange	numrange	nummultirange	0	0	0
+F	numnode	tsquery	int4	0	0	0
+F	numrange	numeric,numeric	numrange	0	0	0
+F	numrange	numeric,numeric,text	numrange	0	0	0
+F	numrange_subdiff	numeric,numeric	float8	0	0	0
+F	obj_description	oid	text	0	0	0
+F	obj_description	oid,name	text	0	0	0
+F	octet_length	bit	int4	0	0	0
+F	octet_length	bpchar	int4	0	0	0
+F	octet_length	bytea	int4	0	0	0
+F	octet_length	text	int4	0	0	0
+F	oid	int8	oid	0	0	0
+F	oideq	oid,oid	bool	0	0	0
+F	oidge	oid,oid	bool	0	0	0
+F	oidgt	oid,oid	bool	0	0	0
+F	oidlarger	oid,oid	oid	0	0	0
+F	oidle	oid,oid	bool	0	0	0
+F	oidlt	oid,oid	bool	0	0	0
+F	oidne	oid,oid	bool	0	0	0
+F	oidsend	oid	bytea	0	0	0
+F	oidsmaller	oid,oid	oid	0	0	0
+F	oidvectoreq	oidvector,oidvector	bool	0	0	0
+F	oidvectorge	oidvector,oidvector	bool	0	0	0
+F	oidvectorgt	oidvector,oidvector	bool	0	0	0
+F	oidvectorle	oidvector,oidvector	bool	0	0	0
+F	oidvectorlt	oidvector,oidvector	bool	0	0	0
+F	oidvectorne	oidvector,oidvector	bool	0	0	0
+F	oidvectorsend	oidvector	bytea	0	0	0
+F	oidvectortypes	oidvector	text	0	0	0
+F	on_pb	point,box	bool	0	0	0
+F	on_pl	point,line	bool	0	0	0
+F	on_ppath	point,path	bool	0	0	0
+F	on_ps	point,lseg	bool	0	0	0
+F	on_sb	lseg,box	bool	0	0	0
+F	on_sl	lseg,line	bool	0	0	0
+F	overlaps	time,interval,time,interval	bool	0	0	0
+F	overlaps	time,interval,time,time	bool	0	0	0
+F	overlaps	time,time,time,interval	bool	0	0	0
+F	overlaps	time,time,time,time	bool	0	0	0
+F	overlaps	timestamp,interval,timestamp,interval	bool	0	0	0
+F	overlaps	timestamp,interval,timestamp,timestamp	bool	0	0	0
+F	overlaps	timestamp,timestamp,timestamp,interval	bool	0	0	0
+F	overlaps	timestamp,timestamp,timestamp,timestamp	bool	0	0	0
+F	overlaps	timestamptz,interval,timestamptz,interval	bool	0	0	0
+F	overlaps	timestamptz,interval,timestamptz,timestamptz	bool	0	0	0
+F	overlaps	timestamptz,timestamptz,timestamptz,interval	bool	0	0	0
+F	overlaps	timestamptz,timestamptz,timestamptz,timestamptz	bool	0	0	0
+F	overlaps	timetz,timetz,timetz,timetz	bool	0	0	0
+F	overlay	bit,bit,int4	bit	0	0	0
+F	overlay	bit,bit,int4,int4	bit	0	0	0
+F	overlay	bytea,bytea,int4	bytea	0	0	0
+F	overlay	bytea,bytea,int4,int4	bytea	0	0	0
+F	overlay	text,text,int4	text	0	0	0
+F	overlay	text,text,int4,int4	text	0	0	0
+F	parse_ident	text,bool	_text	0	1	0
+F	path	polygon	path	0	0	0
+F	path_add	path,path	path	0	0	0
+F	path_add_pt	path,point	path	0	0	0
+F	path_contain_pt	path,point	bool	0	0	0
+F	path_distance	path,path	float8	0	0	0
+F	path_div_pt	path,point	path	0	0	0
+F	path_inter	path,path	bool	0	0	0
+F	path_length	path	float8	0	0	0
+F	path_mul_pt	path,point	path	0	0	0
+F	path_n_eq	path,path	bool	0	0	0
+F	path_n_ge	path,path	bool	0	0	0
+F	path_n_gt	path,path	bool	0	0	0
+F	path_n_le	path,path	bool	0	0	0
+F	path_n_lt	path,path	bool	0	0	0
+F	path_npoints	path	int4	0	0	0
+F	path_send	path	bytea	0	0	0
+F	path_sub_pt	path,point	path	0	0	0
+F	pclose	path	path	0	0	0
+F	percent_rank		float8	0	0	0
+F	percent_rank	any	float8	1	0	0
+F	percentile_cont	_float8,float8	_float8	0	0	0
+F	percentile_cont	_float8,interval	_interval	0	0	0
+F	percentile_cont	float8,float8	float8	0	0	0
+F	percentile_cont	float8,interval	interval	0	0	0
+F	percentile_disc	_float8,anyelement	anyarray	0	0	0
+F	percentile_disc	float8,anyelement	anyelement	0	0	0
+F	pg_advisory_lock	int4,int4	void	0	0	0
+F	pg_advisory_lock	int8	void	0	0	0
+F	pg_advisory_lock_shared	int4,int4	void	0	0	0
+F	pg_advisory_lock_shared	int8	void	0	0	0
+F	pg_advisory_unlock	int4,int4	bool	0	0	0
+F	pg_advisory_unlock	int8	bool	0	0	0
+F	pg_advisory_unlock_all		void	0	0	0
+F	pg_advisory_unlock_shared	int4,int4	bool	0	0	0
+F	pg_advisory_unlock_shared	int8	bool	0	0	0
+F	pg_advisory_xact_lock	int4,int4	void	0	0	0
+F	pg_advisory_xact_lock	int8	void	0	0	0
+F	pg_advisory_xact_lock_shared	int4,int4	void	0	0	0
+F	pg_advisory_xact_lock_shared	int8	void	0	0	0
+F	pg_available_extension_versions		record	0	0	1
+F	pg_available_extensions		record	0	0	1
+F	pg_backend_pid		int4	0	0	0
+F	pg_backup_start	text,bool	pg_lsn	0	1	0
+F	pg_backup_stop	bool	record	0	1	0
+F	pg_blocking_pids	int4	_int4	0	0	0
+F	pg_cancel_backend	int4	bool	0	0	0
+F	pg_char_to_encoding	name	int4	0	0	0
+F	pg_client_encoding		name	0	0	0
+F	pg_collation_actual_version	oid	text	0	0	0
+F	pg_collation_for	any	text	0	0	0
+F	pg_collation_is_visible	oid	bool	0	0	0
+F	pg_column_compression	any	text	0	0	0
+F	pg_column_is_updatable	regclass,int2,bool	bool	0	0	0
+F	pg_column_size	any	int4	0	0	0
+F	pg_conf_load_time		timestamptz	0	0	0
+F	pg_config		record	0	0	1
+F	pg_control_checkpoint		record	0	0	0
+F	pg_control_init		record	0	0	0
+F	pg_control_recovery		record	0	0	0
+F	pg_control_system		record	0	0	0
+F	pg_conversion_is_visible	oid	bool	0	0	0
+F	pg_copy_logical_replication_slot	name,name	record	0	0	0
+F	pg_copy_logical_replication_slot	name,name,bool	record	0	0	0
+F	pg_copy_logical_replication_slot	name,name,bool,name	record	0	0	0
+F	pg_copy_physical_replication_slot	name,name	record	0	0	0
+F	pg_copy_physical_replication_slot	name,name,bool	record	0	0	0
+F	pg_create_logical_replication_slot	name,name,bool,bool	record	0	2	0
+F	pg_create_physical_replication_slot	name,bool,bool	record	0	2	0
+F	pg_create_restore_point	text	pg_lsn	0	0	0
+F	pg_current_logfile		text	0	0	0
+F	pg_current_logfile	text	text	0	0	0
+F	pg_current_snapshot		pg_snapshot	0	0	0
+F	pg_current_wal_flush_lsn		pg_lsn	0	0	0
+F	pg_current_wal_insert_lsn		pg_lsn	0	0	0
+F	pg_current_wal_lsn		pg_lsn	0	0	0
+F	pg_current_xact_id		xid8	0	0	0
+F	pg_current_xact_id_if_assigned		xid8	0	0	0
+F	pg_cursor		record	0	0	1
+F	pg_database_collation_actual_version	oid	text	0	0	0
+F	pg_database_size	name	int8	0	0	0
+F	pg_database_size	oid	int8	0	0	0
+F	pg_ddl_command_send	pg_ddl_command	bytea	0	0	0
+F	pg_dependencies_send	pg_dependencies	bytea	0	0	0
+F	pg_describe_object	oid,oid,int4	text	0	0	0
+F	pg_drop_replication_slot	name	void	0	0	0
+F	pg_encoding_max_length	int4	int4	0	0	0
+F	pg_encoding_to_char	int4	name	0	0	0
+F	pg_event_trigger_ddl_commands		record	0	0	1
+F	pg_event_trigger_dropped_objects		record	0	0	1
+F	pg_event_trigger_table_rewrite_oid		oid	0	0	0
+F	pg_event_trigger_table_rewrite_reason		int4	0	0	0
+F	pg_export_snapshot		text	0	0	0
+F	pg_extension_config_dump	regclass,text	void	0	0	0
+F	pg_extension_update_paths	name	record	0	0	1
+F	pg_filenode_relation	oid,oid	regclass	0	0	0
+F	pg_function_is_visible	oid	bool	0	0	0
+F	pg_get_backend_memory_contexts		record	0	0	1
+F	pg_get_catalog_foreign_keys		record	0	0	1
+F	pg_get_constraintdef	oid	text	0	0	0
+F	pg_get_constraintdef	oid,bool	text	0	0	0
+F	pg_get_expr	pg_node_tree,oid	text	0	0	0
+F	pg_get_expr	pg_node_tree,oid,bool	text	0	0	0
+F	pg_get_function_arg_default	oid,int4	text	0	0	0
+F	pg_get_function_arguments	oid	text	0	0	0
+F	pg_get_function_identity_arguments	oid	text	0	0	0
+F	pg_get_function_result	oid	text	0	0	0
+F	pg_get_function_sqlbody	oid	text	0	0	0
+F	pg_get_functiondef	oid	text	0	0	0
+F	pg_get_indexdef	oid	text	0	0	0
+F	pg_get_indexdef	oid,int4,bool	text	0	0	0
+F	pg_get_keywords		record	0	0	1
+F	pg_get_multixact_members	xid	record	0	0	1
+F	pg_get_object_address	text,_text,_text	record	0	0	0
+F	pg_get_partition_constraintdef	oid	text	0	0	0
+F	pg_get_partkeydef	oid	text	0	0	0
+F	pg_get_publication_tables	_text	record	1	0	1
+F	pg_get_replica_identity_index	regclass	regclass	0	0	0
+F	pg_get_replication_slots		record	0	0	1
+F	pg_get_ruledef	oid	text	0	0	0
+F	pg_get_ruledef	oid,bool	text	0	0	0
+F	pg_get_serial_sequence	text,text	text	0	0	0
+F	pg_get_shmem_allocations		record	0	0	1
+F	pg_get_statisticsobjdef	oid	text	0	0	0
+F	pg_get_statisticsobjdef_columns	oid	text	0	0	0
+F	pg_get_statisticsobjdef_expressions	oid	_text	0	0	0
+F	pg_get_triggerdef	oid	text	0	0	0
+F	pg_get_triggerdef	oid,bool	text	0	0	0
+F	pg_get_userbyid	oid	name	0	0	0
+F	pg_get_viewdef	oid	text	0	0	0
+F	pg_get_viewdef	oid,bool	text	0	0	0
+F	pg_get_viewdef	oid,int4	text	0	0	0
+F	pg_get_viewdef	text	text	0	0	0
+F	pg_get_viewdef	text,bool	text	0	0	0
+F	pg_get_wal_replay_pause_state		text	0	0	0
+F	pg_get_wal_resource_managers		record	0	0	1
+F	pg_has_role	name,name,text	bool	0	0	0
+F	pg_has_role	name,oid,text	bool	0	0	0
+F	pg_has_role	name,text	bool	0	0	0
+F	pg_has_role	oid,name,text	bool	0	0	0
+F	pg_has_role	oid,oid,text	bool	0	0	0
+F	pg_has_role	oid,text	bool	0	0	0
+F	pg_hba_file_rules		record	0	0	1
+F	pg_ident_file_mappings		record	0	0	1
+F	pg_identify_object	oid,oid,int4	record	0	0	0
+F	pg_identify_object_as_address	oid,oid,int4	record	0	0	0
+F	pg_import_system_collations	regnamespace	int4	0	0	0
+F	pg_index_column_has_property	regclass,int4,text	bool	0	0	0
+F	pg_index_has_property	regclass,text	bool	0	0	0
+F	pg_indexam_has_property	oid,text	bool	0	0	0
+F	pg_indexam_progress_phasename	oid,int8	text	0	0	0
+F	pg_indexes_size	regclass	int8	0	0	0
+F	pg_input_error_info	text,text	record	0	0	0
+F	pg_input_is_valid	text,text	bool	0	0	0
+F	pg_is_in_recovery		bool	0	0	0
+F	pg_is_other_temp_schema	oid	bool	0	0	0
+F	pg_is_wal_replay_paused		bool	0	0	0
+F	pg_isolation_test_session_is_blocked	int4,_int4	bool	0	0	0
+F	pg_jit_available		bool	0	0	0
+F	pg_last_committed_xact		record	0	0	0
+F	pg_last_wal_receive_lsn		pg_lsn	0	0	0
+F	pg_last_wal_replay_lsn		pg_lsn	0	0	0
+F	pg_last_xact_replay_timestamp		timestamptz	0	0	0
+F	pg_listening_channels		text	0	0	1
+F	pg_lock_status		record	0	0	1
+F	pg_log_backend_memory_contexts	int4	bool	0	0	0
+F	pg_log_standby_snapshot		pg_lsn	0	0	0
+F	pg_logical_emit_message	bool,text,bytea	pg_lsn	0	0	0
+F	pg_logical_emit_message	bool,text,text	pg_lsn	0	0	0
+F	pg_logical_slot_get_binary_changes	name,pg_lsn,int4,_text	record	1	1	1
+F	pg_logical_slot_get_changes	name,pg_lsn,int4,_text	record	1	1	1
+F	pg_logical_slot_peek_binary_changes	name,pg_lsn,int4,_text	record	1	1	1
+F	pg_logical_slot_peek_changes	name,pg_lsn,int4,_text	record	1	1	1
+F	pg_ls_archive_statusdir		record	0	0	1
+F	pg_ls_dir	text	text	0	0	1
+F	pg_ls_dir	text,bool,bool	text	0	0	1
+F	pg_ls_logdir		record	0	0	1
+F	pg_ls_logicalmapdir		record	0	0	1
+F	pg_ls_logicalsnapdir		record	0	0	1
+F	pg_ls_replslotdir	text	record	0	0	1
+F	pg_ls_tmpdir		record	0	0	1
+F	pg_ls_tmpdir	oid	record	0	0	1
+F	pg_ls_waldir		record	0	0	1
+F	pg_lsn	numeric	pg_lsn	0	0	0
+F	pg_lsn_cmp	pg_lsn,pg_lsn	int4	0	0	0
+F	pg_lsn_eq	pg_lsn,pg_lsn	bool	0	0	0
+F	pg_lsn_ge	pg_lsn,pg_lsn	bool	0	0	0
+F	pg_lsn_gt	pg_lsn,pg_lsn	bool	0	0	0
+F	pg_lsn_hash	pg_lsn	int4	0	0	0
+F	pg_lsn_hash_extended	pg_lsn,int8	int8	0	0	0
+F	pg_lsn_larger	pg_lsn,pg_lsn	pg_lsn	0	0	0
+F	pg_lsn_le	pg_lsn,pg_lsn	bool	0	0	0
+F	pg_lsn_lt	pg_lsn,pg_lsn	bool	0	0	0
+F	pg_lsn_mi	pg_lsn,pg_lsn	numeric	0	0	0
+F	pg_lsn_mii	pg_lsn,numeric	pg_lsn	0	0	0
+F	pg_lsn_ne	pg_lsn,pg_lsn	bool	0	0	0
+F	pg_lsn_pli	pg_lsn,numeric	pg_lsn	0	0	0
+F	pg_lsn_send	pg_lsn	bytea	0	0	0
+F	pg_lsn_smaller	pg_lsn,pg_lsn	pg_lsn	0	0	0
+F	pg_mcv_list_items	pg_mcv_list	record	0	0	1
+F	pg_mcv_list_send	pg_mcv_list	bytea	0	0	0
+F	pg_my_temp_schema		oid	0	0	0
+F	pg_ndistinct_send	pg_ndistinct	bytea	0	0	0
+F	pg_nextoid	regclass,name,regclass	oid	0	0	0
+F	pg_node_tree_send	pg_node_tree	bytea	0	0	0
+F	pg_notification_queue_usage		float8	0	0	0
+F	pg_notify	text,text	void	0	0	0
+F	pg_opclass_is_visible	oid	bool	0	0	0
+F	pg_operator_is_visible	oid	bool	0	0	0
+F	pg_opfamily_is_visible	oid	bool	0	0	0
+F	pg_options_to_table	_text	record	0	0	1
+F	pg_partition_ancestors	regclass	regclass	0	0	1
+F	pg_partition_root	regclass	regclass	0	0	0
+F	pg_partition_tree	regclass	record	0	0	1
+F	pg_postmaster_start_time		timestamptz	0	0	0
+F	pg_prepared_statement		record	0	0	1
+F	pg_prepared_xact		record	0	0	1
+F	pg_promote	bool,int4	bool	0	2	0
+F	pg_read_binary_file	text	bytea	0	0	0
+F	pg_read_binary_file	text,bool	bytea	0	0	0
+F	pg_read_binary_file	text,int8,int8	bytea	0	0	0
+F	pg_read_binary_file	text,int8,int8,bool	bytea	0	0	0
+F	pg_read_file	text	text	0	0	0
+F	pg_read_file	text,bool	text	0	0	0
+F	pg_read_file	text,int8,int8	text	0	0	0
+F	pg_read_file	text,int8,int8,bool	text	0	0	0
+F	pg_read_file_old	text,int8,int8	text	0	0	0
+F	pg_relation_filenode	regclass	oid	0	0	0
+F	pg_relation_filepath	regclass	text	0	0	0
+F	pg_relation_is_publishable	regclass	bool	0	0	0
+F	pg_relation_is_updatable	regclass,bool	int4	0	0	0
+F	pg_relation_size	regclass	int8	0	0	0
+F	pg_relation_size	regclass,text	int8	0	0	0
+F	pg_reload_conf		bool	0	0	0
+F	pg_replication_origin_advance	text,pg_lsn	void	0	0	0
+F	pg_replication_origin_create	text	oid	0	0	0
+F	pg_replication_origin_drop	text	void	0	0	0
+F	pg_replication_origin_oid	text	oid	0	0	0
+F	pg_replication_origin_progress	text,bool	pg_lsn	0	0	0
+F	pg_replication_origin_session_is_setup		bool	0	0	0
+F	pg_replication_origin_session_progress	bool	pg_lsn	0	0	0
+F	pg_replication_origin_session_reset		void	0	0	0
+F	pg_replication_origin_session_setup	text	void	0	0	0
+F	pg_replication_origin_xact_reset		void	0	0	0
+F	pg_replication_origin_xact_setup	pg_lsn,timestamptz	void	0	0	0
+F	pg_replication_slot_advance	name,pg_lsn	record	0	0	0
+F	pg_rotate_logfile		bool	0	0	0
+F	pg_rotate_logfile_old		bool	0	0	0
+F	pg_safe_snapshot_blocking_pids	int4	_int4	0	0	0
+F	pg_sequence_last_value	regclass	int8	0	0	0
+F	pg_sequence_parameters	oid	record	0	0	0
+F	pg_settings_get_flags	text	_text	0	0	0
+F	pg_show_all_file_settings		record	0	0	1
+F	pg_show_all_settings		record	0	0	1
+F	pg_show_replication_origin_status		record	0	0	1
+F	pg_size_bytes	text	int8	0	0	0
+F	pg_size_pretty	int8	text	0	0	0
+F	pg_size_pretty	numeric	text	0	0	0
+F	pg_sleep	float8	void	0	0	0
+F	pg_sleep_for	interval	void	0	0	0
+F	pg_sleep_until	timestamptz	void	0	0	0
+F	pg_snapshot_send	pg_snapshot	bytea	0	0	0
+F	pg_snapshot_xip	pg_snapshot	xid8	0	0	1
+F	pg_snapshot_xmax	pg_snapshot	xid8	0	0	0
+F	pg_snapshot_xmin	pg_snapshot	xid8	0	0	0
+F	pg_split_walfile_name	text	record	0	0	0
+F	pg_stat_clear_snapshot		void	0	0	0
+F	pg_stat_file	text	record	0	0	0
+F	pg_stat_file	text,bool	record	0	0	0
+F	pg_stat_force_next_flush		void	0	0	0
+F	pg_stat_get_activity	int4	record	0	0	1
+F	pg_stat_get_analyze_count	oid	int8	0	0	0
+F	pg_stat_get_archiver		record	0	0	0
+F	pg_stat_get_autoanalyze_count	oid	int8	0	0	0
+F	pg_stat_get_autovacuum_count	oid	int8	0	0	0
+F	pg_stat_get_backend_activity	int4	text	0	0	0
+F	pg_stat_get_backend_activity_start	int4	timestamptz	0	0	0
+F	pg_stat_get_backend_client_addr	int4	inet	0	0	0
+F	pg_stat_get_backend_client_port	int4	int4	0	0	0
+F	pg_stat_get_backend_dbid	int4	oid	0	0	0
+F	pg_stat_get_backend_idset		int4	0	0	1
+F	pg_stat_get_backend_pid	int4	int4	0	0	0
+F	pg_stat_get_backend_start	int4	timestamptz	0	0	0
+F	pg_stat_get_backend_subxact	int4	record	0	0	0
+F	pg_stat_get_backend_userid	int4	oid	0	0	0
+F	pg_stat_get_backend_wait_event	int4	text	0	0	0
+F	pg_stat_get_backend_wait_event_type	int4	text	0	0	0
+F	pg_stat_get_backend_xact_start	int4	timestamptz	0	0	0
+F	pg_stat_get_bgwriter_buf_written_checkpoints		int8	0	0	0
+F	pg_stat_get_bgwriter_buf_written_clean		int8	0	0	0
+F	pg_stat_get_bgwriter_maxwritten_clean		int8	0	0	0
+F	pg_stat_get_bgwriter_requested_checkpoints		int8	0	0	0
+F	pg_stat_get_bgwriter_stat_reset_time		timestamptz	0	0	0
+F	pg_stat_get_bgwriter_timed_checkpoints		int8	0	0	0
+F	pg_stat_get_blocks_fetched	oid	int8	0	0	0
+F	pg_stat_get_blocks_hit	oid	int8	0	0	0
+F	pg_stat_get_buf_alloc		int8	0	0	0
+F	pg_stat_get_buf_fsync_backend		int8	0	0	0
+F	pg_stat_get_buf_written_backend		int8	0	0	0
+F	pg_stat_get_checkpoint_sync_time		float8	0	0	0
+F	pg_stat_get_checkpoint_write_time		float8	0	0	0
+F	pg_stat_get_db_active_time	oid	float8	0	0	0
+F	pg_stat_get_db_blk_read_time	oid	float8	0	0	0
+F	pg_stat_get_db_blk_write_time	oid	float8	0	0	0
+F	pg_stat_get_db_blocks_fetched	oid	int8	0	0	0
+F	pg_stat_get_db_blocks_hit	oid	int8	0	0	0
+F	pg_stat_get_db_checksum_failures	oid	int8	0	0	0
+F	pg_stat_get_db_checksum_last_failure	oid	timestamptz	0	0	0
+F	pg_stat_get_db_conflict_all	oid	int8	0	0	0
+F	pg_stat_get_db_conflict_bufferpin	oid	int8	0	0	0
+F	pg_stat_get_db_conflict_lock	oid	int8	0	0	0
+F	pg_stat_get_db_conflict_logicalslot	oid	int8	0	0	0
+F	pg_stat_get_db_conflict_snapshot	oid	int8	0	0	0
+F	pg_stat_get_db_conflict_startup_deadlock	oid	int8	0	0	0
+F	pg_stat_get_db_conflict_tablespace	oid	int8	0	0	0
+F	pg_stat_get_db_deadlocks	oid	int8	0	0	0
+F	pg_stat_get_db_idle_in_transaction_time	oid	float8	0	0	0
+F	pg_stat_get_db_numbackends	oid	int4	0	0	0
+F	pg_stat_get_db_session_time	oid	float8	0	0	0
+F	pg_stat_get_db_sessions	oid	int8	0	0	0
+F	pg_stat_get_db_sessions_abandoned	oid	int8	0	0	0
+F	pg_stat_get_db_sessions_fatal	oid	int8	0	0	0
+F	pg_stat_get_db_sessions_killed	oid	int8	0	0	0
+F	pg_stat_get_db_stat_reset_time	oid	timestamptz	0	0	0
+F	pg_stat_get_db_temp_bytes	oid	int8	0	0	0
+F	pg_stat_get_db_temp_files	oid	int8	0	0	0
+F	pg_stat_get_db_tuples_deleted	oid	int8	0	0	0
+F	pg_stat_get_db_tuples_fetched	oid	int8	0	0	0
+F	pg_stat_get_db_tuples_inserted	oid	int8	0	0	0
+F	pg_stat_get_db_tuples_returned	oid	int8	0	0	0
+F	pg_stat_get_db_tuples_updated	oid	int8	0	0	0
+F	pg_stat_get_db_xact_commit	oid	int8	0	0	0
+F	pg_stat_get_db_xact_rollback	oid	int8	0	0	0
+F	pg_stat_get_dead_tuples	oid	int8	0	0	0
+F	pg_stat_get_function_calls	oid	int8	0	0	0
+F	pg_stat_get_function_self_time	oid	float8	0	0	0
+F	pg_stat_get_function_total_time	oid	float8	0	0	0
+F	pg_stat_get_ins_since_vacuum	oid	int8	0	0	0
+F	pg_stat_get_io		record	0	0	1
+F	pg_stat_get_last_analyze_time	oid	timestamptz	0	0	0
+F	pg_stat_get_last_autoanalyze_time	oid	timestamptz	0	0	0
+F	pg_stat_get_last_autovacuum_time	oid	timestamptz	0	0	0
+F	pg_stat_get_last_vacuum_time	oid	timestamptz	0	0	0
+F	pg_stat_get_lastscan	oid	timestamptz	0	0	0
+F	pg_stat_get_live_tuples	oid	int8	0	0	0
+F	pg_stat_get_mod_since_analyze	oid	int8	0	0	0
+F	pg_stat_get_numscans	oid	int8	0	0	0
+F	pg_stat_get_progress_info	text	record	0	0	1
+F	pg_stat_get_recovery_prefetch		record	0	0	1
+F	pg_stat_get_replication_slot	text	record	0	0	0
+F	pg_stat_get_slru		record	0	0	1
+F	pg_stat_get_snapshot_timestamp		timestamptz	0	0	0
+F	pg_stat_get_subscription	oid	record	0	0	1
+F	pg_stat_get_subscription_stats	oid	record	0	0	0
+F	pg_stat_get_tuples_deleted	oid	int8	0	0	0
+F	pg_stat_get_tuples_fetched	oid	int8	0	0	0
+F	pg_stat_get_tuples_hot_updated	oid	int8	0	0	0
+F	pg_stat_get_tuples_inserted	oid	int8	0	0	0
+F	pg_stat_get_tuples_newpage_updated	oid	int8	0	0	0
+F	pg_stat_get_tuples_returned	oid	int8	0	0	0
+F	pg_stat_get_tuples_updated	oid	int8	0	0	0
+F	pg_stat_get_vacuum_count	oid	int8	0	0	0
+F	pg_stat_get_wal		record	0	0	0
+F	pg_stat_get_wal_receiver		record	0	0	0
+F	pg_stat_get_wal_senders		record	0	0	1
+F	pg_stat_get_xact_blocks_fetched	oid	int8	0	0	0
+F	pg_stat_get_xact_blocks_hit	oid	int8	0	0	0
+F	pg_stat_get_xact_function_calls	oid	int8	0	0	0
+F	pg_stat_get_xact_function_self_time	oid	float8	0	0	0
+F	pg_stat_get_xact_function_total_time	oid	float8	0	0	0
+F	pg_stat_get_xact_numscans	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_deleted	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_fetched	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_hot_updated	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_inserted	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_newpage_updated	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_returned	oid	int8	0	0	0
+F	pg_stat_get_xact_tuples_updated	oid	int8	0	0	0
+F	pg_stat_have_stats	text,oid,oid	bool	0	0	0
+F	pg_stat_reset		void	0	0	0
+F	pg_stat_reset_replication_slot	text	void	0	0	0
+F	pg_stat_reset_shared	text	void	0	0	0
+F	pg_stat_reset_single_function_counters	oid	void	0	0	0
+F	pg_stat_reset_single_table_counters	oid	void	0	0	0
+F	pg_stat_reset_slru	text	void	0	0	0
+F	pg_stat_reset_subscription_stats	oid	void	0	0	0
+F	pg_statistics_obj_is_visible	oid	bool	0	0	0
+F	pg_stop_making_pinned_objects		void	0	0	0
+F	pg_switch_wal		pg_lsn	0	0	0
+F	pg_table_is_visible	oid	bool	0	0	0
+F	pg_table_size	regclass	int8	0	0	0
+F	pg_tablespace_databases	oid	oid	0	0	1
+F	pg_tablespace_location	oid	text	0	0	0
+F	pg_tablespace_size	name	int8	0	0	0
+F	pg_tablespace_size	oid	int8	0	0	0
+F	pg_terminate_backend	int4,int8	bool	0	1	0
+F	pg_timezone_abbrevs		record	0	0	1
+F	pg_timezone_names		record	0	0	1
+F	pg_total_relation_size	regclass	int8	0	0	0
+F	pg_trigger_depth		int4	0	0	0
+F	pg_try_advisory_lock	int4,int4	bool	0	0	0
+F	pg_try_advisory_lock	int8	bool	0	0	0
+F	pg_try_advisory_lock_shared	int4,int4	bool	0	0	0
+F	pg_try_advisory_lock_shared	int8	bool	0	0	0
+F	pg_try_advisory_xact_lock	int4,int4	bool	0	0	0
+F	pg_try_advisory_xact_lock	int8	bool	0	0	0
+F	pg_try_advisory_xact_lock_shared	int4,int4	bool	0	0	0
+F	pg_try_advisory_xact_lock_shared	int8	bool	0	0	0
+F	pg_ts_config_is_visible	oid	bool	0	0	0
+F	pg_ts_dict_is_visible	oid	bool	0	0	0
+F	pg_ts_parser_is_visible	oid	bool	0	0	0
+F	pg_ts_template_is_visible	oid	bool	0	0	0
+F	pg_type_is_visible	oid	bool	0	0	0
+F	pg_typeof	any	regtype	0	0	0
+F	pg_visible_in_snapshot	xid8,pg_snapshot	bool	0	0	0
+F	pg_wal_lsn_diff	pg_lsn,pg_lsn	numeric	0	0	0
+F	pg_wal_replay_pause		void	0	0	0
+F	pg_wal_replay_resume		void	0	0	0
+F	pg_walfile_name	pg_lsn	text	0	0	0
+F	pg_walfile_name_offset	pg_lsn	record	0	0	0
+F	pg_xact_commit_timestamp	xid	timestamptz	0	0	0
+F	pg_xact_commit_timestamp_origin	xid	record	0	0	0
+F	pg_xact_status	xid8	text	0	0	0
+F	phraseto_tsquery	regconfig,text	tsquery	0	0	0
+F	phraseto_tsquery	text	tsquery	0	0	0
+F	pi		float8	0	0	0
+F	plainto_tsquery	regconfig,text	tsquery	0	0	0
+F	plainto_tsquery	text	tsquery	0	0	0
+F	plpgsql_validator	oid	void	0	0	0
+F	point	box	point	0	0	0
+F	point	circle	point	0	0	0
+F	point	float8,float8	point	0	0	0
+F	point	lseg	point	0	0	0
+F	point	polygon	point	0	0	0
+F	point_above	point,point	bool	0	0	0
+F	point_add	point,point	point	0	0	0
+F	point_below	point,point	bool	0	0	0
+F	point_distance	point,point	float8	0	0	0
+F	point_div	point,point	point	0	0	0
+F	point_eq	point,point	bool	0	0	0
+F	point_horiz	point,point	bool	0	0	0
+F	point_left	point,point	bool	0	0	0
+F	point_mul	point,point	point	0	0	0
+F	point_ne	point,point	bool	0	0	0
+F	point_right	point,point	bool	0	0	0
+F	point_send	point	bytea	0	0	0
+F	point_sub	point,point	point	0	0	0
+F	point_vert	point,point	bool	0	0	0
+F	poly_above	polygon,polygon	bool	0	0	0
+F	poly_below	polygon,polygon	bool	0	0	0
+F	poly_center	polygon	point	0	0	0
+F	poly_contain	polygon,polygon	bool	0	0	0
+F	poly_contain_pt	polygon,point	bool	0	0	0
+F	poly_contained	polygon,polygon	bool	0	0	0
+F	poly_distance	polygon,polygon	float8	0	0	0
+F	poly_left	polygon,polygon	bool	0	0	0
+F	poly_npoints	polygon	int4	0	0	0
+F	poly_overabove	polygon,polygon	bool	0	0	0
+F	poly_overbelow	polygon,polygon	bool	0	0	0
+F	poly_overlap	polygon,polygon	bool	0	0	0
+F	poly_overleft	polygon,polygon	bool	0	0	0
+F	poly_overright	polygon,polygon	bool	0	0	0
+F	poly_right	polygon,polygon	bool	0	0	0
+F	poly_same	polygon,polygon	bool	0	0	0
+F	poly_send	polygon	bytea	0	0	0
+F	polygon	box	polygon	0	0	0
+F	polygon	circle	polygon	0	0	0
+F	polygon	int4,circle	polygon	0	0	0
+F	polygon	path	polygon	0	0	0
+F	popen	path	path	0	0	0
+F	position	bit,bit	int4	0	0	0
+F	position	bytea,bytea	int4	0	0	0
+F	position	text,text	int4	0	0	0
+F	postgresql_fdw_validator	_text,oid	bool	0	0	0
+F	pow	float8,float8	float8	0	0	0
+F	pow	numeric,numeric	numeric	0	0	0
+F	power	float8,float8	float8	0	0	0
+F	power	numeric,numeric	numeric	0	0	0
+F	pt_contained_circle	point,circle	bool	0	0	0
+F	pt_contained_poly	point,polygon	bool	0	0	0
+F	query_to_xml	text,bool,bool,text	xml	0	0	0
+F	query_to_xml_and_xmlschema	text,bool,bool,text	xml	0	0	0
+F	query_to_xmlschema	text,bool,bool,text	xml	0	0	0
+F	querytree	tsquery	text	0	0	0
+F	quote_ident	text	text	0	0	0
+F	quote_literal	anyelement	text	0	0	0
+F	quote_literal	text	text	0	0	0
+F	quote_nullable	anyelement	text	0	0	0
+F	quote_nullable	text	text	0	0	0
+F	radians	float8	float8	0	0	0
+F	radius	circle	float8	0	0	0
+F	random		float8	0	0	0
+F	random_normal	float8,float8	float8	0	2	0
+F	range_adjacent	anyrange,anyrange	bool	0	0	0
+F	range_adjacent_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_after	anyrange,anyrange	bool	0	0	0
+F	range_after_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_agg	anymultirange	anymultirange	0	0	0
+F	range_agg	anyrange	anymultirange	0	0	0
+F	range_before	anyrange,anyrange	bool	0	0	0
+F	range_before_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_cmp	anyrange,anyrange	int4	0	0	0
+F	range_contained_by	anyrange,anyrange	bool	0	0	0
+F	range_contained_by_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_contains	anyrange,anyrange	bool	0	0	0
+F	range_contains_elem	anyrange,anyelement	bool	0	0	0
+F	range_contains_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_eq	anyrange,anyrange	bool	0	0	0
+F	range_ge	anyrange,anyrange	bool	0	0	0
+F	range_gt	anyrange,anyrange	bool	0	0	0
+F	range_intersect	anyrange,anyrange	anyrange	0	0	0
+F	range_intersect_agg	anymultirange	anymultirange	0	0	0
+F	range_intersect_agg	anyrange	anyrange	0	0	0
+F	range_intersect_agg_transfn	anyrange,anyrange	anyrange	0	0	0
+F	range_le	anyrange,anyrange	bool	0	0	0
+F	range_lt	anyrange,anyrange	bool	0	0	0
+F	range_merge	anymultirange	anyrange	0	0	0
+F	range_merge	anyrange,anyrange	anyrange	0	0	0
+F	range_minus	anyrange,anyrange	anyrange	0	0	0
+F	range_ne	anyrange,anyrange	bool	0	0	0
+F	range_overlaps	anyrange,anyrange	bool	0	0	0
+F	range_overlaps_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_overleft	anyrange,anyrange	bool	0	0	0
+F	range_overleft_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_overright	anyrange,anyrange	bool	0	0	0
+F	range_overright_multirange	anyrange,anymultirange	bool	0	0	0
+F	range_send	anyrange	bytea	0	0	0
+F	range_union	anyrange,anyrange	anyrange	0	0	0
+F	rank		int8	0	0	0
+F	rank	any	int8	1	0	0
+F	record_eq	record,record	bool	0	0	0
+F	record_ge	record,record	bool	0	0	0
+F	record_gt	record,record	bool	0	0	0
+F	record_image_eq	record,record	bool	0	0	0
+F	record_image_ge	record,record	bool	0	0	0
+F	record_image_gt	record,record	bool	0	0	0
+F	record_image_le	record,record	bool	0	0	0
+F	record_image_lt	record,record	bool	0	0	0
+F	record_image_ne	record,record	bool	0	0	0
+F	record_le	record,record	bool	0	0	0
+F	record_lt	record,record	bool	0	0	0
+F	record_ne	record,record	bool	0	0	0
+F	record_send	record	bytea	0	0	0
+F	regclass	text	regclass	0	0	0
+F	regclasssend	regclass	bytea	0	0	0
+F	regcollationsend	regcollation	bytea	0	0	0
+F	regconfigsend	regconfig	bytea	0	0	0
+F	regdictionarysend	regdictionary	bytea	0	0	0
+F	regexp_count	text,text	int4	0	0	0
+F	regexp_count	text,text,int4	int4	0	0	0
+F	regexp_count	text,text,int4,text	int4	0	0	0
+F	regexp_instr	text,text	int4	0	0	0
+F	regexp_instr	text,text,int4	int4	0	0	0
+F	regexp_instr	text,text,int4,int4	int4	0	0	0
+F	regexp_instr	text,text,int4,int4,int4	int4	0	0	0
+F	regexp_instr	text,text,int4,int4,int4,text	int4	0	0	0
+F	regexp_instr	text,text,int4,int4,int4,text,int4	int4	0	0	0
+F	regexp_like	text,text	bool	0	0	0
+F	regexp_like	text,text,text	bool	0	0	0
+F	regexp_match	text,text	_text	0	0	0
+F	regexp_match	text,text,text	_text	0	0	0
+F	regexp_matches	text,text	_text	0	0	1
+F	regexp_matches	text,text,text	_text	0	0	1
+F	regexp_replace	text,text,text	text	0	0	0
+F	regexp_replace	text,text,text,int4	text	0	0	0
+F	regexp_replace	text,text,text,int4,int4	text	0	0	0
+F	regexp_replace	text,text,text,int4,int4,text	text	0	0	0
+F	regexp_replace	text,text,text,text	text	0	0	0
+F	regexp_split_to_array	text,text	_text	0	0	0
+F	regexp_split_to_array	text,text,text	_text	0	0	0
+F	regexp_split_to_table	text,text	text	0	0	1
+F	regexp_split_to_table	text,text,text	text	0	0	1
+F	regexp_substr	text,text	text	0	0	0
+F	regexp_substr	text,text,int4	text	0	0	0
+F	regexp_substr	text,text,int4,int4	text	0	0	0
+F	regexp_substr	text,text,int4,int4,text	text	0	0	0
+F	regexp_substr	text,text,int4,int4,text,int4	text	0	0	0
+F	regnamespacesend	regnamespace	bytea	0	0	0
+F	regoperatorsend	regoperator	bytea	0	0	0
+F	regopersend	regoper	bytea	0	0	0
+F	regproceduresend	regprocedure	bytea	0	0	0
+F	regprocsend	regproc	bytea	0	0	0
+F	regr_avgx	float8,float8	float8	0	0	0
+F	regr_avgy	float8,float8	float8	0	0	0
+F	regr_count	float8,float8	int8	0	0	0
+F	regr_intercept	float8,float8	float8	0	0	0
+F	regr_r2	float8,float8	float8	0	0	0
+F	regr_slope	float8,float8	float8	0	0	0
+F	regr_sxx	float8,float8	float8	0	0	0
+F	regr_sxy	float8,float8	float8	0	0	0
+F	regr_syy	float8,float8	float8	0	0	0
+F	regrolesend	regrole	bytea	0	0	0
+F	regtypesend	regtype	bytea	0	0	0
+F	repeat	text,int4	text	0	0	0
+F	replace	text,text,text	text	0	0	0
+F	reverse	text	text	0	0	0
+F	right	text,int4	text	0	0	0
+F	round	float8	float8	0	0	0
+F	round	numeric	numeric	0	0	0
+F	round	numeric,int4	numeric	0	0	0
+F	row_number		int8	0	0	0
+F	row_security_active	oid	bool	0	0	0
+F	row_security_active	text	bool	0	0	0
+F	row_to_json	record	json	0	0	0
+F	row_to_json	record,bool	json	0	0	0
+F	rpad	text,int4	text	0	0	0
+F	rpad	text,int4,text	text	0	0	0
+F	rtrim	bytea,bytea	bytea	0	0	0
+F	rtrim	text	text	0	0	0
+F	rtrim	text,text	text	0	0	0
+F	satisfies_hash_partition	oid,int4,int4,any	bool	1	0	0
+F	scale	numeric	int4	0	0	0
+F	schema_to_xml	name,bool,bool,text	xml	0	0	0
+F	schema_to_xml_and_xmlschema	name,bool,bool,text	xml	0	0	0
+F	schema_to_xmlschema	name,bool,bool,text	xml	0	0	0
+F	session_user		name	0	0	0
+F	set_bit	bit,int4,int4	bit	0	0	0
+F	set_bit	bytea,int8,int4	bytea	0	0	0
+F	set_byte	bytea,int4,int4	bytea	0	0	0
+F	set_config	text,text,bool	text	0	0	0
+F	set_masklen	cidr,int4	cidr	0	0	0
+F	set_masklen	inet,int4	inet	0	0	0
+F	setseed	float8	void	0	0	0
+F	setval	regclass,int8	int8	0	0	0
+F	setval	regclass,int8,bool	int8	0	0	0
+F	setweight	tsvector,char	tsvector	0	0	0
+F	setweight	tsvector,char,_text	tsvector	0	0	0
+F	sha224	bytea	bytea	0	0	0
+F	sha256	bytea	bytea	0	0	0
+F	sha384	bytea	bytea	0	0	0
+F	sha512	bytea	bytea	0	0	0
+F	shobj_description	oid,name	text	0	0	0
+F	sign	float8	float8	0	0	0
+F	sign	numeric	numeric	0	0	0
+F	similar_escape	text,text	text	0	0	0
+F	similar_to_escape	text	text	0	0	0
+F	similar_to_escape	text,text	text	0	0	0
+F	sin	float8	float8	0	0	0
+F	sind	float8	float8	0	0	0
+F	sinh	float8	float8	0	0	0
+F	slope	point,point	float8	0	0	0
+F	spg_poly_quad_compress	polygon	box	0	0	0
+F	split_part	text,text,int4	text	0	0	0
+F	sqrt	float8	float8	0	0	0
+F	sqrt	numeric	numeric	0	0	0
+F	starts_with	text,text	bool	0	0	0
+F	statement_timestamp		timestamptz	0	0	0
+F	stddev	float4	float8	0	0	0
+F	stddev	float8	float8	0	0	0
+F	stddev	int2	numeric	0	0	0
+F	stddev	int4	numeric	0	0	0
+F	stddev	int8	numeric	0	0	0
+F	stddev	numeric	numeric	0	0	0
+F	stddev_pop	float4	float8	0	0	0
+F	stddev_pop	float8	float8	0	0	0
+F	stddev_pop	int2	numeric	0	0	0
+F	stddev_pop	int4	numeric	0	0	0
+F	stddev_pop	int8	numeric	0	0	0
+F	stddev_pop	numeric	numeric	0	0	0
+F	stddev_samp	float4	float8	0	0	0
+F	stddev_samp	float8	float8	0	0	0
+F	stddev_samp	int2	numeric	0	0	0
+F	stddev_samp	int4	numeric	0	0	0
+F	stddev_samp	int8	numeric	0	0	0
+F	stddev_samp	numeric	numeric	0	0	0
+F	string_agg	bytea,bytea	bytea	0	0	0
+F	string_agg	text,text	text	0	0	0
+F	string_to_array	text,text	_text	0	0	0
+F	string_to_array	text,text,text	_text	0	0	0
+F	string_to_table	text,text	text	0	0	1
+F	string_to_table	text,text,text	text	0	0	1
+F	strip	tsvector	tsvector	0	0	0
+F	strpos	text,text	int4	0	0	0
+F	substr	bytea,int4	bytea	0	0	0
+F	substr	bytea,int4,int4	bytea	0	0	0
+F	substr	text,int4	text	0	0	0
+F	substr	text,int4,int4	text	0	0	0
+F	substring	bit,int4	bit	0	0	0
+F	substring	bit,int4,int4	bit	0	0	0
+F	substring	bytea,int4	bytea	0	0	0
+F	substring	bytea,int4,int4	bytea	0	0	0
+F	substring	text,int4	text	0	0	0
+F	substring	text,int4,int4	text	0	0	0
+F	substring	text,text	text	0	0	0
+F	substring	text,text,text	text	0	0	0
+F	sum	float4	float4	0	0	0
+F	sum	float8	float8	0	0	0
+F	sum	int2	int8	0	0	0
+F	sum	int4	int8	0	0	0
+F	sum	int8	numeric	0	0	0
+F	sum	interval	interval	0	0	0
+F	sum	money	money	0	0	0
+F	sum	numeric	numeric	0	0	0
+F	system_user		text	0	0	0
+F	table_to_xml	regclass,bool,bool,text	xml	0	0	0
+F	table_to_xml_and_xmlschema	regclass,bool,bool,text	xml	0	0	0
+F	table_to_xmlschema	regclass,bool,bool,text	xml	0	0	0
+F	tan	float8	float8	0	0	0
+F	tand	float8	float8	0	0	0
+F	tanh	float8	float8	0	0	0
+F	text	bool	text	0	0	0
+F	text	bpchar	text	0	0	0
+F	text	char	text	0	0	0
+F	text	inet	text	0	0	0
+F	text	name	text	0	0	0
+F	text	xml	text	0	0	0
+F	text_ge	text,text	bool	0	0	0
+F	text_gt	text,text	bool	0	0	0
+F	text_larger	text,text	text	0	0	0
+F	text_le	text,text	bool	0	0	0
+F	text_lt	text,text	bool	0	0	0
+F	text_pattern_ge	text,text	bool	0	0	0
+F	text_pattern_gt	text,text	bool	0	0	0
+F	text_pattern_le	text,text	bool	0	0	0
+F	text_pattern_lt	text,text	bool	0	0	0
+F	text_smaller	text,text	text	0	0	0
+F	textanycat	text,anynonarray	text	0	0	0
+F	textcat	text,text	text	0	0	0
+F	texteq	text,text	bool	0	0	0
+F	texteqname	text,name	bool	0	0	0
+F	textgename	text,name	bool	0	0	0
+F	textgtname	text,name	bool	0	0	0
+F	texticlike	text,text	bool	0	0	0
+F	texticnlike	text,text	bool	0	0	0
+F	texticregexeq	text,text	bool	0	0	0
+F	texticregexne	text,text	bool	0	0	0
+F	textlen	text	int4	0	0	0
+F	textlename	text,name	bool	0	0	0
+F	textlike	text,text	bool	0	0	0
+F	textltname	text,name	bool	0	0	0
+F	textne	text,text	bool	0	0	0
+F	textnename	text,name	bool	0	0	0
+F	textnlike	text,text	bool	0	0	0
+F	textregexeq	text,text	bool	0	0	0
+F	textregexne	text,text	bool	0	0	0
+F	textsend	text	bytea	0	0	0
+F	tideq	tid,tid	bool	0	0	0
+F	tidge	tid,tid	bool	0	0	0
+F	tidgt	tid,tid	bool	0	0	0
+F	tidlarger	tid,tid	tid	0	0	0
+F	tidle	tid,tid	bool	0	0	0
+F	tidlt	tid,tid	bool	0	0	0
+F	tidne	tid,tid	bool	0	0	0
+F	tidsend	tid	bytea	0	0	0
+F	tidsmaller	tid,tid	tid	0	0	0
+F	time	interval	time	0	0	0
+F	time	time,int4	time	0	0	0
+F	time	timestamp	time	0	0	0
+F	time	timestamptz	time	0	0	0
+F	time	timetz	time	0	0	0
+F	time_cmp	time,time	int4	0	0	0
+F	time_eq	time,time	bool	0	0	0
+F	time_ge	time,time	bool	0	0	0
+F	time_gt	time,time	bool	0	0	0
+F	time_hash	time	int4	0	0	0
+F	time_hash_extended	time,int8	int8	0	0	0
+F	time_larger	time,time	time	0	0	0
+F	time_le	time,time	bool	0	0	0
+F	time_lt	time,time	bool	0	0	0
+F	time_mi_interval	time,interval	time	0	0	0
+F	time_mi_time	time,time	interval	0	0	0
+F	time_ne	time,time	bool	0	0	0
+F	time_pl_interval	time,interval	time	0	0	0
+F	time_send	time	bytea	0	0	0
+F	time_smaller	time,time	time	0	0	0
+F	timedate_pl	time,date	timestamp	0	0	0
+F	timeofday		text	0	0	0
+F	timestamp	date	timestamp	0	0	0
+F	timestamp	date,time	timestamp	0	0	0
+F	timestamp	timestamp,int4	timestamp	0	0	0
+F	timestamp	timestamptz	timestamp	0	0	0
+F	timestamp_cmp	timestamp,timestamp	int4	0	0	0
+F	timestamp_cmp_date	timestamp,date	int4	0	0	0
+F	timestamp_cmp_timestamptz	timestamp,timestamptz	int4	0	0	0
+F	timestamp_eq	timestamp,timestamp	bool	0	0	0
+F	timestamp_eq_date	timestamp,date	bool	0	0	0
+F	timestamp_eq_timestamptz	timestamp,timestamptz	bool	0	0	0
+F	timestamp_ge	timestamp,timestamp	bool	0	0	0
+F	timestamp_ge_date	timestamp,date	bool	0	0	0
+F	timestamp_ge_timestamptz	timestamp,timestamptz	bool	0	0	0
+F	timestamp_gt	timestamp,timestamp	bool	0	0	0
+F	timestamp_gt_date	timestamp,date	bool	0	0	0
+F	timestamp_gt_timestamptz	timestamp,timestamptz	bool	0	0	0
+F	timestamp_hash	timestamp	int4	0	0	0
+F	timestamp_hash_extended	timestamp,int8	int8	0	0	0
+F	timestamp_larger	timestamp,timestamp	timestamp	0	0	0
+F	timestamp_le	timestamp,timestamp	bool	0	0	0
+F	timestamp_le_date	timestamp,date	bool	0	0	0
+F	timestamp_le_timestamptz	timestamp,timestamptz	bool	0	0	0
+F	timestamp_lt	timestamp,timestamp	bool	0	0	0
+F	timestamp_lt_date	timestamp,date	bool	0	0	0
+F	timestamp_lt_timestamptz	timestamp,timestamptz	bool	0	0	0
+F	timestamp_mi	timestamp,timestamp	interval	0	0	0
+F	timestamp_mi_interval	timestamp,interval	timestamp	0	0	0
+F	timestamp_ne	timestamp,timestamp	bool	0	0	0
+F	timestamp_ne_date	timestamp,date	bool	0	0	0
+F	timestamp_ne_timestamptz	timestamp,timestamptz	bool	0	0	0
+F	timestamp_pl_interval	timestamp,interval	timestamp	0	0	0
+F	timestamp_send	timestamp	bytea	0	0	0
+F	timestamp_smaller	timestamp,timestamp	timestamp	0	0	0
+F	timestamptypmodin	_cstring	int4	0	0	0
+F	timestamptz	date	timestamptz	0	0	0
+F	timestamptz	date,time	timestamptz	0	0	0
+F	timestamptz	date,timetz	timestamptz	0	0	0
+F	timestamptz	timestamp	timestamptz	0	0	0
+F	timestamptz	timestamptz,int4	timestamptz	0	0	0
+F	timestamptz_cmp	timestamptz,timestamptz	int4	0	0	0
+F	timestamptz_cmp_date	timestamptz,date	int4	0	0	0
+F	timestamptz_cmp_timestamp	timestamptz,timestamp	int4	0	0	0
+F	timestamptz_eq	timestamptz,timestamptz	bool	0	0	0
+F	timestamptz_eq_date	timestamptz,date	bool	0	0	0
+F	timestamptz_eq_timestamp	timestamptz,timestamp	bool	0	0	0
+F	timestamptz_ge	timestamptz,timestamptz	bool	0	0	0
+F	timestamptz_ge_date	timestamptz,date	bool	0	0	0
+F	timestamptz_ge_timestamp	timestamptz,timestamp	bool	0	0	0
+F	timestamptz_gt	timestamptz,timestamptz	bool	0	0	0
+F	timestamptz_gt_date	timestamptz,date	bool	0	0	0
+F	timestamptz_gt_timestamp	timestamptz,timestamp	bool	0	0	0
+F	timestamptz_larger	timestamptz,timestamptz	timestamptz	0	0	0
+F	timestamptz_le	timestamptz,timestamptz	bool	0	0	0
+F	timestamptz_le_date	timestamptz,date	bool	0	0	0
+F	timestamptz_le_timestamp	timestamptz,timestamp	bool	0	0	0
+F	timestamptz_lt	timestamptz,timestamptz	bool	0	0	0
+F	timestamptz_lt_date	timestamptz,date	bool	0	0	0
+F	timestamptz_lt_timestamp	timestamptz,timestamp	bool	0	0	0
+F	timestamptz_mi	timestamptz,timestamptz	interval	0	0	0
+F	timestamptz_mi_interval	timestamptz,interval	timestamptz	0	0	0
+F	timestamptz_ne	timestamptz,timestamptz	bool	0	0	0
+F	timestamptz_ne_date	timestamptz,date	bool	0	0	0
+F	timestamptz_ne_timestamp	timestamptz,timestamp	bool	0	0	0
+F	timestamptz_pl_interval	timestamptz,interval	timestamptz	0	0	0
+F	timestamptz_send	timestamptz	bytea	0	0	0
+F	timestamptz_smaller	timestamptz,timestamptz	timestamptz	0	0	0
+F	timestamptztypmodin	_cstring	int4	0	0	0
+F	timetypmodin	_cstring	int4	0	0	0
+F	timetz	time	timetz	0	0	0
+F	timetz	timestamptz	timetz	0	0	0
+F	timetz	timetz,int4	timetz	0	0	0
+F	timetz_cmp	timetz,timetz	int4	0	0	0
+F	timetz_eq	timetz,timetz	bool	0	0	0
+F	timetz_ge	timetz,timetz	bool	0	0	0
+F	timetz_gt	timetz,timetz	bool	0	0	0
+F	timetz_hash	timetz	int4	0	0	0
+F	timetz_hash_extended	timetz,int8	int8	0	0	0
+F	timetz_larger	timetz,timetz	timetz	0	0	0
+F	timetz_le	timetz,timetz	bool	0	0	0
+F	timetz_lt	timetz,timetz	bool	0	0	0
+F	timetz_mi_interval	timetz,interval	timetz	0	0	0
+F	timetz_ne	timetz,timetz	bool	0	0	0
+F	timetz_pl_interval	timetz,interval	timetz	0	0	0
+F	timetz_send	timetz	bytea	0	0	0
+F	timetz_smaller	timetz,timetz	timetz	0	0	0
+F	timetzdate_pl	timetz,date	timestamptz	0	0	0
+F	timetztypmodin	_cstring	int4	0	0	0
+F	timezone	interval,timestamp	timestamptz	0	0	0
+F	timezone	interval,timestamptz	timestamp	0	0	0
+F	timezone	interval,timetz	timetz	0	0	0
+F	timezone	text,timestamp	timestamptz	0	0	0
+F	timezone	text,timestamptz	timestamp	0	0	0
+F	timezone	text,timetz	timetz	0	0	0
+F	to_ascii	text	text	0	0	0
+F	to_ascii	text,int4	text	0	0	0
+F	to_ascii	text,name	text	0	0	0
+F	to_char	float4,text	text	0	0	0
+F	to_char	float8,text	text	0	0	0
+F	to_char	int4,text	text	0	0	0
+F	to_char	int8,text	text	0	0	0
+F	to_char	interval,text	text	0	0	0
+F	to_char	numeric,text	text	0	0	0
+F	to_char	timestamp,text	text	0	0	0
+F	to_char	timestamptz,text	text	0	0	0
+F	to_date	text,text	date	0	0	0
+F	to_hex	int4	text	0	0	0
+F	to_hex	int8	text	0	0	0
+F	to_json	anyelement	json	0	0	0
+F	to_jsonb	anyelement	jsonb	0	0	0
+F	to_number	text,text	numeric	0	0	0
+F	to_regclass	text	regclass	0	0	0
+F	to_regcollation	text	regcollation	0	0	0
+F	to_regnamespace	text	regnamespace	0	0	0
+F	to_regoper	text	regoper	0	0	0
+F	to_regoperator	text	regoperator	0	0	0
+F	to_regproc	text	regproc	0	0	0
+F	to_regprocedure	text	regprocedure	0	0	0
+F	to_regrole	text	regrole	0	0	0
+F	to_regtype	text	regtype	0	0	0
+F	to_timestamp	float8	timestamptz	0	0	0
+F	to_timestamp	text,text	timestamptz	0	0	0
+F	to_tsquery	regconfig,text	tsquery	0	0	0
+F	to_tsquery	text	tsquery	0	0	0
+F	to_tsvector	json	tsvector	0	0	0
+F	to_tsvector	jsonb	tsvector	0	0	0
+F	to_tsvector	regconfig,json	tsvector	0	0	0
+F	to_tsvector	regconfig,jsonb	tsvector	0	0	0
+F	to_tsvector	regconfig,text	tsvector	0	0	0
+F	to_tsvector	text	tsvector	0	0	0
+F	transaction_timestamp		timestamptz	0	0	0
+F	translate	text,text,text	text	0	0	0
+F	trim_array	anyarray,int4	anyarray	0	0	0
+F	trim_scale	numeric	numeric	0	0	0
+F	trunc	float8	float8	0	0	0
+F	trunc	macaddr	macaddr	0	0	0
+F	trunc	macaddr8	macaddr8	0	0	0
+F	trunc	numeric	numeric	0	0	0
+F	trunc	numeric,int4	numeric	0	0	0
+F	ts_debug	regconfig,text	record	0	0	1
+F	ts_debug	text	record	0	0	1
+F	ts_delete	tsvector,_text	tsvector	0	0	0
+F	ts_delete	tsvector,text	tsvector	0	0	0
+F	ts_filter	tsvector,_char	tsvector	0	0	0
+F	ts_headline	json,tsquery	json	0	0	0
+F	ts_headline	json,tsquery,text	json	0	0	0
+F	ts_headline	jsonb,tsquery	jsonb	0	0	0
+F	ts_headline	jsonb,tsquery,text	jsonb	0	0	0
+F	ts_headline	regconfig,json,tsquery	json	0	0	0
+F	ts_headline	regconfig,json,tsquery,text	json	0	0	0
+F	ts_headline	regconfig,jsonb,tsquery	jsonb	0	0	0
+F	ts_headline	regconfig,jsonb,tsquery,text	jsonb	0	0	0
+F	ts_headline	regconfig,text,tsquery	text	0	0	0
+F	ts_headline	regconfig,text,tsquery,text	text	0	0	0
+F	ts_headline	text,tsquery	text	0	0	0
+F	ts_headline	text,tsquery,text	text	0	0	0
+F	ts_lexize	regdictionary,text	_text	0	0	0
+F	ts_match_qv	tsquery,tsvector	bool	0	0	0
+F	ts_match_tq	text,tsquery	bool	0	0	0
+F	ts_match_tt	text,text	bool	0	0	0
+F	ts_match_vq	tsvector,tsquery	bool	0	0	0
+F	ts_parse	oid,text	record	0	0	1
+F	ts_parse	text,text	record	0	0	1
+F	ts_rank	_float4,tsvector,tsquery	float4	0	0	0
+F	ts_rank	_float4,tsvector,tsquery,int4	float4	0	0	0
+F	ts_rank	tsvector,tsquery	float4	0	0	0
+F	ts_rank	tsvector,tsquery,int4	float4	0	0	0
+F	ts_rank_cd	_float4,tsvector,tsquery	float4	0	0	0
+F	ts_rank_cd	_float4,tsvector,tsquery,int4	float4	0	0	0
+F	ts_rank_cd	tsvector,tsquery	float4	0	0	0
+F	ts_rank_cd	tsvector,tsquery,int4	float4	0	0	0
+F	ts_rewrite	tsquery,text	tsquery	0	0	0
+F	ts_rewrite	tsquery,tsquery,tsquery	tsquery	0	0	0
+F	ts_stat	text	record	0	0	1
+F	ts_stat	text,text	record	0	0	1
+F	ts_token_type	oid	record	0	0	1
+F	ts_token_type	text	record	0	0	1
+F	tsmultirange		tsmultirange	0	0	0
+F	tsmultirange	_tsrange	tsmultirange	1	0	0
+F	tsmultirange	tsrange	tsmultirange	0	0	0
+F	tsq_mcontained	tsquery,tsquery	bool	0	0	0
+F	tsq_mcontains	tsquery,tsquery	bool	0	0	0
+F	tsquery_and	tsquery,tsquery	tsquery	0	0	0
+F	tsquery_cmp	tsquery,tsquery	int4	0	0	0
+F	tsquery_eq	tsquery,tsquery	bool	0	0	0
+F	tsquery_ge	tsquery,tsquery	bool	0	0	0
+F	tsquery_gt	tsquery,tsquery	bool	0	0	0
+F	tsquery_le	tsquery,tsquery	bool	0	0	0
+F	tsquery_lt	tsquery,tsquery	bool	0	0	0
+F	tsquery_ne	tsquery,tsquery	bool	0	0	0
+F	tsquery_not	tsquery	tsquery	0	0	0
+F	tsquery_or	tsquery,tsquery	tsquery	0	0	0
+F	tsquery_phrase	tsquery,tsquery	tsquery	0	0	0
+F	tsquery_phrase	tsquery,tsquery,int4	tsquery	0	0	0
+F	tsquerysend	tsquery	bytea	0	0	0
+F	tsrange	timestamp,timestamp	tsrange	0	0	0
+F	tsrange	timestamp,timestamp,text	tsrange	0	0	0
+F	tsrange_subdiff	timestamp,timestamp	float8	0	0	0
+F	tstzmultirange		tstzmultirange	0	0	0
+F	tstzmultirange	_tstzrange	tstzmultirange	1	0	0
+F	tstzmultirange	tstzrange	tstzmultirange	0	0	0
+F	tstzrange	timestamptz,timestamptz	tstzrange	0	0	0
+F	tstzrange	timestamptz,timestamptz,text	tstzrange	0	0	0
+F	tstzrange_subdiff	timestamptz,timestamptz	float8	0	0	0
+F	tsvector_cmp	tsvector,tsvector	int4	0	0	0
+F	tsvector_concat	tsvector,tsvector	tsvector	0	0	0
+F	tsvector_eq	tsvector,tsvector	bool	0	0	0
+F	tsvector_ge	tsvector,tsvector	bool	0	0	0
+F	tsvector_gt	tsvector,tsvector	bool	0	0	0
+F	tsvector_le	tsvector,tsvector	bool	0	0	0
+F	tsvector_lt	tsvector,tsvector	bool	0	0	0
+F	tsvector_ne	tsvector,tsvector	bool	0	0	0
+F	tsvector_to_array	tsvector	_text	0	0	0
+F	tsvectorsend	tsvector	bytea	0	0	0
+F	txid_current		int8	0	0	0
+F	txid_current_if_assigned		int8	0	0	0
+F	txid_current_snapshot		txid_snapshot	0	0	0
+F	txid_snapshot_send	txid_snapshot	bytea	0	0	0
+F	txid_snapshot_xip	txid_snapshot	int8	0	0	1
+F	txid_snapshot_xmax	txid_snapshot	int8	0	0	0
+F	txid_snapshot_xmin	txid_snapshot	int8	0	0	0
+F	txid_status	int8	text	0	0	0
+F	txid_visible_in_snapshot	int8,txid_snapshot	bool	0	0	0
+F	unistr	text	text	0	0	0
+F	unknownsend	unknown	bytea	0	0	0
+F	unnest	anyarray	anyelement	0	0	1
+F	unnest	anymultirange	anyrange	0	0	1
+F	unnest	tsvector	record	0	0	1
+F	upper	anymultirange	anyelement	0	0	0
+F	upper	anyrange	anyelement	0	0	0
+F	upper	text	text	0	0	0
+F	upper_inc	anymultirange	bool	0	0	0
+F	upper_inc	anyrange	bool	0	0	0
+F	upper_inf	anymultirange	bool	0	0	0
+F	upper_inf	anyrange	bool	0	0	0
+F	uuid_cmp	uuid,uuid	int4	0	0	0
+F	uuid_eq	uuid,uuid	bool	0	0	0
+F	uuid_ge	uuid,uuid	bool	0	0	0
+F	uuid_gt	uuid,uuid	bool	0	0	0
+F	uuid_hash	uuid	int4	0	0	0
+F	uuid_hash_extended	uuid,int8	int8	0	0	0
+F	uuid_le	uuid,uuid	bool	0	0	0
+F	uuid_lt	uuid,uuid	bool	0	0	0
+F	uuid_ne	uuid,uuid	bool	0	0	0
+F	uuid_send	uuid	bytea	0	0	0
+F	var_pop	float4	float8	0	0	0
+F	var_pop	float8	float8	0	0	0
+F	var_pop	int2	numeric	0	0	0
+F	var_pop	int4	numeric	0	0	0
+F	var_pop	int8	numeric	0	0	0
+F	var_pop	numeric	numeric	0	0	0
+F	var_samp	float4	float8	0	0	0
+F	var_samp	float8	float8	0	0	0
+F	var_samp	int2	numeric	0	0	0
+F	var_samp	int4	numeric	0	0	0
+F	var_samp	int8	numeric	0	0	0
+F	var_samp	numeric	numeric	0	0	0
+F	varbit	varbit,int4,bool	varbit	0	0	0
+F	varbit_send	varbit	bytea	0	0	0
+F	varbitcmp	varbit,varbit	int4	0	0	0
+F	varbiteq	varbit,varbit	bool	0	0	0
+F	varbitge	varbit,varbit	bool	0	0	0
+F	varbitgt	varbit,varbit	bool	0	0	0
+F	varbitle	varbit,varbit	bool	0	0	0
+F	varbitlt	varbit,varbit	bool	0	0	0
+F	varbitne	varbit,varbit	bool	0	0	0
+F	varbittypmodin	_cstring	int4	0	0	0
+F	varchar	name	varchar	0	0	0
+F	varchar	varchar,int4,bool	varchar	0	0	0
+F	varcharsend	varchar	bytea	0	0	0
+F	varchartypmodin	_cstring	int4	0	0	0
+F	variance	float4	float8	0	0	0
+F	variance	float8	float8	0	0	0
+F	variance	int2	numeric	0	0	0
+F	variance	int4	numeric	0	0	0
+F	variance	int8	numeric	0	0	0
+F	variance	numeric	numeric	0	0	0
+F	version		text	0	0	0
+F	void_send	void	bytea	0	0	0
+F	websearch_to_tsquery	regconfig,text	tsquery	0	0	0
+F	websearch_to_tsquery	text	tsquery	0	0	0
+F	width	box	float8	0	0	0
+F	width_bucket	anycompatible,anycompatiblearray	int4	0	0	0
+F	width_bucket	float8,float8,float8,int4	int4	0	0	0
+F	width_bucket	numeric,numeric,numeric,int4	int4	0	0	0
+F	xid	xid8	xid	0	0	0
+F	xid8_larger	xid8,xid8	xid8	0	0	0
+F	xid8_smaller	xid8,xid8	xid8	0	0	0
+F	xid8cmp	xid8,xid8	int4	0	0	0
+F	xid8eq	xid8,xid8	bool	0	0	0
+F	xid8ge	xid8,xid8	bool	0	0	0
+F	xid8gt	xid8,xid8	bool	0	0	0
+F	xid8le	xid8,xid8	bool	0	0	0
+F	xid8lt	xid8,xid8	bool	0	0	0
+F	xid8ne	xid8,xid8	bool	0	0	0
+F	xid8send	xid8	bytea	0	0	0
+F	xideq	xid,xid	bool	0	0	0
+F	xideqint4	xid,int4	bool	0	0	0
+F	xidneq	xid,xid	bool	0	0	0
+F	xidneqint4	xid,int4	bool	0	0	0
+F	xidsend	xid	bytea	0	0	0
+F	xml	text	xml	0	0	0
+F	xml_is_well_formed	text	bool	0	0	0
+F	xml_is_well_formed_content	text	bool	0	0	0
+F	xml_is_well_formed_document	text	bool	0	0	0
+F	xml_send	xml	bytea	0	0	0
+F	xmlagg	xml	xml	0	0	0
+F	xmlcomment	text	xml	0	0	0
+F	xmlconcat2	xml,xml	xml	0	0	0
+F	xmlexists	text,xml	bool	0	0	0
+F	xmlvalidate	xml,text	bool	0	0	0
+F	xpath	text,xml	_xml	0	0	0
+F	xpath	text,xml,_text	_xml	0	0	0
+F	xpath_exists	text,xml	bool	0	0	0
+F	xpath_exists	text,xml,_text	bool	0	0	0
+O	!!		tsquery	tsquery
+O	!~	bpchar	text	bool
+O	!~	name	text	bool
+O	!~	text	text	bool
+O	!~*	bpchar	text	bool
+O	!~*	name	text	bool
+O	!~*	text	text	bool
+O	!~~	bpchar	text	bool
+O	!~~	bytea	bytea	bool
+O	!~~	name	text	bool
+O	!~~	text	text	bool
+O	!~~*	bpchar	text	bool
+O	!~~*	name	text	bool
+O	!~~*	text	text	bool
+O	#		path	int4
+O	#		polygon	int4
+O	#	bit	bit	bit
+O	#	box	box	box
+O	#	int2	int2	int2
+O	#	int4	int4	int4
+O	#	int8	int8	int8
+O	#	line	line	point
+O	#	lseg	lseg	point
+O	##	line	lseg	point
+O	##	lseg	box	point
+O	##	lseg	lseg	point
+O	##	point	box	point
+O	##	point	line	point
+O	##	point	lseg	point
+O	#-	jsonb	_text	jsonb
+O	#>	json	_text	json
+O	#>	jsonb	_text	jsonb
+O	#>>	json	_text	text
+O	#>>	jsonb	_text	text
+O	%	int2	int2	int2
+O	%	int4	int4	int4
+O	%	int8	int8	int8
+O	%	numeric	numeric	numeric
+O	&	bit	bit	bit
+O	&	inet	inet	inet
+O	&	int2	int2	int2
+O	&	int4	int4	int4
+O	&	int8	int8	int8
+O	&	macaddr	macaddr	macaddr
+O	&	macaddr8	macaddr8	macaddr8
+O	&&	anyarray	anyarray	bool
+O	&&	anymultirange	anymultirange	bool
+O	&&	anymultirange	anyrange	bool
+O	&&	anyrange	anymultirange	bool
+O	&&	anyrange	anyrange	bool
+O	&&	box	box	bool
+O	&&	circle	circle	bool
+O	&&	inet	inet	bool
+O	&&	polygon	polygon	bool
+O	&&	tsquery	tsquery	tsquery
+O	&<	anymultirange	anymultirange	bool
+O	&<	anymultirange	anyrange	bool
+O	&<	anyrange	anymultirange	bool
+O	&<	anyrange	anyrange	bool
+O	&<	box	box	bool
+O	&<	circle	circle	bool
+O	&<	polygon	polygon	bool
+O	&<|	box	box	bool
+O	&<|	circle	circle	bool
+O	&<|	polygon	polygon	bool
+O	&>	anymultirange	anymultirange	bool
+O	&>	anymultirange	anyrange	bool
+O	&>	anyrange	anymultirange	bool
+O	&>	anyrange	anyrange	bool
+O	&>	box	box	bool
+O	&>	circle	circle	bool
+O	&>	polygon	polygon	bool
+O	*	anymultirange	anymultirange	anymultirange
+O	*	anyrange	anyrange	anyrange
+O	*	box	point	box
+O	*	circle	point	circle
+O	*	float4	float4	float4
+O	*	float4	float8	float8
+O	*	float4	money	money
+O	*	float8	float4	float8
+O	*	float8	float8	float8
+O	*	float8	interval	interval
+O	*	float8	money	money
+O	*	int2	int2	int2
+O	*	int2	int4	int4
+O	*	int2	int8	int8
+O	*	int2	money	money
+O	*	int4	int2	int4
+O	*	int4	int4	int4
+O	*	int4	int8	int8
+O	*	int4	money	money
+O	*	int8	int2	int8
+O	*	int8	int4	int8
+O	*	int8	int8	int8
+O	*	int8	money	money
+O	*	interval	float8	interval
+O	*	money	float4	money
+O	*	money	float8	money
+O	*	money	int2	money
+O	*	money	int4	money
+O	*	money	int8	money
+O	*	numeric	numeric	numeric
+O	*	path	point	path
+O	*	point	point	point
+O	*<	record	record	bool
+O	*<=	record	record	bool
+O	*<>	record	record	bool
+O	*=	record	record	bool
+O	*>	record	record	bool
+O	*>=	record	record	bool
+O	+		float4	float4
+O	+		float8	float8
+O	+		int2	int2
+O	+		int4	int4
+O	+		int8	int8
+O	+		numeric	numeric
+O	+	_aclitem	aclitem	_aclitem
+O	+	anymultirange	anymultirange	anymultirange
+O	+	anyrange	anyrange	anyrange
+O	+	box	point	box
+O	+	circle	point	circle
+O	+	date	int4	date
+O	+	date	interval	timestamp
+O	+	date	time	timestamp
+O	+	date	timetz	timestamptz
+O	+	float4	float4	float4
+O	+	float4	float8	float8
+O	+	float8	float4	float8
+O	+	float8	float8	float8
+O	+	inet	int8	inet
+O	+	int2	int2	int2
+O	+	int2	int4	int4
+O	+	int2	int8	int8
+O	+	int4	date	date
+O	+	int4	int2	int4
+O	+	int4	int4	int4
+O	+	int4	int8	int8
+O	+	int8	inet	inet
+O	+	int8	int2	int8
+O	+	int8	int4	int8
+O	+	int8	int8	int8
+O	+	interval	date	timestamp
+O	+	interval	interval	interval
+O	+	interval	time	time
+O	+	interval	timestamp	timestamp
+O	+	interval	timestamptz	timestamptz
+O	+	interval	timetz	timetz
+O	+	money	money	money
+O	+	numeric	numeric	numeric
+O	+	numeric	pg_lsn	pg_lsn
+O	+	path	path	path
+O	+	path	point	path
+O	+	pg_lsn	numeric	pg_lsn
+O	+	point	point	point
+O	+	time	date	timestamp
+O	+	time	interval	time
+O	+	timestamp	interval	timestamp
+O	+	timestamptz	interval	timestamptz
+O	+	timetz	date	timestamptz
+O	+	timetz	interval	timetz
+O	-		float4	float4
+O	-		float8	float8
+O	-		int2	int2
+O	-		int4	int4
+O	-		int8	int8
+O	-		interval	interval
+O	-		numeric	numeric
+O	-	_aclitem	aclitem	_aclitem
+O	-	anymultirange	anymultirange	anymultirange
+O	-	anyrange	anyrange	anyrange
+O	-	box	point	box
+O	-	circle	point	circle
+O	-	date	date	int4
+O	-	date	int4	date
+O	-	date	interval	timestamp
+O	-	float4	float4	float4
+O	-	float4	float8	float8
+O	-	float8	float4	float8
+O	-	float8	float8	float8
+O	-	inet	inet	int8
+O	-	inet	int8	inet
+O	-	int2	int2	int2
+O	-	int2	int4	int4
+O	-	int2	int8	int8
+O	-	int4	int2	int4
+O	-	int4	int4	int4
+O	-	int4	int8	int8
+O	-	int8	int2	int8
+O	-	int8	int4	int8
+O	-	int8	int8	int8
+O	-	interval	interval	interval
+O	-	jsonb	_text	jsonb
+O	-	jsonb	int4	jsonb
+O	-	jsonb	text	jsonb
+O	-	money	money	money
+O	-	numeric	numeric	numeric
+O	-	path	point	path
+O	-	pg_lsn	numeric	pg_lsn
+O	-	pg_lsn	pg_lsn	numeric
+O	-	point	point	point
+O	-	time	interval	time
+O	-	time	time	interval
+O	-	timestamp	interval	timestamp
+O	-	timestamp	timestamp	interval
+O	-	timestamptz	interval	timestamptz
+O	-	timestamptz	timestamptz	interval
+O	-	timetz	interval	timetz
+O	->	json	int4	json
+O	->	json	text	json
+O	->	jsonb	int4	jsonb
+O	->	jsonb	text	jsonb
+O	->>	json	int4	text
+O	->>	json	text	text
+O	->>	jsonb	int4	text
+O	->>	jsonb	text	text
+O	-|-	anymultirange	anymultirange	bool
+O	-|-	anymultirange	anyrange	bool
+O	-|-	anyrange	anymultirange	bool
+O	-|-	anyrange	anyrange	bool
+O	/	box	point	box
+O	/	circle	point	circle
+O	/	float4	float4	float4
+O	/	float4	float8	float8
+O	/	float8	float4	float8
+O	/	float8	float8	float8
+O	/	int2	int2	int2
+O	/	int2	int4	int4
+O	/	int2	int8	int8
+O	/	int4	int2	int4
+O	/	int4	int4	int4
+O	/	int4	int8	int8
+O	/	int8	int2	int8
+O	/	int8	int4	int8
+O	/	int8	int8	int8
+O	/	interval	float8	interval
+O	/	money	float4	money
+O	/	money	float8	money
+O	/	money	int2	money
+O	/	money	int4	money
+O	/	money	int8	money
+O	/	money	money	float8
+O	/	numeric	numeric	numeric
+O	/	path	point	path
+O	/	point	point	point
+O	<	anyarray	anyarray	bool
+O	<	anyenum	anyenum	bool
+O	<	anymultirange	anymultirange	bool
+O	<	anyrange	anyrange	bool
+O	<	bit	bit	bool
+O	<	bool	bool	bool
+O	<	box	box	bool
+O	<	bpchar	bpchar	bool
+O	<	bytea	bytea	bool
+O	<	char	char	bool
+O	<	circle	circle	bool
+O	<	date	date	bool
+O	<	date	timestamp	bool
+O	<	date	timestamptz	bool
+O	<	float4	float4	bool
+O	<	float4	float8	bool
+O	<	float8	float4	bool
+O	<	float8	float8	bool
+O	<	inet	inet	bool
+O	<	int2	int2	bool
+O	<	int2	int4	bool
+O	<	int2	int8	bool
+O	<	int4	int2	bool
+O	<	int4	int4	bool
+O	<	int4	int8	bool
+O	<	int8	int2	bool
+O	<	int8	int4	bool
+O	<	int8	int8	bool
+O	<	interval	interval	bool
+O	<	jsonb	jsonb	bool
+O	<	lseg	lseg	bool
+O	<	macaddr	macaddr	bool
+O	<	macaddr8	macaddr8	bool
+O	<	money	money	bool
+O	<	name	name	bool
+O	<	name	text	bool
+O	<	numeric	numeric	bool
+O	<	oid	oid	bool
+O	<	oidvector	oidvector	bool
+O	<	path	path	bool
+O	<	pg_lsn	pg_lsn	bool
+O	<	record	record	bool
+O	<	text	name	bool
+O	<	text	text	bool
+O	<	tid	tid	bool
+O	<	time	time	bool
+O	<	timestamp	date	bool
+O	<	timestamp	timestamp	bool
+O	<	timestamp	timestamptz	bool
+O	<	timestamptz	date	bool
+O	<	timestamptz	timestamp	bool
+O	<	timestamptz	timestamptz	bool
+O	<	timetz	timetz	bool
+O	<	tsquery	tsquery	bool
+O	<	tsvector	tsvector	bool
+O	<	uuid	uuid	bool
+O	<	varbit	varbit	bool
+O	<	xid8	xid8	bool
+O	<->	box	box	float8
+O	<->	box	lseg	float8
+O	<->	box	point	float8
+O	<->	circle	circle	float8
+O	<->	circle	point	float8
+O	<->	circle	polygon	float8
+O	<->	line	line	float8
+O	<->	line	lseg	float8
+O	<->	line	point	float8
+O	<->	lseg	box	float8
+O	<->	lseg	line	float8
+O	<->	lseg	lseg	float8
+O	<->	lseg	point	float8
+O	<->	path	path	float8
+O	<->	path	point	float8
+O	<->	point	box	float8
+O	<->	point	circle	float8
+O	<->	point	line	float8
+O	<->	point	lseg	float8
+O	<->	point	path	float8
+O	<->	point	point	float8
+O	<->	point	polygon	float8
+O	<->	polygon	circle	float8
+O	<->	polygon	point	float8
+O	<->	polygon	polygon	float8
+O	<->	tsquery	tsquery	tsquery
+O	<<	anymultirange	anymultirange	bool
+O	<<	anymultirange	anyrange	bool
+O	<<	anyrange	anymultirange	bool
+O	<<	anyrange	anyrange	bool
+O	<<	bit	int4	bit
+O	<<	box	box	bool
+O	<<	circle	circle	bool
+O	<<	inet	inet	bool
+O	<<	int2	int4	int2
+O	<<	int4	int4	int4
+O	<<	int8	int4	int8
+O	<<	point	point	bool
+O	<<	polygon	polygon	bool
+O	<<=	inet	inet	bool
+O	<<|	box	box	bool
+O	<<|	circle	circle	bool
+O	<<|	point	point	bool
+O	<<|	polygon	polygon	bool
+O	<=	anyarray	anyarray	bool
+O	<=	anyenum	anyenum	bool
+O	<=	anymultirange	anymultirange	bool
+O	<=	anyrange	anyrange	bool
+O	<=	bit	bit	bool
+O	<=	bool	bool	bool
+O	<=	box	box	bool
+O	<=	bpchar	bpchar	bool
+O	<=	bytea	bytea	bool
+O	<=	char	char	bool
+O	<=	circle	circle	bool
+O	<=	date	date	bool
+O	<=	date	timestamp	bool
+O	<=	date	timestamptz	bool
+O	<=	float4	float4	bool
+O	<=	float4	float8	bool
+O	<=	float8	float4	bool
+O	<=	float8	float8	bool
+O	<=	inet	inet	bool
+O	<=	int2	int2	bool
+O	<=	int2	int4	bool
+O	<=	int2	int8	bool
+O	<=	int4	int2	bool
+O	<=	int4	int4	bool
+O	<=	int4	int8	bool
+O	<=	int8	int2	bool
+O	<=	int8	int4	bool
+O	<=	int8	int8	bool
+O	<=	interval	interval	bool
+O	<=	jsonb	jsonb	bool
+O	<=	lseg	lseg	bool
+O	<=	macaddr	macaddr	bool
+O	<=	macaddr8	macaddr8	bool
+O	<=	money	money	bool
+O	<=	name	name	bool
+O	<=	name	text	bool
+O	<=	numeric	numeric	bool
+O	<=	oid	oid	bool
+O	<=	oidvector	oidvector	bool
+O	<=	path	path	bool
+O	<=	pg_lsn	pg_lsn	bool
+O	<=	record	record	bool
+O	<=	text	name	bool
+O	<=	text	text	bool
+O	<=	tid	tid	bool
+O	<=	time	time	bool
+O	<=	timestamp	date	bool
+O	<=	timestamp	timestamp	bool
+O	<=	timestamp	timestamptz	bool
+O	<=	timestamptz	date	bool
+O	<=	timestamptz	timestamp	bool
+O	<=	timestamptz	timestamptz	bool
+O	<=	timetz	timetz	bool
+O	<=	tsquery	tsquery	bool
+O	<=	tsvector	tsvector	bool
+O	<=	uuid	uuid	bool
+O	<=	varbit	varbit	bool
+O	<=	xid8	xid8	bool
+O	<>	anyarray	anyarray	bool
+O	<>	anyenum	anyenum	bool
+O	<>	anymultirange	anymultirange	bool
+O	<>	anyrange	anyrange	bool
+O	<>	bit	bit	bool
+O	<>	bool	bool	bool
+O	<>	bpchar	bpchar	bool
+O	<>	bytea	bytea	bool
+O	<>	char	char	bool
+O	<>	circle	circle	bool
+O	<>	date	date	bool
+O	<>	date	timestamp	bool
+O	<>	date	timestamptz	bool
+O	<>	float4	float4	bool
+O	<>	float4	float8	bool
+O	<>	float8	float4	bool
+O	<>	float8	float8	bool
+O	<>	inet	inet	bool
+O	<>	int2	int2	bool
+O	<>	int2	int4	bool
+O	<>	int2	int8	bool
+O	<>	int4	int2	bool
+O	<>	int4	int4	bool
+O	<>	int4	int8	bool
+O	<>	int8	int2	bool
+O	<>	int8	int4	bool
+O	<>	int8	int8	bool
+O	<>	interval	interval	bool
+O	<>	jsonb	jsonb	bool
+O	<>	lseg	lseg	bool
+O	<>	macaddr	macaddr	bool
+O	<>	macaddr8	macaddr8	bool
+O	<>	money	money	bool
+O	<>	name	name	bool
+O	<>	name	text	bool
+O	<>	numeric	numeric	bool
+O	<>	oid	oid	bool
+O	<>	oidvector	oidvector	bool
+O	<>	pg_lsn	pg_lsn	bool
+O	<>	point	point	bool
+O	<>	record	record	bool
+O	<>	text	name	bool
+O	<>	text	text	bool
+O	<>	tid	tid	bool
+O	<>	time	time	bool
+O	<>	timestamp	date	bool
+O	<>	timestamp	timestamp	bool
+O	<>	timestamp	timestamptz	bool
+O	<>	timestamptz	date	bool
+O	<>	timestamptz	timestamp	bool
+O	<>	timestamptz	timestamptz	bool
+O	<>	timetz	timetz	bool
+O	<>	tsquery	tsquery	bool
+O	<>	tsvector	tsvector	bool
+O	<>	uuid	uuid	bool
+O	<>	varbit	varbit	bool
+O	<>	xid	int4	bool
+O	<>	xid	xid	bool
+O	<>	xid8	xid8	bool
+O	<@	anyarray	anyarray	bool
+O	<@	anyelement	anymultirange	bool
+O	<@	anyelement	anyrange	bool
+O	<@	anymultirange	anymultirange	bool
+O	<@	anymultirange	anyrange	bool
+O	<@	anyrange	anymultirange	bool
+O	<@	anyrange	anyrange	bool
+O	<@	box	box	bool
+O	<@	circle	circle	bool
+O	<@	jsonb	jsonb	bool
+O	<@	lseg	box	bool
+O	<@	lseg	line	bool
+O	<@	point	box	bool
+O	<@	point	circle	bool
+O	<@	point	line	bool
+O	<@	point	lseg	bool
+O	<@	point	path	bool
+O	<@	point	polygon	bool
+O	<@	polygon	polygon	bool
+O	<@	tsquery	tsquery	bool
+O	<^	box	box	bool
+O	<^	point	point	bool
+O	=	aclitem	aclitem	bool
+O	=	anyarray	anyarray	bool
+O	=	anyenum	anyenum	bool
+O	=	anymultirange	anymultirange	bool
+O	=	anyrange	anyrange	bool
+O	=	bit	bit	bool
+O	=	bool	bool	bool
+O	=	box	box	bool
+O	=	bpchar	bpchar	bool
+O	=	bytea	bytea	bool
+O	=	char	char	bool
+O	=	cid	cid	bool
+O	=	circle	circle	bool
+O	=	date	date	bool
+O	=	date	timestamp	bool
+O	=	date	timestamptz	bool
+O	=	float4	float4	bool
+O	=	float4	float8	bool
+O	=	float8	float4	bool
+O	=	float8	float8	bool
+O	=	inet	inet	bool
+O	=	int2	int2	bool
+O	=	int2	int4	bool
+O	=	int2	int8	bool
+O	=	int4	int2	bool
+O	=	int4	int4	bool
+O	=	int4	int8	bool
+O	=	int8	int2	bool
+O	=	int8	int4	bool
+O	=	int8	int8	bool
+O	=	interval	interval	bool
+O	=	jsonb	jsonb	bool
+O	=	line	line	bool
+O	=	lseg	lseg	bool
+O	=	macaddr	macaddr	bool
+O	=	macaddr8	macaddr8	bool
+O	=	money	money	bool
+O	=	name	name	bool
+O	=	name	text	bool
+O	=	numeric	numeric	bool
+O	=	oid	oid	bool
+O	=	oidvector	oidvector	bool
+O	=	path	path	bool
+O	=	pg_lsn	pg_lsn	bool
+O	=	record	record	bool
+O	=	text	name	bool
+O	=	text	text	bool
+O	=	tid	tid	bool
+O	=	time	time	bool
+O	=	timestamp	date	bool
+O	=	timestamp	timestamp	bool
+O	=	timestamp	timestamptz	bool
+O	=	timestamptz	date	bool
+O	=	timestamptz	timestamp	bool
+O	=	timestamptz	timestamptz	bool
+O	=	timetz	timetz	bool
+O	=	tsquery	tsquery	bool
+O	=	tsvector	tsvector	bool
+O	=	uuid	uuid	bool
+O	=	varbit	varbit	bool
+O	=	xid	int4	bool
+O	=	xid	xid	bool
+O	=	xid8	xid8	bool
+O	>	anyarray	anyarray	bool
+O	>	anyenum	anyenum	bool
+O	>	anymultirange	anymultirange	bool
+O	>	anyrange	anyrange	bool
+O	>	bit	bit	bool
+O	>	bool	bool	bool
+O	>	box	box	bool
+O	>	bpchar	bpchar	bool
+O	>	bytea	bytea	bool
+O	>	char	char	bool
+O	>	circle	circle	bool
+O	>	date	date	bool
+O	>	date	timestamp	bool
+O	>	date	timestamptz	bool
+O	>	float4	float4	bool
+O	>	float4	float8	bool
+O	>	float8	float4	bool
+O	>	float8	float8	bool
+O	>	inet	inet	bool
+O	>	int2	int2	bool
+O	>	int2	int4	bool
+O	>	int2	int8	bool
+O	>	int4	int2	bool
+O	>	int4	int4	bool
+O	>	int4	int8	bool
+O	>	int8	int2	bool
+O	>	int8	int4	bool
+O	>	int8	int8	bool
+O	>	interval	interval	bool
+O	>	jsonb	jsonb	bool
+O	>	lseg	lseg	bool
+O	>	macaddr	macaddr	bool
+O	>	macaddr8	macaddr8	bool
+O	>	money	money	bool
+O	>	name	name	bool
+O	>	name	text	bool
+O	>	numeric	numeric	bool
+O	>	oid	oid	bool
+O	>	oidvector	oidvector	bool
+O	>	path	path	bool
+O	>	pg_lsn	pg_lsn	bool
+O	>	record	record	bool
+O	>	text	name	bool
+O	>	text	text	bool
+O	>	tid	tid	bool
+O	>	time	time	bool
+O	>	timestamp	date	bool
+O	>	timestamp	timestamp	bool
+O	>	timestamp	timestamptz	bool
+O	>	timestamptz	date	bool
+O	>	timestamptz	timestamp	bool
+O	>	timestamptz	timestamptz	bool
+O	>	timetz	timetz	bool
+O	>	tsquery	tsquery	bool
+O	>	tsvector	tsvector	bool
+O	>	uuid	uuid	bool
+O	>	varbit	varbit	bool
+O	>	xid8	xid8	bool
+O	>=	anyarray	anyarray	bool
+O	>=	anyenum	anyenum	bool
+O	>=	anymultirange	anymultirange	bool
+O	>=	anyrange	anyrange	bool
+O	>=	bit	bit	bool
+O	>=	bool	bool	bool
+O	>=	box	box	bool
+O	>=	bpchar	bpchar	bool
+O	>=	bytea	bytea	bool
+O	>=	char	char	bool
+O	>=	circle	circle	bool
+O	>=	date	date	bool
+O	>=	date	timestamp	bool
+O	>=	date	timestamptz	bool
+O	>=	float4	float4	bool
+O	>=	float4	float8	bool
+O	>=	float8	float4	bool
+O	>=	float8	float8	bool
+O	>=	inet	inet	bool
+O	>=	int2	int2	bool
+O	>=	int2	int4	bool
+O	>=	int2	int8	bool
+O	>=	int4	int2	bool
+O	>=	int4	int4	bool
+O	>=	int4	int8	bool
+O	>=	int8	int2	bool
+O	>=	int8	int4	bool
+O	>=	int8	int8	bool
+O	>=	interval	interval	bool
+O	>=	jsonb	jsonb	bool
+O	>=	lseg	lseg	bool
+O	>=	macaddr	macaddr	bool
+O	>=	macaddr8	macaddr8	bool
+O	>=	money	money	bool
+O	>=	name	name	bool
+O	>=	name	text	bool
+O	>=	numeric	numeric	bool
+O	>=	oid	oid	bool
+O	>=	oidvector	oidvector	bool
+O	>=	path	path	bool
+O	>=	pg_lsn	pg_lsn	bool
+O	>=	record	record	bool
+O	>=	text	name	bool
+O	>=	text	text	bool
+O	>=	tid	tid	bool
+O	>=	time	time	bool
+O	>=	timestamp	date	bool
+O	>=	timestamp	timestamp	bool
+O	>=	timestamp	timestamptz	bool
+O	>=	timestamptz	date	bool
+O	>=	timestamptz	timestamp	bool
+O	>=	timestamptz	timestamptz	bool
+O	>=	timetz	timetz	bool
+O	>=	tsquery	tsquery	bool
+O	>=	tsvector	tsvector	bool
+O	>=	uuid	uuid	bool
+O	>=	varbit	varbit	bool
+O	>=	xid8	xid8	bool
+O	>>	anymultirange	anymultirange	bool
+O	>>	anymultirange	anyrange	bool
+O	>>	anyrange	anymultirange	bool
+O	>>	anyrange	anyrange	bool
+O	>>	bit	int4	bit
+O	>>	box	box	bool
+O	>>	circle	circle	bool
+O	>>	inet	inet	bool
+O	>>	int2	int4	int2
+O	>>	int4	int4	int4
+O	>>	int8	int4	int8
+O	>>	point	point	bool
+O	>>	polygon	polygon	bool
+O	>>=	inet	inet	bool
+O	>^	box	box	bool
+O	>^	point	point	bool
+O	?	jsonb	text	bool
+O	?#	box	box	bool
+O	?#	line	box	bool
+O	?#	line	line	bool
+O	?#	lseg	box	bool
+O	?#	lseg	line	bool
+O	?#	lseg	lseg	bool
+O	?#	path	path	bool
+O	?&	jsonb	_text	bool
+O	?-		line	bool
+O	?-		lseg	bool
+O	?-	point	point	bool
+O	?-|	line	line	bool
+O	?-|	lseg	lseg	bool
+O	?|		line	bool
+O	?|		lseg	bool
+O	?|	jsonb	_text	bool
+O	?|	point	point	bool
+O	?||	line	line	bool
+O	?||	lseg	lseg	bool
+O	@		float4	float4
+O	@		float8	float8
+O	@		int2	int2
+O	@		int4	int4
+O	@		int8	int8
+O	@		numeric	numeric
+O	@-@		lseg	float8
+O	@-@		path	float8
+O	@>	_aclitem	aclitem	bool
+O	@>	anyarray	anyarray	bool
+O	@>	anymultirange	anyelement	bool
+O	@>	anymultirange	anymultirange	bool
+O	@>	anymultirange	anyrange	bool
+O	@>	anyrange	anyelement	bool
+O	@>	anyrange	anymultirange	bool
+O	@>	anyrange	anyrange	bool
+O	@>	box	box	bool
+O	@>	box	point	bool
+O	@>	circle	circle	bool
+O	@>	circle	point	bool
+O	@>	jsonb	jsonb	bool
+O	@>	path	point	bool
+O	@>	polygon	point	bool
+O	@>	polygon	polygon	bool
+O	@>	tsquery	tsquery	bool
+O	@?	jsonb	jsonpath	bool
+O	@@		box	point
+O	@@		circle	point
+O	@@		lseg	point
+O	@@		polygon	point
+O	@@	jsonb	jsonpath	bool
+O	@@	text	text	bool
+O	@@	text	tsquery	bool
+O	@@	tsquery	tsvector	bool
+O	@@	tsvector	tsquery	bool
+O	@@@	tsquery	tsvector	bool
+O	@@@	tsvector	tsquery	bool
+O	^	float8	float8	float8
+O	^	numeric	numeric	numeric
+O	^@	text	text	bool
+O	|	bit	bit	bit
+O	|	inet	inet	inet
+O	|	int2	int2	int2
+O	|	int4	int4	int4
+O	|	int8	int8	int8
+O	|	macaddr	macaddr	macaddr
+O	|	macaddr8	macaddr8	macaddr8
+O	|&>	box	box	bool
+O	|&>	circle	circle	bool
+O	|&>	polygon	polygon	bool
+O	|/		float8	float8
+O	|>>	box	box	bool
+O	|>>	circle	circle	bool
+O	|>>	point	point	bool
+O	|>>	polygon	polygon	bool
+O	||	anycompatible	anycompatiblearray	anycompatiblearray
+O	||	anycompatiblearray	anycompatible	anycompatiblearray
+O	||	anycompatiblearray	anycompatiblearray	anycompatiblearray
+O	||	anynonarray	text	text
+O	||	bytea	bytea	bytea
+O	||	jsonb	jsonb	jsonb
+O	||	text	anynonarray	text
+O	||	text	text	text
+O	||	tsquery	tsquery	tsquery
+O	||	tsvector	tsvector	tsvector
+O	||	varbit	varbit	varbit
+O	||/		float8	float8
+O	~		bit	bit
+O	~		inet	inet
+O	~		int2	int2
+O	~		int4	int4
+O	~		int8	int8
+O	~		macaddr	macaddr
+O	~		macaddr8	macaddr8
+O	~	bpchar	text	bool
+O	~	name	text	bool
+O	~	text	text	bool
+O	~*	bpchar	text	bool
+O	~*	name	text	bool
+O	~*	text	text	bool
+O	~<=~	bpchar	bpchar	bool
+O	~<=~	text	text	bool
+O	~<~	bpchar	bpchar	bool
+O	~<~	text	text	bool
+O	~=	box	box	bool
+O	~=	circle	circle	bool
+O	~=	point	point	bool
+O	~=	polygon	polygon	bool
+O	~>=~	bpchar	bpchar	bool
+O	~>=~	text	text	bool
+O	~>~	bpchar	bpchar	bool
+O	~>~	text	text	bool
+O	~~	bpchar	text	bool
+O	~~	bytea	bytea	bool
+O	~~	name	text	bool
+O	~~	text	text	bool
+O	~~*	bpchar	text	bool
+O	~~*	name	text	bool
+O	~~*	text	text	bool
