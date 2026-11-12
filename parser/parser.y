@@ -8137,6 +8137,14 @@ keyword_convert_type:
   {
     $$ = &ConvertType{Type: $1+" "+$2}
   }
+| BIT VARYING
+  {
+    $$ = &ConvertType{Type: $1+" "+$2}
+  }
+| BIT VARYING '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: $1+" "+$2, Length: NewIntVal($4)}
+  }
 | DATE
   {
     $$ = &ConvertType{Type: $1}

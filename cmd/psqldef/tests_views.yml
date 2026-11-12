@@ -2225,3 +2225,17 @@ ChangeColumnTypeReadByViewReplacedToReadAnotherTable:
     CREATE TABLE u (c integer);
     CREATE VIEW v AS SELECT c FROM u;
     CREATE TABLE t (c bigint);
+
+AppendColumnToViewWithCastsToBitVaryingAndNumericArrays:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (x varbit, a integer[]);
+    CREATE VIEW v AS SELECT x::bit varying(3) AS b, x::bit varying AS c, a::numeric(10)[] AS n FROM t;
+  desired: |
+    CREATE TABLE t (x varbit, a integer[]);
+    CREATE VIEW v AS SELECT x::bit varying(3) AS b, x::bit varying AS c, a::numeric(10)[] AS n, 1 AS e FROM t;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT x::bit varying(3) AS b, x::bit varying AS c, a::numeric(10)[] AS n, 1 AS e FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT x::bit varying(3) AS b, x::bit varying AS c, a::numeric(10)[] AS n FROM t;

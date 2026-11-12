@@ -209,10 +209,15 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		typeStr = normalizeTypeName(typeStr, mode)
 	}
 
+	scale := convertType.Scale
+	// PostgreSQL writes numeric(p) as numeric(p,0)
+	if mode == GeneratorModePostgres && scale == nil && convertType.Length != nil && strings.TrimSuffix(typeStr, "[]") == "decimal" {
+		scale = parser.NewIntVal("0")
+	}
 	return &parser.ConvertType{
 		Type:     typeStr,
 		Length:   convertType.Length,
-		Scale:    convertType.Scale,
+		Scale:    scale,
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
@@ -982,11 +987,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {
-							if mode == GeneratorModePostgres {
-								return castArrayElements(arrayConstructor, e.Type, mode)
-							}
-							// Non-empty array: strip the redundant typecast
-							return normalizedExpr
+							return castArrayElements(arrayConstructor, e.Type, mode)
 						}
 						// Empty array: preserve the typecast (ARRAY[]::int[] is required)
 					}

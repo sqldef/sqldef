@@ -176,7 +176,12 @@ func (tc *typeContext) castType(t *parser.ConvertType) (exprType, bool) {
 	if t.Scale != nil {
 		scale = t.Scale.Val
 	}
-	return exprType{name: typ, mod: typeModifier(typ, length, scale)}, true
+	// The modifier of an array is that of its elements
+	element := typ
+	if array || bool(t.Array) {
+		element = tc.resolver.Type(typ).Elem
+	}
+	return exprType{name: typ, mod: typeModifier(element, length, scale)}, true
 }
 
 // columnType returns the type of a column
@@ -421,9 +426,9 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 				resolved.Left, resolved.Right = args[0], args[1]
 				return resolved, t
 			}
-			// The comparison is still boolean, but the casts of its operands are unknown
-			tc.unresolved++
 		}
+		// The comparison is still boolean, but the casts of its operands are unknown
+		tc.unresolved++
 		return resolved, boolType
 	case *parser.BinaryExpr:
 		left, lt := tc.resolve(e.Left, scope)
@@ -482,6 +487,9 @@ var comparisonOperators = map[string]string{
 	parser.PosixRegexCiStr:    "~*",
 	parser.PosixNotRegexStr:   "!~",
 	parser.PosixNotRegexCiStr: "!~*",
+	// PostgreSQL resolves IS [NOT] DISTINCT FROM with the = operator
+	parser.IsDistinctFromStr:    "=",
+	parser.IsNotDistinctFromStr: "=",
 }
 
 // literalType returns the type that PostgreSQL gives a constant

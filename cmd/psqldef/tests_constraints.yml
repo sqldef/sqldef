@@ -3239,3 +3239,12 @@ CheckWithBooleanLiteralCasts:
     CREATE TABLE t (
       flag boolean CONSTRAINT c CHECK (flag = 't'::boolean OR flag = 'no'::bool)
     );
+
+CheckWithIsDistinctFromOfOtherTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      n numeric CHECK (a IS DISTINCT FROM n),
+      m numeric CHECK (a IS NOT DISTINCT FROM m OR m IS NULL)
+    );
