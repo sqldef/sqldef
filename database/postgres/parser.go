@@ -1518,7 +1518,7 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 			}
 		case "bpchar":
 			// The character keyword has a length, while bpchar written as such has none
-			if len(typeNames) == 2 {
+			if len(node.Typmods) > 0 {
 				columnType.Type = "character"
 			} else {
 				columnType.Type = typeName

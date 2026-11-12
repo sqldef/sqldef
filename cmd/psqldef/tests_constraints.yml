@@ -3221,3 +3221,13 @@ ExclusionWithWhereOnDomainColumn:
       r int4range,
       EXCLUDE USING gist (r WITH &&) WHERE (c > 0)
     );
+
+CheckWithImplicitCastsToBitAndBpcharOfDomains:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN flags AS bit(8);
+    CREATE DOMAIN code AS char(2);
+    CREATE TABLE t (
+      f flags CHECK ((f & B'00000001') = B'00000001'),
+      c code CHECK (c || c <> 'xxxx')
+    );

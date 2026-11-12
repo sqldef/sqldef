@@ -56,8 +56,10 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 // Tokenizer is the struct used to generate SQL
 // tokens for the parser.
 type Tokenizer struct {
-	AllowComments        bool
-	lastChar             rune
+	AllowComments bool
+	lastChar      rune
+	// lastSize is the number of bytes of lastChar in buf
+	lastSize             int
 	Position             int
 	lastToken            string
 	LastError            error
@@ -1611,6 +1613,7 @@ func (tkn *Tokenizer) next() {
 		r, size := utf8.DecodeRuneInString(tkn.buf[tkn.bufPos:])
 		tkn.Position += size
 		tkn.lastChar = r
+		tkn.lastSize = size
 		tkn.bufPos += size
 	}
 }
@@ -1621,7 +1624,7 @@ func (tkn *Tokenizer) offset() int {
 	if tkn.lastChar == eofChar {
 		return tkn.Position - 1
 	}
-	return tkn.Position - utf8.RuneLen(tkn.lastChar)
+	return tkn.Position - tkn.lastSize
 }
 
 // scanSkippingComments wraps Scan the same way Lex does: SQL comments never

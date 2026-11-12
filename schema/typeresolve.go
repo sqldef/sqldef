@@ -551,7 +551,7 @@ func (tc *typeContext) withCasts(args []parser.Expr, types []exprType, params []
 			continue
 		}
 		if t := tc.resolver.Type(params[i]); t != nil && t.Display != "" {
-			result[i] = &parser.CastExpr{Expr: result[i], Type: &parser.ConvertType{Type: t.Display}, Resolved: true}
+			result[i] = &parser.CastExpr{Expr: result[i], Type: &parser.ConvertType{Type: t.CastName()}, Resolved: true}
 		}
 	}
 	return result

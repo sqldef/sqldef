@@ -34,7 +34,7 @@ const (
 // Type is a data type, named by its typname in pg_type (int4, not integer)
 type Type struct {
 	Name string
-	// Display is the name format_type() writes, which PostgreSQL writes in a cast
+	// Display is the name format_type() writes for the type without a modifier
 	Display   string
 	Category  byte
 	Preferred bool
@@ -716,4 +716,16 @@ func (r *Resolver) CommonType(types []string) (string, bool) {
 		}
 	}
 	return common, true
+}
+
+// CastName returns the name PostgreSQL writes in a cast it adds, which has no type modifier:
+// format_type() writes bit and character with their default length of 1 otherwise
+func (t *Type) CastName() string {
+	switch t.Display {
+	case "bit":
+		return `"bit"`
+	case "character":
+		return "bpchar"
+	}
+	return t.Display
 }
