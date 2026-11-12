@@ -3165,3 +3165,23 @@ CheckWithExpressionsInArrays:
       CONSTRAINT t_ts CHECK (ARRAY[ts::timestamp(3) with time zone, now()] <> '{}'),
       CONSTRAINT t_i CHECK (i + 1 = ANY (ARRAY[i * 2, -1, length(i::text)]) OR ARRAY[ARRAY[i]] IS NOT NULL)
     );
+
+CheckComparingWithCurrentUser:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (owner name);
+  desired: |
+    CREATE TABLE t (owner name, CONSTRAINT c CHECK (owner = current_user OR owner = session_user));
+  up: |
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (owner = current_user OR owner = session_user);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+
+CheckWithParenthesesInArrays:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      c integer,
+      CONSTRAINT t_c CHECK (c = ANY (ARRAY[(a + 1), 2]) AND (c, (a * 2)) IS NOT NULL)
+    );

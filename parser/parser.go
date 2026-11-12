@@ -15419,6 +15419,9 @@ yydefault:
 					return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", yyDollar[1].ident.Name, yyDollar[3].convertType.Type))
 				}
 				yyVAL.convertType = &ConvertType{Type: collationNamePart(yylex, yyDollar[1].ident) + "." + name, Length: yyDollar[3].convertType.Length, Scale: yyDollar[3].convertType.Scale}
+				if yyDollar[3].convertType.Length == implicitLength {
+					yyVAL.convertType.Length = nil
+				}
 			} else if strings.EqualFold(yyDollar[3].convertType.Type, "char") {
 				// A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
 				if yyDollar[3].convertType.Length != implicitLength {

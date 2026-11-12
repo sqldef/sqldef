@@ -2705,3 +2705,19 @@ func TestCreateOrReplaceSkipsComments(t *testing.T) {
 		}
 	}
 }
+
+func TestTypecastToBitKeepsLengthOnlyForTheKeyword(t *testing.T) {
+	statement, err := ParseDDL(`CREATE VIEW v AS SELECT x::bit AS a, x::ext.bit AS b, x::pg_catalog.bit AS c, x::pg_catalog.bit(3) AS d, x::pg_catalog.char AS e FROM t`, ParserModePostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := String(statement)
+	for _, want := range []string{"::bit(1) as a", "::ext.bit as b", `::"bit" as c`, `::"bit"(3) as d`, `::"char" as e`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want substring %q, got %s", want, got)
+		}
+	}
+	if _, err := ParseDDL("CREATE VIEW v AS SELECT x::pg_catalog.char(1) FROM t", ParserModePostgres); err == nil {
+		t.Error(`want an error for a length of "char"`)
+	}
+}

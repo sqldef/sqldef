@@ -2395,10 +2395,11 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 			}
 		}
 
-		// CREATE OR REPLACE VIEW keeps the names and the types of the existing columns
+		// CREATE OR REPLACE VIEW keeps the names and the types of the existing columns. Legacy mode
+		// writes views without the casts of their literals, which changes the types of columns.
 		currentColumns, currentKnown := g.viewColumnTypes[currentView.definition]
 		desiredColumns, desiredKnown := g.viewColumnTypes[desiredView.definition]
-		if currentKnown && desiredKnown {
+		if currentKnown && desiredKnown && !g.legacyIgnoreQuotes {
 			if len(currentColumns) > len(desiredColumns) {
 				return true
 			}
@@ -4029,37 +4030,30 @@ func (d dialect) generateIndexOptionDefinition(indexOptions []IndexOption) strin
 	if len(indexOptions) > 0 {
 		switch d.mode {
 		case GeneratorModeMysql:
-			// Handle multiple vector index options (M and DISTANCE)
-			if len(indexOptions) > 1 {
-				var mOption, distanceOption string
-				for _, indexOption := range indexOptions {
-					if strings.ToUpper(indexOption.optionName) == "M" {
-						mOption = fmt.Sprintf("M=%s", indexOption.value.raw)
-					} else if strings.ToUpper(indexOption.optionName) == "DISTANCE" {
-						distanceOption = fmt.Sprintf("DISTANCE=%s", indexOption.value.raw)
-					}
+			// The vector index options M and DISTANCE come first, in this order
+			ordered := slices.Clone(indexOptions)
+			rank := func(option IndexOption) int {
+				switch strings.ToUpper(option.optionName) {
+				case "M":
+					return 0
+				case "DISTANCE":
+					return 1
 				}
-				if mOption != "" && distanceOption != "" {
-					optionDefinition = fmt.Sprintf(" %s %s", mOption, distanceOption)
-				} else if mOption != "" {
-					optionDefinition = fmt.Sprintf(" %s", mOption)
-				} else if distanceOption != "" {
-					optionDefinition = fmt.Sprintf(" %s", distanceOption)
-				}
-			} else {
-				indexOption := indexOptions[0]
-				if indexOption.optionName == "parser" {
-					indexOption.optionName = "WITH " + indexOption.optionName
-				}
-				if strings.EqualFold(indexOption.optionName, "M") {
-					optionDefinition = fmt.Sprintf(" M=%s", indexOption.value.raw)
-				} else if strings.EqualFold(indexOption.optionName, "DISTANCE") {
-					optionDefinition = fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
-				} else if indexOption.optionName == "comment" {
-					indexOption.optionName = "COMMENT"
-					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, parser.QuoteString(indexOption.value.raw, true))
-				} else {
-					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
+				return 2
+			}
+			slices.SortStableFunc(ordered, func(a, b IndexOption) int { return rank(a) - rank(b) })
+			for _, indexOption := range ordered {
+				switch {
+				case strings.EqualFold(indexOption.optionName, "M"):
+					optionDefinition += fmt.Sprintf(" M=%s", indexOption.value.raw)
+				case strings.EqualFold(indexOption.optionName, "DISTANCE"):
+					optionDefinition += fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
+				case indexOption.optionName == "parser":
+					optionDefinition += fmt.Sprintf(" WITH parser %s", indexOption.value.raw)
+				case indexOption.optionName == "comment":
+					optionDefinition += fmt.Sprintf(" COMMENT %s", parser.QuoteString(indexOption.value.raw, true))
+				default:
+					optionDefinition += fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
 				}
 			}
 		case GeneratorModeMssql:
@@ -4342,7 +4336,7 @@ func (d dialect) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
 			return d.forceEscapeSQLName(name)
-		} else if folded := strings.ToLower(name); parser.IsPostgresReservedKeyword(folded) || postgresValueKeywords[folded] {
+		} else if folded := strings.ToLower(name); parser.IsPostgresReservedKeyword(folded) || parser.IsPostgresValueKeyword(folded) {
 			// A reserved word is a name only where quoted, as PostgreSQL may have exported it
 			return d.forceEscapeSQLName(folded)
 		} else {
@@ -6432,14 +6426,6 @@ func postgresTypeLength(column Column) *Value {
 	return nil
 }
 
-// postgresValueKeywords are the reserved words that PostgreSQL reads as calls of functions without
-// parentheses, which name an object only where quoted
-var postgresValueKeywords = map[string]bool{
-	"current_catalog": true, "current_date": true, "current_role": true, "current_time": true,
-	"current_timestamp": true, "current_user": true, "localtime": true, "localtimestamp": true,
-	"session_user": true, "system_user": true, "user": true,
-}
-
 func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
 	if checkA == nil && checkB == nil {
 		return true
@@ -6517,6 +6503,10 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 
 	switch e := expr.(type) {
 	case *parser.ColName:
+		// The parser reads current_user and the like as column names
+		if d.mode == GeneratorModePostgres && e.Qualifier.IsEmpty() && !e.Name.Quoted && parser.IsPostgresValueKeyword(strings.ToLower(e.Name.Name)) {
+			return strings.ToLower(e.Name.Name)
+		}
 		var result string
 		if !e.Qualifier.IsEmpty() {
 			result = parser.String(e.Qualifier) + "."

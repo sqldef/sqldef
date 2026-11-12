@@ -2263,13 +2263,15 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 		return values
 	}
 
+	// The order does not depend on the parentheses written
+	key := func(v T) string { return parser.String(canonicalParens(v)) }
 	slices.SortFunc(values, func(a, b T) int {
-		return cmp.Compare(parser.String(a), parser.String(b))
+		return cmp.Compare(key(a), key(b))
 	})
 
 	uniqueValues := values[:0] // reuse underlying array
 	for i, v := range values {
-		if i == 0 || parser.String(v) != parser.String(values[i-1]) {
+		if i == 0 || key(v) != key(values[i-1]) {
 			uniqueValues = append(uniqueValues, v)
 		}
 	}
@@ -2412,7 +2414,9 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 	case *parser.ComparisonExpr:
 		resolved := *e
 		resolved.Left = operand(e.Left)
-		if !e.Any && !e.All {
+		if e.Any || e.All {
+			resolved.Right = canonicalParens(e.Right)
+		} else {
 			resolved.Right = operand(e.Right)
 		}
 		return &resolved
@@ -2461,6 +2465,12 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 			resolved.Else = canonicalParens(e.Else)
 		}
 		return resolved
+	case *parser.ArrayConstructor:
+		return &parser.ArrayConstructor{Elements: util.TransformSlice(e.Elements, canonicalParens)}
+	case parser.ValTuple:
+		return parser.ValTuple(util.TransformSlice(e, canonicalParens))
+	case *parser.CollateExpr:
+		return &parser.CollateExpr{Expr: operand(e.Expr), Charset: e.Charset}
 	}
 	return expr
 }

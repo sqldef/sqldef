@@ -8043,6 +8043,9 @@ simple_convert_type:
         return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", $1.Name, $3.Type))
       }
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + name, Length: $3.Length, Scale: $3.Scale}
+      if $3.Length == implicitLength {
+        $$.Length = nil
+      }
     } else if strings.EqualFold($3.Type, "char") {
       // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
       if $3.Length != implicitLength {

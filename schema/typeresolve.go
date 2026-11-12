@@ -62,23 +62,28 @@ func (g *Generator) newTypeContext(types []*Type, domains []*Domain, functions [
 	}
 	// A domain over a domain of a later statement needs the resolver to know the latter first
 	tc.resolver = pgcatalog.NewResolver(userTypes)
-	for range domains {
+	known := 0
+	for {
 		var domainTypes []*pgcatalog.Type
 		for _, domain := range domains {
 			if base, ok := tc.typeOfName(domain.baseType); ok {
 				domainTypes = append(domainTypes, &pgcatalog.Type{Name: tc.userTypeKey(domain.name), Kind: 'd', Base: base})
 			}
 		}
-		tc.resolver = pgcatalog.NewResolver(append(append([]*pgcatalog.Type{}, userTypes...), domainTypes...))
-		if len(domainTypes) == len(domains) {
+		if len(domainTypes) == known {
 			break
 		}
+		known = len(domainTypes)
+		tc.resolver = pgcatalog.NewResolver(append(append([]*pgcatalog.Type{}, userTypes...), domainTypes...))
 	}
-	for range domains {
+	for changed := true; changed; {
+		changed = false
 		for _, domain := range domains {
+			key := tc.userTypeKey(domain.name)
 			base, _ := tc.typeOfName(domain.baseType)
-			if domain.collation != "" || tc.collatedDomains[base] {
-				tc.collatedDomains[tc.userTypeKey(domain.name)] = true
+			if !tc.collatedDomains[key] && (domain.collation != "" || tc.collatedDomains[base]) {
+				tc.collatedDomains[key] = true
+				changed = true
 			}
 		}
 	}
@@ -924,12 +929,12 @@ func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]rela
 	return nil, false
 }
 
-// resolveSelect resolves the types of the expressions of a query. ctes are the folded names of
+// resolveSelect resolves the types of the expressions of a query. ctes are the name keys of
 // the common table expressions in scope, which hide the tables and views of their names.
 func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnScope, ctes map[string]bool) parser.SelectStatement {
 	switch s := stmt.(type) {
 	case *parser.Union:
-		ctes = withCTEs(ctes, s.With)
+		ctes = tc.withCTEs(ctes, s.With)
 		resolved := *s
 		resolved.Left = tc.resolveSelect(s.Left, outer, ctes)
 		resolved.Right = tc.resolveSelect(s.Right, outer, ctes)
@@ -937,7 +942,7 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 	case *parser.ParenSelect:
 		return &parser.ParenSelect{Select: tc.resolveSelect(s.Select, outer, ctes)}
 	case *parser.Select:
-		ctes = withCTEs(ctes, s.With)
+		ctes = tc.withCTEs(ctes, s.With)
 		var relations []relation
 		for _, tableExpr := range s.From {
 			relations = tc.fromRelations(tableExpr, ctes, relations)
@@ -980,7 +985,7 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 	return stmt
 }
 
-func withCTEs(ctes map[string]bool, with *parser.With) map[string]bool {
+func (tc *typeContext) withCTEs(ctes map[string]bool, with *parser.With) map[string]bool {
 	if with == nil {
 		return ctes
 	}
@@ -989,9 +994,13 @@ func withCTEs(ctes map[string]bool, with *parser.With) map[string]bool {
 		result[name] = true
 	}
 	for _, cte := range with.CTEs {
-		result[parser.FoldASCII(cte.Name.Name)] = true
+		result[tc.identKey(cte.Name)] = true
 	}
 	return result
+}
+
+func (tc *typeContext) identKey(ident parser.Ident) string {
+	return normalizeIdentKey(ident, tc.g.mode, tc.g.legacyIgnoreQuotes, tc.g.config.MysqlLowerCaseTableNames)
 }
 
 // fromRelations adds the relations of a FROM item
@@ -1011,7 +1020,7 @@ func (tc *typeContext) fromRelations(tableExpr parser.TableExpr, ctes map[string
 			if !rel.hasAs {
 				rel.name = QualifiedName{Schema: name.Schema, Name: name.Name}
 			}
-			if len(t.Columns) == 0 && !(name.Schema.IsEmpty() && ctes[parser.FoldASCII(name.Name.Name)]) {
+			if len(t.Columns) == 0 && !(name.Schema.IsEmpty() && ctes[tc.identKey(name.Name)]) {
 				rel.columns, rel.known = tc.relationColumns(QualifiedName{Schema: name.Schema, Name: name.Name})
 			}
 		}

@@ -2641,12 +2641,10 @@ func QuoteString(s string, backslashEscapes bool) string {
 // not a lowercase identifier, a reserved word, or a keyword that names another type unquoted
 func PostgresTypeNameNeedsQuotes(name string) bool {
 	switch name {
-	case "bit", "char", "character", "user", "current_user", "session_user", "current_role",
-		"current_catalog", "current_schema", "current_date", "current_time", "current_timestamp",
-		"localtime", "localtimestamp":
+	case "bit", "char", "character", "current_schema":
 		return true
 	}
-	return !needsNoQuotes(name) || IsPostgresReservedKeyword(name)
+	return !needsNoQuotes(name) || IsPostgresReservedKeyword(name) || IsPostgresValueKeyword(name)
 }
 
 // QuotePostgresIdent quotes a PostgreSQL identifier
@@ -3988,6 +3986,17 @@ var postgresReservedKeywords = func() map[string]bool {
 	}
 	return words
 }()
+
+// IsPostgresValueKeyword reports whether PostgreSQL reads an unquoted name as a call of a function
+// without parentheses, such as current_user, which the parser reads as a column name
+func IsPostgresValueKeyword(name string) bool {
+	switch name {
+	case "current_catalog", "current_date", "current_role", "current_time", "current_timestamp",
+		"current_user", "localtime", "localtimestamp", "session_user", "system_user", "user":
+		return true
+	}
+	return false
+}
 
 // IsPostgresReservedKeyword reports whether PostgreSQL reads an unquoted name as a keyword where a
 // table or column name is expected

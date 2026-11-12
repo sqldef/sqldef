@@ -1936,3 +1936,25 @@ ChangeViewColumnToOneOfAnotherCollation:
   down: |
     DROP VIEW public.v;
     CREATE VIEW v AS SELECT a AS x FROM t;
+
+ViewWithCTENamedLikeTableInQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id integer, name text);
+    CREATE VIEW v AS WITH "Users" AS (SELECT 1 AS id) SELECT u.name FROM users u;
+  desired: |
+    CREATE TABLE users (id integer, name text);
+    CREATE VIEW v AS WITH "Users" AS (SELECT 1 AS id) SELECT u.name, u.id FROM users u;
+  up: |
+    CREATE OR REPLACE VIEW v AS WITH "Users" AS (SELECT 1 AS id) SELECT u.name, u.id FROM users u;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS WITH "Users" AS (SELECT 1 AS id) SELECT u.name FROM users u;
+
+ChangeColumnTypeReadByViewWithLiteralCastInLegacyMode:
+  current: |
+    CREATE TABLE t (a integer);
+    CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s FROM t;
+  desired: |
+    CREATE TABLE t (a bigint);
+    CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s FROM t;
