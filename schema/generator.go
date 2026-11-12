@@ -7399,6 +7399,10 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 
 	normalizedA := normalizeExpr(a, g.mode)
 	normalizedB := normalizeExpr(b, g.mode)
+	if g.mode == GeneratorModePostgres {
+		// Normalization drops parentheses, which canonicalParens puts back where the tree needs them
+		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
+	}
 
 	if !g.legacyIgnoreQuotes {
 		d := g.comparisonDialect()
@@ -7519,6 +7523,7 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
 	if g.mode == GeneratorModePostgres {
+		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
 		return parser.SameForComparison(normalizedA, normalizedB, g.comparisonOptions(false))
 	}
 	// TODO: case-insensitive comparison is not always correct

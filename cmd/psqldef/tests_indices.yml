@@ -1770,3 +1770,18 @@ IndexesWithImplicitCasts:
     CREATE INDEX t_sqrt ON t (sqrt(i));
     CREATE INDEX t_lower ON t (lower(n));
     CREATE INDEX t_round ON t (round(i, 1)) WHERE f > 1 AND i + 0.5 > 1;
+
+ChangePartialIndexWhereByRegroupingAndOr:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a boolean, b boolean, c boolean);
+    CREATE INDEX t_idx ON t (a) WHERE a AND (b OR c);
+  desired: |
+    CREATE TABLE t (a boolean, b boolean, c boolean);
+    CREATE INDEX t_idx ON t (a) WHERE (a AND b) OR c;
+  up: |
+    DROP INDEX public.t_idx;
+    CREATE INDEX t_idx ON public.t (a) WHERE (a AND b) OR c;
+  down: |
+    DROP INDEX public.t_idx;
+    CREATE INDEX t_idx ON public.t (a) WHERE a AND (b OR c);
