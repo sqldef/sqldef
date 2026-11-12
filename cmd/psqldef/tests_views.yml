@@ -86,10 +86,11 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
   up: |
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
+    CREATE VIEW "public"."foos_view" AS
+      SELECT id, secret FROM foos WHERE secret = false;
   down: |
     DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select 1 as dummy;
+    CREATE VIEW "public"."foos_view" AS SELECT 1 AS dummy;
     ALTER TABLE "public"."foos" DROP COLUMN "secret";
 CreateMaterializedView:
   current: |
@@ -326,9 +327,18 @@ ReplaceViewWithChangeCondition:
       FROM hoge
         WHERE bar = 'baz';
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
+    CREATE OR REPLACE VIEW "public"."v" AS
+      SELECT
+        foo,
+        bar
+      FROM hoge
+        WHERE bar = 'baz';
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE OR REPLACE VIEW "public"."v" AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithAddColumnToTail:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -353,10 +363,19 @@ ReplaceViewWithAddColumnToTail:
       'x' as added
      FROM hoge;
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
+    CREATE OR REPLACE VIEW "public"."v" AS
+    SELECT
+      foo,
+      bar,
+      'x' as added
+     FROM hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE VIEW "public"."v" AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithAddColumnToMiddle:
   current: |
     CREATE TABLE "hoge" (
@@ -382,10 +401,19 @@ ReplaceViewWithAddColumnToMiddle:
      FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, 'x' as added, bar from hoge;
+    CREATE VIEW "public"."v" AS
+    SELECT
+      foo,
+      'x' as added,
+      bar
+     FROM hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE VIEW "public"."v" AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithDropColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -407,9 +435,14 @@ ReplaceViewWithDropColumn:
     SELECT foo FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo from hoge;
+    CREATE VIEW "public"."v" AS
+    SELECT foo FROM hoge;
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE OR REPLACE VIEW "public"."v" AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 ReplaceViewWithChangeColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -434,10 +467,18 @@ ReplaceViewWithChangeColumn:
     FROM hoge;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, 'x' as changed from hoge;
+    CREATE VIEW "public"."v" AS
+    SELECT
+      foo,
+      'x' as changed
+    FROM hoge;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE VIEW "public"."v" AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
 CreateViewWithCastCase:
   desired: |
     create table hoge (amount text);
@@ -1099,9 +1140,9 @@ ChangeViewStringLiteralCaseInLegacyMode:
     CREATE TABLE t (a text);
     CREATE VIEW v AS SELECT a FROM t WHERE a = 'active';
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'active';
+    CREATE OR REPLACE VIEW "public"."v" AS SELECT a FROM t WHERE a = 'active';
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select a from t where a = 'Active';
+    CREATE OR REPLACE VIEW "public"."v" AS SELECT a FROM t WHERE a = 'Active';
 
 ChangeViewColumnToQuotedColumnDifferingInCase:
   legacy_ignore_quotes: false
@@ -1953,19 +1994,21 @@ ViewWithCTENamedLikeTableInQuotes:
 
 ChangeColumnTypeReadByViewWithLiteralCastInLegacyMode:
   current: |
+    CREATE TYPE "Mood" AS ENUM ('x');
     CREATE TABLE t (a integer);
-    CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s FROM t;
+    CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s, 'x'::"Mood" AS m, 'x'::"char" AS c, 'abcdef'::varchar(3)::text AS k FROM t;
   desired: |
+    CREATE TYPE "Mood" AS ENUM ('x');
     CREATE TABLE t (a bigint);
-    CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s FROM t;
+    CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s, 'x'::"Mood" AS m, 'x'::"char" AS c, 'abcdef'::varchar(3)::text AS k FROM t;
   up: |
     DROP VIEW "public"."v";
     ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE bigint;
-    CREATE VIEW "public"."v" AS select a, 'x'::varchar(3) as s from t;
+    CREATE VIEW "public"."v" AS SELECT a, 'x'::varchar(3) AS s, 'x'::"Mood" AS m, 'x'::"char" AS c, 'abcdef'::varchar(3)::text AS k FROM t;
   down: |
     DROP VIEW "public"."v";
     ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE integer;
-    CREATE VIEW "public"."v" AS select a, 'x'::varchar(3) as s from t;
+    CREATE VIEW "public"."v" AS SELECT a, 'x'::varchar(3) AS s, 'x'::"Mood" AS m, 'x'::"char" AS c, 'abcdef'::varchar(3)::text AS k FROM t;
 
 ViewWithCastsToBitOfLengths:
   legacy_ignore_quotes: false
@@ -2056,10 +2099,10 @@ ChangeViewColumnCastLengthInLegacyMode:
     CREATE VIEW v AS SELECT b::varchar(10) AS c FROM t;
   up: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select b::varchar(10) as c from t;
+    CREATE VIEW "public"."v" AS SELECT b::varchar(10) AS c FROM t;
   down: |
     DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select b::varchar(3) as c from t;
+    CREATE VIEW "public"."v" AS SELECT b::varchar(3) AS c FROM t;
 
 ChangeViewOverCTEWithFewerColumnNames:
   legacy_ignore_quotes: false

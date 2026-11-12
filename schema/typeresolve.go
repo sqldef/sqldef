@@ -296,49 +296,19 @@ func resolveForms[T any](tc *typeContext, resolve func() T) typedForms[T] {
 
 // withoutResolvedCasts returns a copy of a tree whose casts are not marked as resolved
 func withoutResolvedCasts[T any](tree T) T {
-	var copyValue func(v reflect.Value) reflect.Value
-	copyValue = func(v reflect.Value) reflect.Value {
-		switch v.Kind() {
-		case reflect.Interface:
-			if v.IsNil() {
-				return v
-			}
-			copied := reflect.New(v.Type()).Elem()
-			copied.Set(copyValue(v.Elem()))
-			return copied
-		case reflect.Pointer:
-			if v.IsNil() || v.Elem().Kind() != reflect.Struct {
-				return v
-			}
-			copied := reflect.New(v.Elem().Type())
-			copied.Elem().Set(copyValue(v.Elem()))
-			if cast, ok := copied.Interface().(*parser.CastExpr); ok {
-				cast.Resolved = false
-			}
-			return copied
-		case reflect.Struct:
-			copied := reflect.New(v.Type()).Elem()
-			copied.Set(v)
-			for i := range v.NumField() {
-				if v.Type().Field(i).IsExported() {
-					copied.Field(i).Set(copyValue(v.Field(i)))
-				}
-			}
-			return copied
-		case reflect.Slice:
-			if v.IsNil() {
-				return v
-			}
-			copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-			for i := range v.Len() {
-				copied.Index(i).Set(copyValue(v.Index(i)))
-			}
-			return copied
+	castType := reflect.TypeFor[*parser.CastExpr]()
+	var clear func(v reflect.Value) (reflect.Value, bool)
+	clear = func(v reflect.Value) (reflect.Value, bool) {
+		if v.Type() != castType || v.IsNil() {
+			return reflect.Value{}, false
 		}
-		return v
+		copied := reflect.New(castType.Elem())
+		copied.Elem().Set(copyTree(v.Elem(), clear))
+		copied.Interface().(*parser.CastExpr).Resolved = false
+		return copied, true
 	}
 	value := reflect.ValueOf(&tree).Elem()
-	value.Set(copyValue(value))
+	value.Set(copyTree(value, clear))
 	return tree
 }
 

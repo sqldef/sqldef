@@ -216,14 +216,9 @@ func (s createIndexStatement) Render() string {
 type inputStatement struct {
 	statementDefaults
 	statement string
-	mode      parser.ParserMode
 }
 
 func (s inputStatement) Render() string {
-	// A line comment at the end would take in the semicolon written after the statement
-	if parser.EndsWithLineComment(s.statement, s.mode) {
-		return s.statement + "\n"
-	}
 	return s.statement
 }
 
@@ -241,10 +236,6 @@ func (s createViewStatement) Render() string {
 		ddl += "OR REPLACE "
 	}
 	definition := parser.String(s.view.definition)
-	if s.d.mode == GeneratorModePostgres {
-		// The casts of literals give the columns their types
-		definition = parser.StringWithLiteralCasts(s.view.definition)
-	}
 	if s.view.viewType == "SQL SECURITY" {
 		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)
 	}

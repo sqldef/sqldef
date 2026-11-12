@@ -2435,7 +2435,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 			// The dependent view was dropped by the recreation of a view it depends on, which
 			// decided whether this CREATE runs too.
 			view.owner = previous.view.owner
-			recreateDDLs := []statement{g.recreateView(view)}
+			recreateDDLs := []statement{g.createView(view, false)}
 			if owner, ok := g.restoreViewOwner(&view); ok {
 				recreateDDLs = append(recreateDDLs, owner)
 			}
@@ -2493,7 +2493,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				}
 				recreateDDLs = append(recreateDDLs,
 					g.dropView(currentView),
-					g.recreateView(*desiredView),
+					g.createView(*desiredView, false),
 				)
 				g.forgetViewMetadata(currentView)
 				if owner, ok := g.restoreViewOwner(currentView); ok {
@@ -2505,10 +2505,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				for _, depView := range dependents {
 					g.recreatedViews[g.viewKey(depView)] = recreatedView{view: depView, heldBack: !recreated}
 				}
-			} else if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
-				ddls = append(ddls, g.inputStatement(parser.CreateOrReplace(desiredView.statement, parser.ParserModePostgres)))
 			} else {
-				ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
+				ddls = append(ddls, g.createView(*desiredView, true))
 			}
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
@@ -2533,19 +2531,28 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 
 // inputStatement returns a statement written as the input has it
 func (g *Generator) inputStatement(statement string) inputStatement {
-	return inputStatement{statement: statement, mode: generatorModeToParserMode(g.mode)}
+	// A line comment at the end would take in the semicolon written after the statement
+	if parser.EndsWithLineComment(statement, generatorModeToParserMode(g.mode)) {
+		statement += "\n"
+	}
+	return inputStatement{statement: statement}
 }
 
-// recreateView creates a view that was dropped. PostgreSQL's view is created as written, as
-// sqldef cannot write the casts of its literals back, which give its columns their types; the
-// same goes for CREATE OR REPLACE VIEW.
-func (g *Generator) recreateView(view View) statement {
-	// The desired DDL keeps the casts that the AST drops from literals. Legacy mode quotes every
-	// name, which the following statements on the view expect.
-	if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
-		return g.inputStatement(view.statement)
+// createView creates a desired view. PostgreSQL's view is created as written, as sqldef cannot
+// write the casts of its literals back, which give its columns their types.
+func (g *Generator) createView(view View, orReplace bool) statement {
+	if g.mode != GeneratorModePostgres {
+		return createViewStatement{d: g.dialect, view: view, orReplace: orReplace}
 	}
-	return createViewStatement{d: g.dialect, view: view}
+	ddl := view.statement
+	if g.legacyIgnoreQuotes {
+		// Legacy mode quotes every name, which the following statements on the view expect
+		ddl = parser.ReplaceViewName(ddl, parser.ParserModePostgres, g.escapeQualifiedName(view.name))
+	}
+	if orReplace {
+		ddl = parser.CreateOrReplace(ddl, parser.ParserModePostgres)
+	}
+	return g.inputStatement(ddl)
 }
 
 // appendColumnTypeChange appends the statements that change the type of a column. PostgreSQL

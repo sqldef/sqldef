@@ -2721,3 +2721,16 @@ func TestTypecastToBitKeepsLengthOnlyForTheKeyword(t *testing.T) {
 		t.Error(`want an error for a length of "char"`)
 	}
 }
+
+func TestReplaceViewName(t *testing.T) {
+	for sql, expected := range map[string]string{
+		`CREATE VIEW v AS SELECT 1`:                                                                `CREATE VIEW "public"."v" AS SELECT 1`,
+		`create or replace view public."V" (a) as select 1`:                                        `create or replace view "public"."v" (a) as select 1`,
+		`CREATE MATERIALIZED VIEW IF NOT EXISTS s.v WITH (fillfactor=70) AS SELECT 1 WITH NO DATA`: `CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."v" WITH (fillfactor=70) AS SELECT 1 WITH NO DATA`,
+		`CREATE /* c */ VIEW /* c */ v/* c */AS SELECT 1`:                                          `CREATE /* c */ VIEW "public"."v"/* c */AS SELECT 1`,
+	} {
+		if got := ReplaceViewName(sql, ParserModePostgres, `"public"."v"`); got != expected {
+			t.Errorf("ReplaceViewName(%q) = %q, want %q", sql, got, expected)
+		}
+	}
+}

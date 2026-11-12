@@ -1819,3 +1819,34 @@ func EndsWithLineComment(sql string, mode ParserMode) bool {
 	}
 	return lastType == COMMENT && !strings.HasPrefix(lastValue, "/*") && !strings.HasSuffix(lastValue, "\n")
 }
+
+// ReplaceViewName returns a CREATE VIEW statement with its view named by name
+func ReplaceViewName(sql string, mode ParserMode, name string) string {
+	tkn := NewTokenizer(sql, mode)
+	for {
+		typ, _ := tkn.scanSkippingComments()
+		if typ == VIEW {
+			break
+		}
+		if typ == 0 {
+			panic(fmt.Sprintf("not a CREATE VIEW statement: %s", sql))
+		}
+	}
+	start := tkn.Position - 1
+	end := start
+	for {
+		typ, val := tkn.scanSkippingComments()
+		if typ == ID && strings.EqualFold(val, "tablespace") {
+			typ = 0
+		}
+		switch typ {
+		case IF, NOT, EXISTS:
+			start = tkn.Position - 1
+			end = start
+			continue
+		case '(', AS, WITH, USING, 0:
+			return sql[:start] + " " + name + sql[end:]
+		}
+		end = tkn.Position - 1
+	}
+}

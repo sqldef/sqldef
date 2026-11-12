@@ -2457,51 +2457,55 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 // mapChildExprs returns a copy of an expression with f applied to the expressions it holds
 func mapChildExprs(expr parser.Expr, f func(parser.Expr) parser.Expr) parser.Expr {
 	exprType := reflect.TypeFor[parser.Expr]()
-	var mapValue func(v reflect.Value) reflect.Value
-	mapFields := func(v reflect.Value) reflect.Value {
+	return copyTree(reflect.ValueOf(expr), func(v reflect.Value) (reflect.Value, bool) {
+		if v.Kind() != reflect.Interface || v.Type() != exprType || v.IsNil() {
+			return reflect.Value{}, false
+		}
+		mapped := reflect.New(exprType).Elem()
+		mapped.Set(reflect.ValueOf(f(v.Interface().(parser.Expr))))
+		return mapped, true
+	}).Interface().(parser.Expr)
+}
+
+// copyTree deep copies the exported fields of an AST, replacing each value for which replace
+// returns true
+func copyTree(v reflect.Value, replace func(reflect.Value) (reflect.Value, bool)) reflect.Value {
+	if replaced, ok := replace(v); ok {
+		return replaced
+	}
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		copied := reflect.New(v.Type()).Elem()
+		copied.Set(copyTree(v.Elem(), replace))
+		return copied
+	case reflect.Pointer:
+		if v.IsNil() || v.Elem().Kind() != reflect.Struct {
+			return v
+		}
+		copied := reflect.New(v.Elem().Type())
+		copied.Elem().Set(copyTree(v.Elem(), replace))
+		return copied
+	case reflect.Struct:
 		copied := reflect.New(v.Type()).Elem()
 		copied.Set(v)
 		for i := range v.NumField() {
 			if v.Type().Field(i).IsExported() {
-				copied.Field(i).Set(mapValue(v.Field(i)))
+				copied.Field(i).Set(copyTree(v.Field(i), replace))
 			}
 		}
 		return copied
-	}
-	mapValue = func(v reflect.Value) reflect.Value {
-		switch v.Kind() {
-		case reflect.Interface:
-			if v.IsNil() {
-				return v
-			}
-			if v.Type() == exprType {
-				mapped := reflect.New(exprType).Elem()
-				mapped.Set(reflect.ValueOf(f(v.Interface().(parser.Expr))))
-				return mapped
-			}
-			mapped := reflect.New(v.Type()).Elem()
-			mapped.Set(mapValue(v.Elem()))
-			return mapped
-		case reflect.Pointer:
-			if v.IsNil() || v.Elem().Kind() != reflect.Struct {
-				return v
-			}
-			copied := reflect.New(v.Elem().Type())
-			copied.Elem().Set(mapFields(v.Elem()))
-			return copied
-		case reflect.Struct:
-			return mapFields(v)
-		case reflect.Slice:
-			if v.IsNil() {
-				return v
-			}
-			copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-			for i := range v.Len() {
-				copied.Index(i).Set(mapValue(v.Index(i)))
-			}
-			return copied
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
 		}
-		return v
+		copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			copied.Index(i).Set(copyTree(v.Index(i), replace))
+		}
+		return copied
 	}
-	return mapValue(reflect.ValueOf(expr)).Interface().(parser.Expr)
+	return v
 }
