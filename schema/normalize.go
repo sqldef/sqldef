@@ -313,7 +313,7 @@ func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
 // isFoldableValueCastTypeName matches the scalar types whose typed-literal and
 // read-back cast spellings converge. Array ("numeric[]") and time types are excluded.
 func isFoldableValueCastTypeName(typeStr string) bool {
-	switch typeStr {
+	switch parser.PostgresTypeName(typeStr) {
 	case "numeric", "decimal", "real", "double precision",
 		"integer", "int", "bigint", "smallint",
 		"money", "smallmoney", "interval":
@@ -893,7 +893,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// We strip these redundant casts to generate cleaner DDL
 			// However, we preserve necessary casts like ::interval, ::bpchar, ::json, ::jsonb, and numeric casts
 			if e.Type != nil {
-				typeStr := strings.ToLower(e.Type.Type)
+				typeStr := parser.PostgresTypeName(strings.ToLower(e.Type.Type))
 				// Only strip casts on simple string literals (not in expressions)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
 					// Handle string literals

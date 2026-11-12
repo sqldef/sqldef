@@ -2159,3 +2159,44 @@ ViewsWithArrayCastsWrittenWithArrayKeywordAndEmpty:
   desired: |
     CREATE TABLE t (i integer, b bigint);
     CREATE VIEW v AS SELECT CAST(ARRAY[i, 2] AS bigint ARRAY) AS a, ARRAY[]::bigint[] AS e, CAST(ARRAY[b] AS bigint[]) AS c FROM t;
+
+ChangeColumnTypeOfTableNamedLikeColumnReadByView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE status (id integer, status text);
+    CREATE VIEW v AS SELECT status FROM status;
+  desired: |
+    CREATE TABLE status (id bigint, status text);
+    CREATE VIEW v AS SELECT status FROM status;
+  up: |
+    ALTER TABLE public.status ALTER COLUMN id TYPE bigint;
+  down: |
+    ALTER TABLE public.status ALTER COLUMN id TYPE integer;
+
+# FIXME: PostgreSQL renames an alias that hides another, such as a to a_1
+# ChangeColumnTypeOfTableWithAliasUsedByOtherTable:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE t (id integer, name text);
+#     CREATE TABLE u (id integer);
+#     CREATE VIEW v AS SELECT a.id FROM u a UNION ALL SELECT a.id FROM u a WHERE EXISTS (SELECT 1 FROM t a WHERE a.name = 'x');
+#   desired: |
+#     CREATE TABLE t (id bigint, name text);
+#     CREATE TABLE u (id integer);
+#     CREATE VIEW v AS SELECT a.id FROM u a UNION ALL SELECT a.id FROM u a WHERE EXISTS (SELECT 1 FROM t a WHERE a.name = 'x');
+#   up: |
+#     ALTER TABLE public.t ALTER COLUMN id TYPE bigint;
+#   down: |
+#     ALTER TABLE public.t ALTER COLUMN id TYPE integer;
+
+ViewWithLiteralsCastToQualifiedKeywordTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id integer);
+    CREATE VIEW v AS SELECT 'a'::pg_catalog.char AS c, '1'::pg_catalog.int4 AS i, '{1}'::pg_catalog.int8[] AS a, '0'::pg_catalog.bit AS b FROM t;
+
+ViewWithLiteralsCastToTypeAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id integer);
+    CREATE VIEW v AS SELECT '1'::int4 AS i, '1.5'::float8 AS f, 't'::bool AS b, 'yes'::boolean AS y, '2'::pg_catalog.int8 AS l FROM t;

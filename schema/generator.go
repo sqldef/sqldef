@@ -2610,73 +2610,106 @@ func (g *Generator) viewKey(view *View) string {
 // from the table or in its subqueries, joins USING it or naturally there, selects * there, or reads
 // a whole row of the table
 func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
-	names := []Ident{table.Name}
-	type colRef struct {
-		col     *parser.ColName
-		inScope bool
+	// An unqualified name of the table reads its whole row unless it has a column of that name
+	var columnNames []Ident
+	if current := g.findTableByName(g.currentTables, table); current != nil {
+		for _, col := range current.columns {
+			columnNames = append(columnNames, col.name)
+		}
 	}
-	var colNames []colRef
+	hasColumn := func(name Ident) bool {
+		return slices.ContainsFunc(columnNames, func(col Ident) bool { return g.identsEqual(col, name) })
+	}
 	reads := false
-	// inScope tells whether the table is in the FROM of the query or of a query enclosing it, so
-	// that an unqualified name may be its column. own tells whether it is in the FROM of the query
-	// itself, which * and joins read.
-	var visit func(v reflect.Value, inScope, own bool)
-	visit = func(v reflect.Value, inScope, own bool) {
+	// names are the names the table goes by in the query and the queries enclosing it. inScope
+	// tells whether it is in the FROM of any of them, so that an unqualified name may be its
+	// column. own tells whether it is in the FROM of the query itself, which * and joins read.
+	var visit func(v reflect.Value, names []Ident, inScope, own bool)
+	visit = func(v reflect.Value, names []Ident, inScope, own bool) {
 		v = unwrapInterface(v)
-		if !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
+		if reads || !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
 			return
+		}
+		named := func(ident Ident) bool {
+			return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
 		}
 		switch node := v.Interface().(type) {
 		case *parser.Select:
-			own = g.fromHasTable(node.From, table)
-			inScope = inScope || own
-		case *parser.AliasedTableExpr:
-			if name, ok := node.Expr.(parser.TableName); ok && g.namesTable(name, table) {
-				// A column alias list renames the columns, which sqldef does not map to the table's
-				reads = reads || len(node.Columns) > 0
-				if !node.As.IsEmpty() {
-					names = append(names, node.As)
+			var ownNames, bound []Ident
+			for _, item := range fromItems(node.From) {
+				name := item.As
+				if tableName, ok := item.Expr.(parser.TableName); ok {
+					if name.IsEmpty() {
+						name = tableName.Name
+					}
+					if g.namesTable(tableName, table) {
+						ownNames = append(ownNames, name)
+						// A column alias list renames the columns, which sqldef does not map to the table's
+						reads = reads || len(item.Columns) > 0
+					}
 				}
+				bound = append(bound, name)
 			}
+			// A name in the FROM of the query hides the same name of an enclosing query
+			names = slices.DeleteFunc(slices.Clone(names), func(name Ident) bool {
+				return slices.ContainsFunc(bound, func(b Ident) bool { return g.identsEqual(b, name) })
+			})
+			names = append(names, ownNames...)
+			own = len(ownNames) > 0
+			inScope = inScope || own
 		case *parser.ColName:
-			colNames = append(colNames, colRef{col: node, inScope: inScope})
+			switch {
+			case node.Qualifier.Name.IsEmpty():
+				reads = inScope && g.identsEqual(node.Name, column) || named(node.Name) && !hasColumn(node.Name)
+			case !node.Qualifier.Schema.IsEmpty():
+				reads = g.namesTable(node.Qualifier, table) && g.identsEqual(node.Name, column)
+			default:
+				reads = named(node.Qualifier.Name) && g.identsEqual(node.Name, column)
+			}
 			return
 		case *parser.StarExpr:
 			if node.TableName.Name.IsEmpty() {
-				reads = reads || own
+				reads = own
+			} else if !node.TableName.Schema.IsEmpty() {
+				reads = g.namesTable(node.TableName, table)
 			} else {
-				colNames = append(colNames, colRef{col: &parser.ColName{Name: column, Qualifier: node.TableName}})
+				reads = named(node.TableName.Name)
 			}
 			return
 		case *parser.JoinTableExpr:
 			// A natural join compares the columns of the same name
-			reads = reads || own && strings.HasPrefix(node.Join, "natural ")
+			reads = own && strings.HasPrefix(node.Join, "natural ")
 		case parser.JoinCondition:
-			reads = reads || own && slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
+			reads = own && slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
 		case *parser.FuncExpr:
 			// The * of count(*) reads no column, unlike a whole row such as count(t.*)
 			if len(node.Exprs) == 1 {
 				if star, ok := node.Exprs[0].(*parser.StarExpr); ok && star.TableName.Name.IsEmpty() {
-					visit(reflect.ValueOf(node.Over), inScope, own)
+					visit(reflect.ValueOf(node.Over), names, inScope, own)
 					return
 				}
 			}
 		}
-		visitChildren(v, func(child reflect.Value) { visit(child, inScope, own) })
+		visitChildren(v, func(child reflect.Value) { visit(child, names, inScope, own) })
 	}
-	visit(reflect.ValueOf(view.definition), false, false)
-	namesTable := func(ident Ident) bool {
-		return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
+	visit(reflect.ValueOf(view.definition), nil, false, false)
+	return reads
+}
+
+// fromItems returns the tables, subqueries and functions of a FROM clause
+func fromItems(exprs parser.TableExprs) []*parser.AliasedTableExpr {
+	var items []*parser.AliasedTableExpr
+	for _, expr := range exprs {
+		switch expr := expr.(type) {
+		case *parser.AliasedTableExpr:
+			items = append(items, expr)
+		case *parser.JoinTableExpr:
+			items = append(items, fromItems(parser.TableExprs{expr.LeftExpr, expr.RightExpr})...)
+		case *parser.ParenTableExpr:
+			items = append(items, fromItems(expr.Exprs)...)
+		}
 	}
-	return reads || slices.ContainsFunc(colNames, func(ref colRef) bool {
-		if ref.col.Qualifier.Name.IsEmpty() {
-			return ref.inScope && g.identsEqual(ref.col.Name, column) || namesTable(ref.col.Name)
-		}
-		if !ref.col.Qualifier.Schema.IsEmpty() {
-			return g.namesTable(ref.col.Qualifier, table) && g.identsEqual(ref.col.Name, column)
-		}
-		return namesTable(ref.col.Qualifier.Name) && g.identsEqual(ref.col.Name, column)
-	})
+	return items
 }
 
 // namesTable reports whether a table name in a query names a table, an unqualified one in the

@@ -86,6 +86,39 @@ func castTypeWithLength(name string, length *SQLVal) *ConvertType {
   return &ConvertType{Type: name, Length: length}
 }
 
+// qualifiedKeywordType returns the type a keyword names with a schema, such as pg_catalog.char.
+// A built-in type is written as a keyword, and a type of pg_catalog is written without its schema.
+func qualifiedKeywordType(yylex any, schema Ident, t *ConvertType) (*ConvertType, error) {
+  if !IsPgCatalog(schema) {
+    // A type of another schema, such as extensions.vector(3), is named by the keyword as written.
+    // Keywords that the grammar renames or gives a length cannot be named so.
+    name := strings.ToLower(t.Type)
+    switch {
+    case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", name == "real", t.TimeZone != "":
+      return nil, fmt.Errorf("type %s.%s is not supported", schema.Name, t.Type)
+    }
+    qualified := &ConvertType{Type: collationNamePart(yylex, schema) + "." + name, Length: t.Length, Scale: t.Scale}
+    if t.ImplicitLength {
+      qualified.Length = nil
+    }
+    return qualified, nil
+  }
+  switch {
+  case strings.EqualFold(t.Type, "char"):
+    // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
+    if !t.ImplicitLength {
+      return nil, fmt.Errorf("type \"char\" takes no length")
+    }
+    return &ConvertType{Type: `"char"`}, nil
+  case strings.EqualFold(t.Type, "bit") && t.ImplicitLength:
+    // pg_catalog.bit is the type "bit", which has no length unless one is written, and which
+    // PostgreSQL writes as bit(n) with one
+    return &ConvertType{Type: `"bit"`}, nil
+  }
+  t.Type = PostgresTypeName(strings.ToLower(t.Type))
+  return t, nil
+}
+
 // withImplicitLength gives a cast type the length of character and bit written as keywords
 // without one, which a qualified name of the same type does not have
 func withImplicitLength(t *ConvertType) *ConvertType {
@@ -4987,13 +5020,31 @@ character_cast_opt:
       $$ = &ConvertType{Type: $2}
     }
   }
+| TYPECAST ID '.' keyword_convert_type array_opt character_cast_opt
+  {
+    if $6 != nil {
+      $$ = $6
+    } else {
+      t, err := qualifiedKeywordType(yylex, $2, $4)
+      if err != nil {
+        return abortParse(yylex, err.Error())
+      }
+      $$ = arrayCastType(t, $5)
+    }
+  }
 | TYPECAST column_type array_opt character_cast_opt
   {
     // Return the innermost type for chained casts like ::varchar::text
     if $4 != nil {
       $$ = $4
     } else {
+      // A type of pg_catalog is named as PostgreSQL writes it
       typeName := $2.Type
+      if base, ok := strings.CutPrefix(typeName, "pg_catalog."); ok {
+        typeName = PostgresTypeName(base)
+      } else if !strings.Contains(typeName, ".") {
+        typeName = PostgresTypeName(typeName)
+      }
       if $3 {
         typeName = typeName + "[]"
       }
@@ -8070,35 +8121,11 @@ named_convert_type:
   }
 | sql_id '.' keyword_convert_type
   {
-    // A built-in type is written as a keyword, and a type of pg_catalog is written without its schema
-    if !IsPgCatalog($1) {
-      // A type of another schema, such as extensions.vector(3), is named by the keyword as written.
-      // Keywords that the grammar renames or gives a length cannot be named so.
-      name := strings.ToLower($3.Type)
-      switch {
-      case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", name == "real", $3.TimeZone != "":
-        return abortParse(yylex, fmt.Sprintf("type %s.%s is not supported", $1.Name, $3.Type))
-      }
-      $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + name, Length: $3.Length, Scale: $3.Scale}
-      if $3.ImplicitLength {
-        $$.Length = nil
-      }
-    } else if strings.EqualFold($3.Type, "char") {
-      // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
-      if !$3.ImplicitLength {
-        return abortParse(yylex, "type \"char\" takes no length")
-      }
-      $$ = &ConvertType{Type: `"char"`}
-    } else if strings.EqualFold($3.Type, "bit") {
-      // pg_catalog.bit is the type "bit", which has no length unless one is written, and which
-      // PostgreSQL writes as bit(n) with one
-      $$ = $3
-      if $3.ImplicitLength {
-        $$ = &ConvertType{Type: `"bit"`}
-      }
-    } else {
-      $$ = $3
+    t, err := qualifiedKeywordType(yylex, $1, $3)
+    if err != nil {
+      return abortParse(yylex, err.Error())
     }
+    $$ = t
   }
 
 keyword_convert_type:
