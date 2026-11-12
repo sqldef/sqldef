@@ -3135,3 +3135,33 @@ CheckWithCastsToBitAndCharacterWithoutLength:
       CONSTRAINT t_b CHECK (b::bit <> B'0' AND b::bit(1) <> B'1'),
       CONSTRAINT t_c CHECK (c::char <> 'x' AND c::character(1) <> 'y')
     );
+
+CheckWithCastsToBitOfOtherColumnTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      v varbit,
+      b bit(5),
+      CONSTRAINT t_v CHECK (v::bit <> B'0'),
+      CONSTRAINT t_b CHECK (b::pg_catalog.bit <> B'00000' AND b::pg_catalog.bit(5) <> B'11111')
+    );
+
+CheckWithFunctionsOfQuotedPgCatalog:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer,
+      ts timestamp(3) with time zone[],
+      CONSTRAINT t_i CHECK ("pg_catalog".round(i, 2) > 0 AND i::"pg_catalog".int4 > 0),
+      CONSTRAINT t_ts CHECK (ts::timestamp(3) with time zone[] <> '{}')
+    );
+
+CheckWithExpressionsInArrays:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      ts timestamp,
+      i integer,
+      CONSTRAINT t_ts CHECK (ARRAY[ts::timestamp(3) with time zone, now()] <> '{}'),
+      CONSTRAINT t_i CHECK (i + 1 = ANY (ARRAY[i * 2, -1, length(i::text)]) OR ARRAY[ARRAY[i]] IS NOT NULL)
+    );

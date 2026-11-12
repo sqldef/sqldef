@@ -746,3 +746,16 @@ QuotedArrayAndQualifiedCastTypes:
     CREATE TYPE "Mood" AS ENUM ('a');
     CREATE TYPE s.int4 AS ENUM ('a');
     CREATE TABLE t (m text[], n text, CONSTRAINT k1 CHECK (m::"Mood"[] IS NOT NULL), CONSTRAINT k2 CHECK (n::s.int4 IS NOT NULL));
+
+ColumnNamedLikeValueKeyword:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id integer);
+  desired: |
+    CREATE TABLE t (id integer, "user" text, "current_date" date);
+  up: |
+    ALTER TABLE public.t ADD COLUMN "user" text;
+    ALTER TABLE public.t ADD COLUMN "current_date" date;
+  down: |
+    ALTER TABLE public.t DROP COLUMN "current_date";
+    ALTER TABLE public.t DROP COLUMN "user";

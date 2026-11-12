@@ -1870,3 +1870,16 @@ ColumnsOfCharacterAndBitWithoutLength:
 #   legacy_ignore_quotes: false
 #   desired: |
 #     CREATE TABLE t (p bpchar);
+
+ChangeBitVaryingColumnLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (v varbit, w bit varying(4));
+  desired: |
+    CREATE TABLE t (v varbit(3), w bit varying(8));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN v TYPE varbit(3);
+    ALTER TABLE public.t ALTER COLUMN w TYPE bit varying(8);
+  down: |
+    ALTER TABLE public.t ALTER COLUMN v TYPE varbit;
+    ALTER TABLE public.t ALTER COLUMN w TYPE bit varying(4);

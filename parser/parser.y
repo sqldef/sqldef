@@ -82,7 +82,22 @@ func castTypeWithLength(name string, length *SQLVal) *ConvertType {
   return &ConvertType{Type: name, Length: length}
 }
 
-func isPgCatalog(schema Ident) bool {
+// implicitLength is the length of character and bit written as keywords without one, which a
+// qualified name of the same type does not have
+var implicitLength = NewIntVal("1")
+
+// arrayCastType returns the type of a cast written with [] after it
+func arrayCastType(t *ConvertType, array BoolVal) *ConvertType {
+  if !array {
+    return t
+  }
+  arrayType := *t
+  arrayType.Type += "[]"
+  return &arrayType
+}
+
+// IsPgCatalog reports whether a schema name is pg_catalog, quoted or not
+func IsPgCatalog(schema Ident) bool {
   if schema.Quoted {
     return schema.Name == "pg_catalog"
   }
@@ -619,7 +634,6 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
-%type <expr> array_element numeric_array_element
 %type <str> sql_security
 %type <overExpr> over_expression window_spec
 %token <str> OVER
@@ -4436,11 +4450,7 @@ default_value_expression:
   }
 | default_value_expression TYPECAST simple_convert_type array_opt
   {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
+    $$ = &CastExpr{Expr: $1, Type: arrayCastType($3, $4)}
   }
 | default_value_expression TYPECAST DOUBLE PRECISION array_opt
   {
@@ -5163,6 +5173,10 @@ char_type:
 | NCHAR length_opt charset_opt collate_opt
   {
     $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
+  }
+| BIT VARYING length_opt
+  {
+    $$ = ColumnType{Type: $1 + " " + $2, Length: $3}
   }
 | NVARCHAR max_length_opt charset_opt collate_opt
   {
@@ -7477,11 +7491,7 @@ value_expression:
   }
 | value_expression TYPECAST simple_convert_type array_opt
   {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
+    $$ = &CastExpr{Expr: $1, Type: arrayCastType($3, $4)}
   }
 | value_expression TYPECAST DOUBLE PRECISION array_opt
   {
@@ -8007,7 +8017,7 @@ simple_convert_type:
   }
 | sql_id '.' sql_id
   {
-    if isPgCatalog($1) {
+    if IsPgCatalog($1) {
       $$ = &ConvertType{Type: castTypeName(yylex, $3)}
     } else {
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)}
@@ -8015,7 +8025,7 @@ simple_convert_type:
   }
 | sql_id '.' sql_id '(' INTEGRAL ')'
   {
-    if isPgCatalog($1) {
+    if IsPgCatalog($1) {
       $$ = castTypeWithLength(castTypeName(yylex, $3), NewIntVal($5))
     } else {
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3), Length: NewIntVal($5)}
@@ -8024,7 +8034,7 @@ simple_convert_type:
 | sql_id '.' keyword_convert_type
   {
     // A built-in type is written as a keyword, and a type of pg_catalog is written without its schema
-    if !isPgCatalog($1) {
+    if !IsPgCatalog($1) {
       // A type of another schema, such as extensions.vector(3), is named by the keyword as written.
       // Keywords that the grammar renames or gives a length cannot be named so.
       name := strings.ToLower($3.Type)
@@ -8035,10 +8045,16 @@ simple_convert_type:
       $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + name, Length: $3.Length, Scale: $3.Scale}
     } else if strings.EqualFold($3.Type, "char") {
       // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
-      if String($3.Length) != "1" {
+      if $3.Length != implicitLength {
         return abortParse(yylex, "type \"char\" takes no length")
       }
       $$ = &ConvertType{Type: `"char"`}
+    } else if strings.EqualFold($3.Type, "bit") {
+      // pg_catalog.bit is the type "bit", which has no length unless one is written
+      $$ = &ConvertType{Type: `"bit"`, Length: $3.Length}
+      if $3.Length == implicitLength {
+        $$.Length = nil
+      }
     } else {
       $$ = $3
     }
@@ -8064,6 +8080,10 @@ keyword_convert_type:
 | int_type_keyword
   {
     $$ = &ConvertType{Type: $1}
+    // The keyword bit means bit(1)
+    if strings.EqualFold($1, "bit") {
+      $$.Length = implicitLength
+    }
   }
 | bool_type
   {
@@ -8124,7 +8144,7 @@ keyword_convert_type:
   }
 | CHAR
   {
-    $$ = &ConvertType{Type: $1, Length: NewIntVal("1")}
+    $$ = &ConvertType{Type: $1, Length: implicitLength}
   }
 | CHARACTER '(' INTEGRAL ')'
   {
@@ -8830,103 +8850,13 @@ array_element_list:
   {
     $$ = nil
   }
-| array_element
+| value_expression
   {
     $$ = Exprs{$1}
   }
-| array_element_list ',' array_element
+| array_element_list ',' value_expression
   {
     $$ = append($$, $3)
-  }
-
-/* For PostgreSQL */
-array_element:
-  STRING character_cast_opt
-  {
-    // Preserve numeric/money/interval casts (see value:); drop the rest as before.
-    if isFoldableValueCast($2) {
-      $$ = &CastExpr{Expr: newStrVal(yylex, $1), Type: $2}
-    } else {
-      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2, BackslashEscapes: backslashEscapes(yylex)}
-    }
-  }
-| typed_literal
-  {
-    $$ = $1
-  }
-| INTEGRAL
-  {
-    $$ = NewIntVal($1)
-  }
-| FLOAT
-  {
-    $$ = NewFloatVal($1)
-  }
-| numeric_array_element TYPECAST simple_convert_type array_opt
-  {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
-  }
-| numeric_array_element TYPECAST DOUBLE PRECISION array_opt
-  {
-    t := "double precision"
-    if $5 {
-      t += "[]"
-    }
-    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
-  }
-| current_timestamp
-  {
-    $$ = $1
-  }
-| current_timestamp TYPECAST simple_convert_type array_opt
-  {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
-  }
-| tuple_expression
-  {
-    $$ = $1
-  }
-| tuple_expression TYPECAST simple_convert_type array_opt
-  {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
-  }
-| tuple_expression TYPECAST DOUBLE PRECISION array_opt
-  {
-    t := "double precision"
-    if $5 {
-      t += "[]"
-    }
-    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
-  }
-| variadic_opt array_constructor
-  {
-    $$ = $2
-  }
-| column_name
-  {
-    $$ = $1
-  }
-
-numeric_array_element:
-  INTEGRAL
-  {
-    $$ = NewIntVal($1)
-  }
-| FLOAT
-  {
-    $$ = NewFloatVal($1)
   }
 
 bool_option_name_list:

@@ -27,6 +27,7 @@ var (
 		"float8": "double precision",
 		"float":  "double precision",
 		"bpchar": "character",
+		"varbit": "bit varying",
 
 		// Timezone type aliases (the timezone flag is stored separately in Column.timezone)
 		"timestamptz":                 "timestamp",
@@ -2437,7 +2438,7 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 	case *parser.RangeCond:
 		return &parser.RangeCond{Operator: e.Operator, Left: operand(e.Left), From: operand(e.From), To: operand(e.To)}
 	case *parser.CastExpr:
-		return &parser.CastExpr{Expr: canonicalParens(e.Expr), Type: e.Type}
+		return &parser.CastExpr{Expr: canonicalParens(e.Expr), Type: e.Type, Resolved: e.Resolved}
 	case *parser.FuncExpr:
 		resolved := *e
 		resolved.Exprs = make(parser.SelectExprs, len(e.Exprs))

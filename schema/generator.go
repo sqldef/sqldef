@@ -2430,7 +2430,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 	currentView := g.findViewByName(g.currentViews, desiredView.name)
 	if currentView == nil {
 		view := *desiredView
-		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		key := g.viewKey(&view)
 		if previous, ok := g.recreatedViews[key]; ok {
 			// The dependent view was dropped by the recreation of a view it depends on, which
 			// decided whether this CREATE runs too.
@@ -2503,8 +2503,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				var recreated bool
 				ddls, recreated = g.appendRecreateStatements(ddls, recreate{statements: recreateDDLs})
 				for _, depView := range dependents {
-					key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-					g.recreatedViews[key] = recreatedView{view: depView, heldBack: !recreated}
+					g.recreatedViews[g.viewKey(depView)] = recreatedView{view: depView, heldBack: !recreated}
 				}
 			} else if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
 				ddls = append(ddls, inputStatement{statement: parser.CreateOrReplace(desiredView.statement, parser.ParserModePostgres)})
@@ -4343,7 +4342,7 @@ func (d dialect) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
 			return d.forceEscapeSQLName(name)
-		} else if folded := strings.ToLower(name); parser.IsPostgresReservedKeyword(folded) {
+		} else if folded := strings.ToLower(name); parser.IsPostgresReservedKeyword(folded) || postgresValueKeywords[folded] {
 			// A reserved word is a name only where quoted, as PostgreSQL may have exported it
 			return d.forceEscapeSQLName(folded)
 		} else {
@@ -6431,6 +6430,14 @@ func postgresTypeLength(column Column) *Value {
 		return &Value{valueType: ValueTypeInt, intVal: 1, raw: "1"}
 	}
 	return nil
+}
+
+// postgresValueKeywords are the reserved words that PostgreSQL reads as calls of functions without
+// parentheses, which name an object only where quoted
+var postgresValueKeywords = map[string]bool{
+	"current_catalog": true, "current_date": true, "current_role": true, "current_time": true,
+	"current_timestamp": true, "current_user": true, "localtime": true, "localtimestamp": true,
+	"session_user": true, "system_user": true, "user": true,
 }
 
 func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {

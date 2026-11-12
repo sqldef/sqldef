@@ -115,7 +115,7 @@ func (tc *typeContext) typeOfName(name string) (string, bool) {
 		return "", false
 	}
 	var typ string
-	if len(parts) == 1 || parser.FoldASCII(parts[0].Name) == "pg_catalog" && !parts[0].Quoted {
+	if len(parts) == 1 || parser.IsPgCatalog(parts[0]) {
 		last := parts[len(parts)-1]
 		if last.Quoted {
 			if tc.resolver.Type(last.Name) != nil && last.Name == parser.FoldASCII(last.Name) {
@@ -145,8 +145,10 @@ func (tc *typeContext) typeOfName(name string) (string, bool) {
 
 // castType returns the type of a cast
 func (tc *typeContext) castType(t *parser.ConvertType) (exprType, bool) {
-	name := t.Type + t.TimeZone
-	if bool(t.Array) {
+	// The grammar puts the [] of an array before the time zone
+	base, array := strings.CutSuffix(t.Type, "[]")
+	name := base + t.TimeZone
+	if array || bool(t.Array) {
 		name += "[]"
 	}
 	typ, ok := tc.typeOfName(name)
@@ -550,7 +552,7 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 	if !plain || !tc.allKnown(types) {
 		return &resolved, exprType{}
 	}
-	if !e.Qualifier.IsEmpty() && (e.Qualifier.Quoted || parser.FoldASCII(e.Qualifier.Name) != "pg_catalog") {
+	if !e.Qualifier.IsEmpty() && !parser.IsPgCatalog(e.Qualifier) {
 		return &resolved, exprType{}
 	}
 	name := tc.functionKey(e.Name)
