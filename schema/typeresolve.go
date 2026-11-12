@@ -38,10 +38,15 @@ type typeContext struct {
 	viewOutputs   map[*View]*viewOutput
 	// knownCasts are the casts whose operand and target types are both known
 	knownCasts map[*parser.CastExpr]bool
+	// depth counts the resolutions in progress, as resolving a view resolves the views it reads
+	depth int
 	// mark marks the casts in the places where PostgreSQL adds none of its own as resolved
 	mark bool
 	// unresolved counts the expressions whose types are unknown
 	unresolved int
+	// ctes are the name keys of the common table expressions in scope of the query being
+	// resolved, which its subqueries see
+	ctes map[string]cteColumns
 	// collatedDomains are the keys of the domains with a collation of their own or their base's
 	collatedDomains map[string]bool
 	// collated is set when an expression reads a column, a cast or a COLLATE clause with a
@@ -198,14 +203,8 @@ func (tc *typeContext) columnType(column *Column) (exprType, bool) {
 		}
 	}
 	var length, scale string
-	switch {
-	case column.length != nil:
-		length = column.length.raw
-	case column.displayWidth != nil:
-		// The parser reads the length of bit(n) as a display width
-		length = column.displayWidth.raw
-	default:
-		length = defaultLength(name)
+	if l := postgresTypeLength(*column); l != nil {
+		length = l.raw
 	}
 	if column.scale != nil {
 		scale = column.scale.raw
@@ -278,7 +277,14 @@ type typedForms[T any] struct {
 // resolveForms resolves the types of an expression, or of a query, in both forms
 func resolveForms[T any](tc *typeContext, resolve func() T) typedForms[T] {
 	mark, unresolved := tc.mark, tc.unresolved
-	defer func() { tc.mark, tc.unresolved = mark, unresolved }()
+	tc.depth++
+	defer func() {
+		tc.mark, tc.unresolved = mark, unresolved
+		// The casts are needed only while the trees that hold them are built
+		if tc.depth--; tc.depth == 0 {
+			clear(tc.knownCasts)
+		}
+	}()
 	var forms typedForms[T]
 	tc.mark, tc.unresolved = false, 0
 	forms.plain = resolve()
@@ -656,7 +662,7 @@ func typeNames(types []exprType) []string {
 // resolveSubquery resolves a subquery, which reads the columns of the enclosing queries too. A
 // scalar subquery has the type of its one column.
 func (tc *typeContext) resolveSubquery(e *parser.Subquery, scope columnScope) (parser.Expr, exprType) {
-	resolved := &parser.Subquery{Select: tc.resolveSelect(e.Select, scope, nil)}
+	resolved := &parser.Subquery{Select: tc.resolveSelect(e.Select, scope, tc.ctes)}
 	columns, ok := tc.outputColumns(e.Select, resolved.Select)
 	if !ok || len(columns) != 1 {
 		return resolved, exprType{}
@@ -853,8 +859,8 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 	}
 	out := &viewOutput{resolving: true}
 	tc.viewOutputs[view] = out
-	outerCollated := tc.collated
-	tc.collated = false
+	outerCollated, outerCTEs := tc.collated, tc.ctes
+	tc.collated, tc.ctes = false, nil
 	forms := resolveForms(tc, func() parser.SelectStatement {
 		return tc.resolveSelect(view.definition, nil, nil)
 	})
@@ -869,7 +875,7 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 	} else if out.known && allColumnTypesKnown(out.columns) {
 		tc.g.viewColumnTypes[view.definition] = out.columns
 	}
-	tc.collated = outerCollated
+	tc.collated, tc.ctes = outerCollated, outerCTEs
 	out.resolving = false
 	return out.columns, out.known
 }
@@ -938,7 +944,7 @@ func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]rela
 
 // resolveSelect resolves the types of the expressions of a query. ctes are the name keys of
 // the common table expressions in scope, which hide the tables and views of their names.
-func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnScope, ctes map[string]bool) parser.SelectStatement {
+func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnScope, ctes map[string]cteColumns) parser.SelectStatement {
 	switch s := stmt.(type) {
 	case *parser.Union:
 		ctes = tc.withCTEs(ctes, s.With)
@@ -950,6 +956,9 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 		return &parser.ParenSelect{Select: tc.resolveSelect(s.Select, outer, ctes)}
 	case *parser.Select:
 		ctes = tc.withCTEs(ctes, s.With)
+		outerCTEs := tc.ctes
+		tc.ctes = ctes
+		defer func() { tc.ctes = outerCTEs }()
 		var relations []relation
 		for _, tableExpr := range s.From {
 			relations = tc.fromRelations(tableExpr, ctes, relations)
@@ -1017,16 +1026,36 @@ func writtenCastType(expr parser.Expr) *parser.ConvertType {
 	return nil
 }
 
-func (tc *typeContext) withCTEs(ctes map[string]bool, with *parser.With) map[string]bool {
+// cteColumns are the output columns of a common table expression, if known
+type cteColumns struct {
+	columns []relationColumn
+	known   bool
+}
+
+// withCTEs adds the common table expressions of a WITH clause to those in scope. Each one sees
+// those before it, and its own columns are unknown to itself where it is recursive.
+func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) map[string]cteColumns {
 	if with == nil {
 		return ctes
 	}
 	result := maps.Clone(ctes)
 	if result == nil {
-		result = map[string]bool{}
+		result = map[string]cteColumns{}
 	}
 	for _, cte := range with.CTEs {
-		result[tc.identKey(cte.Name)] = true
+		key := tc.identKey(cte.Name)
+		result[key] = cteColumns{}
+		definition := tc.resolveSelect(cte.Definition, nil, result)
+		columns, known := tc.outputColumns(cte.Definition, definition)
+		if known && len(cte.Columns) > 0 {
+			if len(cte.Columns) != len(columns) {
+				continue
+			}
+			for i, name := range cte.Columns {
+				columns[i].name = name
+			}
+		}
+		result[key] = cteColumns{columns: columns, known: known}
 	}
 	return result
 }
@@ -1036,7 +1065,7 @@ func (tc *typeContext) identKey(ident parser.Ident) string {
 }
 
 // fromRelations adds the relations of a FROM item
-func (tc *typeContext) fromRelations(tableExpr parser.TableExpr, ctes map[string]bool, relations []relation) []relation {
+func (tc *typeContext) fromRelations(tableExpr parser.TableExpr, ctes map[string]cteColumns, relations []relation) []relation {
 	switch t := tableExpr.(type) {
 	case *parser.JoinTableExpr:
 		relations = tc.fromRelations(t.LeftExpr, ctes, relations)
@@ -1052,7 +1081,11 @@ func (tc *typeContext) fromRelations(tableExpr parser.TableExpr, ctes map[string
 			if !rel.hasAs {
 				rel.name = QualifiedName{Schema: name.Schema, Name: name.Name}
 			}
-			if len(t.Columns) == 0 && !(name.Schema.IsEmpty() && ctes[tc.identKey(name.Name)]) {
+			if cte, isCTE := ctes[tc.identKey(name.Name)]; name.Schema.IsEmpty() && isCTE {
+				if len(t.Columns) == 0 {
+					rel.columns, rel.known = cte.columns, cte.known
+				}
+			} else if len(t.Columns) == 0 {
 				rel.columns, rel.known = tc.relationColumns(QualifiedName{Schema: name.Schema, Name: name.Name})
 			}
 		}

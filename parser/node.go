@@ -60,6 +60,8 @@ type nodeBuffer struct {
 	literals                  []keyLiteral
 	// literalType is the type of the cast whose operand is being formatted
 	literalType string
+	// literalCasts writes the casts that the parser dropped from string literals
+	literalCasts bool
 }
 
 // keyLiteral is a string literal in a comparison key
@@ -330,6 +332,13 @@ func String(node SQLNode) string {
 	}
 
 	var buf nodeBuffer
+	node.Format(&buf)
+	return buf.String()
+}
+
+// StringWithLiteralCasts is String, keeping the casts of string literals such as 'x'::varchar(3)
+func StringWithLiteralCasts(node SQLNode) string {
+	buf := nodeBuffer{literalCasts: true}
 	node.Format(&buf)
 	return buf.String()
 }
@@ -2797,6 +2806,9 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 				return
 			}
 			buf.formatCastOperand(literalNode{val: node.Val, backslashEscapes: node.BackslashEscapes}, node.DroppedCast.Type)
+			if buf.literalCasts {
+				buf.Printf("::%v", node.DroppedCast)
+			}
 			return
 		}
 		encodeSQLBytes(node.Val, node.BackslashEscapes, buf)

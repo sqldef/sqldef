@@ -1958,6 +1958,14 @@ ChangeColumnTypeReadByViewWithLiteralCastInLegacyMode:
   desired: |
     CREATE TABLE t (a bigint);
     CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s FROM t;
+  up: |
+    DROP VIEW "public"."v";
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE bigint;
+    CREATE VIEW "public"."v" AS select a, 'x'::varchar(3) as s from t;
+  down: |
+    DROP VIEW "public"."v";
+    ALTER TABLE "public"."t" ALTER COLUMN "a" TYPE integer;
+    CREATE VIEW "public"."v" AS select a, 'x'::varchar(3) as s from t;
 
 ViewWithCastsToBitOfLengths:
   legacy_ignore_quotes: false
@@ -1978,3 +1986,48 @@ AppendColumnToViewWithCastFunctionSyntax:
   down: |
     DROP VIEW public.v;
     CREATE VIEW v AS SELECT CAST(x AS varchar(3)) AS c, CAST(i AS bigint) FROM t;
+
+ChangeCTEReadBySubqueryInView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE c (id integer);
+    CREATE VIEW v AS WITH c AS (SELECT 1 AS id) SELECT (SELECT id FROM c) AS x;
+  desired: |
+    CREATE TABLE c (id integer);
+    CREATE VIEW v AS WITH c AS (SELECT 'a'::text AS id) SELECT (SELECT id FROM c) AS x, 2 AS y;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS WITH c AS (SELECT 'a'::text AS id) SELECT (SELECT id FROM c) AS x, 2 AS y;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS WITH c AS (SELECT 1 AS id) SELECT (SELECT id FROM c) AS x;
+
+ReplaceViewEndingWithLineComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id integer, name text);
+    CREATE VIEW v AS SELECT id FROM t;
+  desired: |
+    CREATE TABLE t (id integer, name text);
+    CREATE VIEW v AS SELECT id, name FROM t -- trailing
+    ;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT id, name FROM t -- trailing
+    ;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT id FROM t;
+
+ViewsWithCastFunctionToNamedTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE SCHEMA s;
+    CREATE TYPE s.mood AS ENUM ('a', 'b');
+    CREATE TABLE t (x text, i integer);
+    CREATE VIEW v AS SELECT CAST(x AS s.mood) AS m, CAST(ARRAY[i] AS int8[]) AS a, CAST(x AS pg_catalog.text) AS c FROM t;
+
+ViewsWithCastsOfArrayConstructors:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (x text, i integer, d date);
+    CREATE VIEW v AS SELECT ARRAY[i]::int8[] AS a, ARRAY[ARRAY[i, 2]]::numeric[] AS b, ARRAY[d::text]::text[] AS c, ARRAY['a', x]::text[] AS e FROM t;

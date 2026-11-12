@@ -692,6 +692,26 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
 }
 
+// castArrayElements moves the cast of an ARRAY constructor to an array type onto its elements, as
+// PostgreSQL stores ARRAY[i]::bigint[] as ARRAY[i::bigint]
+func castArrayElements(array *parser.ArrayConstructor, arrayType *parser.ConvertType, mode GeneratorMode) parser.Expr {
+	elementType := *arrayType
+	elementType.Type = strings.TrimSuffix(arrayType.Type, "[]")
+	elementKey := parser.String(normalizeConvertType(&elementType, mode))
+	elements := util.TransformSlice(array.Elements, func(element parser.Expr) parser.Expr {
+		switch e := element.(type) {
+		case *parser.ArrayConstructor:
+			return castArrayElements(e, arrayType, mode)
+		case *parser.CastExpr:
+			if parser.String(normalizeConvertType(e.Type, mode)) == elementKey {
+				return element
+			}
+		}
+		return normalizeExpr(&parser.CastExpr{Expr: element, Type: &elementType}, mode)
+	})
+	return &parser.ArrayConstructor{Elements: elements}
+}
+
 // isUnsizedStringCastType reports whether a cast is to text or character varying without a length,
 // which PostgreSQL adds implicitly where a string of another string type is expected. A cast with
 // a length truncates, so PostgreSQL never adds one.
@@ -952,6 +972,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {
+							if mode == GeneratorModePostgres {
+								return castArrayElements(arrayConstructor, e.Type, mode)
+							}
 							// Non-empty array: strip the redundant typecast
 							return normalizedExpr
 						}

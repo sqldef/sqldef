@@ -549,7 +549,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <openJSONSchemaItem> openjson_schema_item
 %type <str> charset
 %type <str> set_session_or_global
-%type <convertType> convert_type simple_convert_type keyword_convert_type
+%type <convertType> convert_type simple_convert_type named_convert_type keyword_convert_type
 %type <columnType> column_type
 %type <str> type_modifier_list type_modifier spatial_keyword
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
@@ -4989,7 +4989,14 @@ character_cast_opt:
       if $3 {
         typeName = typeName + "[]"
       }
-      $$ = &ConvertType{Type: typeName}
+      $$ = &ConvertType{Type: typeName, Length: $2.Length, Scale: $2.Scale}
+      if $$.Length == nil {
+        // bit(n) keeps its length as a display width
+        $$.Length = $2.DisplayWidth
+      }
+      if $2.Timezone {
+        $$.TimeZone = " with time zone"
+      }
     }
   }
 
@@ -7615,21 +7622,12 @@ function_call_keyword:
     $5.Array = $6
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
-| CAST '(' expression AS sql_id cast_array_opt ')'
+| CAST '(' expression AS named_convert_type array_opt ')'
   {
     if yylex.(*Tokenizer).mode != ParserModePostgres {
       return abortParse(yylex, "syntax error")
     }
-    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: &ConvertType{Type: castTypeName(yylex, $5), Array: $6}}
-  }
-| CAST '(' expression AS sql_id '(' INTEGRAL ')' cast_array_opt ')'
-  {
-    if yylex.(*Tokenizer).mode != ParserModePostgres {
-      return abortParse(yylex, "syntax error")
-    }
-    t := castTypeWithLength(castTypeName(yylex, $5), NewIntVal($7))
-    t.Array = $9
-    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: t}
+    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: arrayCastType($5, $6)}
   }
 | TRY_CAST '(' expression AS convert_type ')'
   {
@@ -8030,7 +8028,11 @@ convert_type:
 
 simple_convert_type:
   keyword_convert_type
-| sql_id
+| named_convert_type
+
+// named_convert_type is a type written as a name rather than a keyword
+named_convert_type:
+  sql_id
   {
     $$ = &ConvertType{Type: castTypeName(yylex, $1)}
   }
