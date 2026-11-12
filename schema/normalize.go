@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -2446,40 +2447,61 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 		return &parser.IsExpr{Operator: e.Operator, Expr: operand(e.Expr)}
 	case *parser.RangeCond:
 		return &parser.RangeCond{Operator: e.Operator, Left: operand(e.Left), From: operand(e.From), To: operand(e.To)}
-	case *parser.CastExpr:
-		return &parser.CastExpr{Expr: canonicalParens(e.Expr), Type: e.Type, Resolved: e.Resolved}
-	case *parser.FuncExpr:
-		resolved := *e
-		resolved.Exprs = make(parser.SelectExprs, len(e.Exprs))
-		for i, arg := range e.Exprs {
-			if aliased, ok := arg.(*parser.AliasedExpr); ok {
-				arg = &parser.AliasedExpr{Expr: canonicalParens(aliased.Expr), As: aliased.As}
-			}
-			resolved.Exprs[i] = arg
-		}
-		return &resolved
-	case *parser.CaseExpr:
-		resolved := &parser.CaseExpr{Whens: make([]*parser.When, len(e.Whens))}
-		if e.Expr != nil {
-			resolved.Expr = canonicalParens(e.Expr)
-		}
-		for i, when := range e.Whens {
-			resolved.Whens[i] = &parser.When{Cond: canonicalParens(when.Cond), Val: canonicalParens(when.Val)}
-		}
-		if e.Else != nil {
-			resolved.Else = canonicalParens(e.Else)
-		}
-		return resolved
-	case *parser.ArrayConstructor:
-		return &parser.ArrayConstructor{Elements: util.TransformSlice(e.Elements, canonicalParens)}
-	case parser.ValTuple:
-		return parser.ValTuple(util.TransformSlice(e, canonicalParens))
 	case *parser.CollateExpr:
 		return &parser.CollateExpr{Expr: operand(e.Expr), Charset: e.Charset}
-	case *parser.ConvertExpr:
-		resolved := *e
-		resolved.Expr = canonicalParens(e.Expr)
-		return &resolved
 	}
-	return expr
+	// An operator inside another node keeps parentheses, so that the key tells apart what it binds to
+	return mapChildExprs(expr, operand)
+}
+
+// mapChildExprs returns a copy of an expression with f applied to the expressions it holds
+func mapChildExprs(expr parser.Expr, f func(parser.Expr) parser.Expr) parser.Expr {
+	exprType := reflect.TypeFor[parser.Expr]()
+	var mapValue func(v reflect.Value) reflect.Value
+	mapFields := func(v reflect.Value) reflect.Value {
+		copied := reflect.New(v.Type()).Elem()
+		copied.Set(v)
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				copied.Field(i).Set(mapValue(v.Field(i)))
+			}
+		}
+		return copied
+	}
+	mapValue = func(v reflect.Value) reflect.Value {
+		switch v.Kind() {
+		case reflect.Interface:
+			if v.IsNil() {
+				return v
+			}
+			if v.Type() == exprType {
+				mapped := reflect.New(exprType).Elem()
+				mapped.Set(reflect.ValueOf(f(v.Interface().(parser.Expr))))
+				return mapped
+			}
+			mapped := reflect.New(v.Type()).Elem()
+			mapped.Set(mapValue(v.Elem()))
+			return mapped
+		case reflect.Pointer:
+			if v.IsNil() || v.Elem().Kind() != reflect.Struct {
+				return v
+			}
+			copied := reflect.New(v.Elem().Type())
+			copied.Elem().Set(mapFields(v.Elem()))
+			return copied
+		case reflect.Struct:
+			return mapFields(v)
+		case reflect.Slice:
+			if v.IsNil() {
+				return v
+			}
+			copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+			for i := range v.Len() {
+				copied.Index(i).Set(mapValue(v.Index(i)))
+			}
+			return copied
+		}
+		return v
+	}
+	return mapValue(reflect.ValueOf(expr)).Interface().(parser.Expr)
 }

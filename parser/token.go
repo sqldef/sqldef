@@ -1804,3 +1804,18 @@ func CreateOrReplace(sql string, mode ParserMode) string {
 	}
 	return sql[:end] + " OR REPLACE" + sql[end:]
 }
+
+// EndsWithLineComment reports whether a statement ends with a comment that runs to the end of the
+// line, such as -- or #, which would take in anything written after it on the same line
+func EndsWithLineComment(sql string, mode ParserMode) bool {
+	tkn := NewTokenizer(sql, mode)
+	lastType, lastValue := 0, ""
+	for {
+		typ, val := tkn.Scan()
+		if typ == 0 || typ == LEX_ERROR {
+			break
+		}
+		lastType, lastValue = typ, val
+	}
+	return lastType == COMMENT && !strings.HasPrefix(lastValue, "/*") && !strings.HasSuffix(lastValue, "\n")
+}

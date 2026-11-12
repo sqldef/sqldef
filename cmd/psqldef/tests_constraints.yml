@@ -3200,3 +3200,14 @@ CheckWithParenthesesInCastFunction:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE t (a integer, b integer, CONSTRAINT c CHECK (CAST((a + b) AS bigint) > 0 AND CAST((a) AS bigint) < 10));
+
+CheckWithParenthesesInsideOtherNodes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      b integer,
+      ts timestamp,
+      CONSTRAINT t_tz CHECK ((((ts + interval '1 day')) AT TIME ZONE 'UTC') > now()),
+      CONSTRAINT t_sub CHECK (substring(((a + b))::text from 1 for 2) <> 'x' AND coalesce(((a)), (b)) > 0)
+    );

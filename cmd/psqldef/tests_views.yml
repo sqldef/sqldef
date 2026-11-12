@@ -2031,3 +2031,32 @@ ViewsWithCastsOfArrayConstructors:
   desired: |
     CREATE TABLE t (x text, i integer, d date);
     CREATE VIEW v AS SELECT ARRAY[i]::int8[] AS a, ARRAY[ARRAY[i, 2]]::numeric[] AS b, ARRAY[d::text]::text[] AS c, ARRAY['a', x]::text[] AS e FROM t;
+
+# FIXME: PostgreSQL renames the table a CTE of its name reads to orders_1
+# AppendColumnToViewWithCTENamedLikeItsTable:
+#   legacy_ignore_quotes: false
+#   current: |
+#     CREATE TABLE orders (id integer, total numeric);
+#     CREATE VIEW v AS WITH orders AS (SELECT id, total FROM orders WHERE total > 0) SELECT id FROM orders;
+#   desired: |
+#     CREATE TABLE orders (id integer, total numeric);
+#     CREATE VIEW v AS WITH orders AS (SELECT id, total FROM orders WHERE total > 0) SELECT id, total FROM orders;
+#   up: |
+#     CREATE OR REPLACE VIEW v AS WITH orders AS (SELECT id, total FROM orders WHERE total > 0) SELECT id, total FROM orders;
+#   down: |
+#     DROP VIEW public.v;
+#     CREATE VIEW v AS WITH orders AS (SELECT id, total FROM orders WHERE total > 0) SELECT id FROM orders;
+
+ChangeViewColumnCastLengthInLegacyMode:
+  current: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(3) AS c FROM t;
+  desired: |
+    CREATE TABLE t (b text);
+    CREATE VIEW v AS SELECT b::varchar(10) AS c FROM t;
+  up: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select b::varchar(10) as c from t;
+  down: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select b::varchar(3) as c from t;

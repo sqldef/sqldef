@@ -1992,7 +1992,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 				desiredIndex.concurrently = true
 			}
 			// Otherwise: use the original statement as-is
-			indexDDL = inputStatement{statement: createIndex}
+			indexDDL = g.inputStatement(createIndex)
 		}
 	default:
 		indexDDL = g.inputAlterTable(input)
@@ -2206,14 +2206,14 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 	currentPolicy := g.findPolicyByName(currentTable.policies, desiredPolicy.name)
 	if currentPolicy == nil {
 		// Policy not found, add policy.
-		ddls = append(ddls, inputStatement{statement: input})
+		ddls = append(ddls, g.inputStatement(input))
 		currentTable.policies = append(currentTable.policies, desiredPolicy)
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
 			ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
 				dropPolicyStatement{d: g.dialect, name: currentPolicy.name, table: currentTable.name},
-				inputStatement{statement: input},
+				g.inputStatement(input),
 			}})
 		}
 	}
@@ -2395,11 +2395,10 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 			}
 		}
 
-		// CREATE OR REPLACE VIEW keeps the names and the types of the existing columns. Legacy mode
-		// writes views without the casts of their literals, which changes the types of columns.
+		// CREATE OR REPLACE VIEW keeps the names and the types of the existing columns
 		currentColumns, currentKnown := g.viewColumnTypes[currentView.definition]
 		desiredColumns, desiredKnown := g.viewColumnTypes[desiredView.definition]
-		if currentKnown && desiredKnown && !g.legacyIgnoreQuotes {
+		if currentKnown && desiredKnown {
 			if len(currentColumns) > len(desiredColumns) {
 				return true
 			}
@@ -2449,7 +2448,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				view.indexes = nil
 			}
 		} else {
-			ddls = append(ddls, inputStatement{statement: desiredView.statement})
+			ddls = append(ddls, g.inputStatement(desiredView.statement))
 			view.indexes = nil
 		}
 		g.currentViews = append(g.currentViews, &view)
@@ -2507,7 +2506,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 					g.recreatedViews[g.viewKey(depView)] = recreatedView{view: depView, heldBack: !recreated}
 				}
 			} else if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
-				ddls = append(ddls, inputStatement{statement: parser.CreateOrReplace(desiredView.statement, parser.ParserModePostgres)})
+				ddls = append(ddls, g.inputStatement(parser.CreateOrReplace(desiredView.statement, parser.ParserModePostgres)))
 			} else {
 				ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
 			}
@@ -2532,6 +2531,11 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 	return ddls, nil
 }
 
+// inputStatement returns a statement written as the input has it
+func (g *Generator) inputStatement(statement string) inputStatement {
+	return inputStatement{statement: statement, mode: generatorModeToParserMode(g.mode)}
+}
+
 // recreateView creates a view that was dropped. PostgreSQL's view is created as written, as
 // sqldef cannot write the casts of its literals back, which give its columns their types; the
 // same goes for CREATE OR REPLACE VIEW.
@@ -2539,7 +2543,7 @@ func (g *Generator) recreateView(view View) statement {
 	// The desired DDL keeps the casts that the AST drops from literals. Legacy mode quotes every
 	// name, which the following statements on the view expect.
 	if g.mode == GeneratorModePostgres && !g.legacyIgnoreQuotes {
-		return inputStatement{statement: view.statement}
+		return g.inputStatement(view.statement)
 	}
 	return createViewStatement{d: g.dialect, view: view}
 }
@@ -2888,7 +2892,7 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]statemen
 	currentFunction := g.findReplaceTargetFunction(desired)
 	if currentFunction == nil {
 		// Function does not exist, create it
-		ddls = append(ddls, inputStatement{statement: desired.statement})
+		ddls = append(ddls, g.inputStatement(desired.statement))
 	} else if !g.areSameFunctionDefinition(currentFunction, desired) {
 		// PostgreSQL can update a function in place with CREATE OR REPLACE, but
 		// only while the signature (argument modes/names/types and return type)
@@ -2899,20 +2903,20 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]statemen
 		// allows it. Other dialects keep the previous behavior.
 		if g.mode == GeneratorModePostgres {
 			if replacement, ok := g.functionReplacementDDL(currentFunction, desired); ok {
-				ddls = append(ddls, inputStatement{statement: replacement})
+				ddls = append(ddls, g.inputStatement(replacement))
 			} else {
 				// Signature changed: PostgreSQL requires DROP + CREATE.
 				ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
 					g.dropFunction(currentFunction),
-					inputStatement{statement: desired.statement},
+					g.inputStatement(desired.statement),
 				}})
 			}
 		} else if desired.orReplace {
-			ddls = append(ddls, inputStatement{statement: desired.statement})
+			ddls = append(ddls, g.inputStatement(desired.statement))
 		} else {
 			ddls, _ = g.appendRecreateStatements(ddls, recreate{statements: []statement{
 				dropFunctionStatement{d: g.dialect, name: currentFunction.name},
-				inputStatement{statement: desired.statement},
+				g.inputStatement(desired.statement),
 			}})
 		}
 	}
@@ -3351,7 +3355,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]statement, error
 		}
 	} else {
 		// Type not found, add type.
-		ddls = append(ddls, inputStatement{statement: desired.statement})
+		ddls = append(ddls, g.inputStatement(desired.statement))
 	}
 	// Only add to desiredTypes if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findType(g.desiredTypes, desired) == nil {
@@ -3381,7 +3385,7 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]statement, e
 		}
 		ddls = append(ddls, alterDDLs...)
 	} else {
-		ddls = append(ddls, inputStatement{statement: desired.statement})
+		ddls = append(ddls, g.inputStatement(desired.statement))
 	}
 	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findDomainByName(g.desiredDomains, desired.name) == nil {
@@ -3539,7 +3543,7 @@ func (g *Generator) generateDDLsForExtension(desired *Extension) ([]statement, e
 
 	if currentExtension := g.findExtensionByName(g.currentExtensions, desired.extension.Name); currentExtension == nil {
 		// Extension not found, add extension.
-		ddls = append(ddls, inputStatement{statement: desired.statement})
+		ddls = append(ddls, g.inputStatement(desired.statement))
 		extension := *desired // copy extension
 		g.currentExtensions = append(g.currentExtensions, &extension)
 	}
@@ -3557,7 +3561,7 @@ func (g *Generator) generateDDLsForSchema(desired *Schema) ([]statement, error) 
 
 	if currentSchema := findSchemaByName(g.currentSchemas, desired.schema.Name); currentSchema == nil {
 		// Schema not found, add schema.
-		ddls = append(ddls, inputStatement{statement: desired.statement})
+		ddls = append(ddls, g.inputStatement(desired.statement))
 		schema := *desired // copy schema
 		g.currentSchemas = append(g.currentSchemas, &schema)
 	}
@@ -7002,7 +7006,7 @@ func (g *Generator) generateDDLsForCreateEvent(desiredEvent *Event) ([]statement
 	currentEvent := g.findEventByName(g.currentEvents, desiredEvent.name)
 
 	if currentEvent == nil {
-		ddls = append(ddls, inputStatement{statement: desiredEvent.statement})
+		ddls = append(ddls, g.inputStatement(desiredEvent.statement))
 	} else if !g.areSameEventDefinition(currentEvent, desiredEvent) {
 		ddls = append(ddls, alterEventStatement{d: g.dialect, event: *desiredEvent})
 	}

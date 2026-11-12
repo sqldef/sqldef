@@ -1033,7 +1033,7 @@ type cteColumns struct {
 }
 
 // withCTEs adds the common table expressions of a WITH clause to those in scope. Each one sees
-// those before it, and its own columns are unknown to itself where it is recursive.
+// those before it, and itself with unknown columns where the WITH clause is recursive.
 func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) map[string]cteColumns {
 	if with == nil {
 		return ctes
@@ -1044,7 +1044,9 @@ func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) m
 	}
 	for _, cte := range with.CTEs {
 		key := tc.identKey(cte.Name)
-		result[key] = cteColumns{}
+		if with.Recursive {
+			result[key] = cteColumns{}
+		}
 		definition := tc.resolveSelect(cte.Definition, nil, result)
 		columns, known := tc.outputColumns(cte.Definition, definition)
 		if known && len(cte.Columns) > 0 {
