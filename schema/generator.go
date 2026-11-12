@@ -3420,7 +3420,7 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 		if desired.defaultValue == nil {
 			alter(domainDefaultAction{})
 		} else {
-			alter(domainDefaultAction{expr: normalizeExpr(desired.defaultValue.expression, g.mode)})
+			alter(domainDefaultAction{expr: normalizeDefaultExpr(desired.defaultValue.expression, g.mode)})
 		}
 	}
 
@@ -7706,6 +7706,18 @@ func needsMySQLDefaultParens(valueType ValueType) bool {
 	}
 }
 
+// normalizeDefaultExpr normalizes a default for DDL. Normalization moves the cast of an ARRAY
+// constructor onto the elements, where a cast of a string literal or a column does not print, so
+// the cast of a default that is one is kept to give the array its type.
+func normalizeDefaultExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	if cast, ok := expr.(*parser.CastExpr); ok && mode == GeneratorModePostgres {
+		if _, isArray := cast.Expr.(*parser.ArrayConstructor); isArray {
+			return &parser.CastExpr{Expr: normalizeExpr(cast.Expr, mode), Type: normalizeConvertType(cast.Type, mode)}
+		}
+	}
+	return normalizeExpr(expr, mode)
+}
+
 func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
 	expr := defaultDefinition.expression
 
@@ -7739,14 +7751,7 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
-	normalizedExpr := normalizeExpr(expr, d.mode)
-	if cast, ok := expr.(*parser.CastExpr); ok && d.mode == GeneratorModePostgres {
-		if _, isArray := cast.Expr.(*parser.ArrayConstructor); isArray {
-			// Normalization moves the cast onto the elements, where a cast of a string literal or a
-			// column does not print, so the array would lose its type
-			normalizedExpr = &parser.CastExpr{Expr: normalizeExpr(cast.Expr, d.mode), Type: normalizeConvertType(cast.Type, d.mode)}
-		}
-	}
+	normalizedExpr := normalizeDefaultExpr(expr, d.mode)
 	var exprStr string
 	if d.mode == GeneratorModePostgres && !d.legacyIgnoreQuotes {
 		exprStr = parser.PostgresFoldedString(normalizedExpr)
