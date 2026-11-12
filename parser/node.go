@@ -3241,6 +3241,9 @@ func (node *ExtractExpr) Format(buf *nodeBuffer) {
 type CastExpr struct {
 	Expr Expr
 	Type *ConvertType
+	// Resolved is set on a cast that resolving the types of the expression found to be one that
+	// PostgreSQL stores, which a comparison keeps
+	Resolved bool
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {

@@ -337,7 +337,7 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CHECK (t1 ~~ 'x');
     ALTER TABLE "public"."test" ADD CHECK (t2 !~~ 'x');
     ALTER TABLE "public"."test" ADD CHECK (t3 <> '');
-    ALTER TABLE "public"."test" ADD CHECK (t4 ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (t4::text ~ '[0-9]');
     ALTER TABLE "public"."test" ADD CHECK (d1 >= '2022-01-01');
     ALTER TABLE "public"."test" ADD CHECK (d2 >= '2022-01-01');
   down: |

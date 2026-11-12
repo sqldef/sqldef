@@ -402,7 +402,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		// value-context path; otherwise CHECK keeps its own cast simplification below.
 		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
 			if !forComparison {
-				return &parser.CastExpr{Expr: recur(e.Expr, mode), Type: e.Type}
+				return &parser.CastExpr{Expr: recur(e.Expr, mode), Type: e.Type, Resolved: e.Resolved}
 			}
 			return normalizeExpr(e, mode)
 		}
@@ -413,7 +413,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		if e.Type != nil {
 			typeStr := strings.ToLower(e.Type.Type)
 
-			if isUnsizedStringCastType(e.Type) {
+			if isUnsizedStringCastType(e.Type) && !e.Resolved && forComparison {
 				return recur(e.Expr, mode)
 			}
 
@@ -442,13 +442,15 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 
 			// For time types, keep the cast but use normalized type name
 			return &parser.CastExpr{
-				Expr: normalizedExpr,
-				Type: normalizedCheckCastType(e.Type, normalizedTypeStr, mode),
+				Expr:     normalizedExpr,
+				Type:     normalizedCheckCastType(e.Type, normalizedTypeStr, mode),
+				Resolved: e.Resolved,
 			}
 		}
 		return &parser.CastExpr{
-			Expr: recur(e.Expr, mode),
-			Type: e.Type,
+			Expr:     recur(e.Expr, mode),
+			Type:     e.Type,
+			Resolved: e.Resolved,
 		}
 	case *parser.ParenExpr:
 		normalized := recur(e.Expr, mode)
@@ -903,7 +905,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// e.g., (status)::text = 'active'::text → status = 'active'
 				// A string cast under it is the c::character varying(3) that PostgreSQL wraps in an
 				// implicit ::text
-				if isUnsizedStringCastType(e.Type) {
+				if isUnsizedStringCastType(e.Type) && !e.Resolved {
 					switch operand := normalizedExpr.(type) {
 					case *parser.ColName:
 						return normalizedExpr
@@ -961,8 +963,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// Normalize the type name in the cast expression to handle type aliases
 		// e.g., int[]::int[] should become int[]::integer[]
 		return &parser.CastExpr{
-			Expr: normalizedExpr,
-			Type: normalizeConvertType(e.Type, mode),
+			Expr:     normalizedExpr,
+			Type:     normalizeConvertType(e.Type, mode),
+			Resolved: e.Resolved,
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)

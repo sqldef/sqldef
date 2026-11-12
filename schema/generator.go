@@ -98,10 +98,12 @@ type Generator struct {
 	desiredSizedVarcharColumns map[string][]*Column
 	// typedExprs are the expressions of the tables with the casts that resolving their types
 	// implies, which the comparisons take
-	typedExprs map[parser.Expr]parser.Expr
-	typedViews map[parser.SelectStatement]parser.SelectStatement
+	typedExprs           map[parser.Expr]typedForms[parser.Expr]
+	typedViewDefinitions map[parser.SelectStatement]typedForms[parser.SelectStatement]
 	// exprTypes are the resolved types of the output columns of the views
 	exprTypes map[parser.Expr]exprType
+	// viewColumnTypes are the output columns of the views whose names and types are all known
+	viewColumnTypes map[parser.SelectStatement][]relationColumn
 
 	desiredViews []*View
 	currentViews []*View
@@ -2369,8 +2371,9 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// Literals compare as written, so that a column whose literal PostgreSQL rewrote is recreated
 		// rather than replaced by one without its cast
 		opts.ReduceLiteralNames = false
-		currentNormalized := normalizeViewColumnsFromDefinition(g.typedView(currentView.definition), g.mode, opts)
-		desiredNormalized := normalizeViewColumnsFromDefinition(g.typedView(desiredView.definition), g.mode, opts)
+		currentTyped, desiredTyped := g.typedViews(currentView.definition, desiredView.definition)
+		currentNormalized := normalizeViewColumnsFromDefinition(currentTyped, g.mode, opts)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredTyped, g.mode, opts)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2390,6 +2393,21 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 			if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
 				return true
 			}
+		}
+
+		// CREATE OR REPLACE VIEW keeps the names and the types of the existing columns
+		currentColumns, currentKnown := g.viewColumnTypes[currentView.definition]
+		desiredColumns, desiredKnown := g.viewColumnTypes[desiredView.definition]
+		if currentKnown && desiredKnown {
+			if len(currentColumns) > len(desiredColumns) {
+				return true
+			}
+			for i, column := range currentColumns {
+				if !g.identsEqual(column.name, desiredColumns[i].name) || column.typ != desiredColumns[i].typ {
+					return true
+				}
+			}
+			return false
 		}
 
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
@@ -2438,8 +2456,9 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := normalizeViewDefinition(g.typedView(currentView.definition), g.mode, tableLookup)
-		desiredNormalizedAST := normalizeViewDefinition(g.typedView(desiredView.definition), g.mode, tableLookup)
+		currentTyped, desiredTyped := g.typedViews(currentView.definition, desiredView.definition)
+		currentNormalizedAST := normalizeViewDefinition(currentTyped, g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(desiredTyped, g.mode, tableLookup)
 		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 			slog.Debug("Comparing view definitions",
 				"current_before_norm", parser.String(currentView.definition),
@@ -6405,7 +6424,7 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		return false
 	}
 
-	return g.areSameCheckExprs(g.typed(checkA.definition), g.typed(checkB.definition)) &&
+	return g.areSameCheckExprs(g.typed(checkA.definition, checkB.definition)) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
 }
@@ -6423,7 +6442,9 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	if g.mode == GeneratorModePostgres {
 		opts := g.comparisonOptions(false)
 		opts.UnknownTypesCaseSensitive = true
-		return parser.SameForComparison(canonicalParens(normalizedA), canonicalParens(normalizedB), opts)
+		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
+		slog.Debug("Generator#areSameCheckExprs", "a", parser.ComparisonKey(normalizedA, opts), "b", parser.ComparisonKey(normalizedB, opts))
+		return parser.SameForComparison(normalizedA, normalizedB, opts)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
 }
@@ -6728,7 +6749,7 @@ func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
 // This handles custom type casts (e.g., ENUM, domain) that normalizeExpr does not strip.
 func unwrapCast(expr parser.Expr) parser.Expr {
 	castExpr, ok := expr.(*parser.CastExpr)
-	if !ok {
+	if !ok || castExpr.Resolved {
 		return expr
 	}
 	return castExpr.Expr
@@ -7207,8 +7228,9 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		normalizedA = g.formatIndexExprForComparison(g.typed(indexA.columns[i].columnExpr))
-		normalizedB = g.formatIndexExprForComparison(g.typed(indexB.columns[i].columnExpr))
+		typedA, typedB := g.typed(indexA.columns[i].columnExpr, indexB.columns[i].columnExpr)
+		normalizedA = g.formatIndexExprForComparison(typedA)
+		normalizedB = g.formatIndexExprForComparison(typedB)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
@@ -7226,7 +7248,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 			return false
 		}
 	}
-	if !g.areSameWhereClause(g.typed(indexA.where), g.typed(indexB.where)) {
+	if !g.areSameWhereClause(g.typed(indexA.where, indexB.where)) {
 		return false
 	}
 
@@ -7479,10 +7501,10 @@ func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if !g.areSamePolicyExprs(g.typed(policyA.using), g.typed(policyB.using)) {
+	if !g.areSamePolicyExprs(g.typed(policyA.using, policyB.using)) {
 		return false
 	}
-	if !g.areSamePolicyExprs(g.typed(policyA.withCheck), g.typed(policyB.withCheck)) {
+	if !g.areSamePolicyExprs(g.typed(policyA.withCheck, policyB.withCheck)) {
 		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {

@@ -1078,20 +1078,6 @@ ChangeUnnestOfArrayToUnnestOfMultipleArrays:
   down: |
     CREATE OR REPLACE VIEW v AS SELECT t.a FROM x, unnest(ARRAY[x.tags, x.tags2]) AS t(a);
 
-# FIXME: Changing a select expression always drops and recreates the view, because the output column types are unknown. Only the ORDER BY of WITHIN GROUP changes here, so CREATE OR REPLACE VIEW would keep the dependent views.
-# ReplaceViewOnWithinGroupOrderChange:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int, b int);
-#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
-#   desired: |
-#     CREATE TABLE t (a int, b int);
-#     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
-#   up: |
-#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by b asc) as p from t;
-#   down: |
-#     CREATE OR REPLACE VIEW public.v AS select percentile_cont(0.5) within group (order by a asc) as p from t;
-
 ChangeViewStringLiteralCase:
   legacy_ignore_quotes: false
   current: |
@@ -1175,11 +1161,9 @@ ChangeWithinGroupOrderInView:
     CREATE TABLE t (a int, b int);
     CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
   up: |
-    DROP VIEW public.v;
-    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
+    CREATE OR REPLACE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY b) AS p FROM t;
   down: |
-    DROP VIEW public.v;
-    CREATE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
+    CREATE OR REPLACE VIEW v AS SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY a) AS p FROM t;
 
 ViewWithTimezoneDefaultAliases:
   legacy_ignore_quotes: false
@@ -1371,69 +1355,63 @@ ViewWithOrderedSetAggregates:
       percentile_disc(0.5) WITHIN GROUP (ORDER BY a DESC) AS d
     FROM t;
 
-# FIXME: Casts to character varying on a column are stripped, as PostgreSQL adds them implicitly, so adding one is not detected
-# ChangeViewColumnCastToVarchar:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT a FROM t;
-#   desired: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT a::varchar FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select a::varchar from t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select a from t;
+ChangeViewColumnCastToVarchar:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT a FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT a::varchar FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT a::varchar FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT a FROM t;
 
-# FIXME: Casts to text and character varying on a column are stripped, as PostgreSQL adds them implicitly, so a change of the output column type between them is not detected
-# ChangeViewOutputColumnFromVarcharToText:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT a::varchar AS c FROM t;
-#   desired: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT a::varchar::text AS c FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select a::varchar::text as c from t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select a::varchar as c from t;
+ChangeViewOutputColumnFromVarcharToText:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT a::varchar AS c FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT a::varchar::text AS c FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT a::varchar::text AS c FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT a::varchar AS c FROM t;
 
-# FIXME: Casts on the arguments of an ordered-set aggregate are ignored, since PostgreSQL adds casts to its signature that are unknown without type lookups
-# ChangeUserCastInWithinGroup:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT mode() WITHIN GROUP (ORDER BY a::bigint) AS m FROM t;
-#   desired: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT mode() WITHIN GROUP (ORDER BY a) AS m FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select mode() within group (order by a asc) as m from t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select mode() within group (order by a::bigint asc) as m from t;
+ChangeUserCastInWithinGroup:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT mode() WITHIN GROUP (ORDER BY a::bigint) AS m FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT mode() WITHIN GROUP (ORDER BY a) AS m FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT mode() WITHIN GROUP (ORDER BY a) AS m FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT mode() WITHIN GROUP (ORDER BY a::bigint) AS m FROM t;
 
-# FIXME: Casts on the WITHIN GROUP expressions of a hypothetical-set aggregate are ignored, since PostgreSQL puts the casts that resolve the common type of the direct arguments on either side, which is unknown without type lookups
-# ChangeUserCastInHypotheticalSetAggregate:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a::bigint) AS r FROM t;
-#   desired: |
-#     CREATE TABLE t (a int);
-#     CREATE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a) AS r FROM t;
-#   up: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select rank(1) within group (order by a asc) as r from t;
-#   down: |
-#     DROP VIEW public.v;
-#     CREATE VIEW public.v AS select rank(1) within group (order by a::bigint asc) as r from t;
+ChangeUserCastInHypotheticalSetAggregate:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a::bigint) AS r FROM t;
+  desired: |
+    CREATE TABLE t (a int);
+    CREATE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a) AS r FROM t;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a) AS r FROM t;
+  down: |
+    CREATE OR REPLACE VIEW v AS SELECT rank(1) WITHIN GROUP (ORDER BY a::bigint) AS r FROM t;
 
 RecreateViewWithQuotedReservedWordsAndFunction:
   legacy_ignore_quotes: false
@@ -1576,15 +1554,14 @@ ChangeViewColumnToOneWhoseQuotedNameDiffersInCase:
     DROP VIEW public.v1;
     CREATE VIEW v1 AS SELECT id, "Val" FROM t;
 
-# FIXME: Without column types, a view column that reads another column whose quoted name differs only in case is taken for the same column, and CREATE OR REPLACE fails on the type change
-# ChangeViewColumnTypeThroughQuotedNameDifferingInCase:
-#   legacy_ignore_quotes: false
-#   current: |
-#     CREATE TABLE t (id int, "Val" int, val text);
-#     CREATE VIEW v2 AS SELECT id, "Val" AS x FROM t;
-#   desired: |
-#     CREATE TABLE t (id int, "Val" int, val text);
-#     CREATE VIEW v2 AS SELECT id, val AS x FROM t;
+ChangeViewColumnTypeThroughQuotedNameDifferingInCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int, "Val" int, val text);
+    CREATE VIEW v2 AS SELECT id, "Val" AS x FROM t;
+  desired: |
+    CREATE TABLE t (id int, "Val" int, val text);
+    CREATE VIEW v2 AS SELECT id, val AS x FROM t;
 
 ChangeViewWithRegclassLiteralColumn:
   legacy_ignore_quotes: false

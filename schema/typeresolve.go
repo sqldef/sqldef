@@ -2,6 +2,7 @@ package schema
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -34,10 +35,16 @@ type typeContext struct {
 	tables        []*Table
 	views         []*View
 	viewOutputs   map[*View]*viewOutput
+	// knownCasts are the casts whose operand and target types are both known
+	knownCasts map[*parser.CastExpr]bool
+	// mark marks the casts in the places where PostgreSQL adds none of its own as resolved
+	mark bool
+	// unresolved counts the expressions whose types are unknown
+	unresolved int
 }
 
 func (g *Generator) newTypeContext(types []*Type, domains []*Domain, functions []*Function) *typeContext {
-	tc := &typeContext{g: g, userFunctions: map[string]bool{}}
+	tc := &typeContext{g: g, userFunctions: map[string]bool{}, knownCasts: map[*parser.CastExpr]bool{}}
 	var userTypes []*pgcatalog.Type
 	for _, t := range types {
 		if len(t.enumValues) == 0 {
@@ -205,16 +212,47 @@ func (tc *typeContext) tableScope(table *Table) columnScope {
 	}
 }
 
-// withResolvedTypes returns an expression with the casts that PostgreSQL adds or drops while
-// resolving its types. It leaves the expression as it is where it cannot tell the types.
-func (tc *typeContext) withResolvedTypes(expr parser.Expr, scope columnScope) parser.Expr {
-	resolved, _ := tc.resolve(expr, scope)
-	return resolved
+// typedForms are the forms of an expression with the casts that PostgreSQL adds or drops while
+// resolving its types. plain leaves the casts to the comparison, which ignores the casts that
+// PostgreSQL may add, as it did before sqldef resolved types. marked keeps the casts that it
+// found PostgreSQL keeps, which takes the types of the whole expression to be known: full.
+type typedForms[T any] struct {
+	plain, marked T
+	full          bool
+}
+
+// resolveForms resolves the types of an expression, or of a query, in both forms
+func resolveForms[T any](tc *typeContext, resolve func() T) typedForms[T] {
+	mark, unresolved := tc.mark, tc.unresolved
+	defer func() { tc.mark, tc.unresolved = mark, unresolved }()
+	var forms typedForms[T]
+	tc.mark, tc.unresolved = false, 0
+	forms.plain = resolve()
+	tc.mark, tc.unresolved = true, 0
+	forms.marked = resolve()
+	forms.full = tc.unresolved == 0
+	return forms
+}
+
+// typedPair returns the forms of two expressions to compare: the marked ones where both are known
+func typedPair[T any](a, b typedForms[T]) (T, T) {
+	if a.full && b.full {
+		return a.marked, b.marked
+	}
+	return a.plain, b.plain
 }
 
 var boolType = exprType{name: "bool"}
 
 func (tc *typeContext) resolve(expr parser.Expr, scope columnScope) (parser.Expr, exprType) {
+	resolved, t := tc.resolveNode(expr, scope)
+	if t.name == "" {
+		tc.unresolved++
+	}
+	return resolved, t
+}
+
+func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.Expr, exprType) {
 	switch e := expr.(type) {
 	case *parser.ParenExpr:
 		inner, t := tc.resolve(e.Expr, scope)
@@ -244,7 +282,13 @@ func (tc *typeContext) resolve(expr parser.Expr, scope columnScope) (parser.Expr
 		if from == to {
 			return inner, from
 		}
-		return &parser.CastExpr{Expr: inner, Type: e.Type}, to
+		cast := &parser.CastExpr{Expr: inner, Type: e.Type}
+		if from.name != "" {
+			// PostgreSQL converts the operand of a cast with the cast alone
+			cast.Expr = tc.markResolved(inner)
+			tc.knownCasts[cast] = true
+		}
+		return cast, to
 	case *parser.CollateExpr:
 		inner, t := tc.resolve(e.Expr, scope)
 		return &parser.CollateExpr{Expr: inner, Charset: e.Charset}, t
@@ -390,15 +434,32 @@ func (tc *typeContext) allKnown(types []exprType) bool {
 func (tc *typeContext) withCasts(args []parser.Expr, types []exprType, params []string) []parser.Expr {
 	result := make([]parser.Expr, len(args))
 	for i, arg := range args {
-		result[i] = arg
+		result[i] = tc.markResolved(arg)
 		if types[i].name == pgcatalog.Unknown || types[i].name == params[i] || params[i] == "any" || params[i] == pgcatalog.Unknown {
 			continue
 		}
 		if t := tc.resolver.Type(params[i]); t != nil && t.Display != "" {
-			result[i] = &parser.CastExpr{Expr: arg, Type: &parser.ConvertType{Type: t.Display}}
+			result[i] = &parser.CastExpr{Expr: result[i], Type: &parser.ConvertType{Type: t.Display}, Resolved: tc.mark}
 		}
 	}
 	return result
+}
+
+// markResolved marks a cast in a place where PostgreSQL adds none of its own, so that the
+// comparison keeps it, once its operand's type is known
+func (tc *typeContext) markResolved(expr parser.Expr) parser.Expr {
+	inner := expr
+	for {
+		paren, ok := inner.(*parser.ParenExpr)
+		if !ok {
+			break
+		}
+		inner = paren.Expr
+	}
+	if cast, ok := inner.(*parser.CastExpr); ok && tc.mark && tc.knownCasts[cast] {
+		cast.Resolved = true
+	}
+	return expr
 }
 
 func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parser.Expr, exprType) {
@@ -406,18 +467,31 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 	resolved.Exprs = make(parser.SelectExprs, len(e.Exprs))
 	args := make([]parser.Expr, 0, len(e.Exprs))
 	types := make([]exprType, 0, len(e.Exprs))
-	plain := e.WithinGroup == nil
+	plain := true
 	for i, selectExpr := range e.Exprs {
 		aliased, ok := selectExpr.(*parser.AliasedExpr)
 		if !ok || !aliased.As.IsEmpty() {
 			resolved.Exprs[i] = selectExpr
-			plain = false
+			// count(*) is count() in pg_catalog
+			_, isStar := selectExpr.(*parser.StarExpr)
+			plain = plain && isStar && len(e.Exprs) == 1
 			continue
 		}
 		arg, t := tc.resolve(aliased.Expr, scope)
 		resolved.Exprs[i] = &parser.AliasedExpr{Expr: arg}
 		args = append(args, arg)
 		types = append(types, t)
+	}
+	// The ORDER BY of an ordered-set aggregate gives the arguments after the direct ones
+	direct := len(args)
+	if e.WithinGroup != nil {
+		resolved.WithinGroup = make(parser.OrderBy, len(e.WithinGroup))
+		for i, order := range e.WithinGroup {
+			arg, t := tc.resolve(order.Expr, scope)
+			resolved.WithinGroup[i] = &parser.Order{Expr: arg, Direction: order.Direction}
+			args = append(args, arg)
+			types = append(types, t)
+		}
 	}
 	if !plain || !tc.allKnown(types) {
 		return &resolved, exprType{}
@@ -446,7 +520,7 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 		for i := range params {
 			params[i] = common
 		}
-		result = exprType{name: common}
+		result = commonType(types, common)
 	case "nullif":
 		if len(types) != 2 {
 			return &resolved, exprType{}
@@ -466,6 +540,17 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 			return &resolved, exprType{}
 		}
 		params, result = call.Params, exprType{name: call.Result}
+		// A hypothetical-set aggregate converts each direct argument and its aggregated
+		// argument to their common type
+		if e.WithinGroup != nil && direct*2 == len(args) && slices.Equal(slices.Compact(slices.Clone(params)), []string{"any"}) {
+			for i := range direct {
+				common, ok := tc.resolver.CommonType([]string{types[i].name, types[direct+i].name})
+				if !ok {
+					return &resolved, exprType{}
+				}
+				params[i], params[direct+i] = common, common
+			}
+		}
 	}
 	cast := tc.withCasts(args, types, params)
 	j := 0
@@ -475,7 +560,21 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 			j++
 		}
 	}
+	for i, order := range resolved.WithinGroup {
+		order.Expr = cast[direct+i]
+	}
 	return &resolved, result
+}
+
+// commonType returns the common type of values with the type modifier they all have, as
+// select_common_typmod() does
+func commonType(types []exprType, common string) exprType {
+	for _, t := range types {
+		if t.name != common || t.mod != types[0].mod {
+			return exprType{name: common}
+		}
+	}
+	return exprType{name: common, mod: types[0].mod}
 }
 
 func typeNames(types []exprType) []string {
@@ -525,15 +624,16 @@ func (tc *typeContext) resolveCase(e *parser.CaseExpr, scope columnScope) (parse
 	if resolved.Else != nil {
 		resolved.Else = cast[len(cast)-1]
 	}
-	return resolved, exprType{name: common}
+	return resolved, commonType(types, common)
 }
 
 // resolveExpressionTypes resolves the types of the expressions of the tables and views of both
 // schemas, which the comparisons then take through typed and typedView
 func (g *Generator) resolveExpressionTypes() {
-	g.typedExprs = map[parser.Expr]parser.Expr{}
-	g.typedViews = map[parser.SelectStatement]parser.SelectStatement{}
+	g.typedExprs = map[parser.Expr]typedForms[parser.Expr]{}
+	g.typedViewDefinitions = map[parser.SelectStatement]typedForms[parser.SelectStatement]{}
 	g.exprTypes = map[parser.Expr]exprType{}
+	g.viewColumnTypes = map[parser.SelectStatement][]relationColumn{}
 	desired := g.newTypeContext(g.desiredTypes, g.desiredDomains, g.desiredFunctions)
 	current := g.newTypeContext(g.currentTypes, g.currentDomains, g.currentFunctions)
 	desired.setRelations(g.desiredTables, g.desiredViews)
@@ -552,7 +652,10 @@ func (g *Generator) resolveTableExpressionTypes(tc *typeContext, table *Table) {
 	scope := tc.tableScope(table)
 	add := func(expr parser.Expr) {
 		if expr != nil && hashableExpr(expr) {
-			g.typedExprs[expr] = tc.withResolvedTypes(expr, scope)
+			g.typedExprs[expr] = resolveForms(tc, func() parser.Expr {
+				resolved, _ := tc.resolve(expr, scope)
+				return resolved
+			})
 		}
 	}
 	for _, column := range util.CanonicalMapIter(table.columns) {
@@ -580,23 +683,32 @@ func hashableExpr(expr parser.Expr) bool {
 	return reflect.TypeOf(expr).Kind() == reflect.Pointer
 }
 
-// typed returns an expression of a table with the casts that resolving its types implies
-func (g *Generator) typed(expr parser.Expr) parser.Expr {
-	if expr == nil || !hashableExpr(expr) {
-		return expr
-	}
-	if typed, ok := g.typedExprs[expr]; ok {
-		return typed
-	}
-	return expr
+// typed returns two expressions of tables with the casts that resolving their types implies,
+// for comparing them
+func (g *Generator) typed(a, b parser.Expr) (parser.Expr, parser.Expr) {
+	return typedPair(g.exprForms(a), g.exprForms(b))
 }
 
-// typedView returns the definition of a view with the casts that resolving its types implies
-func (g *Generator) typedView(definition parser.SelectStatement) parser.SelectStatement {
-	if typed, ok := g.typedViews[definition]; ok {
-		return typed
+func (g *Generator) exprForms(expr parser.Expr) typedForms[parser.Expr] {
+	if expr != nil && hashableExpr(expr) {
+		if forms, ok := g.typedExprs[expr]; ok {
+			return forms
+		}
 	}
-	return definition
+	return typedForms[parser.Expr]{plain: expr, marked: expr}
+}
+
+// typedViews returns the definitions of two views with the casts that resolving their types
+// implies, for comparing them
+func (g *Generator) typedViews(a, b parser.SelectStatement) (parser.SelectStatement, parser.SelectStatement) {
+	return typedPair(g.viewForms(a), g.viewForms(b))
+}
+
+func (g *Generator) viewForms(definition parser.SelectStatement) typedForms[parser.SelectStatement] {
+	if forms, ok := g.typedViewDefinitions[definition]; ok {
+		return forms
+	}
+	return typedForms[parser.SelectStatement]{plain: definition, marked: definition}
 }
 
 // relationColumn is an output column of a relation
@@ -634,24 +746,40 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 	}
 	out := &viewOutput{resolving: true}
 	tc.viewOutputs[view] = out
-	typed := tc.resolveSelect(view.definition, nil, nil)
-	tc.g.typedViews[view.definition] = typed
-	out.columns, out.known = tc.outputColumns(typed)
+	forms := resolveForms(tc, func() parser.SelectStatement {
+		return tc.resolveSelect(view.definition, nil, nil)
+	})
+	tc.g.typedViewDefinitions[view.definition] = forms
+	out.columns, out.known = tc.outputColumns(view.definition, forms.marked)
+	if out.known && allColumnTypesKnown(out.columns) {
+		tc.g.viewColumnTypes[view.definition] = out.columns
+	}
 	out.resolving = false
 	return out.columns, out.known
 }
 
-// outputColumns returns the names and types of the output columns of a resolved query
-func (tc *typeContext) outputColumns(stmt parser.SelectStatement) ([]relationColumn, bool) {
+func allColumnTypesKnown(columns []relationColumn) bool {
+	for _, column := range columns {
+		if column.name.IsEmpty() || column.typ.name == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// outputColumns returns the names and types of the output columns of a query, from the query as
+// written and as resolved
+func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]relationColumn, bool) {
 	switch s := stmt.(type) {
 	case *parser.ParenSelect:
-		return tc.outputColumns(s.Select)
+		return tc.outputColumns(s.Select, typed.(*parser.ParenSelect).Select)
 	case *parser.Union:
-		left, ok := tc.outputColumns(s.Left)
+		t := typed.(*parser.Union)
+		left, ok := tc.outputColumns(s.Left, t.Left)
 		if !ok {
 			return nil, false
 		}
-		right, ok := tc.outputColumns(s.Right)
+		right, ok := tc.outputColumns(s.Right, t.Right)
 		if !ok || len(left) != len(right) {
 			return nil, false
 		}
@@ -660,41 +788,28 @@ func (tc *typeContext) outputColumns(stmt parser.SelectStatement) ([]relationCol
 			columns[i].name = left[i].name
 			if left[i].typ.name != "" && right[i].typ.name != "" {
 				if common, ok := tc.resolver.CommonType([]string{left[i].typ.name, right[i].typ.name}); ok {
-					columns[i].typ = exprType{name: common}
+					columns[i].typ = commonType([]exprType{left[i].typ, right[i].typ}, common)
 				}
 			}
 		}
 		return columns, true
 	case *parser.Select:
+		t := typed.(*parser.Select)
 		columns := make([]relationColumn, 0, len(s.SelectExprs))
-		for _, selectExpr := range s.SelectExprs {
+		for i, selectExpr := range s.SelectExprs {
 			aliased, ok := selectExpr.(*parser.AliasedExpr)
 			if !ok {
 				return nil, false
 			}
 			name := aliased.As
 			if name.IsEmpty() {
-				name = defaultColumnName(aliased.Expr)
+				name, _ = selectExprOutputName(aliased.Expr, GeneratorModePostgres)
 			}
-			columns = append(columns, relationColumn{name: name, typ: tc.g.exprTypes[aliased.Expr]})
+			columns = append(columns, relationColumn{name: name, typ: tc.g.exprTypes[t.SelectExprs[i].(*parser.AliasedExpr).Expr]})
 		}
 		return columns, true
 	}
 	return nil, false
-}
-
-// defaultColumnName returns the name PostgreSQL gives an output column without an alias, where
-// it is a column's
-func defaultColumnName(expr parser.Expr) Ident {
-	switch e := expr.(type) {
-	case *parser.ColName:
-		return e.Name
-	case *parser.ParenExpr:
-		return defaultColumnName(e.Expr)
-	case *parser.CastExpr:
-		return defaultColumnName(e.Expr)
-	}
-	return Ident{}
 }
 
 // resolveSelect resolves the types of the expressions of a query. ctes are the folded names of
@@ -721,6 +836,7 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 		for i, selectExpr := range s.SelectExprs {
 			if aliased, ok := selectExpr.(*parser.AliasedExpr); ok {
 				expr, t := tc.resolve(aliased.Expr, scope)
+				expr = tc.markResolved(expr)
 				// The cast names a column without an alias, even where PostgreSQL drops it
 				if cast, ok := aliased.Expr.(*parser.CastExpr); ok && aliased.As.IsEmpty() {
 					if _, isCast := expr.(*parser.CastExpr); !isCast {
