@@ -7740,6 +7740,13 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
 	normalizedExpr := normalizeExpr(expr, d.mode)
+	if cast, ok := expr.(*parser.CastExpr); ok && d.mode == GeneratorModePostgres {
+		if _, isArray := cast.Expr.(*parser.ArrayConstructor); isArray {
+			// Normalization moves the cast onto the elements, where a cast of a string literal or a
+			// column does not print, so the array would lose its type
+			normalizedExpr = &parser.CastExpr{Expr: normalizeExpr(cast.Expr, d.mode), Type: normalizeConvertType(cast.Type, d.mode)}
+		}
+	}
 	var exprStr string
 	if d.mode == GeneratorModePostgres && !d.legacyIgnoreQuotes {
 		exprStr = parser.PostgresFoldedString(normalizedExpr)

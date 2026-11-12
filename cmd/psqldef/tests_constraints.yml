@@ -3261,3 +3261,24 @@ ChangeCheckByDroppingDateCastOfColumn:
   down: |
     ALTER TABLE public.t DROP CONSTRAINT c;
     ALTER TABLE public.t ADD CONSTRAINT c CHECK (ts::date > d);
+
+AddColumnAndCheckWithArrayCasts:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a integer, b text);
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      b text,
+      d date[] DEFAULT ARRAY['2020-01-01']::date[],
+      CONSTRAINT c CHECK (ARRAY[a]::text[] <@ ARRAY[b]),
+      CONSTRAINT c2 CHECK (d <@ ARRAY['2020-01-01']::date[])
+    );
+  up: |
+    ALTER TABLE public.t ADD COLUMN d date[] DEFAULT ARRAY['2020-01-01']::date[];
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (ARRAY[a]::text[] <@ ARRAY[b]);
+    ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (d <@ ARRAY['2020-01-01']::date[]);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c2;
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t DROP COLUMN d;

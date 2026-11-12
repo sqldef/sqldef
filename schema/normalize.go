@@ -431,7 +431,8 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			// Empty arrays (ARRAY[]) need the typecast or PostgreSQL can't determine the type.
 			normalizedExpr := recur(e.Expr, mode)
 			if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
-				if _, isArrayType := arrayElementType(e.Type); isArrayType && len(arrayConstructor.Elements) > 0 {
+				// The DDL keeps the cast, which castArrayElements may move onto elements that print without it
+				if _, isArrayType := arrayElementType(e.Type); isArrayType && len(arrayConstructor.Elements) > 0 && forComparison {
 					return recur(castArrayElements(arrayConstructor, e.Type, mode), mode)
 				}
 			}
@@ -2490,30 +2491,27 @@ func canonicalParens(expr parser.Expr) parser.Expr {
 
 // treeWithCanonicalParens applies canonicalParens to every expression of an AST
 func treeWithCanonicalParens[T any](tree T) T {
-	exprType := reflect.TypeFor[parser.Expr]()
 	value := reflect.ValueOf(&tree).Elem()
-	value.Set(copyTree(value, func(v reflect.Value) (reflect.Value, bool) {
-		if v.Kind() != reflect.Interface || v.Type() != exprType || v.IsNil() {
-			return reflect.Value{}, false
-		}
-		mapped := reflect.New(exprType).Elem()
-		mapped.Set(reflect.ValueOf(canonicalParens(v.Interface().(parser.Expr))))
-		return mapped, true
-	}))
+	value.Set(copyTree(value, replaceExprs(canonicalParens)))
 	return tree
 }
 
 // mapChildExprs returns a copy of an expression with f applied to the expressions it holds
 func mapChildExprs(expr parser.Expr, f func(parser.Expr) parser.Expr) parser.Expr {
+	return copyTree(reflect.ValueOf(expr), replaceExprs(f)).Interface().(parser.Expr)
+}
+
+// replaceExprs returns a copyTree replacement that applies f to each expression
+func replaceExprs(f func(parser.Expr) parser.Expr) func(reflect.Value) (reflect.Value, bool) {
 	exprType := reflect.TypeFor[parser.Expr]()
-	return copyTree(reflect.ValueOf(expr), func(v reflect.Value) (reflect.Value, bool) {
+	return func(v reflect.Value) (reflect.Value, bool) {
 		if v.Kind() != reflect.Interface || v.Type() != exprType || v.IsNil() {
 			return reflect.Value{}, false
 		}
 		mapped := reflect.New(exprType).Elem()
 		mapped.Set(reflect.ValueOf(f(v.Interface().(parser.Expr))))
 		return mapped, true
-	}).Interface().(parser.Expr)
+	}
 }
 
 // copyTree deep copies the exported fields of an AST, replacing each value for which replace
