@@ -7617,10 +7617,16 @@ function_call_keyword:
   }
 | CAST '(' expression AS sql_id cast_array_opt ')'
   {
+    if yylex.(*Tokenizer).mode != ParserModePostgres {
+      return abortParse(yylex, "syntax error")
+    }
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: &ConvertType{Type: castTypeName(yylex, $5), Array: $6}}
   }
 | CAST '(' expression AS sql_id '(' INTEGRAL ')' cast_array_opt ')'
   {
+    if yylex.(*Tokenizer).mode != ParserModePostgres {
+      return abortParse(yylex, "syntax error")
+    }
     t := castTypeWithLength(castTypeName(yylex, $5), NewIntVal($7))
     t.Array = $9
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: t}

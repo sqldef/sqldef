@@ -314,3 +314,14 @@ DomainCheckWithImplicitCasts:
   desired: |
     CREATE DOMAIN d1 AS integer CHECK (round(VALUE, 1) > 0 AND VALUE + 0.5 > 1);
     CREATE DOMAIN d2 AS varchar(10) CHECK (VALUE <> '' AND length(VALUE) < 5);
+
+DomainCheckOverTimestamptz:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN day_t AS timestamptz CHECK (date_trunc('day', VALUE, 'UTC') = VALUE);
+
+# FIXME: the parser does not read a domain over an array type
+# DomainCheckOverArray:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE DOMAIN ints_t AS integer[] CHECK (array_length(VALUE, 1) > 0);

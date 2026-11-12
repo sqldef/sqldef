@@ -3195,3 +3195,8 @@ CheckWithCastFunctionSyntax:
       CONSTRAINT t_v CHECK (CAST(v AS bit) <> B'0'),
       CONSTRAINT t_i CHECK (round(CAST(i AS int8), 2) > 0 AND CAST(i AS integer) < 10)
     );
+
+CheckWithParenthesesInCastFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a integer, b integer, CONSTRAINT c CHECK (CAST((a + b) AS bigint) > 0 AND CAST((a) AS bigint) < 10));

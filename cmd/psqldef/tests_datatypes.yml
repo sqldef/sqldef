@@ -1883,3 +1883,14 @@ ChangeBitVaryingColumnLength:
   down: |
     ALTER TABLE public.t ALTER COLUMN v TYPE varbit;
     ALTER TABLE public.t ALTER COLUMN w TYPE bit varying(4);
+
+AddBitColumnWithDefaultOfBitLiterals:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id integer);
+  desired: |
+    CREATE TABLE t (id integer, c bit(4) DEFAULT (B'0101' | B'0011'));
+  up: |
+    ALTER TABLE public.t ADD COLUMN c bit(4) DEFAULT B'0101' | B'0011';
+  down: |
+    ALTER TABLE public.t DROP COLUMN c;

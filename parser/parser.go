@@ -14995,11 +14995,17 @@ yydefault:
 	case 1184:
 		yyDollar = yyS[yypt-7 : yypt+1]
 		{
+			if yylex.(*Tokenizer).mode != ParserModePostgres {
+				return abortParse(yylex, "syntax error")
+			}
 			yyVAL.expr = &ConvertExpr{Action: CastStr, Expr: yyDollar[3].expr, Type: &ConvertType{Type: castTypeName(yylex, yyDollar[5].ident), Array: yyDollar[6].boolVal}}
 		}
 	case 1185:
 		yyDollar = yyS[yypt-10 : yypt+1]
 		{
+			if yylex.(*Tokenizer).mode != ParserModePostgres {
+				return abortParse(yylex, "syntax error")
+			}
 			t := castTypeWithLength(castTypeName(yylex, yyDollar[5].ident), NewIntVal(yyDollar[7].str))
 			t.Array = yyDollar[9].boolVal
 			yyVAL.expr = &ConvertExpr{Action: CastStr, Expr: yyDollar[3].expr, Type: t}

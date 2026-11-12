@@ -67,7 +67,7 @@ func (g *Generator) newTypeContext(types []*Type, domains []*Domain, functions [
 	for {
 		var domainTypes []*pgcatalog.Type
 		for _, domain := range domains {
-			if base, ok := tc.typeOfName(domain.baseType); ok {
+			if base, ok := tc.domainBaseType(domain); ok {
 				domainTypes = append(domainTypes, &pgcatalog.Type{Name: tc.userTypeKey(domain.name), Kind: 'd', Base: base})
 			}
 		}
@@ -81,7 +81,7 @@ func (g *Generator) newTypeContext(types []*Type, domains []*Domain, functions [
 		changed = false
 		for _, domain := range domains {
 			key := tc.userTypeKey(domain.name)
-			base, _ := tc.typeOfName(domain.baseType)
+			base, _ := tc.domainBaseType(domain)
 			if !tc.collatedDomains[key] && (domain.collation != "" || tc.collatedDomains[base]) {
 				tc.collatedDomains[key] = true
 				changed = true
@@ -767,7 +767,7 @@ func (g *Generator) resolveTableExpressionTypes(tc *typeContext, table *Table) {
 // resolveDomainExpressionTypes resolves the types of the constraints of a domain, where VALUE has
 // the base type of the domain
 func (g *Generator) resolveDomainExpressionTypes(tc *typeContext, domain *Domain) {
-	base, ok := tc.typeOfName(domain.baseType)
+	base, ok := tc.domainBaseType(domain)
 	scope := func(col *parser.ColName) (exprType, bool) {
 		if ok && col.Qualifier.IsEmpty() && !col.Name.Quoted && parser.FoldASCII(col.Name.Name) == "value" {
 			return exprType{name: base}, true
@@ -990,6 +990,18 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 		return &resolved
 	}
 	return stmt
+}
+
+// domainBaseType returns the base type of a domain
+func (tc *typeContext) domainBaseType(domain *Domain) (string, bool) {
+	name := domain.baseType
+	if domain.baseTimezone {
+		name += " with time zone"
+	}
+	if domain.baseArray {
+		name += "[]"
+	}
+	return tc.typeOfName(name)
 }
 
 // writtenCastType returns the type of an expression written as x::t or CAST(x AS t)

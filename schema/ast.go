@@ -560,10 +560,14 @@ type Type struct {
 }
 
 type Domain struct {
-	name         QualifiedName
-	statement    string
-	dataType     string
-	baseType     string
+	name      QualifiedName
+	statement string
+	dataType  string
+	baseType  string
+	// baseTimezone and baseArray are the time zone and the array of the base type, which
+	// baseType leaves out
+	baseTimezone bool
+	baseArray    bool
 	defaultValue *DefaultDefinition
 	notNull      bool
 	collation    string

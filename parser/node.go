@@ -2808,6 +2808,12 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	case HexVal:
 		buf.Printf("X'%s'", node.Val)
 	case BitVal:
+		if buf.comparisonKey {
+			// PostgreSQL stores B'0101' as '0101'::"bit"
+			buf.literalType = "bit"
+			encodeSQLBytes(node.Val, false, buf)
+			return
+		}
 		buf.Printf("B'%s'", node.Val)
 	case ValArg:
 		buf.WriteString(node.Val)
