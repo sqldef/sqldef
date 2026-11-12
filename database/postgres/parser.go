@@ -1465,7 +1465,7 @@ func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 		return `"char"`
 	}
 	quoted := util.TransformSlice(typeNames, func(name string) string {
-		if resolved && NewIdentWithQuoteDetected(name).Quoted || !resolved && parser.PostgresTypeNameNeedsQuotes(name) {
+		if !resolved && parser.PostgresTypeNameNeedsQuotes(name) {
 			return parser.QuotePostgresIdent(name)
 		}
 		return name
@@ -1517,7 +1517,12 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 				columnType.Type = "boolean"
 			}
 		case "bpchar":
-			columnType.Type = "character"
+			// The character keyword has a length, while bpchar written as such has none
+			if len(typeNames) == 2 {
+				columnType.Type = "character"
+			} else {
+				columnType.Type = typeName
+			}
 		case "boolean", "varchar", "interval", "numeric", "timestamp", "time": // TODO: use this pattern more, fixing failed tests as well
 			columnType.Type = typeName
 		case "timetz":

@@ -295,18 +295,18 @@ func resolveForms[T any](tc *typeContext, resolve func() T) typedForms[T] {
 // withoutResolvedCasts returns a copy of a tree whose casts are not marked as resolved
 func withoutResolvedCasts[T any](tree T) T {
 	castType := reflect.TypeFor[*parser.CastExpr]()
-	var clear func(v reflect.Value) (reflect.Value, bool)
-	clear = func(v reflect.Value) (reflect.Value, bool) {
+	var unmark func(v reflect.Value) (reflect.Value, bool)
+	unmark = func(v reflect.Value) (reflect.Value, bool) {
 		if v.Type() != castType || v.IsNil() {
 			return reflect.Value{}, false
 		}
 		copied := reflect.New(castType.Elem())
-		copied.Elem().Set(copyTree(v.Elem(), clear))
+		copied.Elem().Set(copyTree(v.Elem(), unmark))
 		copied.Interface().(*parser.CastExpr).Resolved = false
 		return copied, true
 	}
 	value := reflect.ValueOf(&tree).Elem()
-	value.Set(copyTree(value, clear))
+	value.Set(copyTree(value, unmark))
 	return tree
 }
 
@@ -401,6 +401,8 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 				resolved.Left, resolved.Right = args[0], args[1]
 				return resolved, t
 			}
+			// The comparison is still boolean, but the casts of its operands are unknown
+			tc.unresolved++
 		}
 		return resolved, boolType
 	case *parser.BinaryExpr:

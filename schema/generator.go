@@ -4256,15 +4256,26 @@ func (g *Generator) forgetViewMetadata(view *View) {
 		return priv.objectType == "TABLE" && g.qualifiedNamesEqual(priv.tableName, view.name)
 	})
 	g.currentComments = slices.DeleteFunc(g.currentComments, func(comment *Comment) bool {
-		parts := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+		// The name of the object, or of the table or view it is on, without the schema it may omit
+		objectName := func(parts []Ident) QualifiedName {
+			if len(parts) == 1 {
+				return QualifiedName{Name: parts[0]}
+			}
+			return QualifiedName{Schema: parts[0], Name: parts[1]}
+		}
 		switch comment.comment.ObjectType {
-		case "OBJECT_VIEW", "OBJECT_TABLE", "OBJECT_COLUMN":
-			return g.qualifiedNamesEqual(QualifiedName{Schema: parts[0], Name: parts[1]}, view.name)
+		case "OBJECT_VIEW", "OBJECT_TABLE":
+			return g.qualifiedNamesEqual(objectName(normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)), view.name)
+		case "OBJECT_COLUMN":
+			parts := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+			return g.qualifiedNamesEqual(objectName(parts[:len(parts)-1]), view.name)
 		case "OBJECT_TRIGGER":
-			return g.qualifiedNamesEqual(QualifiedName{Schema: parts[1], Name: parts[2]}, view.name)
+			// The trigger's name comes first
+			return g.qualifiedNamesEqual(objectName(normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)[1:]), view.name)
 		case "OBJECT_INDEX":
+			name := objectName(normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema))
 			return slices.ContainsFunc(indexes, func(index Index) bool {
-				return g.qualifiedNamesEqual(QualifiedName{Schema: parts[0], Name: parts[1]}, QualifiedName{Schema: view.name.Schema, Name: index.name})
+				return g.qualifiedNamesEqual(name, QualifiedName{Schema: view.name.Schema, Name: index.name})
 			})
 		}
 		return false
