@@ -76,6 +76,10 @@ func castTypeName(yylex any, name Ident) string {
 // castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
 // it keeps the time zone of timestamptz(p) and timetz(p) after the precision.
 func castTypeWithLength(name string, length *SQLVal) *ConvertType {
+	// PostgreSQL writes the type "bit" with a length as bit(n)
+	if name == `"bit"` {
+		name = "bit"
+	}
   if base, ok := strings.CutSuffix(name, " with time zone"); ok {
     return &ConvertType{Type: base, Length: length, TimeZone: " with time zone"}
   }
@@ -7611,6 +7615,16 @@ function_call_keyword:
     $5.Array = $6
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
+| CAST '(' expression AS sql_id cast_array_opt ')'
+  {
+    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: &ConvertType{Type: castTypeName(yylex, $5), Array: $6}}
+  }
+| CAST '(' expression AS sql_id '(' INTEGRAL ')' cast_array_opt ')'
+  {
+    t := castTypeWithLength(castTypeName(yylex, $5), NewIntVal($7))
+    t.Array = $9
+    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: t}
+  }
 | TRY_CAST '(' expression AS convert_type ')'
   {
     $$ = &ConvertExpr{Action: TryCastStr, Expr: $3, Type: $5}
@@ -7899,7 +7913,7 @@ convert_type:
     $$ = &ConvertType{Type: $1, Length: $2, Charset: $3, Operator: CharacterSetStr}
     if $2 == nil && yylex.(*Tokenizer).mode == ParserModePostgres {
       // char has a length of 1 in PostgreSQL, as in a cast written with ::
-      $$.Length = NewIntVal("1")
+      $$.Length = implicitLength
     }
   }
 | CHAR length_opt ID
@@ -7967,6 +7981,9 @@ convert_type:
 | int_type_keyword length_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2}
+    if $2 == nil && strings.EqualFold($1, "bit") && yylex.(*Tokenizer).mode == ParserModePostgres {
+      $$.Length = implicitLength
+    }
   }
 | DATETIME2 length_opt
   {
@@ -8053,10 +8070,11 @@ simple_convert_type:
       }
       $$ = &ConvertType{Type: `"char"`}
     } else if strings.EqualFold($3.Type, "bit") {
-      // pg_catalog.bit is the type "bit", which has no length unless one is written
-      $$ = &ConvertType{Type: `"bit"`, Length: $3.Length}
+      // pg_catalog.bit is the type "bit", which has no length unless one is written, and which
+      // PostgreSQL writes as bit(n) with one
+      $$ = $3
       if $3.Length == implicitLength {
-        $$.Length = nil
+        $$ = &ConvertType{Type: `"bit"`}
       }
     } else {
       $$ = $3

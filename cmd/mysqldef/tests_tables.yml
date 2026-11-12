@@ -1472,6 +1472,7 @@ AddIndexWithCommentWithQuoteAndBackslash:
   down: |
     ALTER TABLE `users` DROP INDEX `index_name`;
 AddIndexWithUsingAndComment:
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
       id bigint NOT NULL,

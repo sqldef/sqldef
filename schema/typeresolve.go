@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -326,6 +327,12 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 		return e, exprType{}
 	case *parser.IntervalExpr:
 		return e, exprType{name: "interval"}
+	case *parser.ConvertExpr:
+		// CAST(x AS t) is x::t
+		if e.Action != parser.CastStr || e.Style != nil {
+			return expr, exprType{}
+		}
+		return tc.resolveNode(&parser.CastExpr{Expr: e.Expr, Type: e.Type}, scope)
 	case *parser.CastExpr:
 		inner, from := tc.resolve(e.Expr, scope)
 		to, ok := tc.castType(e.Type)
@@ -955,9 +962,9 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 				expr, t := tc.resolve(aliased.Expr, scope)
 				expr = tc.markResolved(expr)
 				// The cast names a column without an alias, even where PostgreSQL drops it
-				if cast, ok := aliased.Expr.(*parser.CastExpr); ok && aliased.As.IsEmpty() {
+				if castType := writtenCastType(aliased.Expr); castType != nil && aliased.As.IsEmpty() {
 					if _, isCast := expr.(*parser.CastExpr); !isCast {
-						expr = &parser.CastExpr{Expr: expr, Type: cast.Type}
+						expr = &parser.CastExpr{Expr: expr, Type: castType}
 					}
 				}
 				if t.name != "" && hashableExpr(expr) {
@@ -985,13 +992,26 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 	return stmt
 }
 
+// writtenCastType returns the type of an expression written as x::t or CAST(x AS t)
+func writtenCastType(expr parser.Expr) *parser.ConvertType {
+	switch e := expr.(type) {
+	case *parser.CastExpr:
+		return e.Type
+	case *parser.ConvertExpr:
+		if e.Action == parser.CastStr && e.Style == nil {
+			return e.Type
+		}
+	}
+	return nil
+}
+
 func (tc *typeContext) withCTEs(ctes map[string]bool, with *parser.With) map[string]bool {
 	if with == nil {
 		return ctes
 	}
-	result := map[string]bool{}
-	for name := range ctes {
-		result[name] = true
+	result := maps.Clone(ctes)
+	if result == nil {
+		result = map[string]bool{}
 	}
 	for _, cte := range with.CTEs {
 		result[tc.identKey(cte.Name)] = true

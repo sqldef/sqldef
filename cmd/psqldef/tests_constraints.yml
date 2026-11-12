@@ -3185,3 +3185,13 @@ CheckWithParenthesesInArrays:
       c integer,
       CONSTRAINT t_c CHECK (c = ANY (ARRAY[(a + 1), 2]) AND (c, (a * 2)) IS NOT NULL)
     );
+
+CheckWithCastFunctionSyntax:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      v varbit,
+      i integer,
+      CONSTRAINT t_v CHECK (CAST(v AS bit) <> B'0'),
+      CONSTRAINT t_i CHECK (round(CAST(i AS int8), 2) > 0 AND CAST(i AS integer) < 10)
+    );

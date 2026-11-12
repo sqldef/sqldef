@@ -2712,7 +2712,7 @@ func TestTypecastToBitKeepsLengthOnlyForTheKeyword(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := String(statement)
-	for _, want := range []string{"::bit(1) as a", "::ext.bit as b", `::"bit" as c`, `::"bit"(3) as d`, `::"char" as e`} {
+	for _, want := range []string{"::bit(1) as a", "::ext.bit as b", `::"bit" as c`, "::bit(3) as d", `::"char" as e`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("want substring %q, got %s", want, got)
 		}

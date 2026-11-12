@@ -1958,3 +1958,23 @@ ChangeColumnTypeReadByViewWithLiteralCastInLegacyMode:
   desired: |
     CREATE TABLE t (a bigint);
     CREATE VIEW v AS SELECT a, 'x'::varchar(3) AS s FROM t;
+
+ViewWithCastsToBitOfLengths:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (v varbit);
+    CREATE VIEW w AS SELECT v::pg_catalog.bit(3) AS a, v::"bit"(2) AS b, v::pg_catalog.bit AS c, CAST(v AS bit) AS d FROM t;
+
+AppendColumnToViewWithCastFunctionSyntax:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (x text, i integer);
+    CREATE VIEW v AS SELECT CAST(x AS varchar(3)) AS c, CAST(i AS bigint) FROM t;
+  desired: |
+    CREATE TABLE t (x text, i integer);
+    CREATE VIEW v AS SELECT CAST(x AS varchar(3)) AS c, CAST(i AS bigint), i AS j FROM t;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT CAST(x AS varchar(3)) AS c, CAST(i AS bigint), i AS j FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT CAST(x AS varchar(3)) AS c, CAST(i AS bigint) FROM t;

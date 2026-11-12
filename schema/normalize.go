@@ -2264,19 +2264,16 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 	}
 
 	// The order does not depend on the parentheses written
-	key := func(v T) string { return parser.String(canonicalParens(v)) }
-	slices.SortFunc(values, func(a, b T) int {
-		return cmp.Compare(key(a), key(b))
-	})
-
-	uniqueValues := values[:0] // reuse underlying array
-	for i, v := range values {
-		if i == 0 || key(v) != key(values[i-1]) {
-			uniqueValues = append(uniqueValues, v)
-		}
+	type keyed struct {
+		key   string
+		value T
 	}
-
-	return uniqueValues
+	keyedValues := util.TransformSlice(values, func(v T) keyed {
+		return keyed{key: parser.String(canonicalParens(v)), value: v}
+	})
+	slices.SortFunc(keyedValues, func(a, b keyed) int { return cmp.Compare(a.key, b.key) })
+	keyedValues = slices.CompactFunc(keyedValues, func(a, b keyed) bool { return a.key == b.key })
+	return util.TransformSlice(keyedValues, func(k keyed) T { return k.value })
 }
 
 // tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
