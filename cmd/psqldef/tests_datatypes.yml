@@ -1894,3 +1894,8 @@ AddBitColumnWithDefaultOfBitLiterals:
     ALTER TABLE public.t ADD COLUMN c bit(4) DEFAULT B'0101' | B'0011';
   down: |
     ALTER TABLE public.t DROP COLUMN c;
+
+ColumnOfNcharWithoutLength:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (f nchar);

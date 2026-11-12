@@ -2739,3 +2739,13 @@ func TestReplaceViewName(t *testing.T) {
 		}
 	}
 }
+
+func TestQuoteStringEscapes(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"'a'\nb\\c\x00", `'''a''\nb\\c\0'`},
+	} {
+		if got := QuoteString(tc.in, true); got != tc.want {
+			t.Errorf("QuoteString(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

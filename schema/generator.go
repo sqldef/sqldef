@@ -5126,16 +5126,12 @@ func findViewQuoteAware(views []*View, name QualifiedName, defaultSchema string,
 
 // findColumnByName finds a column using quote-aware comparison
 func (g *Generator) findColumnByName(columns map[string]*Column, name Ident) *Column {
-	// Of the columns that match, the one of the least key, so that the result does not depend on
-	// the order of the map
-	var found *Column
-	var foundKey string
-	for key, column := range columns {
-		if g.identsEqual(column.name, name) && (found == nil || key < foundKey) {
-			found, foundKey = column, key
+	for _, column := range util.CanonicalMapIter(columns) {
+		if g.identsEqual(column.name, name) {
+			return column
 		}
 	}
-	return found
+	return nil
 }
 
 // findIndexByName finds an index by its identifier using quote-aware comparison.

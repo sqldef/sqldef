@@ -2628,13 +2628,37 @@ var postgresTypeAliases = map[string]string{
 	"timetz":      "time with time zone",
 }
 
-// QuoteString writes a string as an SQL literal, escaping backslashes where they are escape
-// characters, as in MySQL
+// QuoteString writes a string as an SQL literal. Where backslashes are escape characters, as in
+// MySQL, it escapes them and the characters a client may not pass through, such as NUL and newlines.
 func QuoteString(s string, backslashEscapes bool) string {
-	if backslashEscapes {
-		s = strings.ReplaceAll(s, `\`, `\\`)
+	if !backslashEscapes {
+		return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 	}
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	var b strings.Builder
+	b.WriteByte('\'')
+	for i, part := range strings.Split(s, "'") {
+		if i > 0 {
+			b.WriteString("''")
+		}
+		writeBackslashEscaped(&b, part)
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
+// writeBackslashEscaped writes a string with backslash escapes for the characters that need them
+func writeBackslashEscaped(w interface {
+	WriteByte(byte) error
+	WriteRune(rune) (int, error)
+}, s string) {
+	for _, ch := range s {
+		if encodedChar := sqlEncodeMap[byte(ch)]; ch > 0xff || encodedChar == dontEscape {
+			w.WriteRune(ch)
+		} else {
+			w.WriteByte('\\')
+			w.WriteByte(encodedChar)
+		}
+	}
 }
 
 // PostgresTypeNameNeedsQuotes reports whether PostgreSQL writes a type name quoted: a name that is
@@ -2868,14 +2892,7 @@ func encodeSQLBytes(val string, backslashEscapes bool, buf *nodeBuffer) {
 		return
 	}
 	buf.WriteByte('\'')
-	for _, ch := range val {
-		if encodedChar := sqlEncodeMap[byte(ch)]; ch > 0xff || encodedChar == dontEscape {
-			buf.WriteRune(ch)
-		} else {
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
-		}
-	}
+	writeBackslashEscaped(buf, val)
 	buf.WriteByte('\'')
 }
 

@@ -21,14 +21,16 @@ var (
 		"varchar": "character varying",
 	}
 	postgresDataTypeAliases = map[string]string{
-		"int2":   "smallint",
-		"int4":   "integer",
-		"int8":   "bigint",
-		"float4": "real",
-		"float8": "double precision",
-		"float":  "double precision",
-		"bpchar": "character",
-		"varbit": "bit varying",
+		"int2":               "smallint",
+		"int4":               "integer",
+		"int8":               "bigint",
+		"float4":             "real",
+		"float8":             "double precision",
+		"float":              "double precision",
+		"bpchar":             "character",
+		"nchar":              "character",
+		"national character": "character",
+		"varbit":             "bit varying",
 
 		// Timezone type aliases (the timezone flag is stored separately in Column.timezone)
 		"timestamptz":                 "timestamp",
