@@ -108,7 +108,7 @@ func (tc *typeContext) typeOfName(name string) (string, bool) {
 			if tc.resolver.Type(last.Name) != nil && last.Name == parser.FoldASCII(last.Name) {
 				typ = last.Name
 			}
-		} else if builtin, ok := pgcatalog.BuiltinTypeName(normalizeTypeName(last.Name, GeneratorModePostgres)); ok {
+		} else if builtin, ok := pgcatalog.BuiltinTypeName(last.Name); ok {
 			typ = builtin
 		}
 	}
@@ -140,20 +140,20 @@ func (tc *typeContext) castType(t *parser.ConvertType) (exprType, bool) {
 	if !ok {
 		return exprType{}, false
 	}
-	mod := ""
+	var length, scale string
 	if t.Length != nil {
-		mod = t.Length.Val
-		if t.Scale != nil {
-			mod += "," + t.Scale.Val
-		}
+		length = t.Length.Val
 	}
-	return exprType{name: typ, mod: mod}, true
+	if t.Scale != nil {
+		scale = t.Scale.Val
+	}
+	return exprType{name: typ, mod: typeModifier(typ, length, scale)}, true
 }
 
 // columnType returns the type of a column
 func (tc *typeContext) columnType(column *Column) (exprType, bool) {
 	var typ string
-	name := normalizeTypeName(column.typeName, GeneratorModePostgres)
+	name := strings.ToLower(column.typeName)
 	builtin, isBuiltin := pgcatalog.BuiltinTypeName(name)
 	if column.references.Name == "" && !column.typeIdent.Quoted && isBuiltin {
 		typ = builtin
@@ -171,22 +171,37 @@ func (tc *typeContext) columnType(column *Column) (exprType, bool) {
 			return exprType{}, false
 		}
 	}
-	mod := ""
+	var length, scale string
 	if column.length != nil {
-		mod = column.length.raw
-		if column.scale != nil {
-			mod += "," + column.scale.raw
-		}
+		length = column.length.raw
 	} else if typ == "bpchar" && name != "bpchar" {
 		// character means character(1)
-		mod = "1"
+		length = "1"
 	}
+	if column.scale != nil {
+		scale = column.scale.raw
+	}
+	mod := typeModifier(typ, length, scale)
 	if column.array {
 		if typ = tc.resolver.ArrayType(typ); typ == "" {
 			return exprType{}, false
 		}
 	}
 	return exprType{name: typ, mod: mod}, true
+}
+
+// typeModifier returns the type modifier of a length and a scale, the same however it was written
+func typeModifier(typ, length, scale string) string {
+	if length == "" {
+		return ""
+	}
+	if typ == "numeric" && scale == "" {
+		scale = "0"
+	}
+	if scale == "" {
+		return strings.TrimSpace(length)
+	}
+	return strings.TrimSpace(length) + "," + strings.TrimSpace(scale)
 }
 
 // columnScope returns the type of a column that an expression reads, or false
@@ -347,6 +362,11 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 		return &parser.UnaryExpr{Operator: e.Operator, Expr: args[0]}, rt
 	case *parser.FuncExpr:
 		return tc.resolveFunc(e, scope)
+	case *parser.Subquery:
+		return tc.resolveSubquery(e, scope)
+	case *parser.ExistsExpr:
+		subquery, _ := tc.resolveSubquery(e.Subquery, scope)
+		return &parser.ExistsExpr{Subquery: subquery.(*parser.Subquery)}, boolType
 	case *parser.CaseExpr:
 		return tc.resolveCase(e, scope)
 	default:
@@ -508,11 +528,7 @@ func (tc *typeContext) resolveFunc(e *parser.FuncExpr, scope columnScope) (parse
 	var result exprType
 	switch name {
 	case "coalesce", "greatest", "least":
-		names := make([]string, len(types))
-		for i, t := range types {
-			names[i] = t.name
-		}
-		common, ok := tc.resolver.CommonType(names)
+		common, ok := tc.resolver.CommonType(typeNames(types))
 		if !ok {
 			return &resolved, exprType{}
 		}
@@ -583,6 +599,17 @@ func typeNames(types []exprType) []string {
 		names[i] = t.name
 	}
 	return names
+}
+
+// resolveSubquery resolves a subquery, which reads the columns of the enclosing queries too. A
+// scalar subquery has the type of its one column.
+func (tc *typeContext) resolveSubquery(e *parser.Subquery, scope columnScope) (parser.Expr, exprType) {
+	resolved := &parser.Subquery{Select: tc.resolveSelect(e.Select, scope, nil)}
+	columns, ok := tc.outputColumns(e.Select, resolved.Select)
+	if !ok || len(columns) != 1 {
+		return resolved, exprType{}
+	}
+	return resolved, columns[0].typ
 }
 
 // resolveCase converts the results of a CASE to their common type
@@ -785,6 +812,40 @@ func (tc *typeContext) viewColumns(view *View) ([]relationColumn, bool) {
 	return out.columns, out.known
 }
 
+// hasCollate reports whether an expression has a COLLATE clause, which may change the collation
+// of the column that it gives, unknown to its type
+func hasCollate(node any) bool {
+	found := false
+	var visit func(v reflect.Value)
+	visit = func(v reflect.Value) {
+		if found {
+			return
+		}
+		switch v.Kind() {
+		case reflect.Interface, reflect.Pointer:
+			if !v.IsNil() {
+				if _, ok := v.Interface().(*parser.CollateExpr); ok {
+					found = true
+					return
+				}
+				visit(v.Elem())
+			}
+		case reflect.Struct:
+			for i := range v.NumField() {
+				if v.Type().Field(i).IsExported() {
+					visit(v.Field(i))
+				}
+			}
+		case reflect.Slice:
+			for i := range v.Len() {
+				visit(v.Index(i))
+			}
+		}
+	}
+	visit(reflect.ValueOf(node))
+	return found
+}
+
 func allColumnTypesKnown(columns []relationColumn) bool {
 	for _, column := range columns {
 		if column.name.IsEmpty() || column.typ.name == "" {
@@ -832,7 +893,15 @@ func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement) ([]rela
 			if name.IsEmpty() {
 				name, _ = selectExprOutputName(aliased.Expr, GeneratorModePostgres)
 			}
-			columns = append(columns, relationColumn{name: name, typ: tc.g.exprTypes[t.SelectExprs[i].(*parser.AliasedExpr).Expr]})
+			var typ exprType
+			if expr := t.SelectExprs[i].(*parser.AliasedExpr).Expr; hashableExpr(expr) && !hasCollate(expr) {
+				typ = tc.g.exprTypes[expr]
+			}
+			// PostgreSQL makes an output column of unknown type text
+			if typ.name == pgcatalog.Unknown {
+				typ = exprType{name: "text"}
+			}
+			columns = append(columns, relationColumn{name: name, typ: typ})
 		}
 		return columns, true
 	}

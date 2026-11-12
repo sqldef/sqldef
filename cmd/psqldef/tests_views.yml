@@ -1865,3 +1865,59 @@ ChangeViewRemovingCastThatIsNotImplicit:
     CREATE OR REPLACE VIEW v AS SELECT i FROM t WHERE i / 3 > 1;
   down: |
     CREATE OR REPLACE VIEW v AS SELECT i FROM t WHERE i::numeric / 3 > 1;
+
+ChangeViewCastFromTimestampToTimestamptz:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (ts timestamp);
+    CREATE VIEW v AS SELECT ts::timestamp AS x FROM t;
+  desired: |
+    CREATE TABLE t (ts timestamp);
+    CREATE VIEW v AS SELECT ts::timestamptz AS x FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT ts::timestamptz AS x FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT ts::timestamp AS x FROM t;
+
+ChangeViewColumnCollation:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (name text);
+    CREATE VIEW v AS SELECT name AS n FROM t;
+  desired: |
+    CREATE TABLE t (name text);
+    CREATE VIEW v AS SELECT name COLLATE "C" AS n FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT name COLLATE "C" AS n FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT name AS n FROM t;
+
+ViewWithRowComparisons:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id integer, name text);
+    CREATE VIEW v AS SELECT (id, name) = (1, 'a') AS eq, ROW(id, name) <> ROW(2, 'b') AS ne, (id, name) < (3, 'c') AS lt, ROW(id, name) IS NULL AS n FROM t;
+
+AppendColumnToViewWithStringLiteralColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (i integer);
+    CREATE VIEW v AS SELECT 'a' AS s FROM t;
+  desired: |
+    CREATE TABLE t (i integer);
+    CREATE VIEW v AS SELECT 'a' AS s, i FROM t;
+  up: |
+    CREATE OR REPLACE VIEW v AS SELECT 'a' AS s, i FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT 'a' AS s FROM t;
+
+ViewWithCastToNumericWithoutScale:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (n numeric(10));
+    CREATE VIEW v AS SELECT n::numeric(10, 0) AS m, n + 1 > 2::numeric(10) AS b FROM t;

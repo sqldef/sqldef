@@ -3102,3 +3102,13 @@ CheckWithInListsOfMixedNumbers:
       n numeric CHECK (n IN (1, 2.5)),
       f double precision CHECK (f IN (1, 2))
     );
+
+CheckWithRowComparisons:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      b text,
+      CONSTRAINT t_eq CHECK ((a, b) = (1, 'x') OR (a, b) <> (2, 'y')),
+      CONSTRAINT t_lt CHECK ((a, b) < (3, 'z'))
+    );

@@ -9,6 +9,7 @@ package pgcatalog
 
 import (
 	_ "embed"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,11 +148,6 @@ func BuiltinTypeName(name string) (string, bool) {
 		return name, true
 	}
 	return "", false
-}
-
-// IsBuiltinFunction reports whether pg_catalog has a function of the name
-func IsBuiltinFunction(name string) bool {
-	return len(loadCatalog().funcs[name]) > 0
 }
 
 // Resolver resolves types with the user-defined types of a schema added to the built-in ones
@@ -410,23 +406,11 @@ func (r *Resolver) ResolveOperator(name, left, right string) (*Call, bool) {
 
 func findExact(candidates []candidate, args []string) *candidate {
 	for i, c := range candidates {
-		if slicesEqual(c.args, args) {
+		if slices.Equal(c.args, args) {
 			return &candidates[i]
 		}
 	}
 	return nil
-}
-
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (r *Resolver) selectCandidate(candidates []candidate, args []string) (*Call, bool) {

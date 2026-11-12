@@ -1291,6 +1291,10 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	case *parser.AliasedExpr:
 		as := e.As
 		normalizedExpr := normalizeExpr(e.Expr, mode)
+		// The parentheses normalizeExpr keeps around COLLATE are redundant for a whole output column
+		if paren, ok := normalizedExpr.(*parser.ParenExpr); ok && mode == GeneratorModePostgres {
+			normalizedExpr = paren.Expr
+		}
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
@@ -2109,6 +2113,11 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 	anyFlag := e.Any
 	allFlag := e.All
 
+	// PostgreSQL stores a row comparison by = or <> as the comparisons of its fields
+	if expanded, ok := expandRowComparison(e, op, mode, forComparison); ok {
+		return recur(expanded, mode)
+	}
+
 	// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side.
 	// Normalize this to set the Any/All flags properly.
 	if funcExpr, ok := right.(*parser.FuncExpr); ok {
@@ -2200,6 +2209,34 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 		All:      allFlag,
 		Any:      anyFlag,
 	}
+}
+
+// expandRowComparison rewrites (a, b) = (c, d) into a = c AND b = d, and (a, b) <> (c, d) into a <> c OR b <> d
+func expandRowComparison(e *parser.ComparisonExpr, op string, mode GeneratorMode, forComparison bool) (parser.Expr, bool) {
+	if mode != GeneratorModePostgres || !forComparison || e.Any || e.All || (op != "=" && op != "<>") {
+		return nil, false
+	}
+	left, ok := e.Left.(parser.ValTuple)
+	if !ok || len(left) < 2 {
+		return nil, false
+	}
+	right, ok := e.Right.(parser.ValTuple)
+	if !ok || len(right) != len(left) {
+		return nil, false
+	}
+	var expanded parser.Expr
+	for i := range left {
+		field := &parser.ComparisonExpr{Operator: op, Left: left[i], Right: right[i]}
+		switch {
+		case expanded == nil:
+			expanded = field
+		case op == "=":
+			expanded = &parser.AndExpr{Left: expanded, Right: field}
+		default:
+			expanded = &parser.OrExpr{Left: expanded, Right: field}
+		}
+	}
+	return expanded, true
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
