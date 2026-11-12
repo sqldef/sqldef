@@ -2239,3 +2239,24 @@ AppendColumnToViewWithCastsToBitVaryingAndNumericArrays:
   down: |
     DROP VIEW public.v;
     CREATE VIEW v AS SELECT x::bit varying(3) AS b, x::bit varying AS c, a::numeric(10)[] AS n FROM t;
+
+ChangeViewOfCaseWithoutElseToCaseWithElse:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a varchar(10), b varchar(10), x boolean);
+    CREATE VIEW v AS SELECT CASE WHEN x THEN a END AS c FROM t;
+  desired: |
+    CREATE TABLE t (a varchar(10), b varchar(10), x boolean);
+    CREATE VIEW v AS SELECT CASE WHEN x THEN a ELSE b END AS c FROM t;
+  up: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT CASE WHEN x THEN a ELSE b END AS c FROM t;
+  down: |
+    DROP VIEW public.v;
+    CREATE VIEW v AS SELECT CASE WHEN x THEN a END AS c FROM t;
+
+ViewWithLiteralsCastToBpcharWithLength:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id integer);
+    CREATE VIEW v AS SELECT 'x'::bpchar(3) AS b, 'y'::"bpchar"(2) AS c FROM t;

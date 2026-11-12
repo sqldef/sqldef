@@ -755,7 +755,12 @@ func (tc *typeContext) resolveCase(e *parser.CaseExpr, scope columnScope) (parse
 	if resolved.Else != nil {
 		resolved.Else = cast[len(cast)-1]
 	}
-	return resolved, commonType(types, common)
+	t := commonType(types, common)
+	if e.Else == nil {
+		// The ELSE NULL that PostgreSQL adds has no type modifier
+		t.mod = ""
+	}
+	return resolved, t
 }
 
 // resolveExpressionTypes resolves the types of the expressions of the tables and views of both

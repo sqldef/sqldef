@@ -76,9 +76,13 @@ func castTypeName(yylex any, name Ident) string {
 // castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
 // it keeps the time zone of timestamptz(p) and timetz(p) after the precision.
 func castTypeWithLength(name string, length *SQLVal) *ConvertType {
-  // PostgreSQL writes the type "bit" with a length as bit(n)
-  if name == `"bit"` {
+  switch name {
+  case `"bit"`:
+    // PostgreSQL writes the type "bit" with a length as bit(n)
     name = "bit"
+  case "bpchar":
+    // bpchar(n) is character(n), as the keyword spelling makes it
+    name = "character"
   }
   if base, ok := strings.CutSuffix(name, " with time zone"); ok {
     return &ConvertType{Type: base, Length: length, TimeZone: " with time zone"}
@@ -5010,6 +5014,14 @@ set_value:
 
 character_cast_opt:
   /* empty */ %prec EMPTY_EXPR { $$ = nil }
+| TYPECAST BPCHAR '(' INTEGRAL ')' character_cast_opt
+  {
+    if $6 != nil {
+      $$ = $6
+    } else {
+      $$ = &ConvertType{Type: "character", Length: NewIntVal($4)}
+    }
+  }
 | TYPECAST BPCHAR character_cast_opt
   {
     // Return the innermost type for chained casts like ::bpchar::text
@@ -5045,10 +5057,15 @@ character_cast_opt:
       } else if !strings.Contains(typeName, ".") {
         typeName = PostgresTypeName(typeName)
       }
+      // The time zone follows the precision, as in timestamp(3) with time zone
+      timeZone := ""
+      if base, ok := strings.CutSuffix(typeName, " with time zone"); ok {
+        typeName, timeZone = base, " with time zone"
+      }
       if $3 {
         typeName = typeName + "[]"
       }
-      $$ = &ConvertType{Type: typeName, Length: $2.Length, Scale: $2.Scale}
+      $$ = &ConvertType{Type: typeName, Length: $2.Length, Scale: $2.Scale, TimeZone: timeZone}
       if $$.Length == nil {
         // bit(n) keeps its length as a display width
         $$.Length = $2.DisplayWidth
