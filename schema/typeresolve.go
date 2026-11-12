@@ -356,6 +356,22 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 		}
 		return tc.resolveNode(&parser.CastExpr{Expr: e.Expr, Type: e.Type}, scope)
 	case *parser.CastExpr:
+		if array, ok := e.Expr.(*parser.ArrayConstructor); ok && strings.HasSuffix(e.Type.Type, "[]") {
+			if to, ok := tc.castType(e.Type); ok {
+				// PostgreSQL casts the elements of ARRAY[...]::t[] to t, each but those of t already
+				elementType := *e.Type
+				elementType.Type = strings.TrimSuffix(e.Type.Type, "[]")
+				resolved := &parser.ArrayConstructor{Elements: util.TransformSlice(array.Elements, func(element parser.Expr) parser.Expr {
+					cast := &parser.CastExpr{Expr: element, Type: &elementType}
+					if _, nested := element.(*parser.ArrayConstructor); nested {
+						cast.Type = e.Type
+					}
+					resolved, _ := tc.resolve(cast, scope)
+					return resolved
+				})}
+				return resolved, to
+			}
+		}
 		inner, from := tc.resolve(e.Expr, scope)
 		to, ok := tc.castType(e.Type)
 		if !ok {
@@ -971,15 +987,18 @@ func (tc *typeContext) outputColumns(stmt, typed parser.SelectStatement, underSe
 func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnScope, ctes map[string]cteColumns) parser.SelectStatement {
 	switch s := stmt.(type) {
 	case *parser.Union:
-		ctes = tc.withCTEs(ctes, s.With)
+		var with *parser.With
+		ctes, with = tc.withCTEs(ctes, s.With)
 		resolved := *s
+		resolved.With = with
 		resolved.Left = tc.resolveSelect(s.Left, outer, ctes)
 		resolved.Right = tc.resolveSelect(s.Right, outer, ctes)
 		return &resolved
 	case *parser.ParenSelect:
 		return &parser.ParenSelect{Select: tc.resolveSelect(s.Select, outer, ctes)}
 	case *parser.Select:
-		ctes = tc.withCTEs(ctes, s.With)
+		var with *parser.With
+		ctes, with = tc.withCTEs(ctes, s.With)
 		outerCTEs := tc.ctes
 		tc.ctes = ctes
 		defer func() { tc.ctes = outerCTEs }()
@@ -989,6 +1008,7 @@ func (tc *typeContext) resolveSelect(stmt parser.SelectStatement, outer columnSc
 		}
 		scope := tc.relationScope(relations, outer)
 		resolved := *s
+		resolved.With = with
 		resolved.SelectExprs = make(parser.SelectExprs, len(s.SelectExprs))
 		for i, selectExpr := range s.SelectExprs {
 			if aliased, ok := selectExpr.(*parser.AliasedExpr); ok {
@@ -1059,10 +1079,11 @@ type cteColumns struct {
 // withCTEs adds the common table expressions of a WITH clause to those in scope. Each one sees
 // those before it, and where the WITH clause is recursive, itself and those after it with unknown
 // columns.
-func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) map[string]cteColumns {
+func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) (map[string]cteColumns, *parser.With) {
 	if with == nil {
-		return ctes
+		return ctes, nil
 	}
+	resolvedWith := &parser.With{Recursive: with.Recursive}
 	result := maps.Clone(ctes)
 	if result == nil {
 		result = map[string]cteColumns{}
@@ -1085,8 +1106,9 @@ func (tc *typeContext) withCTEs(ctes map[string]cteColumns, with *parser.With) m
 			}
 		}
 		result[key] = cteColumns{columns: columns, known: known}
+		resolvedWith.CTEs = append(resolvedWith.CTEs, &parser.CommonTableExpr{Name: cte.Name, Columns: cte.Columns, Definition: definition})
 	}
-	return result
+	return result, resolvedWith
 }
 
 func (tc *typeContext) identKey(ident parser.Ident) string {

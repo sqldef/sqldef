@@ -1615,6 +1615,15 @@ func (tkn *Tokenizer) next() {
 	}
 }
 
+// offset returns the byte offset of the character the tokenizer has read ahead, which is where the
+// last token scanned ends
+func (tkn *Tokenizer) offset() int {
+	if tkn.lastChar == eofChar {
+		return tkn.Position - 1
+	}
+	return tkn.Position - utf8.RuneLen(tkn.lastChar)
+}
+
 // scanSkippingComments wraps Scan the same way Lex does: SQL comments never
 // count as the "next" token unless AllowComments is set (currently never true
 // in this codebase). Peek callers must use this so a lookahead across a
@@ -1797,8 +1806,7 @@ func CreateOrReplace(sql string, mode ParserMode) string {
 	if typ != CREATE {
 		panic(fmt.Sprintf("not a CREATE statement: %s", sql))
 	}
-	// The tokenizer has read one character past CREATE
-	end := tkn.Position - 1
+	end := tkn.offset()
 	if typ, _ := tkn.scanSkippingComments(); typ == OR {
 		return sql
 	}
@@ -1832,7 +1840,7 @@ func ReplaceViewName(sql string, mode ParserMode, name string) string {
 			panic(fmt.Sprintf("not a CREATE VIEW statement: %s", sql))
 		}
 	}
-	start := tkn.Position - 1
+	start := tkn.offset()
 	end := start
 	prev := 0
 	for {
@@ -1842,7 +1850,7 @@ func ReplaceViewName(sql string, mode ParserMode, name string) string {
 			typ = 0
 		}
 		if end == start && (typ == IF || typ == NOT || typ == EXISTS) {
-			start = tkn.Position - 1
+			start = tkn.offset()
 			end = start
 			continue
 		}
@@ -1850,7 +1858,7 @@ func ReplaceViewName(sql string, mode ParserMode, name string) string {
 		case '(', AS, WITH, USING, 0:
 			return sql[:start] + " " + name + sql[end:]
 		}
-		end = tkn.Position - 1
+		end = tkn.offset()
 		prev = typ
 	}
 }

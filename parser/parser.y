@@ -76,10 +76,10 @@ func castTypeName(yylex any, name Ident) string {
 // castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
 // it keeps the time zone of timestamptz(p) and timetz(p) after the precision.
 func castTypeWithLength(name string, length *SQLVal) *ConvertType {
-	// PostgreSQL writes the type "bit" with a length as bit(n)
-	if name == `"bit"` {
-		name = "bit"
-	}
+  // PostgreSQL writes the type "bit" with a length as bit(n)
+  if name == `"bit"` {
+    name = "bit"
+  }
   if base, ok := strings.CutSuffix(name, " with time zone"); ok {
     return &ConvertType{Type: base, Length: length, TimeZone: " with time zone"}
   }

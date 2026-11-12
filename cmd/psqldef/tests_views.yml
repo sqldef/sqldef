@@ -2146,3 +2146,10 @@ AppendColumnToViewOfUnionWithStringLiteral:
 #   down: |
 #     DROP VIEW public.v;
 #     CREATE VIEW v AS WITH RECURSIVE a AS (SELECT x FROM b), b AS (SELECT 1 AS x) SELECT x FROM a;
+
+ViewsWithImplicitCastsInCTEAndArrayCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (i integer, b bigint);
+    CREATE VIEW v AS WITH c AS (SELECT round(i, 2) AS r FROM t) SELECT r FROM c;
+    CREATE VIEW w AS SELECT ARRAY[b]::bigint[] AS a, ARRAY[i, b]::bigint[] AS m, ARRAY[ARRAY[b]]::bigint[] AS n FROM t;
