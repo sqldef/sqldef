@@ -2670,6 +2670,17 @@ func postgresFloatTypeName(precision string) string {
 	return "double precision"
 }
 
+// NewStringCast returns a cast of a string literal as the parser reads 'x'::t: a cast whose
+// literal normalization folds, or else the literal holding its cast
+func NewStringCast(val *SQLVal, t *ConvertType) Expr {
+	if isFoldableValueCast(t) {
+		return &CastExpr{Expr: val, Type: t}
+	}
+	cast := *val
+	cast.DroppedCast = t
+	return &cast
+}
+
 // isFoldableValueCast reports whether a value-context string cast should be kept
 // (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
 // numeric/money/interval need this; dropping the rest preserves historical behavior.

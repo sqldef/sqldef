@@ -5501,6 +5501,10 @@ cast_array_opt:
   {
     $$ = BoolVal(true)
   }
+| array_brackets
+  {
+    $$ = BoolVal(true)
+  }
 
 /* Handles [], [][], [][][], etc. - PostgreSQL treats all as equivalent */
 array_brackets:
@@ -8339,10 +8343,10 @@ value:
   {
     // Keep numeric/money/interval casts so normalize can fold them to match PG's
     // read-back ('1'::numeric); drop the rest as before.
-    if isFoldableValueCast($2) {
-      $$ = &CastExpr{Expr: newStrVal(yylex, $1), Type: $2}
+    if $2 == nil {
+      $$ = newStrVal(yylex, $1)
     } else {
-      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2, BackslashEscapes: backslashEscapes(yylex)}
+      $$ = NewStringCast(newStrVal(yylex, $1), $2)
     }
   }
 | UNICODE_STRING

@@ -2153,3 +2153,9 @@ ViewsWithImplicitCastsInCTEAndArrayCasts:
     CREATE TABLE t (i integer, b bigint);
     CREATE VIEW v AS WITH c AS (SELECT round(i, 2) AS r FROM t) SELECT r FROM c;
     CREATE VIEW w AS SELECT ARRAY[b]::bigint[] AS a, ARRAY[i, b]::bigint[] AS m, ARRAY[ARRAY[b]]::bigint[] AS n FROM t;
+
+ViewsWithArrayCastsWrittenWithArrayKeywordAndEmpty:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (i integer, b bigint);
+    CREATE VIEW v AS SELECT CAST(ARRAY[i, 2] AS bigint ARRAY) AS a, ARRAY[]::bigint[] AS e, CAST(ARRAY[b] AS bigint[]) AS c FROM t;

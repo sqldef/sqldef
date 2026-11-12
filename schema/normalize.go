@@ -693,22 +693,42 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
 }
 
+// arrayElementType returns the element type of an array type, written t[] or t ARRAY
+func arrayElementType(t *parser.ConvertType) (*parser.ConvertType, bool) {
+	elementType := *t
+	if t.Array {
+		elementType.Array = false
+		return &elementType, true
+	}
+	if base, ok := strings.CutSuffix(t.Type, "[]"); ok {
+		elementType.Type = base
+		return &elementType, true
+	}
+	return nil, false
+}
+
 // castArrayElements moves the cast of an ARRAY constructor to an array type onto its elements, as
-// PostgreSQL stores ARRAY[i]::bigint[] as ARRAY[i::bigint]
+// PostgreSQL stores ARRAY[i]::bigint[] as ARRAY[i::bigint]. Where the type resolver does not
+// know the type, a column is taken to have it already, as PostgreSQL adds no cast then.
 func castArrayElements(array *parser.ArrayConstructor, arrayType *parser.ConvertType, mode GeneratorMode) parser.Expr {
-	elementType := *arrayType
-	elementType.Type = strings.TrimSuffix(arrayType.Type, "[]")
-	elementKey := parser.String(normalizeConvertType(&elementType, mode))
+	elementType, _ := arrayElementType(arrayType)
+	elementKey := parser.String(normalizeConvertType(elementType, mode))
 	elements := util.TransformSlice(array.Elements, func(element parser.Expr) parser.Expr {
 		switch e := element.(type) {
 		case *parser.ArrayConstructor:
 			return castArrayElements(e, arrayType, mode)
+		case *parser.ColName:
+			return element
+		case *parser.SQLVal:
+			if e.Type == parser.StrVal && e.DroppedCast == nil {
+				return normalizeExpr(parser.NewStringCast(e, elementType), mode)
+			}
 		case *parser.CastExpr:
 			if parser.String(normalizeConvertType(e.Type, mode)) == elementKey {
 				return element
 			}
 		}
-		return normalizeExpr(&parser.CastExpr{Expr: element, Type: &elementType}, mode)
+		return normalizeExpr(&parser.CastExpr{Expr: element, Type: elementType}, mode)
 	})
 	return &parser.ArrayConstructor{Elements: elements}
 }
@@ -968,8 +988,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// e.g., ARRAY[current_date::text]::text[] -> ARRAY[(CURRENT_DATE)::text]
 				// HOWEVER: Empty arrays (ARRAY[]) NEED the typecast or PostgreSQL can't determine the type
 				if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
-					// Check if this is an array type cast (type string ends with [])
-					if strings.HasSuffix(typeStr, "[]") {
+					if _, isArrayType := arrayElementType(e.Type); isArrayType {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {

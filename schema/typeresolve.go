@@ -356,15 +356,19 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 		}
 		return tc.resolveNode(&parser.CastExpr{Expr: e.Expr, Type: e.Type}, scope)
 	case *parser.CastExpr:
-		if array, ok := e.Expr.(*parser.ArrayConstructor); ok && strings.HasSuffix(e.Type.Type, "[]") {
+		elementType, isArrayType := arrayElementType(e.Type)
+		if array, ok := e.Expr.(*parser.ArrayConstructor); ok && isArrayType && len(array.Elements) > 0 {
 			if to, ok := tc.castType(e.Type); ok {
 				// PostgreSQL casts the elements of ARRAY[...]::t[] to t, each but those of t already
-				elementType := *e.Type
-				elementType.Type = strings.TrimSuffix(e.Type.Type, "[]")
 				resolved := &parser.ArrayConstructor{Elements: util.TransformSlice(array.Elements, func(element parser.Expr) parser.Expr {
-					cast := &parser.CastExpr{Expr: element, Type: &elementType}
-					if _, nested := element.(*parser.ArrayConstructor); nested {
-						cast.Type = e.Type
+					var cast parser.Expr = &parser.CastExpr{Expr: element, Type: elementType}
+					switch element := element.(type) {
+					case *parser.ArrayConstructor:
+						cast = &parser.CastExpr{Expr: element, Type: e.Type}
+					case *parser.SQLVal:
+						if element.Type == parser.StrVal && element.DroppedCast == nil {
+							cast = parser.NewStringCast(element, elementType)
+						}
 					}
 					resolved, _ := tc.resolve(cast, scope)
 					return resolved
