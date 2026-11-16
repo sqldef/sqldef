@@ -690,7 +690,7 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 	rows, err := d.db.Query(`
 		SELECT schema_name
 		FROM information_schema.schemata
-		WHERE schema_name NOT LIKE 'pg_%%'
+		WHERE schema_name NOT LIKE 'pg\_%'
 		AND schema_name not in ('information_schema', 'public', 'sys')
 		ORDER BY schema_name;
 	`)

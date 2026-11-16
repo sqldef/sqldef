@@ -10,6 +10,16 @@ CreateSchema:
     CREATE TABLE foo.test (id int);
   down: |
     DROP TABLE "foo"."test";
+CreateSchemaStartingWithPg:
+  desired: |
+    CREATE SCHEMA pgq;
+    CREATE TABLE pgq.jobs (id int);
+  up: |
+    CREATE SCHEMA pgq;
+    CREATE TABLE pgq.jobs (id int);
+  down: |
+    DROP TABLE pgq.jobs;
+  legacy_ignore_quotes: false
 CreateSchemasWithDomains:
   desired: |
     CREATE SCHEMA test_schema_a;
