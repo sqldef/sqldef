@@ -32,9 +32,121 @@ func setParseTree(yylex any, stmt Statement) {
 // case-insensitively, so they keep them as written.
 func collationNamePart(yylex any, name Ident) string {
   if yylex.(*Tokenizer).mode == ParserModePostgres && name.Quoted {
-    return `"` + strings.ReplaceAll(name.Name, `"`, `""`) + `"`
+    return QuotePostgresIdent(name.Name)
   }
   return name.Name
+}
+
+// backslashEscapes tells whether a string literal takes MySQL's backslash escapes
+func backslashEscapes(yylex any) bool {
+  return yylex.(*Tokenizer).mode == ParserModeMysql
+}
+
+func newStrVal(yylex any, s string) *SQLVal {
+  return &SQLVal{Type: StrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
+}
+
+func newUnicodeStrVal(yylex any, s string) *SQLVal {
+  return &SQLVal{Type: UnicodeStrVal, Val: s, BackslashEscapes: backslashEscapes(yylex)}
+}
+
+// castTypeName returns the type a cast names with an identifier. An alias of a built-in type is
+// resolved to the name PostgreSQL writes, as the keyword spellings of the type are. A quoted name
+// keeps its quotes unless it is a lowercase name that means the same unquoted: not one that needs
+// quotes, nor a keyword such as char or bit that names another type or gives a length.
+func castTypeName(yylex any, name Ident) string {
+  if !name.Quoted {
+    return PostgresTypeName(FoldASCII(name.Name))
+  }
+  if _, ok := postgresTypeAliases[name.Name]; ok {
+    return PostgresTypeName(name.Name)
+  }
+  switch name.Name {
+  case "varchar":
+    return "character varying"
+  case "text", "date", "interval", "numeric", "timestamp", "time", "uuid", "json", "jsonb", "bpchar":
+    return name.Name
+  }
+  if !PostgresTypeNameNeedsQuotes(name.Name) && !IsKeyword(name.Name) {
+    return name.Name
+  }
+  return collationNamePart(yylex, name)
+}
+
+// castTypeWithLength returns a cast type with a length or precision. Like the keyword spellings,
+// it keeps the time zone of timestamptz(p) and timetz(p) after the precision.
+func castTypeWithLength(name string, length *SQLVal) *ConvertType {
+  switch name {
+  case `"bit"`:
+    // PostgreSQL writes the type "bit" with a length as bit(n)
+    name = "bit"
+  case "bpchar":
+    // bpchar(n) is character(n), as the keyword spelling makes it
+    name = "character"
+  }
+  if base, ok := strings.CutSuffix(name, " with time zone"); ok {
+    return &ConvertType{Type: base, Length: length, TimeZone: " with time zone"}
+  }
+  return &ConvertType{Type: name, Length: length}
+}
+
+// qualifiedKeywordType returns the type a keyword names with a schema, such as pg_catalog.char.
+// A built-in type is written as a keyword, and a type of pg_catalog is written without its schema.
+func qualifiedKeywordType(yylex any, schema Ident, t *ConvertType) (*ConvertType, error) {
+  if !IsPgCatalog(schema) {
+    // A type of another schema, such as extensions.vector(3), is named by the keyword as written.
+    // Keywords that the grammar renames or gives a length cannot be named so.
+    name := strings.ToLower(t.Type)
+    switch {
+    case strings.Contains(name, " "), name == "char", name == "character", name == "varchar", name == "real", t.TimeZone != "":
+      return nil, fmt.Errorf("type %s.%s is not supported", schema.Name, t.Type)
+    }
+    qualified := &ConvertType{Type: collationNamePart(yylex, schema) + "." + name, Length: t.Length, Scale: t.Scale}
+    if t.ImplicitLength {
+      qualified.Length = nil
+    }
+    return qualified, nil
+  }
+  switch {
+  case strings.EqualFold(t.Type, "char"):
+    // A qualified name is not a keyword, so pg_catalog.char is the type "char", which takes no length
+    if !t.ImplicitLength {
+      return nil, fmt.Errorf("type \"char\" takes no length")
+    }
+    return &ConvertType{Type: `"char"`}, nil
+  case strings.EqualFold(t.Type, "bit") && t.ImplicitLength:
+    // pg_catalog.bit is the type "bit", which has no length unless one is written, and which
+    // PostgreSQL writes as bit(n) with one
+    return &ConvertType{Type: `"bit"`}, nil
+  }
+  t.Type = PostgresTypeName(strings.ToLower(t.Type))
+  return t, nil
+}
+
+// withImplicitLength gives a cast type the length of character and bit written as keywords
+// without one, which a qualified name of the same type does not have
+func withImplicitLength(t *ConvertType) *ConvertType {
+  t.Length = NewIntVal("1")
+  t.ImplicitLength = true
+  return t
+}
+
+// arrayCastType returns the type of a cast written with [] after it
+func arrayCastType(t *ConvertType, array BoolVal) *ConvertType {
+  if !array {
+    return t
+  }
+  arrayType := *t
+  arrayType.Type += "[]"
+  return &arrayType
+}
+
+// IsPgCatalog reports whether a schema name is pg_catalog, quoted or not
+func IsPgCatalog(schema Ident) bool {
+  if schema.Quoted {
+    return schema.Name == "pg_catalog"
+  }
+  return strings.EqualFold(schema.Name, "pg_catalog")
 }
 
 func setAllowComments(yylex any, allow bool) {
@@ -478,7 +590,7 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <openJSONSchemaItem> openjson_schema_item
 %type <str> charset
 %type <str> set_session_or_global
-%type <convertType> convert_type simple_convert_type
+%type <convertType> convert_type simple_convert_type named_convert_type keyword_convert_type
 %type <columnType> column_type
 %type <str> type_modifier_list type_modifier spatial_keyword
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
@@ -567,7 +679,6 @@ func newTableFunctionExpr(expr *FuncExpr, withOrdinality BoolVal, as Ident, colu
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
-%type <expr> array_element
 %type <str> sql_security
 %type <overExpr> over_expression window_spec
 %token <str> OVER
@@ -2472,6 +2583,10 @@ common_table_expr:
   {
     $$ = &CommonTableExpr{Name: $1, Definition: $4}
   }
+| table_id '(' column_list ')' AS '(' select_statement ')'
+  {
+    $$ = &CommonTableExpr{Name: $1, Columns: $3, Definition: $7}
+  }
 
 select_statement:
   select_statement_no_with
@@ -3327,7 +3442,7 @@ event_comment_opt:
 event_definer_user:
   STRING ID STRING
   {
-    $$ = fmt.Sprintf("'%s'@'%s'", $1, $3)
+    $$ = QuoteString($1, backslashEscapes(yylex)) + "@" + QuoteString($3, backslashEscapes(yylex))
   }
 | sql_id ID sql_id
   {
@@ -4118,7 +4233,7 @@ column_definition_type:
   }
 | column_definition_type COMMENT_KEYWORD STRING
   {
-    $1.Comment = NewStrVal($3)
+    $1.Comment = newStrVal(yylex, $3)
     $$ = $1
   }
 | column_definition_type REFERENCES table_name
@@ -4269,54 +4384,54 @@ default_definition:
 typed_literal:
   DATE STRING
   {
-    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "date", Value: newStrVal(yylex, $2)}
   }
 | TIME STRING
   {
-    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "time", Value: newStrVal(yylex, $2)}
   }
 | TIMESTAMP STRING
   {
-    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "timestamp", Value: newStrVal(yylex, $2)}
   }
 | numeric_bool_literal_type STRING
   {
-    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: $1, Value: newStrVal(yylex, $2)}
   }
 | money_type_keyword STRING
   {
-    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: $1, Value: newStrVal(yylex, $2)}
   }
 | JSON STRING
   {
-    $$ = &TypedLiteral{Type: "json", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "json", Value: newStrVal(yylex, $2)}
   }
 | JSONB STRING
   {
-    $$ = &TypedLiteral{Type: "jsonb", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "jsonb", Value: newStrVal(yylex, $2)}
   }
 | UUID STRING
   {
-    $$ = &TypedLiteral{Type: "uuid", Value: NewStrVal($2)}
+    $$ = &TypedLiteral{Type: "uuid", Value: newStrVal(yylex, $2)}
   }
 
 default_value_expression:
   STRING character_cast_opt
   {
     if $2 != nil {
-      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+      $$ = &CastExpr{Expr: newStrVal(yylex, $1), Type: $2}
     } else {
-      $$ = NewStrVal($1)
+      $$ = newStrVal(yylex, $1)
     }
   }
 | sql_id STRING
   {
     // MySQL charset introducer syntax: _charset_name'string'
-    $$ = NewStrVal($2)
+    $$ = newStrVal(yylex, $2)
   }
 | UNICODE_STRING
   {
-    $$ = NewUnicodeStrVal($1)
+    $$ = newUnicodeStrVal(yylex, $1)
   }
 | INTEGRAL
   {
@@ -4372,11 +4487,11 @@ default_value_expression:
   }
 | INTERVAL STRING
   {
-    $$ = &IntervalExpr{Expr: NewStrVal($2)}
+    $$ = &IntervalExpr{Expr: newStrVal(yylex, $2)}
   }
 | INTERVAL STRING interval_unit
   {
-    $$ = &IntervalExpr{Expr: NewStrVal($2), Unit: $3}
+    $$ = &IntervalExpr{Expr: newStrVal(yylex, $2), Unit: $3}
   }
 | variadic_opt array_constructor
   {
@@ -4384,11 +4499,7 @@ default_value_expression:
   }
 | default_value_expression TYPECAST simple_convert_type array_opt
   {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
+    $$ = &CastExpr{Expr: $1, Type: arrayCastType($3, $4)}
   }
 | default_value_expression TYPECAST DOUBLE PRECISION array_opt
   {
@@ -4903,6 +5014,14 @@ set_value:
 
 character_cast_opt:
   /* empty */ %prec EMPTY_EXPR { $$ = nil }
+| TYPECAST BPCHAR '(' INTEGRAL ')' character_cast_opt
+  {
+    if $6 != nil {
+      $$ = $6
+    } else {
+      $$ = &ConvertType{Type: "character", Length: NewIntVal($4)}
+    }
+  }
 | TYPECAST BPCHAR character_cast_opt
   {
     // Return the innermost type for chained casts like ::bpchar::text
@@ -4913,17 +5032,47 @@ character_cast_opt:
       $$ = &ConvertType{Type: $2}
     }
   }
+| TYPECAST ID '.' keyword_convert_type array_opt character_cast_opt
+  {
+    if $6 != nil {
+      $$ = $6
+    } else {
+      t, err := qualifiedKeywordType(yylex, $2, $4)
+      if err != nil {
+        return abortParse(yylex, err.Error())
+      }
+      $$ = arrayCastType(t, $5)
+    }
+  }
 | TYPECAST column_type array_opt character_cast_opt
   {
     // Return the innermost type for chained casts like ::varchar::text
     if $4 != nil {
       $$ = $4
     } else {
+      // A type of pg_catalog is named as PostgreSQL writes it
       typeName := $2.Type
+      if base, ok := strings.CutPrefix(typeName, "pg_catalog."); ok {
+        typeName = PostgresTypeName(base)
+      } else if !strings.Contains(typeName, ".") {
+        typeName = PostgresTypeName(typeName)
+      }
+      // The time zone follows the precision, as in timestamp(3) with time zone
+      timeZone := ""
+      if base, ok := strings.CutSuffix(typeName, " with time zone"); ok {
+        typeName, timeZone = base, " with time zone"
+      }
       if $3 {
         typeName = typeName + "[]"
       }
-      $$ = &ConvertType{Type: typeName}
+      $$ = &ConvertType{Type: typeName, Length: $2.Length, Scale: $2.Scale, TimeZone: timeZone}
+      if $$.Length == nil {
+        // bit(n) keeps its length as a display width
+        $$.Length = $2.DisplayWidth
+      }
+      if $2.Timezone {
+        $$.TimeZone = " with time zone"
+      }
     }
   }
 
@@ -5112,6 +5261,10 @@ char_type:
   {
     $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
   }
+| BIT VARYING length_opt
+  {
+    $$ = ColumnType{Type: $1 + " " + $2, Length: $3}
+  }
 | NVARCHAR max_length_opt charset_opt collate_opt
   {
     $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
@@ -5206,12 +5359,12 @@ char_type:
   }
 | ENUM '(' enum_values ')' charset_opt collate_opt
   {
-    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6}
+    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6, EnumBackslashEscapes: backslashEscapes(yylex)}
   }
 // need set_values / SetValues ?
 | SET '(' enum_values ')' charset_opt collate_opt
   {
-    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6}
+    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6, EnumBackslashEscapes: backslashEscapes(yylex)}
   }
 
 varying_opt:
@@ -5351,7 +5504,7 @@ max_length_opt:
     if !strings.EqualFold($2.Name, "max") {
       return abortParse(yylex, fmt.Sprintf("syntax error around '%s'", $2.Name))
     }
-    $$ = NewStrVal($2.Name)
+    $$ = newStrVal(yylex, $2.Name)
   }
 
 
@@ -5413,6 +5566,10 @@ cast_array_opt:
     $$ = BoolVal(false)
   }
 | ARRAY
+  {
+    $$ = BoolVal(true)
+  }
+| array_brackets
   {
     $$ = BoolVal(true)
   }
@@ -5550,7 +5707,7 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2.Name)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $2.Name)}
   }
 /* HASH is a reserved token (used by PARTITION BY HASH) but MariaDB allows it
  * inline as an index_type after USING, e.g. UNIQUE KEY k (k) USING HASH.
@@ -5567,11 +5724,11 @@ index_option:
   }
 | COMMENT_KEYWORD STRING
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $2)}
   }
 | WITH PARSER sql_id
   {
-    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.Name)}
+    $$ = &IndexOption{Name: $2, Value: newStrVal(yylex, $3.Name)}
   }
 | PAD_INDEX '=' on_off
   {
@@ -5583,7 +5740,7 @@ index_option:
   }
 | FILLFACTOR '=' STRING
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $3)}
   }
 | IGNORE_DUP_KEY '=' on_off
   {
@@ -5615,7 +5772,7 @@ index_option:
   }
 | M '=' STRING
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
+    $$ = &IndexOption{Name: $1, Value: newStrVal(yylex, $3)}
   }
 | ID '=' vector_option_value
   {
@@ -5647,11 +5804,11 @@ on_off:
 index_distance_option_value:
   EUCLIDEAN
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 | COSINE
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 
 vector_option_value:
@@ -5665,7 +5822,7 @@ vector_option_value:
   }
 | STRING
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 
 // for MSSQL
@@ -6347,7 +6504,7 @@ table_opt_value:
   }
 | STRING
   {
-    $$ = "'" + $1 + "'"
+    $$ = QuoteString($1, backslashEscapes(yylex))
   }
 | INTEGRAL
   {
@@ -7425,11 +7582,7 @@ value_expression:
   }
 | value_expression TYPECAST simple_convert_type array_opt
   {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
+    $$ = &CastExpr{Expr: $1, Type: arrayCastType($3, $4)}
   }
 | value_expression TYPECAST DOUBLE PRECISION array_opt
   {
@@ -7548,6 +7701,13 @@ function_call_keyword:
   {
     $5.Array = $6
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
+  }
+| CAST '(' expression AS named_convert_type array_opt ')'
+  {
+    if yylex.(*Tokenizer).mode != ParserModePostgres {
+      return abortParse(yylex, "syntax error")
+    }
+    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: arrayCastType($5, $6)}
   }
 | TRY_CAST '(' expression AS convert_type ')'
   {
@@ -7835,6 +7995,10 @@ convert_type:
 | CHAR length_opt charset_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2, Charset: $3, Operator: CharacterSetStr}
+    if $2 == nil && yylex.(*Tokenizer).mode == ParserModePostgres {
+      // char has a length of 1 in PostgreSQL, as in a cast written with ::
+      $$ = withImplicitLength($$)
+    }
   }
 | CHAR length_opt ID
   {
@@ -7901,6 +8065,9 @@ convert_type:
 | int_type_keyword length_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2}
+    if $2 == nil && strings.EqualFold($1, "bit") && yylex.(*Tokenizer).mode == ParserModePostgres {
+      $$ = withImplicitLength($$)
+    }
   }
 | DATETIME2 length_opt
   {
@@ -7940,6 +8107,45 @@ convert_type:
   }
 
 simple_convert_type:
+  keyword_convert_type
+| named_convert_type
+
+// named_convert_type is a type written as a name rather than a keyword
+named_convert_type:
+  sql_id
+  {
+    $$ = &ConvertType{Type: castTypeName(yylex, $1)}
+  }
+| sql_id '(' INTEGRAL ')'
+  {
+    $$ = castTypeWithLength(castTypeName(yylex, $1), NewIntVal($3))
+  }
+| sql_id '.' sql_id
+  {
+    if IsPgCatalog($1) {
+      $$ = &ConvertType{Type: castTypeName(yylex, $3)}
+    } else {
+      $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3)}
+    }
+  }
+| sql_id '.' sql_id '(' INTEGRAL ')'
+  {
+    if IsPgCatalog($1) {
+      $$ = castTypeWithLength(castTypeName(yylex, $3), NewIntVal($5))
+    } else {
+      $$ = &ConvertType{Type: collationNamePart(yylex, $1) + "." + collationNamePart(yylex, $3), Length: NewIntVal($5)}
+    }
+  }
+| sql_id '.' keyword_convert_type
+  {
+    t, err := qualifiedKeywordType(yylex, $1, $3)
+    if err != nil {
+      return abortParse(yylex, err.Error())
+    }
+    $$ = t
+  }
+
+keyword_convert_type:
   BINARY
   {
     $$ = &ConvertType{Type: $1}
@@ -7947,6 +8153,14 @@ simple_convert_type:
 | CHARACTER VARYING
   {
     $$ = &ConvertType{Type: $1+" "+$2}
+  }
+| BIT VARYING
+  {
+    $$ = &ConvertType{Type: $1+" "+$2}
+  }
+| BIT VARYING '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: $1+" "+$2, Length: NewIntVal($4)}
   }
 | DATE
   {
@@ -7959,6 +8173,10 @@ simple_convert_type:
 | int_type_keyword
   {
     $$ = &ConvertType{Type: $1}
+    // The keyword bit means bit(1)
+    if strings.EqualFold($1, "bit") {
+      $$ = withImplicitLength($$)
+    }
   }
 | bool_type
   {
@@ -8008,6 +8226,18 @@ simple_convert_type:
 | CHAR '(' INTEGRAL ')'
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
+  }
+| BPCHAR
+  {
+    $$ = &ConvertType{Type: "bpchar"}
+  }
+| BPCHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: "character", Length: NewIntVal($3)}
+  }
+| CHAR
+  {
+    $$ = withImplicitLength(&ConvertType{Type: $1})
   }
 | CHARACTER '(' INTEGRAL ')'
   {
@@ -8091,7 +8321,7 @@ separator_opt:
   }
 | SEPARATOR STRING
   {
-    $$ = " separator '"+$2+"'"
+    $$ = " separator " + QuoteString($2, backslashEscapes(yylex))
   }
 
 when_expression_list:
@@ -8165,21 +8395,21 @@ value:
   {
     // Keep numeric/money/interval casts so normalize can fold them to match PG's
     // read-back ('1'::numeric); drop the rest as before.
-    if isFoldableValueCast($2) {
-      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+    if $2 == nil {
+      $$ = newStrVal(yylex, $1)
     } else {
-      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
+      $$ = NewStringCast(newStrVal(yylex, $1), $2)
     }
   }
 | UNICODE_STRING
   {
-    $$ = NewUnicodeStrVal($1)
+    $$ = newUnicodeStrVal(yylex, $1)
   }
 // For MySQL
 | sql_id STRING
   {
     // Ignoring _charset_name as a workaround
-    $$ = NewStrVal($2)
+    $$ = newStrVal(yylex, $2)
   }
 | HEX
   {
@@ -8345,7 +8575,7 @@ lock_opt:
   }
 | FOR ID ID '(' STRING ')' ',' TYPE
   {
-    $$ = " for xml path(" + String(NewStrVal($5)) + "), type"
+    $$ = " for xml path(" + String(newStrVal(yylex, $5)) + "), type"
   }
 | FOR JSON ID
   {
@@ -8545,11 +8775,11 @@ charset_or_character_set:
 charset_value:
   sql_id
   {
-    $$ = NewStrVal($1.Name)
+    $$ = newStrVal(yylex, $1.Name)
   }
 | STRING
   {
-    $$ = NewStrVal($1)
+    $$ = newStrVal(yylex, $1)
   }
 | DEFAULT
   {
@@ -8713,77 +8943,13 @@ array_element_list:
   {
     $$ = nil
   }
-| array_element
+| value_expression
   {
     $$ = Exprs{$1}
   }
-| array_element_list ',' array_element
+| array_element_list ',' value_expression
   {
     $$ = append($$, $3)
-  }
-
-/* For PostgreSQL */
-array_element:
-  STRING character_cast_opt
-  {
-    // Preserve numeric/money/interval casts (see value:); drop the rest as before.
-    if isFoldableValueCast($2) {
-      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
-    } else {
-      $$ = &SQLVal{Type: StrVal, Val: $1, DroppedCast: $2}
-    }
-  }
-| typed_literal
-  {
-    $$ = $1
-  }
-| INTEGRAL
-  {
-    $$ = NewIntVal($1)
-  }
-| FLOAT
-  {
-    $$ = NewFloatVal($1)
-  }
-| current_timestamp
-  {
-    $$ = $1
-  }
-| current_timestamp TYPECAST simple_convert_type array_opt
-  {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
-  }
-| tuple_expression
-  {
-    $$ = $1
-  }
-| tuple_expression TYPECAST simple_convert_type array_opt
-  {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale, TimeZone: t.TimeZone}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
-  }
-| tuple_expression TYPECAST DOUBLE PRECISION array_opt
-  {
-    t := "double precision"
-    if $5 {
-      t += "[]"
-    }
-    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: t}}
-  }
-| variadic_opt array_constructor
-  {
-    $$ = $2
-  }
-| column_name
-  {
-    $$ = $1
   }
 
 bool_option_name_list:

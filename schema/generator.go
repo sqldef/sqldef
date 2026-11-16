@@ -96,6 +96,14 @@ type Generator struct {
 	currentTables []*Table
 	// desiredSizedVarcharColumns are the desired columns of type character varying(n), for noOpCast
 	desiredSizedVarcharColumns map[string][]*Column
+	// typedExprs are the expressions of the tables with the casts that resolving their types
+	// implies, which the comparisons take
+	typedExprs           map[parser.Expr]typedForms[parser.Expr]
+	typedViewDefinitions map[parser.SelectStatement]typedForms[parser.SelectStatement]
+	// exprTypes are the resolved types of the output columns of the views
+	exprTypes map[parser.Expr]exprType
+	// viewColumnTypes are the output columns of the views whose names and types are all known
+	viewColumnTypes map[parser.SelectStatement][]relationColumn
 
 	desiredViews []*View
 	currentViews []*View
@@ -258,6 +266,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	if mode == GeneratorModePostgres {
 		generator.desiredSizedVarcharColumns = sizedVarcharColumns(desiredAggregated.Tables, mode)
+		generator.resolveExpressionTypes()
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -289,6 +298,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	foreignKeyDDLs := []statement{}
 	exclusionDDLs := []statement{}
 	viewDDLs := []statement{}
+	viewTriggerDDLs := []statement{}
 	ownerDDLs := []statement{} // Owners must come after CREATE VIEW, which resets them
 	metadataDDLs := []statement{}
 
@@ -430,7 +440,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, triggerDDLs...)
+			if g.findViewByName(g.desiredViews, desired.tableName) != nil {
+				// A view may be created or recreated among viewDDLs
+				viewTriggerDDLs = append(viewTriggerDDLs, triggerDDLs...)
+			} else {
+				interDDLs = append(interDDLs, triggerDDLs...)
+			}
 		case *Event:
 			eventDDLs, err := g.generateDDLsForCreateEvent(desired)
 			if err != nil {
@@ -508,6 +523,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, viewDDLs...)
+	ddls = append(ddls, viewTriggerDDLs...)
 	ddls = append(ddls, metadataDDLs...)
 	// After viewDDLs: a recreated view is owned by the connecting role until this runs.
 	ddls = append(ddls, ownerDDLs...)
@@ -942,7 +958,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddls[i] = skipped{ddl}
 		}
 	}
-	return renderStatements(ddls), nil
+	return renderStatements(ddls, generatorModeToParserMode(g.mode)), nil
 }
 
 // heldBack reports whether a statement is kept from running, and is the only place that
@@ -1127,7 +1143,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) || !g.haveSameColumnCollation(*renameFromColumn, desiredColumn) {
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*renameFromColumn, desiredColumn)}))
+						ddls = g.appendColumnTypeChange(ddls, currentTable.name, renameFromColumn.name,
+							g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*renameFromColumn, desiredColumn)}))
 					}
 
 					if !g.isPrimaryKey(*renameFromColumn, currentTable) {
@@ -1297,7 +1314,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// Serial types require changing both column type and sequence type
 					if isPostgresSerialType(currentColumn.typeName) && isPostgresSerialType(desiredColumn.typeName) {
 						underlyingType := getSerialUnderlyingType(desiredColumn.typeName)
-						ddls = append(ddls,
+						ddls = g.appendColumnTypeChange(ddls, currentTable.name, currentColumn.name,
 							g.alterTable(desired.table.name, alterColumnTypeAction{column: desiredColumn, serialType: underlyingType}),
 							alterSequenceStatement{d: g.dialect, table: desired.table.name, column: desiredColumn.name, underlyingType: underlyingType},
 						)
@@ -1308,7 +1325,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							ddls = append(ddls, g.alterTable(desired.table.name, alterColumnDefaultAction{column: desiredColumn.name}))
 						}
 						// Change type - use desiredColumn for escaping to match user's quote style
-						ddls = append(ddls, g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
+						ddls = g.appendColumnTypeChange(ddls, currentTable.name, currentColumn.name,
+							g.alterTable(desired.table.name, alterColumnTypeAction{column: g.withKeptCollation(*currentColumn, desiredColumn), using: usingClause}))
 					}
 				}
 
@@ -2345,16 +2363,41 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		// Columns are compared like definitions, but case-insensitively, as a column that differs
-		// only in the case of a quoted name it reads is more likely the same one. Quoted names that
-		// differ in case are compared below.
+		// A quoted output column renamed only in case is a renamed column
+		if !g.legacyIgnoreQuotes {
+			tableLookup := g.createTableLookup()
+			currentAliases := quotedOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
+			desiredAliases := quotedOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
+			if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
+				return true
+			}
+		}
+
+		// CREATE OR REPLACE VIEW keeps the names and the types of the existing columns
+		currentColumns, currentKnown := g.viewColumnTypes[currentView.definition]
+		desiredColumns, desiredKnown := g.viewColumnTypes[desiredView.definition]
+		if currentKnown && desiredKnown {
+			if len(currentColumns) > len(desiredColumns) {
+				return true
+			}
+			for i, column := range currentColumns {
+				if !g.identsEqual(column.name, desiredColumns[i].name) || column.typ != desiredColumns[i].typ {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Without the types, columns are compared like definitions, but case-insensitively, as a
+		// column that differs only in the case of a quoted name it reads is more likely the same one
 		opts := g.viewComparisonOptions()
 		opts.FoldQuoted = true
 		// Literals compare as written, so that a column whose literal PostgreSQL rewrote is recreated
 		// rather than replaced by one without its cast
 		opts.ReduceLiteralNames = false
-		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode, opts)
-		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode, opts)
+		currentTyped, desiredTyped := g.typedViews(currentView.definition, desiredView.definition)
+		currentNormalized := normalizeViewColumnsFromDefinition(currentTyped, g.mode, opts)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredTyped, g.mode, opts)
 
 		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
 		if currentNormalized == nil || desiredNormalized == nil {
@@ -2364,16 +2407,6 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 		// If columns are removed, we need to DROP and CREATE.
 		if len(currentNormalized) > len(desiredNormalized) {
 			return true
-		}
-
-		// A quoted output column renamed only in case is a renamed column
-		if !g.legacyIgnoreQuotes {
-			tableLookup := g.createTableLookup()
-			currentAliases := quotedOutputAliases(normalizeViewDefinition(currentView.definition, g.mode, tableLookup))
-			desiredAliases := quotedOutputAliases(normalizeViewDefinition(desiredView.definition, g.mode, tableLookup))
-			if len(currentAliases) <= len(desiredAliases) && !slices.Equal(currentAliases, desiredAliases[:len(currentAliases)]) {
-				return true
-			}
 		}
 
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
@@ -2396,12 +2429,12 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 	currentView := g.findViewByName(g.currentViews, desiredView.name)
 	if currentView == nil {
 		view := *desiredView
-		key := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		key := g.viewKey(&view)
 		if previous, ok := g.recreatedViews[key]; ok {
 			// The dependent view was dropped by the recreation of a view it depends on, which
 			// decided whether this CREATE runs too.
 			view.owner = previous.view.owner
-			recreateDDLs := []statement{createViewStatement{d: g.dialect, view: view}}
+			recreateDDLs := []statement{g.createView(view, false)}
 			if owner, ok := g.restoreViewOwner(&view); ok {
 				recreateDDLs = append(recreateDDLs, owner)
 			}
@@ -2422,8 +2455,9 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison with table lookup for SELECT * expansion
 		tableLookup := g.createTableLookup()
-		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
-		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
+		currentTyped, desiredTyped := g.typedViews(currentView.definition, desiredView.definition)
+		currentNormalizedAST := normalizeViewDefinition(currentTyped, g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(desiredTyped, g.mode, tableLookup)
 		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 			slog.Debug("Comparing view definitions",
 				"current_before_norm", parser.String(currentView.definition),
@@ -2436,7 +2470,8 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 		// every identifier
 		var sameDefinitions bool
 		if g.mode == GeneratorModePostgres {
-			sameDefinitions = parser.SameForComparison(currentNormalizedAST, desiredNormalizedAST, g.viewComparisonOptions())
+			// Normalization drops parentheses, which canonicalParens puts back where the tree needs them
+			sameDefinitions = parser.SameForComparison(treeWithCanonicalParens(currentNormalizedAST), treeWithCanonicalParens(desiredNormalizedAST), g.viewComparisonOptions())
 		} else {
 			sameDefinitions = strings.EqualFold(parser.String(currentNormalizedAST), parser.String(desiredNormalizedAST))
 		}
@@ -2458,7 +2493,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				}
 				recreateDDLs = append(recreateDDLs,
 					g.dropView(currentView),
-					createViewStatement{d: g.dialect, view: *desiredView},
+					g.createView(*desiredView, false),
 				)
 				g.forgetViewMetadata(currentView)
 				if owner, ok := g.restoreViewOwner(currentView); ok {
@@ -2468,11 +2503,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 				var recreated bool
 				ddls, recreated = g.appendRecreateStatements(ddls, recreate{statements: recreateDDLs})
 				for _, depView := range dependents {
-					key := normalizeNameKey(depView.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
-					g.recreatedViews[key] = recreatedView{view: depView, heldBack: !recreated}
+					g.recreatedViews[g.viewKey(depView)] = recreatedView{view: depView, heldBack: !recreated}
 				}
 			} else {
-				ddls = append(ddls, createViewStatement{d: g.dialect, view: *desiredView, orReplace: true})
+				ddls = append(ddls, g.createView(*desiredView, true))
 			}
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
@@ -2493,6 +2527,227 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]statement, e
 	}
 
 	return ddls, nil
+}
+
+// createView creates a desired view. PostgreSQL's view is created as written, as sqldef cannot
+// write the casts of its literals back, which give its columns their types.
+func (g *Generator) createView(view View, orReplace bool) statement {
+	if g.mode != GeneratorModePostgres {
+		return createViewStatement{d: g.dialect, view: view, orReplace: orReplace}
+	}
+	ddl := view.statement
+	if g.legacyIgnoreQuotes {
+		// Legacy mode quotes every name, which the following statements on the view expect
+		ddl = parser.ReplaceViewName(ddl, parser.ParserModePostgres, g.escapeQualifiedName(view.name))
+	}
+	if orReplace {
+		ddl = parser.CreateOrReplace(ddl, parser.ParserModePostgres)
+	}
+	return inputStatement{statement: ddl}
+}
+
+// appendColumnTypeChange appends the statements that change the type of a column. PostgreSQL
+// refuses to change the type of a column that a view reads, so the views that read it, and the
+// views that depend on those, are dropped first and created again from the desired schema. Without
+// drops, the change is left to fail as before, since a view may only seem to read the column.
+func (g *Generator) appendColumnTypeChange(ddls []statement, table QualifiedName, column Ident, statements ...statement) []statement {
+	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
+		return append(ddls, statements...)
+	}
+	// The current views still name a table renamed in this run by its old name
+	tables := []QualifiedName{table}
+	if desired := g.findTableByName(g.desiredTables, table); desired != nil && !desired.renamedFrom.IsEmpty() {
+		tables = append(tables, g.normalizeOldObjectName(desired.renamedFrom, table))
+	}
+	viewDeps := map[string][]string{}
+	dropped := map[string]bool{}
+	for _, view := range g.currentViews {
+		key := g.viewKey(view)
+		viewDeps[key] = extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		dropped[key] = slices.ContainsFunc(tables, func(t QualifiedName) bool {
+			return slices.Contains(viewDeps[key], normalizeNameKey(t, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)) && g.viewReadsColumn(view, t, column)
+		})
+	}
+	for changed := true; changed; {
+		changed = false
+		for key, deps := range util.CanonicalMapIter(viewDeps) {
+			if !dropped[key] && slices.ContainsFunc(deps, func(dep string) bool { return dropped[dep] }) {
+				dropped[key] = true
+				changed = true
+			}
+		}
+	}
+	dependents := slices.DeleteFunc(slices.Clone(g.currentViews), func(view *View) bool { return !dropped[g.viewKey(view)] })
+	if len(dependents) == 0 {
+		return append(ddls, statements...)
+	}
+	// Sorted in reverse, so that dropping it backward keeps the order of independent views
+	slices.Reverse(dependents)
+	sorted := topologicalSort(dependents, viewDeps, g.viewKey)
+	if len(sorted) != len(dependents) {
+		// Views whose names compare equal in legacy mode collapse in the sort; drop them in the
+		// reverse of their order
+		slices.Reverse(dependents)
+		sorted = dependents
+	}
+	// Drop the views that depend on others first
+	for _, view := range slices.Backward(sorted) {
+		ddls = append(ddls, g.dropView(view))
+		g.forgetViewMetadata(view)
+		g.currentViews = slices.DeleteFunc(g.currentViews, func(v *View) bool { return v == view })
+		g.recreatedViews[g.viewKey(view)] = recreatedView{view: view}
+		slog.Warn("A view is dropped and created again to change the type of a column it reads. Privileges of roles that sqldef does not manage are not restored.",
+			"view", view.name.RawString(), "column", column.Name)
+	}
+	return append(ddls, statements...)
+}
+
+func (g *Generator) viewKey(view *View) string {
+	return normalizeNameKey(view.name, g.defaultSchema, g.mode, g.legacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+}
+
+// viewReadsColumn reports whether a view may read a column of a table it selects from: it names a
+// column of the name qualified with the table's name or alias, or unqualified in a query selecting
+// from the table or in its subqueries, joins USING it or naturally there, selects * there, or reads
+// a whole row of the table
+func (g *Generator) viewReadsColumn(view *View, table QualifiedName, column Ident) bool {
+	// An unqualified name of the table reads its whole row unless it has a column of that name
+	var columnNames []Ident
+	if current := g.findTableByName(g.currentTables, table); current != nil {
+		for _, col := range current.columns {
+			columnNames = append(columnNames, col.name)
+		}
+	}
+	hasColumn := func(name Ident) bool {
+		return slices.ContainsFunc(columnNames, func(col Ident) bool { return g.identsEqual(col, name) })
+	}
+	reads := false
+	// names are the names the table goes by in the query and the queries enclosing it. inScope
+	// tells whether it is in the FROM of any of them, so that an unqualified name may be its
+	// column. own tells whether it is in the FROM of the query itself, which * and joins read.
+	var visit func(v reflect.Value, names []Ident, inScope, own bool)
+	visit = func(v reflect.Value, names []Ident, inScope, own bool) {
+		v = unwrapInterface(v)
+		if reads || !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
+			return
+		}
+		named := func(ident Ident) bool {
+			return slices.ContainsFunc(names, func(name Ident) bool { return g.identsEqual(name, ident) })
+		}
+		switch node := v.Interface().(type) {
+		case *parser.Select:
+			var ownNames, bound []Ident
+			for _, item := range fromItems(node.From) {
+				name := item.As
+				if tableName, ok := item.Expr.(parser.TableName); ok {
+					if name.IsEmpty() {
+						name = tableName.Name
+					}
+					if g.namesTable(tableName, table) {
+						ownNames = append(ownNames, name)
+						// A column alias list renames the columns, which sqldef does not map to the table's
+						reads = reads || len(item.Columns) > 0
+					}
+				}
+				bound = append(bound, name)
+			}
+			// A name in the FROM of the query hides the same name of an enclosing query
+			names = slices.DeleteFunc(slices.Clone(names), func(name Ident) bool {
+				return slices.ContainsFunc(bound, func(b Ident) bool { return g.identsEqual(b, name) })
+			})
+			names = append(names, ownNames...)
+			own = len(ownNames) > 0
+			inScope = inScope || own
+		case *parser.ColName:
+			switch {
+			case node.Qualifier.Name.IsEmpty():
+				reads = inScope && g.identsEqual(node.Name, column) || named(node.Name) && !hasColumn(node.Name)
+			case !node.Qualifier.Schema.IsEmpty():
+				reads = g.namesTable(node.Qualifier, table) && g.identsEqual(node.Name, column)
+			default:
+				reads = named(node.Qualifier.Name) && g.identsEqual(node.Name, column)
+			}
+			return
+		case *parser.StarExpr:
+			if node.TableName.Name.IsEmpty() {
+				reads = own
+			} else if !node.TableName.Schema.IsEmpty() {
+				reads = g.namesTable(node.TableName, table)
+			} else {
+				reads = named(node.TableName.Name)
+			}
+			return
+		case *parser.JoinTableExpr:
+			// A natural join compares the columns of the same name
+			reads = own && strings.HasPrefix(node.Join, "natural ")
+		case parser.JoinCondition:
+			reads = own && slices.ContainsFunc(node.Using, func(using Ident) bool { return g.identsEqual(using, column) })
+		case *parser.FuncExpr:
+			// The * of count(*) reads no column, unlike a whole row such as count(t.*)
+			if len(node.Exprs) == 1 {
+				if star, ok := node.Exprs[0].(*parser.StarExpr); ok && star.TableName.Name.IsEmpty() {
+					visit(reflect.ValueOf(node.Over), names, inScope, own)
+					return
+				}
+			}
+		}
+		visitChildren(v, func(child reflect.Value) { visit(child, names, inScope, own) })
+	}
+	visit(reflect.ValueOf(view.definition), nil, false, false)
+	return reads
+}
+
+// fromItems returns the tables, subqueries and functions of a FROM clause
+func fromItems(exprs parser.TableExprs) []*parser.AliasedTableExpr {
+	var items []*parser.AliasedTableExpr
+	for _, expr := range exprs {
+		switch expr := expr.(type) {
+		case *parser.AliasedTableExpr:
+			items = append(items, expr)
+		case *parser.JoinTableExpr:
+			items = append(items, fromItems(parser.TableExprs{expr.LeftExpr, expr.RightExpr})...)
+		case *parser.ParenTableExpr:
+			items = append(items, fromItems(expr.Exprs)...)
+		}
+	}
+	return items
+}
+
+// namesTable reports whether a table name in a query names a table, an unqualified one in the
+// default schema
+func (g *Generator) namesTable(name parser.TableName, table QualifiedName) bool {
+	return g.qualifiedNamesEqual(QualifiedName{Schema: name.Schema, Name: name.Name}, table)
+}
+
+// unwrapInterface returns the value an interface holds, so that a node is visited once
+func unwrapInterface(v reflect.Value) reflect.Value {
+	for v.IsValid() && v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return reflect.Value{}
+		}
+		v = v.Elem()
+	}
+	return v
+}
+
+// visitChildren calls visit for the exported fields and elements of an AST value
+func visitChildren(v reflect.Value, visit func(reflect.Value)) {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			visit(v.Elem())
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				visit(v.Field(i))
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			visit(v.Index(i))
+		}
+	}
 }
 
 // findDependentViews finds all views that reference the given view name in their definitions.
@@ -3165,7 +3420,7 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 		if desired.defaultValue == nil {
 			alter(domainDefaultAction{})
 		} else {
-			alter(domainDefaultAction{expr: normalizeExpr(desired.defaultValue.expression, g.mode)})
+			alter(domainDefaultAction{expr: normalizeDefaultExpr(desired.defaultValue.expression, g.mode)})
 		}
 	}
 
@@ -3194,9 +3449,8 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]stateme
 }
 
 func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstraint, expression parser.Expr) bool {
-	normalizedExpr := normalizeCheckExpr(expression, g.mode)
 	for _, c := range constraints {
-		if parser.SameForComparison(normalizeCheckExpr(c.expression, g.mode), normalizedExpr, g.comparisonOptions(false)) {
+		if g.areSameCheckExprs(g.typed(c.expression, expression)) {
 			return true
 		}
 	}
@@ -3285,9 +3539,7 @@ func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string 
 		return fmt.Sprintf("COMMENT ON %s IS NULL", objectClause)
 	}
 
-	// Escape the comment value (single quotes need to be doubled)
-	escapedComment := strings.ReplaceAll(comment.comment.Comment, "'", "''")
-	return fmt.Sprintf("COMMENT ON %s IS '%s'", objectClause, escapedComment)
+	return fmt.Sprintf("COMMENT ON %s IS %s", objectClause, StringConstant(comment.comment.Comment))
 }
 
 // buildFunctionSignature builds a function signature string for COMMENT ON FUNCTION.
@@ -3475,7 +3727,7 @@ func (d dialect) generateDataType(column Column) string {
 		case "enum", "set":
 			quotedValues := make([]string, len(column.enumValues))
 			for i, v := range column.enumValues {
-				quotedValues[i] = "'" + v + "'"
+				quotedValues[i] = parser.QuoteString(v, d.mode == GeneratorModeMysql)
 			}
 			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(quotedValues, ", "), suffix)
 		default:
@@ -3574,8 +3826,7 @@ func (d dialect) generateColumnDefinition(column Column, enableUnique bool) (str
 	}
 
 	if column.comment != nil {
-		// TODO: Should this use StringConstant?
-		definition += fmt.Sprintf("COMMENT '%s' ", column.comment.raw)
+		definition += fmt.Sprintf("COMMENT %s ", parser.QuoteString(column.comment.raw, d.mode == GeneratorModeMysql))
 	}
 
 	if column.check != nil {
@@ -3798,37 +4049,30 @@ func (d dialect) generateIndexOptionDefinition(indexOptions []IndexOption) strin
 	if len(indexOptions) > 0 {
 		switch d.mode {
 		case GeneratorModeMysql:
-			// Handle multiple vector index options (M and DISTANCE)
-			if len(indexOptions) > 1 {
-				var mOption, distanceOption string
-				for _, indexOption := range indexOptions {
-					if strings.ToUpper(indexOption.optionName) == "M" {
-						mOption = fmt.Sprintf("M=%s", indexOption.value.raw)
-					} else if strings.ToUpper(indexOption.optionName) == "DISTANCE" {
-						distanceOption = fmt.Sprintf("DISTANCE=%s", indexOption.value.raw)
-					}
+			// The vector index options M and DISTANCE come first, in this order
+			ordered := slices.Clone(indexOptions)
+			rank := func(option IndexOption) int {
+				switch strings.ToUpper(option.optionName) {
+				case "M":
+					return 0
+				case "DISTANCE":
+					return 1
 				}
-				if mOption != "" && distanceOption != "" {
-					optionDefinition = fmt.Sprintf(" %s %s", mOption, distanceOption)
-				} else if mOption != "" {
-					optionDefinition = fmt.Sprintf(" %s", mOption)
-				} else if distanceOption != "" {
-					optionDefinition = fmt.Sprintf(" %s", distanceOption)
-				}
-			} else {
-				indexOption := indexOptions[0]
-				if indexOption.optionName == "parser" {
-					indexOption.optionName = "WITH " + indexOption.optionName
-				}
-				if strings.EqualFold(indexOption.optionName, "M") {
-					optionDefinition = fmt.Sprintf(" M=%s", indexOption.value.raw)
-				} else if strings.EqualFold(indexOption.optionName, "DISTANCE") {
-					optionDefinition = fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
-				} else if indexOption.optionName == "comment" {
-					indexOption.optionName = "COMMENT"
-					optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, indexOption.value.raw)
-				} else {
-					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
+				return 2
+			}
+			slices.SortStableFunc(ordered, func(a, b IndexOption) int { return rank(a) - rank(b) })
+			for _, indexOption := range ordered {
+				switch {
+				case strings.EqualFold(indexOption.optionName, "M"):
+					optionDefinition += fmt.Sprintf(" M=%s", indexOption.value.raw)
+				case strings.EqualFold(indexOption.optionName, "DISTANCE"):
+					optionDefinition += fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
+				case indexOption.optionName == "parser":
+					optionDefinition += fmt.Sprintf(" WITH parser %s", indexOption.value.raw)
+				case indexOption.optionName == "comment":
+					optionDefinition += fmt.Sprintf(" COMMENT %s", parser.QuoteString(indexOption.value.raw, true))
+				default:
+					optionDefinition += fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
 				}
 			}
 		case GeneratorModeMssql:
@@ -4021,15 +4265,36 @@ func (g *Generator) forgetViewMetadata(view *View) {
 	if g.mode != GeneratorModePostgres || !g.config.EnableDrop {
 		return
 	}
+	indexes := view.indexes
 	view.indexes = nil
+	g.currentTriggers = slices.DeleteFunc(g.currentTriggers, func(trigger *Trigger) bool {
+		return g.qualifiedNamesEqual(trigger.tableName, view.name)
+	})
 	g.currentPrivileges = slices.DeleteFunc(g.currentPrivileges, func(priv *GrantPrivilege) bool {
 		return priv.objectType == "TABLE" && g.qualifiedNamesEqual(priv.tableName, view.name)
 	})
 	g.currentComments = slices.DeleteFunc(g.currentComments, func(comment *Comment) bool {
+		// The name of the object, or of the table or view it is on, without the schema it may omit
+		objectName := func(parts []Ident) QualifiedName {
+			if len(parts) == 1 {
+				return QualifiedName{Name: parts[0]}
+			}
+			return QualifiedName{Schema: parts[0], Name: parts[1]}
+		}
 		switch comment.comment.ObjectType {
-		case "OBJECT_VIEW", "OBJECT_TABLE", "OBJECT_COLUMN":
+		case "OBJECT_VIEW", "OBJECT_TABLE":
+			return g.qualifiedNamesEqual(objectName(normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)), view.name)
+		case "OBJECT_COLUMN":
 			parts := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
-			return g.qualifiedNamesEqual(QualifiedName{Schema: parts[0], Name: parts[1]}, view.name)
+			return g.qualifiedNamesEqual(objectName(parts[:len(parts)-1]), view.name)
+		case "OBJECT_TRIGGER":
+			// The trigger's name comes first
+			return g.qualifiedNamesEqual(objectName(normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)[1:]), view.name)
+		case "OBJECT_INDEX":
+			name := objectName(normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema))
+			return slices.ContainsFunc(indexes, func(index Index) bool {
+				return g.qualifiedNamesEqual(name, QualifiedName{Schema: view.name.Schema, Name: index.name})
+			})
 		}
 		return false
 	})
@@ -4054,11 +4319,11 @@ func (g *Generator) dropView(view *View) dropObjectStatement {
 	return dropObjectStatement{d: g.dialect, kind: kind, name: view.name}
 }
 
-// quotedCollationName writes a collation with a PostgreSQL name quoted as written, as sqldef has
-// always written an index collation, and as the legacy mode writes identifiers
+// quotedCollationName writes an index collation. The legacy mode quotes a PostgreSQL name as written,
+// as sqldef has always written it, and the quote-aware mode keeps the quotes as written.
 func (d dialect) quotedCollationName(collation string) string {
-	if d.mode == GeneratorModePostgres {
-		return strings.Join(util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+	if d.mode == GeneratorModePostgres && d.legacyIgnoreQuotes {
+		return strings.Join(util.TransformSlice(parser.PostgresNameParts(collation), func(part Ident) string {
 			return d.forceEscapeSQLName(part.Name)
 		}), ".")
 	}
@@ -4101,9 +4366,12 @@ func (d dialect) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
 			return d.forceEscapeSQLName(name)
+		} else if folded := strings.ToLower(name); parser.IsPostgresReservedKeyword(folded) || parser.IsPostgresValueKeyword(folded) {
+			// A reserved word is a name only where quoted, as PostgreSQL may have exported it
+			return d.forceEscapeSQLName(folded)
 		} else {
 			// Originally unquoted: normalize to lowercase and don't quote
-			return strings.ToLower(name)
+			return folded
 		}
 	default:
 		if wasQuoted {
@@ -4859,7 +5127,7 @@ func findViewQuoteAware(views []*View, name QualifiedName, defaultSchema string,
 
 // findColumnByName finds a column using quote-aware comparison
 func (g *Generator) findColumnByName(columns map[string]*Column, name Ident) *Column {
-	for _, column := range columns {
+	for _, column := range util.CanonicalMapIter(columns) {
 		if g.identsEqual(column.name, name) {
 			return column
 		}
@@ -5933,7 +6201,7 @@ func (g *Generator) haveSameColumnCollation(current Column, desired Column) bool
 // folds, so it manages only a quoted name.
 func (g *Generator) managedCollation(collation string) string {
 	if g.legacyIgnoreQuotes && collation != "" {
-		if parts := postgresNameParts(collation); !parts[len(parts)-1].Quoted {
+		if parts := parser.PostgresNameParts(collation); !parts[len(parts)-1].Quoted {
 			return ""
 		}
 	}
@@ -5948,7 +6216,7 @@ func (g *Generator) sameCollations(a, b string) bool {
 	if a == b {
 		return true
 	}
-	partsA, partsB := postgresNameParts(a), postgresNameParts(b)
+	partsA, partsB := parser.PostgresNameParts(a), parser.PostgresNameParts(b)
 	if len(partsA) == 0 || len(partsB) == 0 || (len(partsA) == 1) == (len(partsB) == 1) {
 		return false
 	}
@@ -5982,7 +6250,7 @@ func (g *Generator) canonicalCollationFolding(collation string, fold bool) strin
 	if g.mode != GeneratorModePostgres {
 		return collation
 	}
-	parts := util.TransformSlice(postgresNameParts(collation), func(part Ident) string {
+	parts := util.TransformSlice(parser.PostgresNameParts(collation), func(part Ident) string {
 		if fold && (!part.Quoted || g.legacyIgnoreQuotes) {
 			return parser.FoldASCII(part.Name)
 		}
@@ -5999,41 +6267,6 @@ func (g *Generator) canonicalCollationFolding(collation string, fold bool) strin
 		return ""
 	}
 	return strings.Join(util.TransformSlice(parts, g.forceEscapeSQLName), ".")
-}
-
-// postgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
-// name. A quoted part such as "en_US.utf8" may contain a dot.
-func postgresNameParts(name string) []Ident {
-	var parts []Ident
-	for name != "" {
-		if rest, ok := strings.CutPrefix(name, `"`); ok {
-			var part strings.Builder
-			for {
-				i := strings.IndexByte(rest, '"')
-				if i < 0 {
-					panic(fmt.Sprintf("unterminated quoted name: %s", name))
-				}
-				part.WriteString(rest[:i])
-				rest = rest[i+1:]
-				if !strings.HasPrefix(rest, `"`) {
-					break
-				}
-				part.WriteByte('"')
-				rest = rest[1:]
-			}
-			parts = append(parts, Ident{Name: part.String(), Quoted: true})
-			name = rest
-		} else {
-			end := strings.IndexByte(name, '.')
-			if end < 0 {
-				end = len(name)
-			}
-			parts = append(parts, Ident{Name: name[:end]})
-			name = name[end:]
-		}
-		name = strings.TrimPrefix(name, ".")
-	}
-	return parts
 }
 
 // withKeptCollation returns the desired column with the current collation when it omits one, as
@@ -6092,8 +6325,13 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (!current.typeIdent.IsEmpty() || !desired.typeIdent.IsEmpty()) {
-		// Quote-aware comparison for custom types (domains, etc.)
+	// A quoted name in lowercase names the same type as the unquoted one
+	caseSensitive := func(column Column) bool {
+		return column.typeIdent.Quoted && column.typeIdent.Name != parser.FoldASCII(column.typeIdent.Name)
+	}
+	if !g.legacyIgnoreQuotes && g.mode == GeneratorModePostgres && (caseSensitive(current) || caseSensitive(desired)) {
+		// Quote-aware comparison for custom types (domains, etc.). Other names compare below,
+		// where an alias such as int4 resolves to its type.
 		//
 		// PostgreSQL's format_type returns the internal type name without quotes.
 		// For a domain created with CREATE DOMAIN "PositiveInt", it returns "PositiveInt".
@@ -6102,14 +6340,13 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		// The canonical form for comparison is:
 		// - Quoted identifiers: use the exact name (case-sensitive)
 		// - Unquoted identifiers: lowercase the name
-		currentCanonical := current.typeIdent.Name
-		desiredCanonical := desired.typeIdent.Name
-		if !current.typeIdent.Quoted {
-			currentCanonical = strings.ToLower(currentCanonical)
+		canonical := func(column Column) string {
+			if caseSensitive(column) {
+				return column.typeIdent.Name
+			}
+			return strings.ToLower(column.typeName)
 		}
-		if !desired.typeIdent.Quoted {
-			desiredCanonical = strings.ToLower(desiredCanonical)
-		}
+		currentCanonical, desiredCanonical := canonical(current), canonical(desired)
 		slog.Debug("haveSameDataType quote-aware comparison",
 			"column", current.name.Name,
 			"current.typeIdent", current.typeIdent,
@@ -6151,6 +6388,10 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 			currentLength = nil
 			desiredLength = nil
 		}
+	}
+
+	if g.mode == GeneratorModePostgres {
+		currentLength, desiredLength = postgresTypeLength(current), postgresTypeLength(desired)
 	}
 
 	// Normalize default precision/scale for numeric/decimal types.
@@ -6201,6 +6442,20 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	return true
 }
 
+// postgresTypeLength returns the length of a PostgreSQL column type, which the parser reads as a
+// display width for bit(n), and which is 1 for character and bit written without one
+func postgresTypeLength(column Column) *Value {
+	switch {
+	case column.length != nil:
+		return column.length
+	case column.displayWidth != nil:
+		return column.displayWidth
+	case !column.typeIdent.Quoted && defaultLength(strings.ToLower(column.typeName)) != "":
+		return &Value{valueType: ValueTypeInt, intVal: 1, raw: "1"}
+	}
+	return nil
+}
+
 func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
 	if checkA == nil && checkB == nil {
 		return true
@@ -6209,7 +6464,7 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		return false
 	}
 
-	return g.areSameCheckExprs(checkA.definition, checkB.definition) &&
+	return g.areSameCheckExprs(g.typed(checkA.definition, checkB.definition)) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
 }
@@ -6227,6 +6482,10 @@ func (g *Generator) areSameCheckExprs(exprA, exprB parser.Expr) bool {
 	if g.mode == GeneratorModePostgres {
 		opts := g.comparisonOptions(false)
 		opts.UnknownTypesCaseSensitive = true
+		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
+		if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+			slog.Debug("Generator#areSameCheckExprs", "a", parser.ComparisonKey(normalizedA, opts), "b", parser.ComparisonKey(normalizedB, opts))
+		}
 		return parser.SameForComparison(normalizedA, normalizedB, opts)
 	}
 	return parser.String(normalizedA) == parser.String(normalizedB)
@@ -6274,6 +6533,10 @@ func (d dialect) formatExprQuoteAware(expr parser.Expr) string {
 
 	switch e := expr.(type) {
 	case *parser.ColName:
+		// The parser reads current_user and the like as column names
+		if d.mode == GeneratorModePostgres && e.Qualifier.IsEmpty() && !e.Name.Quoted && parser.IsPostgresValueKeyword(strings.ToLower(e.Name.Name)) {
+			return strings.ToLower(e.Name.Name)
+		}
 		var result string
 		if !e.Qualifier.IsEmpty() {
 			result = parser.String(e.Qualifier) + "."
@@ -6514,8 +6777,9 @@ func (g *Generator) comparisonOptions(dropQualifiers bool) parser.ComparisonOpti
 		DropQualifiers: dropQualifiers,
 		OmittedSchemas: []string{"pg_catalog"},
 		// pg_get_viewdef() leaves out every schema on the search path, which sqldef does not know
-		DropSchemas: dropQualifiers,
-		NoOpCast:    g.noOpCast,
+		DropSchemas:        dropQualifiers,
+		OmittedTypeSchemas: []string{g.defaultSchema},
+		NoOpCast:           g.noOpCast,
 	}
 }
 
@@ -6531,7 +6795,7 @@ func (g *Generator) viewComparisonOptions() parser.ComparisonOptions {
 // This handles custom type casts (e.g., ENUM, domain) that normalizeExpr does not strip.
 func unwrapCast(expr parser.Expr) parser.Expr {
 	castExpr, ok := expr.(*parser.CastExpr)
-	if !ok {
+	if !ok || castExpr.Resolved {
 		return expr
 	}
 	return castExpr.Expr
@@ -6935,11 +7199,12 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 // COLLATE clause from the DDL it exports whenever it names the collation the column already has, so
 // an omitted clause has to compare equal to one that restates it. "default" names the database
 // default, which the export never writes out either. An index on a materialized view has no column
-// definitions to resolve against, so its collation is compared as written. Names keep their case as
-// written, as quotedCollationName quotes them.
+// definitions to resolve against, so its collation is compared as written. The legacy mode keeps the
+// case of names as written, as quotedCollationName quotes them.
 func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn IndexColumn) string {
+	fold := !g.legacyIgnoreQuotes
 	if indexColumn.collation != "" {
-		return g.canonicalCollationFolding(indexColumn.collation, false)
+		return g.canonicalCollationFolding(indexColumn.collation, fold)
 	}
 	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
 		if column := g.findColumnByName(columns, colName.Name); column != nil {
@@ -6947,7 +7212,7 @@ func (g *Generator) indexColumnCollation(columns map[string]*Column, indexColumn
 			if collation == "" {
 				collation = g.columnCollation(*column, g.desiredDomains)
 			}
-			return g.canonicalCollationFolding(collation, false)
+			return g.canonicalCollationFolding(collation, fold)
 		}
 	}
 	return ""
@@ -7009,8 +7274,9 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		normalizedA = g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
-		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
+		typedA, typedB := g.typed(indexA.columns[i].columnExpr, indexB.columns[i].columnExpr)
+		normalizedA = g.formatIndexExprForComparison(typedA)
+		normalizedB = g.formatIndexExprForComparison(typedB)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
@@ -7028,7 +7294,7 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 			return false
 		}
 	}
-	if !g.areSameWhereClause(indexA.where, indexB.where) {
+	if !g.areSameWhereClause(g.typed(indexA.where, indexB.where)) {
 		return false
 	}
 
@@ -7043,18 +7309,16 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 	if !(g.mode == GeneratorModeMssql && indexA.constraint && indexB.constraint && indexA.unique && indexB.unique) {
 		indexAOptions := indexA.options
 		indexBOptions := indexB.options
-		// Mysql: Default Index B-Tree (but not for vector indexes)
+		// MySQL defaults an index to B-tree (but not a vector index), which TiDB never writes out
 		if g.mode == GeneratorModeMysql {
-			if len(indexAOptions) == 0 && !indexA.vector {
-				indexAOptions = []IndexOption{
-					{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}},
+			withDefaultUsing := func(index Index, options []IndexOption) []IndexOption {
+				if index.vector || findIndexOptionByName(options, "using") != nil {
+					return options
 				}
+				return append(slices.Clone(options), IndexOption{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}})
 			}
-			if len(indexBOptions) == 0 && !indexB.vector {
-				indexBOptions = []IndexOption{
-					{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}},
-				}
-			}
+			indexAOptions = withDefaultUsing(indexA, indexAOptions)
+			indexBOptions = withDefaultUsing(indexB, indexBOptions)
 		}
 		for _, optionB := range indexBOptions {
 			if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
@@ -7134,6 +7398,10 @@ func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
 
 	normalizedA := normalizeExpr(a, g.mode)
 	normalizedB := normalizeExpr(b, g.mode)
+	if g.mode == GeneratorModePostgres {
+		// Normalization drops parentheses, which canonicalParens puts back where the tree needs them
+		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
+	}
 
 	if !g.legacyIgnoreQuotes {
 		d := g.comparisonDialect()
@@ -7208,13 +7476,13 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if !g.areSameWhereClause(exclusionA.where, exclusionB.where) {
+	if !g.areSameWhereClause(g.typed(exclusionA.where, exclusionB.where)) {
 		return false
 	}
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.operator != b.operator || !g.sameNormalizedExpr(a.expression, b.expression) {
+		if a.operator != b.operator || !g.sameNormalizedExpr(g.typed(a.expression, b.expression)) {
 			return false
 		}
 	}
@@ -7254,6 +7522,7 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
 	if g.mode == GeneratorModePostgres {
+		normalizedA, normalizedB = canonicalParens(normalizedA), canonicalParens(normalizedB)
 		return parser.SameForComparison(normalizedA, normalizedB, g.comparisonOptions(false))
 	}
 	// TODO: case-insensitive comparison is not always correct
@@ -7281,10 +7550,10 @@ func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if !g.areSamePolicyExprs(policyA.using, policyB.using) {
+	if !g.areSamePolicyExprs(g.typed(policyA.using, policyB.using)) {
 		return false
 	}
-	if !g.areSamePolicyExprs(policyA.withCheck, policyB.withCheck) {
+	if !g.areSamePolicyExprs(g.typed(policyA.withCheck, policyB.withCheck)) {
 		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {
@@ -7401,7 +7670,7 @@ func formatDefaultLiteral(sqlVal *parser.SQLVal) (string, error) {
 	defaultVal := parseValue(sqlVal)
 	switch defaultVal.valueType {
 	case ValueTypeStr:
-		return StringConstant(defaultVal.strVal), nil
+		return parser.QuoteString(defaultVal.strVal, sqlVal.BackslashEscapes), nil
 	case ValueTypeBool:
 		return fmt.Sprintf("%t", defaultVal.bitVal), nil
 	case ValueTypeInt:
@@ -7433,6 +7702,18 @@ func needsMySQLDefaultParens(valueType ValueType) bool {
 	default:
 		return false
 	}
+}
+
+// normalizeDefaultExpr normalizes a default for DDL. Normalization moves the cast of an ARRAY
+// constructor onto the elements, where a cast of a string literal or a column does not print, so
+// the cast of a default that is one is kept to give the array its type.
+func normalizeDefaultExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	if cast, ok := expr.(*parser.CastExpr); ok && mode == GeneratorModePostgres {
+		if _, isArray := cast.Expr.(*parser.ArrayConstructor); isArray {
+			return &parser.CastExpr{Expr: normalizeExpr(cast.Expr, mode), Type: normalizeConvertType(cast.Type, mode)}
+		}
+	}
+	return normalizeExpr(expr, mode)
 }
 
 func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
@@ -7468,7 +7749,7 @@ func (d dialect) generateDefaultDefinition(defaultDefinition DefaultDefinition) 
 
 	// Complex expression path
 	// Normalize the expression to handle typed literals and other database-specific normalizations
-	normalizedExpr := normalizeExpr(expr, d.mode)
+	normalizedExpr := normalizeDefaultExpr(expr, d.mode)
 	var exprStr string
 	if d.mode == GeneratorModePostgres && !d.legacyIgnoreQuotes {
 		exprStr = parser.PostgresFoldedString(normalizedExpr)
@@ -8117,5 +8398,5 @@ func isValidLock(lock string) bool {
 
 // Escape a string and add quotes to form a legal SQL string constant.
 func StringConstant(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	return parser.QuoteString(s, false)
 }

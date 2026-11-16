@@ -712,3 +712,13 @@ JsonColumnWithCommentIdempotency:
       details json DEFAULT NULL COMMENT 'metadata blob',
       PRIMARY KEY (id)
     );
+AddColumnWithDefaultOfControlCharacters:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id int);
+  desired: |
+    CREATE TABLE t (id int, s varchar(10) DEFAULT 'a\nb\tc\\d' COMMENT 'x\ny');
+  up: |
+    ALTER TABLE t ADD COLUMN s varchar(10) DEFAULT 'a\nb\tc\\d' COMMENT 'x\ny' AFTER id;
+  down: |
+    ALTER TABLE t DROP COLUMN `s`;

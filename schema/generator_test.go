@@ -657,7 +657,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: normalize table prefix with COLLATE",
 			mode:     GeneratorModePostgres,
 			input:    `select users.id, (users.name COLLATE "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") from users`,
+			expected: `select id, name collate "ja-jp-x-icu" from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize multiple table prefixes",
@@ -669,25 +669,25 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: normalize with lowercase collate",
 			mode:     GeneratorModePostgres,
 			input:    `select users.id, (users.name collate "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") from users`,
+			expected: `select id, name collate "ja-jp-x-icu" from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize spaces",
 			mode:     GeneratorModePostgres,
 			input:    `select   users.id,    (users.name   COLLATE   "ja-JP-x-icu")   as   name   from   users`,
-			expected: `select id, (name collate "ja-jp-x-icu") from users`,
+			expected: `select id, name collate "ja-jp-x-icu" from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize with joins",
 			mode:     GeneratorModePostgres,
 			input:    `select u.id, (u.name COLLATE "en_US") as name from users u join orders o on u.id = o.user_id`,
-			expected: `select id, (name collate "en_us") from users as u join orders as o on u.id = o.user_id`,
+			expected: `select id, name collate "en_us" from users as u join orders as o on u.id = o.user_id`,
 		},
 		{
 			name:     "PostgreSQL: preserve column names without prefixes",
 			mode:     GeneratorModePostgres,
 			input:    `select id, (name COLLATE "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") from users`,
+			expected: `select id, name collate "ja-jp-x-icu" from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize ARRAY in function calls",
@@ -705,7 +705,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: unwrap redundant set operand parentheses",
 			mode:     GeneratorModePostgres,
 			input:    `(SELECT 1 AS id) UNION ALL (SELECT 2 AS id)`,
-			expected: `select 1 as id union all select 2 as id`,
+			expected: `select 1 as id union all select 2`,
 		},
 		{
 			name:     "PostgreSQL: preserve ordered limited set operand parentheses",
@@ -717,7 +717,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: preserve grouped set operation parentheses",
 			mode:     GeneratorModePostgres,
 			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
-			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
+			expected: `select 1 as id except (select 2 union select 3)`,
 		},
 		{
 			name:     "PostgreSQL: strip an alias equal to the default output name",

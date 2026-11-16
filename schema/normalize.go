@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -20,13 +21,16 @@ var (
 		"varchar": "character varying",
 	}
 	postgresDataTypeAliases = map[string]string{
-		"int2":   "smallint",
-		"int4":   "integer",
-		"int8":   "bigint",
-		"float4": "real",
-		"float8": "double precision",
-		"float":  "double precision",
-		"bpchar": "character",
+		"int2":               "smallint",
+		"int4":               "integer",
+		"int8":               "bigint",
+		"float4":             "real",
+		"float8":             "double precision",
+		"float":              "double precision",
+		"bpchar":             "character",
+		"nchar":              "character",
+		"national character": "character",
+		"varbit":             "bit varying",
 
 		// Timezone type aliases (the timezone flag is stored separately in Column.timezone)
 		"timestamptz":                 "timestamp",
@@ -100,9 +104,37 @@ func isMariaDBJSONColumn(col Column) bool {
 	return strings.EqualFold(colName.Name.Name, col.name.Name)
 }
 
+// normalizeQuotedTypeName keeps the case of the quoted parts of a type name written in SQL. ok is
+// false for a column's type name, which is stored without its quotes.
+func normalizeQuotedTypeName(typeName string) (string, bool) {
+	name := typeName
+	for {
+		base, ok := strings.CutSuffix(name, "[]")
+		if !ok {
+			break
+		}
+		name = base
+	}
+	parts, ok := parser.SplitPostgresName(name)
+	if !ok {
+		return "", false
+	}
+	return strings.Join(util.TransformSlice(parts, func(part Ident) string {
+		if part.Quoted {
+			return parser.QuotePostgresIdent(part.Name)
+		}
+		return strings.ToLower(part.Name)
+	}), ".") + typeName[len(name):], true
+}
+
 // normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases.
 // This is the central function for all type name normalization in the generator.
 func normalizeTypeName(typeName string, mode GeneratorMode) string {
+	if mode == GeneratorModePostgres && strings.Contains(typeName, `"`) {
+		if normalized, ok := normalizeQuotedTypeName(typeName); ok {
+			return normalized
+		}
+	}
 	// Normalize to lowercase for case-insensitive comparison
 	normalized := strings.ToLower(typeName)
 
@@ -177,10 +209,15 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		typeStr = normalizeTypeName(typeStr, mode)
 	}
 
+	scale := convertType.Scale
+	// PostgreSQL writes numeric(p) as numeric(p,0)
+	if mode == GeneratorModePostgres && scale == nil && convertType.Length != nil && strings.TrimSuffix(typeStr, "[]") == "decimal" {
+		scale = parser.NewIntVal("0")
+	}
 	return &parser.ConvertType{
 		Type:     typeStr,
 		Length:   convertType.Length,
-		Scale:    convertType.Scale,
+		Scale:    scale,
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
 		Array:    convertType.Array,
@@ -280,18 +317,6 @@ func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
 	return NewIdentWithQuoteDetected(name)
 }
 
-// isFoldableValueCastTypeName matches the scalar types whose typed-literal and
-// read-back cast spellings converge. Array ("numeric[]") and time types are excluded.
-func isFoldableValueCastTypeName(typeStr string) bool {
-	switch typeStr {
-	case "numeric", "decimal", "real", "double precision",
-		"integer", "int", "bigint", "smallint",
-		"money", "smallmoney", "interval":
-		return true
-	}
-	return false
-}
-
 // normalizedCheckCastType names a cast type kept in a CHECK, with its length and scale in PostgreSQL
 func normalizedCheckCastType(convertType *parser.ConvertType, normalizedTypeStr string, mode GeneratorMode) *parser.ConvertType {
 	if mode != GeneratorModePostgres {
@@ -372,7 +397,10 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 	case *parser.CastExpr:
 		// Numeric/money/interval casts fold to a value-independent form, so reuse the
 		// value-context path; otherwise CHECK keeps its own cast simplification below.
-		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
+		if mode == GeneratorModePostgres && e.Type != nil && parser.IsFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
+			if !forComparison {
+				return &parser.CastExpr{Expr: recur(e.Expr, mode), Type: e.Type, Resolved: e.Resolved}
+			}
 			return normalizeExpr(e, mode)
 		}
 		// Remove certain casts that PostgreSQL simplifies
@@ -380,18 +408,18 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		// - date, timestamp without time zone: Removed when cast from string literals
 		// - time, time without time zone: Kept but normalized (PostgreSQL preserves these for precision)
 		if e.Type != nil {
-			typeStr := strings.ToLower(e.Type.Type)
-
-			if isUnsizedStringCastType(e.Type) {
+			if isUnsizedStringCastType(e.Type) && !e.Resolved && forComparison {
 				return recur(e.Expr, mode)
 			}
 
-			normalizedTypeStr := normalizeTypeName(typeStr, mode)
+			normalizedTypeStr := normalizeTypeName(e.Type.Type, mode)
 
 			// Remove date/timestamp casts from string literals
 			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints
 			if normalizedTypeStr == "date" || normalizedTypeStr == "timestamp" {
-				return recur(e.Expr, mode)
+				if val, ok := e.Expr.(*parser.SQLVal); ok && val.Type == parser.StrVal {
+					return recur(e.Expr, mode)
+				}
 			}
 
 			// Remove redundant array typecasts on ARRAY constructors
@@ -403,21 +431,23 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			// Empty arrays (ARRAY[]) need the typecast or PostgreSQL can't determine the type.
 			normalizedExpr := recur(e.Expr, mode)
 			if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
-				if strings.HasSuffix(typeStr, "[]") && len(arrayConstructor.Elements) > 0 {
-					// Non-empty array with array typecast: strip the redundant typecast
-					return normalizedExpr
+				// The DDL keeps the cast, which castArrayElements may move onto elements that print without it
+				if _, isArrayType := arrayElementType(e.Type); isArrayType && len(arrayConstructor.Elements) > 0 && forComparison {
+					return recur(castArrayElements(arrayConstructor, e.Type, mode), mode)
 				}
 			}
 
 			// For time types, keep the cast but use normalized type name
 			return &parser.CastExpr{
-				Expr: normalizedExpr,
-				Type: normalizedCheckCastType(e.Type, normalizedTypeStr, mode),
+				Expr:     normalizedExpr,
+				Type:     normalizedCheckCastType(e.Type, normalizedTypeStr, mode),
+				Resolved: e.Resolved,
 			}
 		}
 		return &parser.CastExpr{
-			Expr: recur(e.Expr, mode),
-			Type: e.Type,
+			Expr:     recur(e.Expr, mode),
+			Type:     e.Type,
+			Resolved: e.Resolved,
 		}
 	case *parser.ParenExpr:
 		normalized := recur(e.Expr, mode)
@@ -520,6 +550,17 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
 			return atz
 		}
+		// PostgreSQL 13 and earlier write SUBSTRING(x FROM f FOR t) as "substring"(x, f, t)
+		if mode == GeneratorModePostgres && e.Qualifier.Name == "" && strings.EqualFold(e.Name.Name, "substring") && e.Over == nil &&
+			(len(normalizedExprs) == 2 || len(normalizedExprs) == 3) {
+			if args, ok := aliasedExprs(normalizedExprs); ok {
+				substr := &parser.SubstrExpr{Name: &parser.AliasedExpr{Expr: args[0]}, From: args[1]}
+				if len(args) == 3 {
+					substr.To = args[2]
+				}
+				return substr
+			}
+		}
 		funcName := foldFuncName(e.Name, mode)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
@@ -616,7 +657,7 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.TypedLiteral:
-		if mode == GeneratorModePostgres && isFoldableValueCastTypeName(normalizeTypeName(e.Type, mode)) {
+		if mode == GeneratorModePostgres && parser.IsFoldableValueCastTypeName(normalizeTypeName(e.Type, mode)) {
 			return normalizeExpr(e, mode)
 		}
 		// Strip the prefix for temporal/json/uuid: pg_get_constraintdef emits typed
@@ -656,6 +697,46 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 		return nil, false
 	}
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
+}
+
+// arrayElementType returns the element type of an array type, written t[] or t ARRAY
+func arrayElementType(t *parser.ConvertType) (*parser.ConvertType, bool) {
+	elementType := *t
+	if t.Array {
+		elementType.Array = false
+		return &elementType, true
+	}
+	if base, ok := strings.CutSuffix(t.Type, "[]"); ok {
+		elementType.Type = base
+		return &elementType, true
+	}
+	return nil, false
+}
+
+// castArrayElements moves the cast of an ARRAY constructor to an array type onto its elements, as
+// PostgreSQL stores ARRAY[i]::bigint[] as ARRAY[i::bigint]. Where the type resolver does not
+// know the type, a column is taken to have it already, as PostgreSQL adds no cast then.
+func castArrayElements(array *parser.ArrayConstructor, arrayType *parser.ConvertType, mode GeneratorMode) parser.Expr {
+	elementType, _ := arrayElementType(arrayType)
+	elementKey := parser.String(normalizeConvertType(elementType, mode))
+	elements := util.TransformSlice(array.Elements, func(element parser.Expr) parser.Expr {
+		switch e := element.(type) {
+		case *parser.ArrayConstructor:
+			return castArrayElements(e, arrayType, mode)
+		case *parser.ColName:
+			return element
+		case *parser.SQLVal:
+			if e.Type == parser.StrVal && e.DroppedCast == nil {
+				return normalizeExpr(parser.NewStringCast(e, elementType), mode)
+			}
+		case *parser.CastExpr:
+			if parser.String(normalizeConvertType(e.Type, mode)) == elementKey {
+				return element
+			}
+		}
+		return normalizeExpr(&parser.CastExpr{Expr: element, Type: elementType}, mode)
+	})
+	return &parser.ArrayConstructor{Elements: elements}
 }
 
 // isUnsizedStringCastType reports whether a cast is to text or character varying without a length,
@@ -818,7 +899,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// We strip these redundant casts to generate cleaner DDL
 			// However, we preserve necessary casts like ::interval, ::bpchar, ::json, ::jsonb, and numeric casts
 			if e.Type != nil {
-				typeStr := strings.ToLower(e.Type.Type)
+				typeStr := parser.PostgresTypeName(strings.ToLower(e.Type.Type))
 				// Only strip casts on simple string literals (not in expressions)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
 					// Handle string literals
@@ -872,7 +953,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// e.g., (status)::text = 'active'::text → status = 'active'
 				// A string cast under it is the c::character varying(3) that PostgreSQL wraps in an
 				// implicit ::text
-				if isUnsizedStringCastType(e.Type) {
+				if isUnsizedStringCastType(e.Type) && !e.Resolved {
 					switch operand := normalizedExpr.(type) {
 					case *parser.ColName:
 						return normalizedExpr
@@ -913,13 +994,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// e.g., ARRAY[current_date::text]::text[] -> ARRAY[(CURRENT_DATE)::text]
 				// HOWEVER: Empty arrays (ARRAY[]) NEED the typecast or PostgreSQL can't determine the type
 				if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
-					// Check if this is an array type cast (type string ends with [])
-					if strings.HasSuffix(typeStr, "[]") {
+					if _, isArrayType := arrayElementType(e.Type); isArrayType {
 						// This is an array type (e.g., text[], int[])
 						// Only strip the typecast if the array is NOT empty
 						if len(arrayConstructor.Elements) > 0 {
-							// Non-empty array: strip the redundant typecast
-							return normalizedExpr
+							return castArrayElements(arrayConstructor, e.Type, mode)
 						}
 						// Empty array: preserve the typecast (ARRAY[]::int[] is required)
 					}
@@ -930,8 +1009,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// Normalize the type name in the cast expression to handle type aliases
 		// e.g., int[]::int[] should become int[]::integer[]
 		return &parser.CastExpr{
-			Expr: normalizedExpr,
-			Type: normalizeConvertType(e.Type, mode),
+			Expr:     normalizedExpr,
+			Type:     normalizeConvertType(e.Type, mode),
+			Resolved: e.Resolved,
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)
@@ -1257,6 +1337,10 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	case *parser.AliasedExpr:
 		as := e.As
 		normalizedExpr := normalizeExpr(e.Expr, mode)
+		// The parentheses normalizeExpr keeps around COLLATE are redundant for a whole output column
+		if paren, ok := normalizedExpr.(*parser.ParenExpr); ok && mode == GeneratorModePostgres {
+			normalizedExpr = paren.Expr
+		}
 		// For PostgreSQL, strip the aliases it adds when storing a view, such as "now() AS now",
 		// "(a)::integer AS a" and "1 AS "?column?"". A quoted alias differing in case renames the column.
 		if mode == GeneratorModePostgres && !as.IsEmpty() {
@@ -1595,7 +1679,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 		return &parser.Union{
 			Type:    s.Type,
 			Left:    normalizeViewDefinition(s.Left, mode, tableLookup),
-			Right:   normalizeViewDefinition(s.Right, mode, tableLookup),
+			Right:   withoutOutputAliases(normalizeViewDefinition(s.Right, mode, tableLookup)),
 			OrderBy: normalizeOrderBy(s.OrderBy, mode),
 			Limit:   s.Limit,
 			Lock:    s.Lock,
@@ -1610,6 +1694,30 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 	default:
 		return stmt
 	}
+}
+
+// withoutOutputAliases drops the aliases of a query whose output columns a set operation names
+// after its first query, as PostgreSQL writes those names into the other queries
+func withoutOutputAliases(stmt parser.SelectStatement) parser.SelectStatement {
+	switch s := stmt.(type) {
+	case *parser.Select:
+		stripped := *s
+		stripped.SelectExprs = util.TransformSlice(s.SelectExprs, func(expr parser.SelectExpr) parser.SelectExpr {
+			if aliased, ok := expr.(*parser.AliasedExpr); ok {
+				return &parser.AliasedExpr{Expr: aliased.Expr}
+			}
+			return expr
+		})
+		return &stripped
+	case *parser.Union:
+		stripped := *s
+		stripped.Left = withoutOutputAliases(s.Left)
+		stripped.Right = withoutOutputAliases(s.Right)
+		return &stripped
+	case *parser.ParenSelect:
+		return &parser.ParenSelect{Select: withoutOutputAliases(s.Select)}
+	}
+	return stmt
 }
 
 // hasStarExpr checks if there's a StarExpr in the SELECT list.
@@ -2075,6 +2183,11 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 	anyFlag := e.Any
 	allFlag := e.All
 
+	// PostgreSQL stores a row comparison by = or <> as the comparisons of its fields
+	if expanded, ok := expandRowComparison(e, op, mode, forComparison); ok {
+		return recur(expanded, mode)
+	}
+
 	// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side.
 	// Normalize this to set the Any/All flags properly.
 	if funcExpr, ok := right.(*parser.FuncExpr); ok {
@@ -2168,6 +2281,35 @@ func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur
 	}
 }
 
+// expandRowComparison rewrites (a, b) = (c, d) into a = c AND b = d, and (a, b) <> (c, d) into a <> c OR b <> d
+func expandRowComparison(e *parser.ComparisonExpr, op string, mode GeneratorMode, forComparison bool) (parser.Expr, bool) {
+	if mode != GeneratorModePostgres || !forComparison || e.Any || e.All || (op != "=" && op != "<>") {
+		return nil, false
+	}
+	left, ok := e.Left.(parser.ValTuple)
+	if !ok || len(left) < 2 {
+		return nil, false
+	}
+	right, ok := e.Right.(parser.ValTuple)
+	if !ok || len(right) != len(left) {
+		return nil, false
+	}
+	var expanded parser.Expr
+	for i := range left {
+		field := &parser.ComparisonExpr{Operator: op, Left: left[i], Right: right[i]}
+		switch {
+		case expanded == nil:
+			expanded = field
+		case op == "=":
+			expanded = &parser.AndExpr{Left: expanded, Right: field}
+		default:
+			expanded = &parser.OrExpr{Left: expanded, Right: field}
+		}
+	}
+	// The expansion stands for a single comparison, so it keeps its own precedence
+	return &parser.ParenExpr{Expr: expanded}, true
+}
+
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
 // This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
 // For example: [b, a, b] becomes [a, b]
@@ -2176,18 +2318,17 @@ func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 		return values
 	}
 
-	slices.SortFunc(values, func(a, b T) int {
-		return cmp.Compare(parser.String(a), parser.String(b))
-	})
-
-	uniqueValues := values[:0] // reuse underlying array
-	for i, v := range values {
-		if i == 0 || parser.String(v) != parser.String(values[i-1]) {
-			uniqueValues = append(uniqueValues, v)
-		}
+	// The order does not depend on the parentheses written
+	type keyed struct {
+		key   string
+		value T
 	}
-
-	return uniqueValues
+	keyedValues := util.TransformSlice(values, func(v T) keyed {
+		return keyed{key: parser.String(canonicalParens(v)), value: v}
+	})
+	slices.SortStableFunc(keyedValues, func(a, b keyed) int { return cmp.Compare(a.key, b.key) })
+	keyedValues = slices.CompactFunc(keyedValues, func(a, b keyed) bool { return a.key == b.key })
+	return util.TransformSlice(keyedValues, func(k keyed) T { return k.value })
 }
 
 // tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
@@ -2302,4 +2443,140 @@ func isPostgresSerialType(typeName string) bool {
 
 func getSerialUnderlyingType(typeName string) string {
 	return postgresSerialTypes[strings.ToLower(typeName)]
+}
+
+// canonicalParens puts parentheses around exactly the operands that are operator expressions,
+// which is where PostgreSQL writes them back. The tree already holds the grouping that the
+// parentheses written in the schema gave it.
+func canonicalParens(expr parser.Expr) parser.Expr {
+	operand := func(e parser.Expr) parser.Expr {
+		e = canonicalParens(e)
+		switch e.(type) {
+		case *parser.BinaryExpr, *parser.ComparisonExpr, *parser.ConcatExpr, *parser.AndExpr,
+			*parser.OrExpr, *parser.NotExpr, *parser.IsExpr, *parser.RangeCond:
+			return &parser.ParenExpr{Expr: e}
+		}
+		return e
+	}
+	switch e := expr.(type) {
+	case *parser.ParenExpr:
+		return canonicalParens(e.Expr)
+	case *parser.BinaryExpr:
+		return &parser.BinaryExpr{Operator: e.Operator, Left: operand(e.Left), Right: operand(e.Right)}
+	case *parser.ComparisonExpr:
+		resolved := *e
+		resolved.Left = operand(e.Left)
+		if e.Any || e.All {
+			resolved.Right = canonicalParens(e.Right)
+		} else {
+			resolved.Right = operand(e.Right)
+		}
+		return &resolved
+	case *parser.ConcatExpr:
+		return &parser.ConcatExpr{Left: operand(e.Left), Right: operand(e.Right)}
+	case *parser.UnaryExpr:
+		return &parser.UnaryExpr{Operator: e.Operator, Expr: operand(e.Expr)}
+	case *parser.AndExpr:
+		left, right := canonicalParens(e.Left), canonicalParens(e.Right)
+		if _, ok := left.(*parser.OrExpr); ok {
+			left = &parser.ParenExpr{Expr: left}
+		}
+		if _, ok := right.(*parser.OrExpr); ok {
+			right = &parser.ParenExpr{Expr: right}
+		}
+		return &parser.AndExpr{Left: left, Right: right}
+	case *parser.OrExpr:
+		return &parser.OrExpr{Left: canonicalParens(e.Left), Right: canonicalParens(e.Right)}
+	case *parser.NotExpr:
+		return &parser.NotExpr{Expr: operand(e.Expr)}
+	case *parser.IsExpr:
+		return &parser.IsExpr{Operator: e.Operator, Expr: operand(e.Expr)}
+	case *parser.RangeCond:
+		return &parser.RangeCond{Operator: e.Operator, Left: operand(e.Left), From: operand(e.From), To: operand(e.To)}
+	case *parser.CollateExpr:
+		return &parser.CollateExpr{Expr: operand(e.Expr), Charset: e.Charset}
+	}
+	// An operator inside another node keeps parentheses, so that the key tells apart what it binds to
+	return mapChildExprs(expr, operand)
+}
+
+// treeWithCanonicalParens applies canonicalParens to every expression of an AST
+func treeWithCanonicalParens[T any](tree T) T {
+	value := reflect.ValueOf(&tree).Elem()
+	value.Set(copyTree(value, replaceExprs(canonicalParens)))
+	return tree
+}
+
+// aliasedExprs returns the expressions of function arguments that are all plain expressions
+func aliasedExprs(args parser.SelectExprs) ([]parser.Expr, bool) {
+	exprs := make([]parser.Expr, 0, len(args))
+	for _, arg := range args {
+		aliased, ok := arg.(*parser.AliasedExpr)
+		if !ok || !aliased.As.IsEmpty() {
+			return nil, false
+		}
+		exprs = append(exprs, aliased.Expr)
+	}
+	return exprs, true
+}
+
+// mapChildExprs returns a copy of an expression with f applied to the expressions it holds
+func mapChildExprs(expr parser.Expr, f func(parser.Expr) parser.Expr) parser.Expr {
+	return copyTree(reflect.ValueOf(expr), replaceExprs(f)).Interface().(parser.Expr)
+}
+
+// replaceExprs returns a copyTree replacement that applies f to each expression
+func replaceExprs(f func(parser.Expr) parser.Expr) func(reflect.Value) (reflect.Value, bool) {
+	exprType := reflect.TypeFor[parser.Expr]()
+	return func(v reflect.Value) (reflect.Value, bool) {
+		if v.Kind() != reflect.Interface || v.Type() != exprType || v.IsNil() {
+			return reflect.Value{}, false
+		}
+		mapped := reflect.New(exprType).Elem()
+		mapped.Set(reflect.ValueOf(f(v.Interface().(parser.Expr))))
+		return mapped, true
+	}
+}
+
+// copyTree deep copies the exported fields of an AST, replacing each value for which replace
+// returns true
+func copyTree(v reflect.Value, replace func(reflect.Value) (reflect.Value, bool)) reflect.Value {
+	if replaced, ok := replace(v); ok {
+		return replaced
+	}
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		copied := reflect.New(v.Type()).Elem()
+		copied.Set(copyTree(v.Elem(), replace))
+		return copied
+	case reflect.Pointer:
+		if v.IsNil() || v.Elem().Kind() != reflect.Struct {
+			return v
+		}
+		copied := reflect.New(v.Elem().Type())
+		copied.Elem().Set(copyTree(v.Elem(), replace))
+		return copied
+	case reflect.Struct:
+		copied := reflect.New(v.Type()).Elem()
+		copied.Set(v)
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				copied.Field(i).Set(copyTree(v.Field(i), replace))
+			}
+		}
+		return copied
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			copied.Index(i).Set(copyTree(v.Index(i), replace))
+		}
+		return copied
+	}
+	return v
 }

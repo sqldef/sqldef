@@ -310,6 +310,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				defaultValue: parseDefaultDefinition(stmt.Domain.Default),
 				notNull:      stmt.Domain.NotNull,
 				baseType:     stmt.Domain.DataType.Type,
+				baseTimezone: bool(stmt.Domain.DataType.Timezone),
+				baseArray:    bool(stmt.Domain.DataType.Array),
 				collation:    cmp.Or(stmt.Domain.Collation, stmt.Domain.DataType.Collate),
 				constraints:  constraints,
 			}, nil

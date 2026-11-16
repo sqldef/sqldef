@@ -1423,13 +1423,23 @@ UnquotedCollationMatchesQuotedOneInLegacyMode:
   up: ""
   down: ""
 
-# FIXME: An index collation is quoted as written, so an unquoted name is not folded
-# IndexColumnWithUnquotedAndQualifiedCollations:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE TABLE t (a text, b text);
-#     CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
-#     CREATE INDEX t_b ON t (b COLLATE pg_catalog."C");
+IndexColumnWithUnquotedAndQualifiedCollations:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a text, b text);
+    CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
+    CREATE INDEX t_b ON t (b COLLATE pg_catalog."C");
+
+IndexCollationCaseChangeOfUnquotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a text);
+    CREATE INDEX t_a ON t (a COLLATE ucs_basic);
+  desired: |
+    CREATE TABLE t (a text);
+    CREATE INDEX t_a ON t (a COLLATE UCS_BASIC);
+  up: ""
+  down: ""
 
 IndexColumnWithQualifiedCollation:
   legacy_ignore_quotes: false
@@ -1746,3 +1756,32 @@ ChangeVarcharLengthCastOfFunctionResultInIndex:
   down: |
     DROP INDEX public.i;
     CREATE INDEX i ON public.t ((lower(s)::varchar(10)));
+PartialIndexWithCastToQualifiedType:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TABLE t (c text, m mood);
+    CREATE INDEX j ON t (c) WHERE m = 'a'::public.mood;
+IndexesWithImplicitCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN name_t AS text;
+    CREATE TABLE t (i integer, n name_t, v varchar(10), f double precision);
+    CREATE INDEX t_sqrt ON t (sqrt(i));
+    CREATE INDEX t_lower ON t (lower(n));
+    CREATE INDEX t_round ON t (round(i, 1)) WHERE f > 1 AND i + 0.5 > 1;
+
+ChangePartialIndexWhereByRegroupingAndOr:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a boolean, b boolean, c boolean);
+    CREATE INDEX t_idx ON t (a) WHERE a AND (b OR c);
+  desired: |
+    CREATE TABLE t (a boolean, b boolean, c boolean);
+    CREATE INDEX t_idx ON t (a) WHERE (a AND b) OR c;
+  up: |
+    DROP INDEX public.t_idx;
+    CREATE INDEX t_idx ON public.t (a) WHERE (a AND b) OR c;
+  down: |
+    DROP INDEX public.t_idx;
+    CREATE INDEX t_idx ON public.t (a) WHERE a AND (b OR c);

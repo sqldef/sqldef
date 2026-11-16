@@ -337,7 +337,7 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CHECK (t1 ~~ 'x');
     ALTER TABLE "public"."test" ADD CHECK (t2 !~~ 'x');
     ALTER TABLE "public"."test" ADD CHECK (t3 <> '');
-    ALTER TABLE "public"."test" ADD CHECK (t4 ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CHECK (t4::text ~ '[0-9]');
     ALTER TABLE "public"."test" ADD CHECK (d1 >= '2022-01-01');
     ALTER TABLE "public"."test" ADD CHECK (d2 >= '2022-01-01');
   down: |
@@ -3004,3 +3004,290 @@ UnnamedUniqueConstraintDeclaredTwiceInCreateTableAndWithAlterTable:
     ALTER TABLE t ADD UNIQUE (a);
   down: |
     DROP TABLE public.t;
+CheckWithCastsOfColumnsToTheirOwnTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer CHECK (i::int4 > 0),
+      b bigint CHECK (b::int8 > 0),
+      v varchar(10) CHECK (v::varchar(10) <> 'a'),
+      c char(3) CHECK (c::char(3) <> 'abc'),
+      n numeric(10, 2) CHECK (n::numeric(10, 2) > 0),
+      w varchar CHECK (w::varchar <> 'a')
+    );
+CheckWithImplicitCastsOfFunctionAndOperatorArguments:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer,
+      b bigint,
+      n numeric,
+      f double precision,
+      v varchar(10),
+      CONSTRAINT c1 CHECK (round(i, 2) > 0),
+      CONSTRAINT c2 CHECK (sqrt(i) > 1 AND f > 1 AND f > 1.5),
+      CONSTRAINT c3 CHECK (i + 1.5 > 2 AND n > 2),
+      CONSTRAINT c4 CHECK (COALESCE(i, b) > 0 AND GREATEST(i, b) > 0 AND NULLIF(i, 1.5) > 0),
+      CONSTRAINT c5 CHECK (CASE WHEN i > 0 THEN i ELSE b END > 0),
+      CONSTRAINT c6 CHECK (substr(v, 1, 2) <> 'ab' AND length(v) < 10),
+      CONSTRAINT c7 CHECK (i < 5000000000)
+    );
+CheckOnDomainColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN posint AS integer;
+    CREATE DOMAIN smallposint AS posint;
+    CREATE DOMAIN name_t AS text;
+    CREATE TABLE t (
+      p posint CHECK (p > 0),
+      s smallposint CHECK (s::smallposint < 100 AND abs(s) > 0),
+      n name_t CHECK (length(n) < 10 AND n <> '')
+    );
+ChangeCheckRemovingCastThatIsNotImplicit:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (i::numeric / 3 > 1));
+  desired: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (i / 3 > 1));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (i / 3 > 1);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (i::numeric / 3 > 1);
+ChangeCheckFunctionArgument:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (round(i, 2) > 0));
+  desired: |
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (round(i, 3) > 0));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (round(i, 3) > 0);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (round(i, 2) > 0);
+CheckCallingUserFunctionNamedLikeBuiltin:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION round(i integer, d integer) RETURNS integer LANGUAGE sql IMMUTABLE AS 'SELECT i';
+    CREATE TABLE t (i integer, CONSTRAINT c CHECK (round(i, 2) > 0));
+CheckWithArithmeticInComparisons:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer,
+      n numeric,
+      a boolean,
+      b boolean,
+      CONSTRAINT c1 CHECK (i + 1 > 2 AND n / 3 > 1 AND -i < 0),
+      CONSTRAINT c2 CHECK ((a OR b) AND i > 0)
+    );
+ChangeCheckGroupingOfOrAndAnd:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a boolean, b boolean, c boolean, CONSTRAINT k CHECK ((a OR b) AND c));
+  desired: |
+    CREATE TABLE t (a boolean, b boolean, c boolean, CONSTRAINT k CHECK (a OR b AND c));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (a OR b AND c);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK ((a OR b) AND c);
+CheckWithInListsOfMixedNumbers:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      n numeric CHECK (n IN (1, 2.5)),
+      f double precision CHECK (f IN (1, 2))
+    );
+
+CheckWithRowComparisons:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      b text,
+      CONSTRAINT t_eq CHECK ((a, b) = (1, 'x') OR (a, b) <> (2, 'y')),
+      CONSTRAINT t_lt CHECK ((a, b) < (3, 'z'))
+    );
+
+CheckWithCommonTypesOfDomainsAndNullif:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN dt AS text;
+    CREATE TABLE t (
+      d dt,
+      i integer,
+      b bigint,
+      CONSTRAINT t_coalesce CHECK (COALESCE(d, 'x') <> ''),
+      CONSTRAINT t_case CHECK (CASE WHEN i > 0 THEN d ELSE 'y' END <> ''),
+      CONSTRAINT t_nullif CHECK (NULLIF(i, 1.5) > b)
+    );
+
+CheckWithCastsToBitAndCharacterWithoutLength:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      b bit,
+      c character,
+      CONSTRAINT t_b CHECK (b::bit <> B'0' AND b::bit(1) <> B'1'),
+      CONSTRAINT t_c CHECK (c::char <> 'x' AND c::character(1) <> 'y')
+    );
+
+CheckWithCastsToBitOfOtherColumnTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      v varbit,
+      b bit(5),
+      CONSTRAINT t_v CHECK (v::bit <> B'0'),
+      CONSTRAINT t_b CHECK (b::pg_catalog.bit <> B'00000' AND b::pg_catalog.bit(5) <> B'11111')
+    );
+
+CheckWithFunctionsOfQuotedPgCatalog:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      i integer,
+      ts timestamp(3) with time zone[],
+      CONSTRAINT t_i CHECK ("pg_catalog".round(i, 2) > 0 AND i::"pg_catalog".int4 > 0),
+      CONSTRAINT t_ts CHECK (ts::timestamp(3) with time zone[] <> '{}')
+    );
+
+CheckWithExpressionsInArrays:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      ts timestamp,
+      i integer,
+      CONSTRAINT t_ts CHECK (ARRAY[ts::timestamp(3) with time zone, now()] <> '{}'),
+      CONSTRAINT t_i CHECK (i + 1 = ANY (ARRAY[i * 2, -1, length(i::text)]) OR ARRAY[ARRAY[i]] IS NOT NULL)
+    );
+
+CheckComparingWithCurrentUser:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (owner name);
+  desired: |
+    CREATE TABLE t (owner name, CONSTRAINT c CHECK (owner = current_user OR owner = session_user));
+  up: |
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (owner = current_user OR owner = session_user);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+
+CheckWithParenthesesInArrays:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      c integer,
+      CONSTRAINT t_c CHECK (c = ANY (ARRAY[(a + 1), 2]) AND (c, (a * 2)) IS NOT NULL)
+    );
+
+CheckWithCastFunctionSyntax:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      v varbit,
+      i integer,
+      CONSTRAINT t_v CHECK (CAST(v AS bit) <> B'0'),
+      CONSTRAINT t_i CHECK (round(CAST(i AS int8), 2) > 0 AND CAST(i AS integer) < 10)
+    );
+
+CheckWithParenthesesInCastFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (a integer, b integer, CONSTRAINT c CHECK (CAST((a + b) AS bigint) > 0 AND CAST((a) AS bigint) < 10));
+
+CheckWithParenthesesInsideOtherNodes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      b integer,
+      ts timestamp,
+      CONSTRAINT t_tz CHECK ((((ts + interval '1 day')) AT TIME ZONE 'UTC') > now()),
+      CONSTRAINT t_sub CHECK (substring(((a + b))::text from 1 for 2) <> 'x' AND coalesce(((a)), (b)) > 0)
+    );
+
+ExclusionWithWhereOnDomainColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN posint AS integer;
+    CREATE TABLE t (
+      c posint,
+      r int4range,
+      EXCLUDE USING gist (r WITH &&) WHERE (c > 0)
+    );
+
+CheckWithImplicitCastsToBitAndBpcharOfDomains:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN flags AS bit(8);
+    CREATE DOMAIN code AS char(2);
+    CREATE TABLE t (
+      f flags CHECK ((f & B'00000001') = B'00000001'),
+      c code CHECK (c || c <> 'xxxx')
+    );
+
+CheckWithBooleanLiteralCasts:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN yes AS boolean CHECK (VALUE = 't'::boolean);
+    CREATE TABLE t (
+      flag boolean CONSTRAINT c CHECK (flag = 't'::boolean OR flag = 'no'::bool)
+    );
+
+CheckWithIsDistinctFromOfOtherTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      n numeric CHECK (a IS DISTINCT FROM n),
+      m numeric CHECK (a IS NOT DISTINCT FROM m OR m IS NULL)
+    );
+
+ChangeCheckByDroppingDateCastOfColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (ts timestamp, d date, CONSTRAINT c CHECK (ts::date > d));
+  desired: |
+    CREATE TABLE t (ts timestamp, d date, CONSTRAINT c CHECK (ts > d));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (ts > d);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (ts::date > d);
+
+AddColumnAndCheckWithArrayCasts:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a integer, b text);
+  desired: |
+    CREATE TABLE t (
+      a integer,
+      b text,
+      d date[] DEFAULT ARRAY['2020-01-01']::date[],
+      CONSTRAINT c CHECK (ARRAY[a]::text[] <@ ARRAY[b]),
+      CONSTRAINT c2 CHECK (d <@ ARRAY['2020-01-01']::date[])
+    );
+  up: |
+    ALTER TABLE public.t ADD COLUMN d date[] DEFAULT ARRAY['2020-01-01']::date[];
+    ALTER TABLE public.t ADD CONSTRAINT c CHECK (ARRAY[a]::text[] <@ ARRAY[b]);
+    ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (d <@ ARRAY['2020-01-01']::date[]);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT c2;
+    ALTER TABLE public.t DROP CONSTRAINT c;
+    ALTER TABLE public.t DROP COLUMN d;
+
+CheckWithSubstringFunctionCallAsWrittenByPostgres13:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a integer, b integer, CONSTRAINT t_sub CHECK ("substring"((a + b)::text, 1, 2) <> 'x'));
+  desired: |
+    CREATE TABLE t (a integer, b integer, CONSTRAINT t_sub CHECK (substring((a + b)::text from 1 for 2) <> 'x'));
+  up: ""
+  down: ""

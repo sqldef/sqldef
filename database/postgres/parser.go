@@ -1438,9 +1438,9 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	}
 }
 
-// getRawTypeName extracts the raw type name from a TypeName node with minimal normalization.
-// This preserves type names like "bpchar" instead of normalizing them to "character",
-// but still normalizes PostgreSQL internal names like "int4" to "integer" for consistency.
+// getRawTypeName returns the type name of a cast without the pg_catalog schema, with an internal
+// name such as int4 resolved to integer as the generic parser does, and quoted where the name needs
+// quotes. Other names, such as bpchar and varchar, are kept as is.
 func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 	if node == nil || node.Names == nil {
 		return ""
@@ -1452,31 +1452,28 @@ func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
 			typeNames = append(typeNames, n.String_.Sval)
 		}
 	}
-
-	// Get the last name, skipping schema prefix like "pg_catalog"
 	if len(typeNames) == 0 {
 		return ""
 	}
-
-	typeName := typeNames[len(typeNames)-1]
-
-	// Normalize PostgreSQL internal type names to SQL standard names
-	// but preserve types like "bpchar" that should not be normalized
-	switch typeName {
-	case "int2":
-		return "smallint"
-	case "int4":
-		return "integer"
-	case "int8":
-		return "bigint"
-	case "float4":
-		return "real"
-	case "float8":
-		return "double precision"
-	default:
-		// Keep the type name as-is (including "bpchar", "timetz", "timestamptz", etc.)
-		return typeName
+	// A keyword such as bit or char is resolved to a pg_catalog name, while the quoted name, which
+	// names another type, is not
+	resolved := typeNames[0] == "pg_catalog"
+	if resolved {
+		typeNames = typeNames[1:]
 	}
+	if len(typeNames) == 1 && typeNames[0] == "char" {
+		return `"char"`
+	}
+	quoted := util.TransformSlice(typeNames, func(name string) string {
+		if !resolved && parser.PostgresTypeNameNeedsQuotes(name) {
+			return parser.QuotePostgresIdent(name)
+		}
+		return name
+	})
+	if len(quoted) == 1 {
+		return parser.PostgresTypeName(quoted[0])
+	}
+	return strings.Join(quoted, ".")
 }
 
 func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType, error) {
@@ -1520,7 +1517,12 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 				columnType.Type = "boolean"
 			}
 		case "bpchar":
-			columnType.Type = "character"
+			// The character keyword has a length, while bpchar written as such has none
+			if len(node.Typmods) > 0 {
+				columnType.Type = "character"
+			} else {
+				columnType.Type = typeName
+			}
 		case "boolean", "varchar", "interval", "numeric", "timestamp", "time": // TODO: use this pattern more, fixing failed tests as well
 			columnType.Type = typeName
 		case "timetz":
@@ -1884,14 +1886,21 @@ func (p PostgresParser) castType(typeName *pgquery.TypeName, columnType parser.C
 			"type_node", fmt.Sprintf("%#v", typeName))
 		name = columnType.Type
 	}
+	// The generic parser keeps the time zone of a type with a precision apart, as in
+	// timestamp(3) with time zone
+	var timeZone string
+	if base, ok := strings.CutSuffix(name, " with time zone"); ok && columnType.Length != nil {
+		name, timeZone = base, " with time zone"
+	}
 	if columnType.Array {
 		name += "[]"
 	}
 	return &parser.ConvertType{
-		Type:    name,
-		Length:  columnType.Length,
-		Scale:   columnType.Scale,
-		Charset: columnType.Charset,
+		Type:     name,
+		Length:   columnType.Length,
+		Scale:    columnType.Scale,
+		Charset:  columnType.Charset,
+		TimeZone: timeZone,
 	}
 }
 

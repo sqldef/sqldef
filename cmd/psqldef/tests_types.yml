@@ -722,3 +722,29 @@ RenameEnumTypeWithSchemaQualifiedColumn:
     CREATE TYPE myschema.item_state AS ENUM ('active', 'inactive');
     ALTER TABLE public.items ALTER COLUMN status TYPE myschema.item_state USING status::text::myschema.item_state;
     DROP TYPE myschema.item_status;
+AddEnumValueWithQuote:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('ok', 'it''s');
+  desired: |
+    CREATE TYPE mood AS ENUM ('ok', 'it''s', 'can''t');
+  up: |
+    ALTER TYPE public.mood ADD VALUE 'can''t';
+  down: ""
+# FIXME: the generic parser drops the quotes of a schema-qualified column type, so the column is
+# altered to public.Mood, which PostgreSQL folds to public.mood
+# ColumnOfQualifiedQuotedEnumType:
+#   legacy_ignore_quotes: false
+#   desired: |
+#     CREATE TYPE "Mood" AS ENUM ('a');
+#     CREATE TABLE t (m public."Mood");
+RenameEnumValueToValueWithQuote:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('ok', 'pending');
+  desired: |
+    CREATE TYPE mood AS ENUM ('ok', 'it''s' /* @renamed from=pending */);
+  up: |
+    ALTER TYPE public.mood RENAME VALUE 'pending' TO 'it''s';
+  down: |
+    ALTER TYPE public.mood ADD VALUE 'pending';

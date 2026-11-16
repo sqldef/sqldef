@@ -49,6 +49,8 @@ type nodeBuffer struct {
 	omittedSchemas []string
 	// dropSchemas leaves out every schema of table and function names
 	dropSchemas bool
+	// omittedTypeSchemas are left out of type names besides omittedSchemas
+	omittedTypeSchemas []string
 	// noOpCast reports the casts of columns that PostgreSQL drops, which are left out
 	noOpCast                  NoOpCastFunc
 	unknownTypesCaseSensitive bool
@@ -68,22 +70,66 @@ type keyLiteral struct {
 }
 
 func (buf *nodeBuffer) omitsSchema(schema Ident) bool {
-	if buf.dropSchemas {
-		return true
-	}
-	if len(buf.omittedSchemas) == 0 {
-		return false
-	}
+	return buf.dropSchemas || buf.inSchemas(schema, buf.omittedSchemas)
+}
+
+// inSchemas reports whether a schema is one of schemas, which are written as PostgreSQL stores them
+func (buf *nodeBuffer) inSchemas(schema Ident, schemas []string) bool {
 	name := schema.Name
 	if !schema.Quoted || buf.foldQuoted {
 		name = FoldASCII(name)
 	}
-	for _, omitted := range buf.omittedSchemas {
+	for _, omitted := range schemas {
 		if name == omitted || (buf.foldQuoted && name == FoldASCII(omitted)) {
 			return true
 		}
 	}
 	return false
+}
+
+// PostgresNameParts splits a possibly qualified name written in SQL, as the parser gives a collation
+// name. A quoted part such as "en_US.utf8" may contain a dot.
+func PostgresNameParts(name string) []Ident {
+	parts, ok := SplitPostgresName(name)
+	if !ok {
+		panic(fmt.Sprintf("unterminated quoted name: %s", name))
+	}
+	return parts
+}
+
+// SplitPostgresName is PostgresNameParts that reports a name with an unterminated quote instead of
+// panicking, for a name that may be stored without its quotes
+func SplitPostgresName(name string) ([]Ident, bool) {
+	var parts []Ident
+	for name != "" {
+		if rest, ok := strings.CutPrefix(name, `"`); ok {
+			var part strings.Builder
+			for {
+				i := strings.IndexByte(rest, '"')
+				if i < 0 {
+					return nil, false
+				}
+				part.WriteString(rest[:i])
+				rest = rest[i+1:]
+				if !strings.HasPrefix(rest, `"`) {
+					break
+				}
+				part.WriteByte('"')
+				rest = rest[1:]
+			}
+			parts = append(parts, Ident{Name: part.String(), Quoted: true})
+			name = rest
+		} else {
+			end := strings.IndexByte(name, '.')
+			if end < 0 {
+				end = len(name)
+			}
+			parts = append(parts, Ident{Name: name[:end]})
+			name = name[end:]
+		}
+		name = strings.TrimPrefix(name, ".")
+	}
+	return parts, true
 }
 
 // formatCastOperand formats the operand of a cast, recording the type of a literal operand
@@ -311,6 +357,8 @@ type ComparisonOptions struct {
 	// DropSchemas leaves out every schema of table and function names, as sqldef does not know the
 	// search path, which may hold other schemas than the default one
 	DropSchemas bool
+	// OmittedTypeSchemas are left out of type names besides OmittedSchemas
+	OmittedTypeSchemas []string
 	// UnknownTypesCaseSensitive compares the case of a literal of a type that is neither a string
 	// type nor one whose constants PostgreSQL is known to rewrite, such as an enum
 	UnknownTypesCaseSensitive bool
@@ -329,7 +377,7 @@ type ComparisonOptions struct {
 type NoOpCastFunc func(col *ColName, t *ConvertType) bool
 
 func (o ComparisonOptions) buffer() nodeBuffer {
-	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, reduceLiteralNames: o.ReduceLiteralNames}
+	return nodeBuffer{comparisonKey: true, foldQuoted: o.FoldQuoted, dropQualifiers: o.DropQualifiers, omittedSchemas: o.OmittedSchemas, omittedTypeSchemas: o.OmittedTypeSchemas, dropSchemas: o.DropSchemas, unknownTypesCaseSensitive: o.UnknownTypesCaseSensitive, noOpCast: o.NoOpCast, untypedRegLiterals: o.UntypedRegLiterals, reduceLiteralNames: o.ReduceLiteralNames}
 }
 
 // ComparisonKey is String for comparing PostgreSQL expressions: keywords, type names, string
@@ -672,7 +720,7 @@ type CommonTableExpr struct {
 
 // Format formats the node.
 func (node *CommonTableExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v AS (%v)", node.Name, node.Definition)
+	buf.Printf("%v%v AS (%v)", node.Name, node.Columns, node.Definition)
 }
 
 // Stream represents a SELECT statement.
@@ -1212,6 +1260,8 @@ type ColumnType struct {
 
 	// Enum values
 	EnumValues []string
+	// EnumBackslashEscapes tells whether a backslash in EnumValues is written escaped, as in MySQL
+	EnumBackslashEscapes bool
 
 	// Key specification
 	KeyOpt ColumnKeyOption
@@ -1315,7 +1365,7 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	if ct.EnumValues != nil {
 		quotedValues := make([]string, len(ct.EnumValues))
 		for i, v := range ct.EnumValues {
-			quotedValues[i] = "'" + v + "'"
+			quotedValues[i] = QuoteString(v, ct.EnumBackslashEscapes)
 		}
 		buf.Printf("(%s)", strings.Join(quotedValues, ", "))
 	}
@@ -2555,11 +2605,84 @@ type SQLVal struct {
 	// DroppedCast is the cast that the parser dropped from a string literal ('x'::text), kept
 	// for the default column name and comparison key, which depend on it
 	DroppedCast *ConvertType
+	// BackslashEscapes writes a string with MySQL's backslash escapes. The other databases take a
+	// backslash in a string literally.
+	BackslashEscapes bool
 }
 
 // NewStrVal builds a new StrVal.
 func NewStrVal(in string) *SQLVal {
 	return &SQLVal{Type: StrVal, Val: in}
+}
+
+// postgresTypeAliases maps the internal names of PostgreSQL's built-in types to the names it writes
+var postgresTypeAliases = map[string]string{
+	"int2":        "smallint",
+	"int4":        "integer",
+	"int8":        "bigint",
+	"float4":      "real",
+	"float8":      "double precision",
+	"bool":        "boolean",
+	"varbit":      "bit varying",
+	"timestamptz": "timestamp with time zone",
+	"timetz":      "time with time zone",
+}
+
+// QuoteString writes a string as an SQL literal. Where backslashes are escape characters, as in
+// MySQL, it escapes them and the characters a client may not pass through, such as NUL and newlines.
+func QuoteString(s string, backslashEscapes bool) string {
+	if !backslashEscapes {
+		return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	}
+	var b strings.Builder
+	b.WriteByte('\'')
+	for i, part := range strings.Split(s, "'") {
+		if i > 0 {
+			b.WriteString("''")
+		}
+		writeBackslashEscaped(&b, part)
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
+// writeBackslashEscaped writes a string with backslash escapes for the characters that need them
+func writeBackslashEscaped(w interface {
+	WriteByte(byte) error
+	WriteRune(rune) (int, error)
+}, s string) {
+	for _, ch := range s {
+		if encodedChar := sqlEncodeMap[byte(ch)]; ch > 0xff || encodedChar == dontEscape {
+			w.WriteRune(ch)
+		} else {
+			w.WriteByte('\\')
+			w.WriteByte(encodedChar)
+		}
+	}
+}
+
+// PostgresTypeNameNeedsQuotes reports whether PostgreSQL writes a type name quoted: a name that is
+// not a lowercase identifier, a reserved word, or a keyword that names another type unquoted
+func PostgresTypeNameNeedsQuotes(name string) bool {
+	switch name {
+	case "bit", "char", "character", "current_schema":
+		return true
+	}
+	return !needsNoQuotes(name) || IsPostgresReservedKeyword(name) || IsPostgresValueKeyword(name)
+}
+
+// QuotePostgresIdent quotes a PostgreSQL identifier
+func QuotePostgresIdent(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+// PostgresTypeName returns the name PostgreSQL writes for a type named by its internal name, such
+// as integer for int4
+func PostgresTypeName(name string) string {
+	if canonical, ok := postgresTypeAliases[name]; ok {
+		return canonical
+	}
+	return name
 }
 
 // postgresFloatTypeName returns the type PostgreSQL makes of float(p): real up to 24 bits of
@@ -2571,17 +2694,31 @@ func postgresFloatTypeName(precision string) string {
 	return "double precision"
 }
 
+// NewStringCast returns a cast of a string literal as the parser reads 'x'::t: a cast whose
+// literal normalization folds, or else the literal holding its cast
+func NewStringCast(val *SQLVal, t *ConvertType) Expr {
+	if isFoldableValueCast(t) {
+		return &CastExpr{Expr: val, Type: t}
+	}
+	cast := *val
+	cast.DroppedCast = t
+	return &cast
+}
+
 // isFoldableValueCast reports whether a value-context string cast should be kept
 // (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
-// numeric/money/interval need this; dropping the rest preserves historical behavior.
+// numeric/money/interval/boolean need this; dropping the rest preserves historical behavior.
 func isFoldableValueCast(t *ConvertType) bool {
-	if t == nil {
-		return false
-	}
-	switch strings.ToLower(t.Type) {
+	return t != nil && IsFoldableValueCastTypeName(strings.ToLower(t.Type))
+}
+
+// IsFoldableValueCastTypeName matches the scalar types whose typed-literal and read-back cast
+// spellings converge. Array ("numeric[]") and time types are excluded.
+func IsFoldableValueCastTypeName(typeName string) bool {
+	switch PostgresTypeName(typeName) {
 	case "numeric", "decimal", "real", "double precision",
 		"integer", "int", "bigint", "smallint",
-		"money", "smallmoney", "interval":
+		"money", "smallmoney", "interval", "boolean":
 		return true
 	}
 	return false
@@ -2694,21 +2831,27 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 				// The literal is written without its cast, but the name in it keeps its case only
 				// where it is quoted
 				buf.literalType = node.DroppedCast.Type
-				encodeSQLBytes(node.Val, buf)
+				encodeSQLBytes(node.Val, node.BackslashEscapes, buf)
 				return
 			}
-			buf.formatCastOperand(literalNode(node.Val), node.DroppedCast.Type)
+			buf.formatCastOperand(literalNode{val: node.Val, backslashEscapes: node.BackslashEscapes}, node.DroppedCast.Type)
 			return
 		}
-		encodeSQLBytes(node.Val, buf)
+		encodeSQLBytes(node.Val, node.BackslashEscapes, buf)
 	case UnicodeStrVal:
 		buf.WriteRune('N')
-		encodeSQLBytes(node.Val, buf)
+		encodeSQLBytes(node.Val, node.BackslashEscapes, buf)
 	case IntVal, FloatVal, HexNum:
 		buf.Printf("%s", node.Val)
 	case HexVal:
 		buf.Printf("X'%s'", node.Val)
 	case BitVal:
+		if buf.comparisonKey {
+			// PostgreSQL stores B'0101' as '0101'::"bit"
+			buf.literalType = "bit"
+			encodeSQLBytes(node.Val, false, buf)
+			return
+		}
 		buf.Printf("B'%s'", node.Val)
 	case ValArg:
 		buf.WriteString(node.Val)
@@ -2720,13 +2863,18 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 }
 
 // literalNode formats a string literal
-type literalNode string
-
-func (node literalNode) Format(buf *nodeBuffer) {
-	encodeSQLBytes(string(node), buf)
+type literalNode struct {
+	val              string
+	backslashEscapes bool
 }
 
-func encodeSQLBytes(val string, buf *nodeBuffer) {
+func (node literalNode) Format(buf *nodeBuffer) {
+	encodeSQLBytes(node.val, node.backslashEscapes, buf)
+}
+
+// encodeSQLBytes writes a string literal, with MySQL's backslash escapes or, as the standard
+// writes it, with only the quote doubled
+func encodeSQLBytes(val string, backslashEscapes bool, buf *nodeBuffer) {
 	if buf.comparisonKey {
 		switch typeName := FoldASCII(buf.literalType); {
 		case typeName == "regclass" && !buf.untypedRegLiterals:
@@ -2739,15 +2887,12 @@ func encodeSQLBytes(val string, buf *nodeBuffer) {
 		buf.literals = append(buf.literals, keyLiteral{value: val, typeName: buf.literalType})
 		buf.literalType = ""
 	}
-	buf.WriteByte('\'')
-	for _, ch := range val {
-		if encodedChar := sqlEncodeMap[byte(ch)]; encodedChar == dontEscape {
-			buf.WriteRune(ch)
-		} else {
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
-		}
+	if !backslashEscapes {
+		buf.WriteString(QuoteString(val, false))
+		return
 	}
+	buf.WriteByte('\'')
+	writeBackslashEscaped(buf, val)
 	buf.WriteByte('\'')
 }
 
@@ -3131,6 +3276,9 @@ func (node *ExtractExpr) Format(buf *nodeBuffer) {
 type CastExpr struct {
 	Expr Expr
 	Type *ConvertType
+	// Resolved is set on a cast that resolving the types of the expression found to be one that
+	// PostgreSQL stores, which a comparison keeps
+	Resolved bool
 }
 
 func (node *CastExpr) Format(buf *nodeBuffer) {
@@ -3220,6 +3368,9 @@ type ConvertType struct {
 	// (e.g. " with time zone"), emitted after the length so a cast such as
 	// timestamp(0) with time zone round-trips. Empty for other types.
 	TimeZone string
+	// ImplicitLength is set where Length is the 1 that character and bit written as keywords
+	// have without one
+	ImplicitLength bool
 }
 
 // this string is "character set" and this comment is required
@@ -3233,7 +3384,36 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	// timezone modifier belong to the element type, so they have to be emitted
 	// before it: timestamp(0) with time zone[], not timestamp[](0) with time zone.
 	typeName, isArray := strings.CutSuffix(node.Type, "[]")
-	buf.Printf("%s", typeName)
+	var parts []Ident
+	ok := false
+	if (buf.comparisonKey || buf.dropSchemas) && strings.ContainsAny(typeName, `".`) {
+		parts, ok = SplitPostgresName(typeName)
+	}
+	if ok {
+		// A name of PostgreSQL keeps its case where quoted, and PostgreSQL leaves out the schema
+		// on the search path
+		if len(parts) > 1 && (buf.omitsSchema(parts[0]) || buf.inSchemas(parts[0], buf.omittedTypeSchemas)) {
+			parts = parts[1:]
+		}
+		for i, part := range parts {
+			if i > 0 {
+				buf.WriteByte('.')
+			}
+			switch {
+			case part.Quoted && part.Name == FoldASCII(part.Name) && PostgresTypeNameNeedsQuotes(part.Name):
+				// Such as "bit", which names another type than bit
+				buf.writePostgresQuoted(part.Name)
+			case buf.comparisonKey:
+				buf.writeIdentKey(part)
+			case part.Quoted && part.Name != FoldASCII(part.Name):
+				buf.writePostgresQuoted(part.Name)
+			default:
+				formatPostgresID(buf, FoldASCII(part.Name))
+			}
+		}
+	} else {
+		buf.Printf("%s", typeName)
+	}
 	if node.Length != nil {
 		buf.Printf("(%v", node.Length)
 		if node.Scale != nil {
@@ -3824,9 +4004,53 @@ func (n Ident) Format(buf *nodeBuffer) {
 	formatID(buf, n.Name)
 }
 
+// postgresReservedKeywords are the keywords that PostgreSQL does not take as a table or column name
+// unless quoted: the reserved ones and those that can name only a type or function. The ones that
+// call a function without parentheses, such as current_user, are left out, as the parser reads
+// them as names.
+var postgresReservedKeywords = func() map[string]bool {
+	words := map[string]bool{}
+	for _, word := range []string{
+		"all", "analyse", "analyze", "and", "any", "array", "as", "asc", "asymmetric", "authorization",
+		"binary", "both", "case", "cast", "check", "collate", "collation", "column", "concurrently",
+		"constraint", "create", "cross", "default", "deferrable", "desc", "distinct", "do", "else",
+		"end", "except", "false", "fetch", "for", "foreign", "freeze", "from", "full", "grant", "group",
+		"having", "ilike", "in", "initially", "inner", "intersect", "into", "is", "isnull", "join",
+		"lateral", "leading", "left", "like", "limit", "natural", "not", "notnull", "null", "offset",
+		"on", "only", "or", "order", "outer", "overlaps", "placing", "primary", "references",
+		"returning", "right", "select", "similar", "some", "symmetric", "table", "tablesample", "then",
+		"to", "trailing", "true", "union", "unique", "using", "variadic", "verbose", "when", "where",
+		"window", "with",
+	} {
+		words[word] = true
+	}
+	return words
+}()
+
+// IsPostgresValueKeyword reports whether PostgreSQL reads an unquoted name as a call of a function
+// without parentheses, such as current_user, which the parser reads as a column name
+func IsPostgresValueKeyword(name string) bool {
+	switch name {
+	case "current_catalog", "current_date", "current_role", "current_time", "current_timestamp",
+		"current_user", "localtime", "localtimestamp", "session_user", "system_user", "user":
+		return true
+	}
+	return false
+}
+
+// IsPostgresReservedKeyword reports whether PostgreSQL reads an unquoted name as a keyword where a
+// table or column name is expected
+func IsPostgresReservedKeyword(name string) bool {
+	return postgresReservedKeywords[name]
+}
+
 // formatPostgresID writes an unquoted identifier as is if PostgreSQL reads it so, and quotes it
 // otherwise, where formatID would quote it in MySQL's style
 func formatPostgresID(buf *nodeBuffer, name string) {
+	if postgresReservedKeywords[name] {
+		buf.writePostgresQuoted(name)
+		return
+	}
 	for i, c := range name {
 		if !(isNameStart(c) || i > 0 && (c == '$' || isAsciiDigit(c))) {
 			buf.writePostgresQuoted(name)
@@ -3855,7 +4079,7 @@ func formatFuncName(buf *nodeBuffer, name Ident) {
 }
 
 func (buf *nodeBuffer) writePostgresQuoted(name string) {
-	buf.WriteString(`"` + strings.ReplaceAll(name, `"`, `""`) + `"`)
+	buf.WriteString(QuotePostgresIdent(name))
 }
 
 // equalString performs a case-insensitive compare with str.

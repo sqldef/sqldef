@@ -343,6 +343,10 @@ Remove the `ENABLE ROW LEVEL SECURITY` line to DISABLE ROW LEVEL SECURITY, and t
 
 Remove the line to DROP VIEW.
 
+psqldef writes a view it replaces or creates again as the desired schema writes it. With the default `legacy_ignore_quotes: true`, only the name of the view is quoted. When `CREATE OR REPLACE VIEW` cannot make a change, such as removing a column, the view and the views that depend on it are dropped and created again.
+
+PostgreSQL does not change the type of a column that a view or materialized view reads. With `--enable-drop`, psqldef drops the views that select from the table and read the column, in their FROM, joins or subqueries, and the views that depend on them, before `ALTER TABLE ... ALTER COLUMN ... TYPE`, and creates them again after it. A materialized view is filled again when it is created, unless the desired schema creates it `WITH NO DATA`, which leaves it empty until `REFRESH MATERIALIZED VIEW`. Privileges on those views of roles that psqldef does not manage are not restored. Without `--enable-drop`, or when a view reads the column through a function or from a partition or inheritance child of the table, the change fails as PostgreSQL reports it.
+
 #### Functions in FROM
 
 A view can use functions in FROM, such as `unnest(...)`, with `LATERAL` and `WITH ORDINALITY`. psqldef assumes such a function returns one column named after its alias. For a function that returns a composite type, several columns, or a column with its own name, write the column alias list in full, as PostgreSQL stores it. Otherwise the view is replaced on every run:

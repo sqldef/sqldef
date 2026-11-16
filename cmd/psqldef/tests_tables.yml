@@ -580,7 +580,7 @@ AddTruncatingVarcharCastsOfColumns:
     ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (n::character varying(3) <> 'abc');
     DROP POLICY p ON public.t;
     CREATE POLICY p ON t FOR SELECT USING (n::varchar(3) = 'x');
-    CREATE OR REPLACE VIEW public.v AS select id from t where n::varchar(3) = 'abc';
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE n::varchar(3) = 'abc';
     DROP INDEX public.i1;
     CREATE INDEX i1 ON public.t ((name::varchar(10)));
     DROP INDEX public.i2;
@@ -592,7 +592,7 @@ AddTruncatingVarcharCastsOfColumns:
     ALTER TABLE public.t ADD CONSTRAINT c2 CHECK (n <> 'abc');
     DROP POLICY p ON public.t;
     CREATE POLICY p ON t FOR SELECT USING (n = 'x');
-    CREATE OR REPLACE VIEW public.v AS select id from t where n = 'abc';
+    CREATE OR REPLACE VIEW v AS SELECT id FROM t WHERE n = 'abc';
     DROP INDEX public.i1;
     CREATE INDEX i1 ON public.t ((name::varchar(5)));
     DROP INDEX public.i2;
@@ -610,3 +610,166 @@ WidenVarcharColumnUnderTruncatingCheckCast:
     ALTER TABLE public.t ADD CONSTRAINT k CHECK (name::character varying(10) <> '');
   down: |
     ALTER TABLE public.t ALTER COLUMN name TYPE varchar(10);
+
+StringLiteralsKeepBackslashesAndDoubleQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text DEFAULT 'a"b\c', CONSTRAINT k CHECK (s ~ '^\d+$'));
+  desired: |
+    CREATE TABLE t (s text DEFAULT 'a"b\cd', CONSTRAINT k CHECK (s ~ '^\d*$'));
+  up: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a"b\cd';
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (s ~ '^\d*$');
+  down: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a"b\c';
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (s ~ '^\d+$');
+
+EscapeStringConstantsMatchTheirValues:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text DEFAULT 'x	y\z''q', u text DEFAULT 'AAé');
+  desired: |
+    CREATE TABLE t (s text DEFAULT E'x\ty\\z\'q', u text DEFAULT e'\101\x41é');
+  up: ""
+  down: ""
+
+ChangeEscapeStringConstantDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (s text DEFAULT E'a\\b');
+  desired: |
+    CREATE TABLE t (s text DEFAULT E'a\\b\nc');
+  up: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a\b
+    c';
+  down: |
+    ALTER TABLE public.t ALTER COLUMN s SET DEFAULT 'a\b';
+
+StringLiteralsKeepBackslashesInLegacyMode:
+  current: |
+    CREATE TABLE t (s text DEFAULT 'a\b', CONSTRAINT k CHECK (s ~ '^\w+$'));
+  desired: |
+    CREATE TABLE t (s text DEFAULT 'a\bc', CONSTRAINT k CHECK (s ~ '^\w*$'));
+  up: |
+    ALTER TABLE "public"."t" ALTER COLUMN "s" SET DEFAULT 'a\bc';
+    ALTER TABLE "public"."t" DROP CONSTRAINT "k";
+    ALTER TABLE "public"."t" ADD CONSTRAINT "k" CHECK (s ~ '^\w*$');
+  down: |
+    ALTER TABLE "public"."t" ALTER COLUMN "s" SET DEFAULT 'a\b';
+    ALTER TABLE "public"."t" DROP CONSTRAINT "k";
+    ALTER TABLE "public"."t" ADD CONSTRAINT "k" CHECK (s ~ '^\w+$');
+
+FunctionBodyWithBackslash:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION f() RETURNS text LANGUAGE sql AS 'SELECT ''a\b''::text';
+
+ReservedWordNamesInIndexAndView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "order" (id int, "select" int);
+    CREATE INDEX o_i ON "order" ("select") WHERE "select" <> 1;
+    CREATE VIEW v AS SELECT o."select", 'a\b' AS s FROM "order" o;
+  desired: |
+    CREATE TABLE "order" (id int, "select" int);
+    CREATE INDEX o_i ON "order" ("select") WHERE "select" <> 2;
+    CREATE VIEW v AS SELECT o."select", 'a\b' AS s2 FROM "order" o;
+
+CastsToTypesNamedWithoutKeywords:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TYPE "Mood" AS ENUM ('A', 'B');
+    CREATE TABLE t (
+      id int,
+      m text,
+      n bigint,
+      CONSTRAINT k1 CHECK (m::mood IS NOT NULL),
+      CONSTRAINT k2 CHECK (m::public."Mood" IS NOT NULL),
+      CONSTRAINT k3 CHECK (id::int8 > 0),
+      CONSTRAINT k4 CHECK (n::pg_catalog.int4 > 0),
+      CONSTRAINT k5 CHECK (m::pg_catalog.text <> ''),
+      CONSTRAINT k6 CHECK (id::"int8" > 0 AND m::pg_catalog."text" <> '')
+    );
+    CREATE INDEX t_n ON t ((n::int4));
+    CREATE VIEW v AS SELECT id::float8 AS f, m::"Mood" AS mm, (n::text || '+00')::timestamptz::text AS ts FROM t;
+
+ChangeCastToTypeNamedWithoutKeyword:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TYPE mood2 AS ENUM ('a', 'b');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::mood IS NOT NULL));
+  desired: |
+    CREATE TYPE mood AS ENUM ('a', 'b');
+    CREATE TYPE mood2 AS ENUM ('a', 'b');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::mood2 IS NOT NULL));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::mood2 is not null);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::mood is not null);
+
+ColumnTypesNamedByTheirAliases:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a integer, b bigint, c double precision, d real, e smallint, f boolean, g timestamp with time zone);
+  desired: |
+    CREATE TABLE t (a int4, b int8, c float8, d float4, e int2, f bool, g timestamptz);
+  up: ""
+  down: ""
+
+ChangeCaseOfQuotedCastType:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE "Mood" AS ENUM ('a');
+    CREATE TYPE mood AS ENUM ('a');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::"Mood" IS NOT NULL));
+  desired: |
+    CREATE TYPE "Mood" AS ENUM ('a');
+    CREATE TYPE mood AS ENUM ('a');
+    CREATE TABLE t (m text, CONSTRAINT k CHECK (m::"mood" IS NOT NULL));
+  up: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::mood is not null);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT k;
+    ALTER TABLE public.t ADD CONSTRAINT k CHECK (m::"Mood" is not null);
+
+QuotedArrayAndQualifiedCastTypes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE SCHEMA s;
+    CREATE TYPE "Mood" AS ENUM ('a');
+    CREATE TYPE s.int4 AS ENUM ('a');
+    CREATE TABLE t (m text[], n text, CONSTRAINT k1 CHECK (m::"Mood"[] IS NOT NULL), CONSTRAINT k2 CHECK (n::s.int4 IS NOT NULL));
+
+ColumnNamedLikeValueKeyword:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (id integer);
+  desired: |
+    CREATE TABLE t (id integer, "user" text, "current_date" date);
+  up: |
+    ALTER TABLE public.t ADD COLUMN "user" text;
+    ALTER TABLE public.t ADD COLUMN "current_date" date;
+  down: |
+    ALTER TABLE public.t DROP COLUMN "current_date";
+    ALTER TABLE public.t DROP COLUMN "user";
+
+CreateTableEndingWithLineComment:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (id integer) -- trailing
+    ;
+    CREATE TABLE u (id integer);
+  up: |
+    CREATE TABLE t (id integer) -- trailing
+    ;
+    CREATE TABLE u (id integer);
+  down: |
+    DROP TABLE public.t;
+    DROP TABLE public.u;

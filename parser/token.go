@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -55,8 +56,10 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 // Tokenizer is the struct used to generate SQL
 // tokens for the parser.
 type Tokenizer struct {
-	AllowComments        bool
-	lastChar             rune
+	AllowComments bool
+	lastChar      rune
+	// lastSize is the number of bytes of lastChar in buf
+	lastSize             int
 	Position             int
 	lastToken            string
 	LastError            error
@@ -757,6 +760,10 @@ func (tkn *Tokenizer) Scan() (int, string) {
 				return tkn.scanBitLiteral()
 			}
 		}
+		if (ch == 'E' || ch == 'e') && tkn.lastChar == '\'' && tkn.mode == ParserModePostgres {
+			tkn.next()
+			return tkn.scanEscapeString()
+		}
 		if ch == 'N' {
 			if tkn.lastChar == '\'' {
 				if tkn.mode == ParserModeMssql {
@@ -1219,6 +1226,9 @@ exit:
 }
 
 func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
+	if tkn.mode != ParserModeMysql {
+		return tkn.scanStandardString(typ)
+	}
 	var buffer strings.Builder
 	for {
 		ch := tkn.lastChar
@@ -1277,6 +1287,136 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 	return typ, buffer.String()
 }
 
+// scanStandardString scans a string literal of the SQL standard, where only a doubled quote
+// stands for one quote
+func (tkn *Tokenizer) scanStandardString(typ int) (int, string) {
+	var buffer strings.Builder
+	for {
+		switch tkn.lastChar {
+		case eofChar:
+			return LEX_ERROR, buffer.String()
+		case '\'':
+			tkn.next()
+			if tkn.lastChar != '\'' {
+				return typ, buffer.String()
+			}
+		}
+		buffer.WriteRune(tkn.lastChar)
+		tkn.next()
+	}
+}
+
+// scanEscapeString scans a PostgreSQL escape string constant (E'...'), whose backslash escapes are
+// those of C. An octal or hexadecimal escape gives a byte, and a Unicode escape gives a character.
+func (tkn *Tokenizer) scanEscapeString() (int, string) {
+	var buffer strings.Builder
+	for {
+		switch tkn.lastChar {
+		case eofChar:
+			return LEX_ERROR, buffer.String()
+		case '\'':
+			tkn.next()
+			if tkn.lastChar != '\'' {
+				return STRING, buffer.String()
+			}
+		case '\\':
+			tkn.next()
+			switch esc := tkn.lastChar; esc {
+			case eofChar:
+				return LEX_ERROR, buffer.String()
+			case 'b':
+				buffer.WriteByte('\b')
+			case 'f':
+				buffer.WriteByte('\f')
+			case 'n':
+				buffer.WriteByte('\n')
+			case 'r':
+				buffer.WriteByte('\r')
+			case 't':
+				buffer.WriteByte('\t')
+			case '0', '1', '2', '3', '4', '5', '6', '7':
+				// PostgreSQL rejects a NUL in a string
+				code, _ := tkn.scanEscapeCode(8, 1, 3)
+				if byte(code) == 0 {
+					return LEX_ERROR, buffer.String()
+				}
+				buffer.WriteByte(byte(code))
+				continue
+			case 'x':
+				tkn.next()
+				if code, ok := tkn.scanEscapeCode(16, 1, 2); ok {
+					if code == 0 {
+						return LEX_ERROR, buffer.String()
+					}
+					buffer.WriteByte(byte(code))
+				} else {
+					buffer.WriteByte('x')
+				}
+				continue
+			case 'u', 'U':
+				tkn.next()
+				r, ok := tkn.scanUnicodeEscape(esc)
+				if !ok || r == 0 {
+					return LEX_ERROR, buffer.String()
+				}
+				buffer.WriteRune(r)
+				continue
+			default:
+				buffer.WriteRune(esc)
+			}
+			tkn.next()
+			continue
+		}
+		buffer.WriteRune(tkn.lastChar)
+		tkn.next()
+	}
+}
+
+// scanUnicodeEscape reads the digits of a \uXXXX or \UXXXXXXXX escape, and the low surrogate that
+// follows a high one
+func (tkn *Tokenizer) scanUnicodeEscape(esc rune) (rune, bool) {
+	digits := 4
+	if esc == 'U' {
+		digits = 8
+	}
+	code, ok := tkn.scanEscapeCode(16, digits, digits)
+	if !ok || !utf16.IsSurrogate(code) {
+		return code, ok && utf8.ValidRune(code)
+	}
+	if tkn.lastChar != '\\' {
+		return 0, false
+	}
+	tkn.next()
+	if next := tkn.lastChar; next == 'u' || next == 'U' {
+		tkn.next()
+		digits = 4
+		if next == 'U' {
+			digits = 8
+		}
+		if low, ok := tkn.scanEscapeCode(16, digits, digits); ok {
+			if r := utf16.DecodeRune(code, low); r != utf8.RuneError {
+				return r, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// scanEscapeCode reads from min to max digits of a character code in base
+func (tkn *Tokenizer) scanEscapeCode(base int, minDigits int, maxDigits int) (rune, bool) {
+	var code rune
+	n := 0
+	for ; n < maxDigits; n++ {
+		d := digitVal(tkn.lastChar)
+		if d >= base {
+			break
+		}
+		code = code*rune(base) + rune(d)
+		tkn.next()
+	}
+	return code, n >= minDigits
+}
+
 // scanDollarQuotedString scans a PostgreSQL dollar-quoted string.
 // Supports both $$...$$ and $tag$...$tag$ styles.
 func (tkn *Tokenizer) scanDollarQuotedString() (int, string) {
@@ -1317,7 +1457,7 @@ func (tkn *Tokenizer) scanDollarQuotedString() (int, string) {
 		if tkn.lastChar == '$' {
 			// Check if this is the start of the closing delimiter
 			savedPos := tkn.bufPos
-			savedChar := tkn.lastChar
+			savedChar, savedSize := tkn.lastChar, tkn.lastSize
 			savedPosition := tkn.Position
 
 			var potentialDelim strings.Builder
@@ -1342,7 +1482,7 @@ func (tkn *Tokenizer) scanDollarQuotedString() (int, string) {
 			// Not the closing delimiter, restore and include in content
 			buffer.WriteString(potentialDelim.String()[:potentialDelim.Len()-1])
 			tkn.bufPos = savedPos
-			tkn.lastChar = savedChar
+			tkn.lastChar, tkn.lastSize = savedChar, savedSize
 			tkn.Position = savedPosition
 			buffer.WriteRune(tkn.lastChar)
 			tkn.next()
@@ -1473,8 +1613,18 @@ func (tkn *Tokenizer) next() {
 		r, size := utf8.DecodeRuneInString(tkn.buf[tkn.bufPos:])
 		tkn.Position += size
 		tkn.lastChar = r
+		tkn.lastSize = size
 		tkn.bufPos += size
 	}
+}
+
+// offset returns the byte offset of the character the tokenizer has read ahead, which is where the
+// last token scanned ends
+func (tkn *Tokenizer) offset() int {
+	if tkn.lastChar == eofChar {
+		return tkn.Position - 1
+	}
+	return tkn.Position - tkn.lastSize
 }
 
 // scanSkippingComments wraps Scan the same way Lex does: SQL comments never
@@ -1493,14 +1643,14 @@ func (tkn *Tokenizer) scanSkippingComments() (int, string) {
 // without consuming any characters. This is used for context-aware tokenization.
 func (tkn *Tokenizer) peekToken() (int, string) {
 	// Save current state and restore on exit
-	savedLastChar := tkn.lastChar
+	savedLastChar, savedLastSize := tkn.lastChar, tkn.lastSize
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
 	savedPeeking := tkn.peeking
 
 	defer func() {
 		tkn.peeking = savedPeeking
-		tkn.lastChar = savedLastChar
+		tkn.lastChar, tkn.lastSize = savedLastChar, savedLastSize
 		tkn.Position = savedPosition
 		tkn.bufPos = savedBufPos
 	}()
@@ -1517,7 +1667,7 @@ type peekedToken struct {
 
 // peekTokens returns the next n tokens without consuming input.
 func (tkn *Tokenizer) peekTokens(n int) []peekedToken {
-	savedLastChar := tkn.lastChar
+	savedLastChar, savedLastSize := tkn.lastChar, tkn.lastSize
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
 	savedPeeking := tkn.peeking
@@ -1525,7 +1675,7 @@ func (tkn *Tokenizer) peekTokens(n int) []peekedToken {
 
 	defer func() {
 		tkn.peeking = savedPeeking
-		tkn.lastChar = savedLastChar
+		tkn.lastChar, tkn.lastSize = savedLastChar, savedLastSize
 		tkn.Position = savedPosition
 		tkn.bufPos = savedBufPos
 		tkn.lastIdentifierQuoted = savedQuoted
@@ -1650,4 +1800,68 @@ func (tkn *Tokenizer) scanCustomOp(firstChar rune) (int, string) {
 	}
 
 	return CUSTOM_OP, op
+}
+
+// CreateOrReplace returns a CREATE statement as CREATE OR REPLACE
+func CreateOrReplace(sql string, mode ParserMode) string {
+	tkn := NewTokenizer(sql, mode)
+	typ, _ := tkn.scanSkippingComments()
+	if typ != CREATE {
+		panic(fmt.Sprintf("not a CREATE statement: %s", sql))
+	}
+	end := tkn.offset()
+	if typ, _ := tkn.scanSkippingComments(); typ == OR {
+		return sql
+	}
+	return sql[:end] + " OR REPLACE" + sql[end:]
+}
+
+// EndsWithLineComment reports whether a statement ends with a comment that runs to the end of the
+// line, such as -- or #, which would take in anything written after it on the same line
+func EndsWithLineComment(sql string, mode ParserMode) bool {
+	tkn := NewTokenizer(sql, mode)
+	lastType, lastValue := 0, ""
+	for {
+		typ, val := tkn.Scan()
+		if typ == 0 || typ == LEX_ERROR {
+			break
+		}
+		lastType, lastValue = typ, val
+	}
+	return lastType == COMMENT && !strings.HasPrefix(lastValue, "/*") && !strings.HasSuffix(lastValue, "\n")
+}
+
+// ReplaceViewName returns a CREATE VIEW statement with its view named by name
+func ReplaceViewName(sql string, mode ParserMode, name string) string {
+	tkn := NewTokenizer(sql, mode)
+	for {
+		typ, _ := tkn.scanSkippingComments()
+		if typ == VIEW {
+			break
+		}
+		if typ == 0 {
+			panic(fmt.Sprintf("not a CREATE VIEW statement: %s", sql))
+		}
+	}
+	start := tkn.offset()
+	end := start
+	prev := 0
+	for {
+		typ, val := tkn.scanSkippingComments()
+		// A materialized view names its tablespace after its name, unless the name goes on after a dot
+		if typ == ID && end > start && prev != '.' && strings.EqualFold(val, "tablespace") {
+			typ = 0
+		}
+		if end == start && (typ == IF || typ == NOT || typ == EXISTS) {
+			start = tkn.offset()
+			end = start
+			continue
+		}
+		switch typ {
+		case '(', AS, WITH, USING, 0:
+			return sql[:start] + " " + name + sql[end:]
+		}
+		end = tkn.offset()
+		prev = typ
+	}
 }

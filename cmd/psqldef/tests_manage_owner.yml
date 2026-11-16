@@ -152,10 +152,10 @@ ManageOwnerListRestoresUnlistedOwnerOnViewRecreate:
     ALTER TABLE v_users OWNER TO app_user;
   up: |
     DROP VIEW public.v_users;
-    CREATE VIEW public.v_users AS select id from users;
+    CREATE VIEW v_users AS SELECT id FROM users;
     ALTER VIEW public.v_users OWNER TO "admin_role";
   down: |
-    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+    CREATE OR REPLACE VIEW v_users AS SELECT id, name FROM users;
 
 ManageOwnerFalseRestoresOwnerOnViewRecreate:
   legacy_ignore_quotes: false
@@ -178,10 +178,10 @@ ManageOwnerFalseRestoresOwnerOnViewRecreate:
     CREATE VIEW v_users AS SELECT id FROM users;
   up: |
     DROP VIEW public.v_users;
-    CREATE VIEW public.v_users AS select id from users;
+    CREATE VIEW v_users AS SELECT id FROM users;
     ALTER VIEW public.v_users OWNER TO "app_user";
   down: |
-    CREATE OR REPLACE VIEW public.v_users AS select id, name from users;
+    CREATE OR REPLACE VIEW v_users AS SELECT id, name FROM users;
 
 ManageOwnerListKeepsRenamedTableOfUnlistedRole:
   legacy_ignore_quotes: false

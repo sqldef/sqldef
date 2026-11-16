@@ -45,8 +45,15 @@ func rawStatements(ddls []string) []statement {
 	return util.TransformSlice(ddls, func(ddl string) statement { return rawStatement(ddl) })
 }
 
-func renderStatements(statements []statement) []string {
-	return util.TransformSlice(statements, statement.Render)
+func renderStatements(statements []statement, mode parser.ParserMode) []string {
+	return util.TransformSlice(statements, func(s statement) string {
+		ddl := s.Render()
+		// A line comment at the end would take in the semicolon written after the statement
+		if !s.Skipped() && strings.ContainsAny(ddl, "-#") && parser.EndsWithLineComment(ddl, mode) {
+			ddl += "\n"
+		}
+		return ddl
+	})
 }
 
 // skipped is a statement heldBack holds back. It is still emitted, as a comment, so that
@@ -218,7 +225,9 @@ type inputStatement struct {
 	statement string
 }
 
-func (s inputStatement) Render() string { return s.statement }
+func (s inputStatement) Render() string {
+	return s.statement
+}
 
 // createViewStatement creates a view the generator builds from its definition.
 type createViewStatement struct {
@@ -234,9 +243,6 @@ func (s createViewStatement) Render() string {
 		ddl += "OR REPLACE "
 	}
 	definition := parser.String(s.view.definition)
-	if s.d.mode == GeneratorModePostgres && !s.d.legacyIgnoreQuotes {
-		definition = parser.PostgresString(s.view.definition)
-	}
 	if s.view.viewType == "SQL SECURITY" {
 		return ddl + fmt.Sprintf("SQL SECURITY %s VIEW %s AS %s", s.view.securityType, s.d.escapeQualifiedName(s.view.name), definition)
 	}
@@ -341,7 +347,7 @@ type renameEnumValueStatement struct {
 }
 
 func (s renameEnumValueStatement) Render() string {
-	return fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'", s.d.escapeQualifiedName(s.typeName), s.from, s.to)
+	return fmt.Sprintf("ALTER TYPE %s RENAME VALUE %s TO %s", s.d.escapeQualifiedName(s.typeName), StringConstant(s.from), StringConstant(s.to))
 }
 
 // addEnumValueStatement adds a value to a PostgreSQL enum type.
@@ -353,7 +359,7 @@ type addEnumValueStatement struct {
 }
 
 func (s addEnumValueStatement) Render() string {
-	return fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", s.d.escapeQualifiedName(s.typeName), s.value)
+	return fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", s.d.escapeQualifiedName(s.typeName), StringConstant(s.value))
 }
 
 // alterDomainStatement changes one thing about a PostgreSQL domain.
@@ -447,9 +453,8 @@ func (s alterEventStatement) Render() string {
 	} else {
 		buf.WriteString(" ENABLE")
 	}
-	buf.WriteString(" COMMENT '")
-	buf.WriteString(event.comment) // empty string is valid: removes comment
-	buf.WriteString("'")
+	buf.WriteString(" COMMENT ")
+	buf.WriteString(parser.QuoteString(event.comment, true)) // empty string is valid: removes comment
 	if len(event.body) > 0 {
 		buf.WriteString(" DO ")
 		buf.WriteString(strings.Join(event.body, "\n"))

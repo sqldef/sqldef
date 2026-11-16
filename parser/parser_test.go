@@ -2657,3 +2657,95 @@ func TestColumnCollateAfterOtherConstraints(t *testing.T) {
 		}
 	})
 }
+
+func TestTypecastToTypeOfOtherSchemaNamedByKeyword(t *testing.T) {
+	statement, err := ParseDDL("CREATE VIEW v AS SELECT x::extensions.vector(3) AS a, x::s.text AS b FROM t", ParserModePostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := String(statement)
+	for _, want := range []string{"::extensions.vector(3) as a", "::s.text as b"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("want substring %q, got %s", want, got)
+		}
+	}
+	if _, err := ParseDDL("CREATE VIEW v AS SELECT x::s.varchar(3) FROM t", ParserModePostgres); err == nil {
+		t.Fatal("want an error for a keyword the grammar renames")
+	}
+}
+
+func TestEscapeStringRejectsNul(t *testing.T) {
+	for _, sql := range []string{`SELECT E'a\0b'`, `SELECT E'a\x00b'`, `SELECT E'a\u0000b'`} {
+		if _, err := ParseDDL("CREATE VIEW v AS "+sql, ParserModePostgres); err == nil {
+			t.Errorf("want an error for %s", sql)
+		}
+	}
+}
+
+func TestTypecastToQualifiedTypeWithLength(t *testing.T) {
+	statement, err := ParseDDL(`CREATE VIEW v AS SELECT x::extensions.halfvec(3) AS a, x::pg_catalog.varbit(5) AS b FROM t`, ParserModePostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := String(statement)
+	for _, want := range []string{"::extensions.halfvec(3) as a", "::bit varying(5) as b"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("want substring %q, got %s", want, got)
+		}
+	}
+}
+
+func TestCreateOrReplaceSkipsComments(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{"CREATE /* c */ OR REPLACE VIEW v AS SELECT 1", "CREATE /* c */ OR REPLACE VIEW v AS SELECT 1"},
+		{"/* c */ CREATE VIEW v AS SELECT 1", "/* c */ CREATE OR REPLACE VIEW v AS SELECT 1"},
+	} {
+		sql, want := tc.sql, tc.want
+		if got := CreateOrReplace(sql, ParserModePostgres); got != want {
+			t.Errorf("CreateOrReplace(%q) = %q, want %q", sql, got, want)
+		}
+	}
+}
+
+func TestTypecastToBitKeepsLengthOnlyForTheKeyword(t *testing.T) {
+	statement, err := ParseDDL(`CREATE VIEW v AS SELECT x::bit AS a, x::ext.bit AS b, x::pg_catalog.bit AS c, x::pg_catalog.bit(3) AS d, x::pg_catalog.char AS e FROM t`, ParserModePostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := String(statement)
+	for _, want := range []string{"::bit(1) as a", "::ext.bit as b", `::"bit" as c`, "::bit(3) as d", `::"char" as e`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want substring %q, got %s", want, got)
+		}
+	}
+	if _, err := ParseDDL("CREATE VIEW v AS SELECT x::pg_catalog.char(1) FROM t", ParserModePostgres); err == nil {
+		t.Error(`want an error for a length of "char"`)
+	}
+}
+
+func TestReplaceViewName(t *testing.T) {
+	for _, tc := range []struct{ sql, expected string }{
+		{`CREATE VIEW v AS SELECT 1`, `CREATE VIEW "public"."v" AS SELECT 1`},
+		{`create or replace view public."V" (a) as select 1`, `create or replace view "public"."v" (a) as select 1`},
+		{`CREATE MATERIALIZED VIEW IF NOT EXISTS s.v WITH (fillfactor=70) AS SELECT 1 WITH NO DATA`, `CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."v" WITH (fillfactor=70) AS SELECT 1 WITH NO DATA`},
+		{"CREATE VIEW public.comment(列) AS SELECT 1", `CREATE VIEW "public"."v"(列) AS SELECT 1`},
+		{`CREATE VIEW tablespace.tablespace AS SELECT 1`, `CREATE VIEW "public"."v" AS SELECT 1`},
+		{`CREATE MATERIALIZED VIEW v TABLESPACE pg_default AS SELECT 1`, `CREATE MATERIALIZED VIEW "public"."v" TABLESPACE pg_default AS SELECT 1`},
+		{`CREATE /* c */ VIEW /* c */ v/* c */AS SELECT 1`, `CREATE /* c */ VIEW "public"."v"/* c */AS SELECT 1`},
+	} {
+		sql, expected := tc.sql, tc.expected
+		if got := ReplaceViewName(sql, ParserModePostgres, `"public"."v"`); got != expected {
+			t.Errorf("ReplaceViewName(%q) = %q, want %q", sql, got, expected)
+		}
+	}
+}
+
+func TestQuoteStringEscapes(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"'a'\nb\\c\x00", `'''a''\nb\\c\0'`},
+	} {
+		if got := QuoteString(tc.in, true); got != tc.want {
+			t.Errorf("QuoteString(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

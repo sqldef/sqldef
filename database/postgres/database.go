@@ -1553,7 +1553,8 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	  n.nspname || '.' || c.relname AS qualified_table_name,
 	  s.column_name,
 	  s.column_default,
-	  s.is_nullable,
+	  -- information_schema says NO for a column of a NOT NULL domain, which itself is nullable
+	  CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END,
 	  CASE
 	  -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
 	  WHEN t.typtype IN ('d', 'e') THEN
