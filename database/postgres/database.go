@@ -1336,6 +1336,9 @@ func postgresBuildDSN(config database.Config) string {
 	}
 
 	options := url.Values{}
+	// lib/pq otherwise sends a query with parameters in two round trips, one to describe the
+	// statement and one to run it. This also sends []byte parameters as binary; psqldef passes none.
+	options.Set("binary_parameters", "yes")
 
 	if config.Socket == "" {
 		dsn.Host = fmt.Sprintf("%s:%d", config.Host, config.Port)
