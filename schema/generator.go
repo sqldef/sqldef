@@ -7309,18 +7309,16 @@ func (g *Generator) areSameIndexes(columns map[string]*Column, indexA Index, ind
 	if !(g.mode == GeneratorModeMssql && indexA.constraint && indexB.constraint && indexA.unique && indexB.unique) {
 		indexAOptions := indexA.options
 		indexBOptions := indexB.options
-		// Mysql: Default Index B-Tree (but not for vector indexes)
+		// MySQL defaults an index to B-tree (but not a vector index), which TiDB never writes out
 		if g.mode == GeneratorModeMysql {
-			if len(indexAOptions) == 0 && !indexA.vector {
-				indexAOptions = []IndexOption{
-					{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}},
+			withDefaultUsing := func(index Index, options []IndexOption) []IndexOption {
+				if index.vector || findIndexOptionByName(options, "using") != nil {
+					return options
 				}
+				return append(slices.Clone(options), IndexOption{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}})
 			}
-			if len(indexBOptions) == 0 && !indexB.vector {
-				indexBOptions = []IndexOption{
-					{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}},
-				}
-			}
+			indexAOptions = withDefaultUsing(indexA, indexAOptions)
+			indexBOptions = withDefaultUsing(indexB, indexBOptions)
 		}
 		for _, optionB := range indexBOptions {
 			if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {

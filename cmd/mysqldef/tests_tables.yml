@@ -1487,6 +1487,8 @@ AddIndexWithUsingAndComment:
       KEY index_name (name) USING BTREE COMMENT 'by name'
     );
 AddEnumColumnWithQuoteAndBackslash:
+  # TiDB writes a backslash of an enum value unescaped in SHOW CREATE TABLE
+  flavor: "!tidb"
   legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
