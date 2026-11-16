@@ -36,35 +36,32 @@ func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 
 	var result []DDLStatement
 	for _, ddl := range ddls {
-		ddl = trimMarginComments(ddl)
-		stmt, err := parser.ParseDDL(ddl, p.mode)
-		if err != nil {
-			return result, err
-		}
 		// Some schema exports interleave non-DDL statements with the DDL: Cloudflare
 		// D1, for instance, emits `DELETE FROM sqlite_sequence;` and
 		// `PRAGMA defer_foreign_keys=TRUE;` even with --no-data. They carry no schema
 		// meaning, so accept them and drop them here.
-		switch stmt.(type) {
+		switch ddl.Statement.(type) {
 		case *parser.Delete, *parser.Pragma:
 			continue
 		}
-		result = append(result, DDLStatement{DDL: ddl, Statement: stmt})
+		result = append(result, ddl)
 	}
 	return result, nil
 }
 
-func (p GenericParser) splitDDLs(str string) ([]string, error) {
+// splitDDLs keeps the Statement each DDL was parsed into while finding where the DDL ends.
+func (p GenericParser) splitDDLs(str string) ([]DDLStatement, error) {
 	re := regexp.MustCompilePOSIX("^--.*")
 	str = re.ReplaceAllString(str, "")
 
 	ddls := strings.Split(str, ";")
-	var result []string
+	var result []DDLStatement
 
 	for len(ddls) > 0 {
 		// Right now, the parser isn't capable of splitting statements by itself.
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
 		var ddl string
+		var stmt parser.Statement
 		var err error
 		var firstErr error
 		i := 1
@@ -75,7 +72,7 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 			if ddl == "" {
 				break
 			}
-			_, err = parser.ParseDDL(ddl, p.mode)
+			stmt, err = parser.ParseDDL(ddl, p.mode)
 			if i == 1 {
 				firstErr = err
 			}
@@ -94,7 +91,7 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 			return result, err
 		}
 		if ddl != "" {
-			result = append(result, ddl)
+			result = append(result, DDLStatement{DDL: ddl, Statement: stmt})
 		}
 
 		if i < len(ddls) {
