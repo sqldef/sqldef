@@ -1,3 +1,12 @@
+## [v3.11.30](https://github.com/sqldef/sqldef/compare/v3.11.29...v3.11.30) - 2026-11-11
+
+- build(deps): bump the github-actions group with 4 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1437
+- build(deps): bump golang from 1.27.1-alpine to 1.27.2-alpine in the docker group by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1435
+- build(deps): bump the gomod group with 5 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1436
+- psqldef: fix view default names, quoted identifiers and WITHIN GROUP left by #1433 by @gfx in https://github.com/sqldef/sqldef/pull/1443
+- mysqldef: support MySQL index hints in views (multiple hints, PRIMARY, KEY, FOR) by @gunyoki in https://github.com/sqldef/sqldef/pull/1444
+- psqldef: manage column collations and compare expressions case-correctly by @gfx in https://github.com/sqldef/sqldef/pull/1445
+
 ## [v3.11.29](https://github.com/sqldef/sqldef/compare/v3.11.28...v3.11.29) - 2026-10-30
 
 - psqldef: support LATERAL and functions in FROM by @gfx in https://github.com/sqldef/sqldef/pull/1433
