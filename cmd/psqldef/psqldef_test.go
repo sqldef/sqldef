@@ -1220,6 +1220,70 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	assert.Equal(t, "dummy_owner_role\n", owner)
 }
 
+func TestPsqldefApplyStopsAtFailingStatement(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		CREATE TABLE users (id bigint PRIMARY KEY, name text);
+		INSERT INTO users VALUES (1, NULL);
+	`)
+	tu.WriteFile("schema.sql", tu.StripHeredoc(`
+		CREATE TABLE tags (id bigint PRIMARY KEY);
+		CREATE TABLE users (id bigint PRIMARY KEY, name text NOT NULL, email text);
+		`,
+	))
+
+	out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql")...)
+	assert.Error(t, err)
+	printed, logged, _ := strings.Cut(out, "ROLLBACK;\n")
+	assert.Equal(t, applyPrefix+tu.StripHeredoc(`
+		BEGIN;
+		CREATE TABLE tags (id bigint PRIMARY KEY);
+		ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+		`,
+	), printed)
+	assert.Contains(t, logged, `column "name" of relation "users" contains null values`)
+
+	tables, err := pgQuery(testDatabaseName, "SELECT string_agg(table_name || '.' || column_name, ',' ORDER BY table_name, ordinal_position) FROM information_schema.columns WHERE table_schema = 'public'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, "users.id,users.name\n", tables)
+}
+
+func TestPsqldefBeforeApplyWhenStatementFails(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_before_apply_role;
+		CREATE ROLE test_before_apply_role;
+		GRANT CREATE ON SCHEMA public TO test_before_apply_role;
+		CREATE TABLE users (id bigint PRIMARY KEY);
+	`)
+	t.Cleanup(func() {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, "DROP ROLE IF EXISTS test_before_apply_role;")
+	})
+	tu.WriteFile("schema.sql", tu.StripHeredoc(`
+		CREATE TABLE tags (id bigint PRIMARY KEY);
+		CREATE TABLE users (id bigint PRIMARY KEY, email text);
+		`,
+	))
+
+	beforeApply := "SET ROLE test_before_apply_role;"
+	out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)...)
+	assert.Error(t, err)
+	printed, logged, _ := strings.Cut(out, "ROLLBACK;\n")
+	assert.Equal(t, applyPrefix+tu.StripHeredoc(`
+		BEGIN;
+		SET ROLE test_before_apply_role;
+		CREATE TABLE tags (id bigint PRIMARY KEY);
+		ALTER TABLE "public"."users" ADD COLUMN "email" text;
+		`,
+	), printed)
+	assert.Contains(t, logged, "must be owner of table users")
+}
+
 func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 	resetTestDatabase()
 
