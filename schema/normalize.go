@@ -550,6 +550,17 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
 			return atz
 		}
+		// PostgreSQL 13 and earlier write SUBSTRING(x FROM f FOR t) as "substring"(x, f, t)
+		if mode == GeneratorModePostgres && e.Qualifier.Name == "" && strings.EqualFold(e.Name.Name, "substring") && e.Over == nil &&
+			(len(normalizedExprs) == 2 || len(normalizedExprs) == 3) {
+			if args, ok := aliasedExprs(normalizedExprs); ok {
+				substr := &parser.SubstrExpr{Name: &parser.AliasedExpr{Expr: args[0]}, From: args[1]}
+				if len(args) == 3 {
+					substr.To = args[2]
+				}
+				return substr
+			}
+		}
 		funcName := foldFuncName(e.Name, mode)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
@@ -2494,6 +2505,19 @@ func treeWithCanonicalParens[T any](tree T) T {
 	value := reflect.ValueOf(&tree).Elem()
 	value.Set(copyTree(value, replaceExprs(canonicalParens)))
 	return tree
+}
+
+// aliasedExprs returns the expressions of function arguments that are all plain expressions
+func aliasedExprs(args parser.SelectExprs) ([]parser.Expr, bool) {
+	exprs := make([]parser.Expr, 0, len(args))
+	for _, arg := range args {
+		aliased, ok := arg.(*parser.AliasedExpr)
+		if !ok || !aliased.As.IsEmpty() {
+			return nil, false
+		}
+		exprs = append(exprs, aliased.Expr)
+	}
+	return exprs, true
 }
 
 // mapChildExprs returns a copy of an expression with f applied to the expressions it holds

@@ -3282,3 +3282,12 @@ AddColumnAndCheckWithArrayCasts:
     ALTER TABLE public.t DROP CONSTRAINT c2;
     ALTER TABLE public.t DROP CONSTRAINT c;
     ALTER TABLE public.t DROP COLUMN d;
+
+CheckWithSubstringFunctionCallAsWrittenByPostgres13:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (a integer, b integer, CONSTRAINT t_sub CHECK ("substring"((a + b)::text, 1, 2) <> 'x'));
+  desired: |
+    CREATE TABLE t (a integer, b integer, CONSTRAINT t_sub CHECK (substring((a + b)::text from 1 for 2) <> 'x'));
+  up: ""
+  down: ""
