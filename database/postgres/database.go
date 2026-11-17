@@ -688,11 +688,11 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 
 func (d *PostgresDatabase) schemas() ([]string, error) {
 	rows, err := d.db.Query(`
-		SELECT schema_name
-		FROM information_schema.schemata
-		WHERE schema_name NOT LIKE 'pg_%%'
-		AND schema_name not in ('information_schema', 'public', 'sys')
-		ORDER BY schema_name;
+		SELECT nspname
+		FROM pg_namespace
+		WHERE nspname NOT LIKE 'pg_%%'
+		AND nspname not in ('information_schema', 'public', 'sys')
+		ORDER BY nspname;
 	`)
 	if err != nil {
 		return nil, err
@@ -1551,8 +1551,8 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string][]column, error) {
 	const query = `SELECT
 	  n.nspname || '.' || c.relname AS qualified_table_name,
-	  s.column_name,
-	  s.column_default,
+	  f.attname,
+	  CASE WHEN f.attgenerated = '' THEN pg_get_expr(d.adbin, d.adrelid) END,
 	  -- information_schema says NO for a column of a NOT NULL domain, which itself is nullable
 	  CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END,
 	  CASE
@@ -1562,8 +1562,9 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	      WHEN tn.nspname = 'public' THEN t.typname
 	      ELSE tn.nspname || '.' || t.typname
 	    END
-	  WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	  ELSE s.data_type
+	  -- A built-in type other than an array is named without its modifier, as information_schema.columns.data_type does
+	  WHEN tn.nspname = 'pg_catalog' AND NOT (t.typelem <> 0 AND t.typlen = -1) THEN format_type(f.atttypid, NULL)
+	  ELSE format_type(f.atttypid, f.atttypmod)
 	  END,
 	  -- formattedDataType: also return type name for domain and enum types
 	  CASE
@@ -1574,7 +1575,7 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	    END
 	  ELSE format_type(f.atttypid, f.atttypmod)
 	  END,
-	  s.identity_generation,
+	  CASE f.attidentity WHEN 'a' THEN 'ALWAYS' WHEN 'd' THEN 'BY DEFAULT' END,
 	  -- The collation is written only when it differs from the type's, as pg_dump does
 	  CASE WHEN f.attcollation <> t.typcollation THEN
 	    CASE WHEN cn.nspname = 'pg_catalog' THEN quote_ident(co.collname)
@@ -1585,7 +1586,6 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
 	LEFT JOIN pg_collation co ON co.oid = f.attcollation
 	LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
 	WHERE c.relkind in ('r', 'p')
@@ -1631,15 +1631,16 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 
 func (d *PostgresDatabase) getPrimaryKeyColumnsForTables(tableNames []string) (map[string][]string, error) {
 	const query = `SELECT
-	tc.table_schema || '.' || tc.table_name AS qualified_table_name,
-	kcu.column_name
-FROM
-	information_schema.table_constraints AS tc
-	JOIN information_schema.key_column_usage AS kcu
-		USING (table_schema, table_name, constraint_name)
-WHERE constraint_type = 'PRIMARY KEY'
-AND tc.table_schema || '.' || tc.table_name = ANY($1::text[])
-ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position`
+	n.nspname || '.' || c.relname AS qualified_table_name,
+	a.attname
+FROM pg_constraint con
+JOIN pg_class c ON c.oid = con.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+CROSS JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS key(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = key.attnum
+WHERE con.contype = 'p'
+AND n.nspname || '.' || c.relname = ANY($1::text[])
+ORDER BY n.nspname, c.relname, key.ord`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
 	if err != nil {

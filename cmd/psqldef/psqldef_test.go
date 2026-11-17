@@ -844,6 +844,59 @@ func TestPsqldefExportManageOwner(t *testing.T) {
 	})
 }
 
+// information_schema hides what the connecting role has no privilege on, though pg_catalog still lists it:
+// columns of a table it has no privilege on, primary keys of a table it can only SELECT, and a schema it has no USAGE on.
+func TestPsqldefExportWithoutPrivileges(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `
+		DROP ROLE IF EXISTS test_unprivileged_owner;
+		DROP ROLE IF EXISTS test_unprivileged_user;
+		CREATE ROLE test_unprivileged_owner;
+		CREATE ROLE test_unprivileged_user LOGIN;
+		CREATE SCHEMA private AUTHORIZATION test_unprivileged_owner;
+		CREATE TABLE private.users (
+		  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+		  name varchar(20) NOT NULL DEFAULT 'none',
+		  tags text[]
+		);
+		CREATE TABLE posts (
+		  user_id bigint,
+		  seq integer,
+		  PRIMARY KEY (user_id, seq)
+		);
+		ALTER TABLE private.users OWNER TO test_unprivileged_owner;
+		ALTER TABLE posts OWNER TO test_unprivileged_owner;
+		GRANT SELECT ON posts TO test_unprivileged_user;
+	`)
+	t.Cleanup(func() {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, `
+			DROP ROLE IF EXISTS test_unprivileged_owner;
+			DROP ROLE IF EXISTS test_unprivileged_user;
+		`)
+	})
+
+	actual := tu.MustExecute(t, "./psqldef", psqldefArgs("-U", "test_unprivileged_user", testDatabaseName, "--export")...)
+	assert.Equal(t, tu.StripHeredoc(`
+		CREATE SCHEMA "private";
+
+		CREATE TABLE "private"."users" (
+		    "id" bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+		    "name" character varying(20) NOT NULL DEFAULT 'none'::character varying,
+		    "tags" text[],
+		    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+		);
+
+		CREATE TABLE "public"."posts" (
+		    "user_id" bigint NOT NULL,
+		    "seq" integer NOT NULL,
+		    CONSTRAINT "posts_pkey" PRIMARY KEY ("user_id", "seq")
+		);
+		`,
+	), actual)
+}
+
 func TestPsqldefManageOwnerWithCurrentFile(t *testing.T) {
 	tu.WriteFile("current.sql", "CREATE TABLE users (id bigint);\n")
 	tu.WriteFile("schema.sql", "CREATE TABLE users (id bigint);\nALTER TABLE users OWNER TO app_owner;\n")
