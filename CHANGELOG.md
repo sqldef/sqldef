@@ -1,3 +1,8 @@
+## [v3.11.31](https://github.com/sqldef/sqldef/compare/v3.11.30...v3.11.31) - 2026-11-17
+
+- psqldef: resolve expression types to compare PostgreSQL's implicit casts by @gfx in https://github.com/sqldef/sqldef/pull/1447
+- ci: make parser.go a generated file with a single writer by @moznion in https://github.com/sqldef/sqldef/pull/1391
+
 ## [v3.11.30](https://github.com/sqldef/sqldef/compare/v3.11.29...v3.11.30) - 2026-11-11
 
 - build(deps): bump the github-actions group with 4 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1437
