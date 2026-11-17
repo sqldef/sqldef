@@ -84,6 +84,10 @@ package-tar.gz: build
 # grammar changes never conflict on the generated output.
 $(PARSER_GO): $(PARSER_Y)
 	go run golang.org/x/tools/cmd/goyacc@$(GOYACC_VERSION) -l -o $(PARSER_GO) $(PARSER_Y)
+	@# ParseDDL reuses parsers, so a stack deep enough for most statements is allocated only once
+	sed 's/^const yyInitialStackSize = 16$$/const yyInitialStackSize = 64/' $(PARSER_GO) > $(PARSER_GO).tmp
+	mv $(PARSER_GO).tmp $(PARSER_GO)
+	grep -q '^const yyInitialStackSize = 64$$' $(PARSER_GO)
 	gofmt -w ./$(PARSER_GO)
 
 # Regenerate unconditionally, ignoring timestamps. Checkouts (CI, Docker) give
