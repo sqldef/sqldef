@@ -13,7 +13,10 @@ RUN go mod download
 
 COPY . .
 
+# parser.go is generated and is not carried by pull requests, so build it here
+# instead of trusting whatever is in the build context.
 RUN set -ex \
+    && make parser \
     && make build-$SQLDEF_TOOL \
     && build/$(go env GOOS)-$(go env GOARCH)/$SQLDEF_TOOL --version
 
