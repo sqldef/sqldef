@@ -25,6 +25,8 @@ ManageFunctionUnmatchedFunctionUntouched:
     CREATE FUNCTION external_fn() RETURNS integer AS $$ BEGIN RETURN 2; END; $$ LANGUAGE plpgsql;
   desired: |
     CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  up: ""
+  down: ""
 
 ManageFunctionObsoleteDropForbidden:
   # A managed function absent from desired is a drop candidate; with drop:false
@@ -105,3 +107,28 @@ ManageFunctionOtherSchemaUntouched:
   desired: |
     CREATE SCHEMA s2;
     CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
+ManageFunctionUnmanagedCommentUntouched:
+  # A comment follows the function it describes: external_fn matches no rule, so
+  # neither the function nor its comment belongs to the diff. The comment used to be
+  # compared regardless, and the run emitted
+  #   COMMENT ON FUNCTION "public"."external_fn"() IS NULL;
+  # for a function manage.function does not manage. That statement carries no DROP, so
+  # nothing held it back, and the wording of a comment cannot be restored from a
+  # declaration that was never there.
+  manage:
+    function:
+      - target: app_.*
+  current: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    COMMENT ON FUNCTION app_touch() IS 'managed';
+    CREATE FUNCTION external_fn() RETURNS integer AS $$ BEGIN RETURN 2; END; $$ LANGUAGE plpgsql;
+    COMMENT ON FUNCTION external_fn() IS 'not ours';
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    COMMENT ON FUNCTION app_touch() IS 'managed';
+  # up and down are both given on purpose. Omitting them makes this an
+  # idempotency-only case, which does not compare the generated DDL at all -- the very
+  # reason this went unnoticed in ManageFunctionUnmatchedFunctionUntouched.
+  up: ""
+  down: ""

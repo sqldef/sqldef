@@ -8232,7 +8232,10 @@ func FilterFunctions(ddls []DDL, config database.GeneratorConfig, defaultSchema 
 				continue
 			}
 		case *Comment:
-			if strings.EqualFold(stmt.comment.ObjectType, "FUNCTION") && len(stmt.comment.Object) > 0 {
+			// The parser writes the object type as OBJECT_FUNCTION, the form every other
+			// comparison in this package uses. Matching it against "FUNCTION" never held,
+			// so no comment was ever excluded here.
+			if stmt.comment.ObjectType == "OBJECT_FUNCTION" && len(stmt.comment.Object) > 0 {
 				schema := ""
 				if len(stmt.comment.Object) >= 2 {
 					schema = stmt.comment.Object[len(stmt.comment.Object)-2].Name
