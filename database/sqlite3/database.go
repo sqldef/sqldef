@@ -1,6 +1,7 @@
 package sqlite3
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 
@@ -190,7 +191,7 @@ func (d *Sqlite3Database) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
 }
 
-func (d *Sqlite3Database) SessionSetupQueries() []string {
+func (d *Sqlite3Database) SetupSession(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 

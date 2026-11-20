@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
@@ -287,7 +288,7 @@ func (d *MysqlDatabase) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
 }
 
-func (d *MysqlDatabase) SessionSetupQueries() []string {
+func (d *MysqlDatabase) SetupSession(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 
