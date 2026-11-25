@@ -249,6 +249,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				newTable:          stmt.Trigger.TransitionTables.New,
 				forEach:           stmt.Trigger.ForEach,
 				whenCondition:     whenCondition,
+				when:              stmt.Trigger.When,
 				constraint:        stmt.Trigger.Constraint,
 				constraintOptions: triggerConstraintOptions,
 				body:              body,

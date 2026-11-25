@@ -434,6 +434,7 @@ type Trigger struct {
 	newTable          Ident  // REFERENCING NEW TABLE name; empty if not declared
 	forEach           string // "ROW", "STATEMENT", or "" when the FOR EACH clause is omitted
 	whenCondition     string
+	when              parser.Expr // AST of whenCondition, for comparison; nil when there is no WHEN clause
 	body              []string
 	constraint        bool // true for PostgreSQL's CREATE CONSTRAINT TRIGGER
 	constraintOptions *ConstraintOptions
