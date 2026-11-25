@@ -213,11 +213,6 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				}
 			})
 
-			var whenCondition string
-			if stmt.Trigger.When != nil {
-				whenCondition = parser.String(stmt.Trigger.When)
-			}
-
 			// PostgreSQL defaults an omitted FOR EACH clause to STATEMENT while sqldef creates
 			// a row-level trigger. v4 rejects the omission instead of picking either default
 			// (see v4-migration.md).
@@ -248,7 +243,6 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				oldTable:          stmt.Trigger.TransitionTables.Old,
 				newTable:          stmt.Trigger.TransitionTables.New,
 				forEach:           stmt.Trigger.ForEach,
-				whenCondition:     whenCondition,
 				when:              stmt.Trigger.When,
 				constraint:        stmt.Trigger.Constraint,
 				constraintOptions: triggerConstraintOptions,

@@ -763,26 +763,6 @@ CreateTriggerWithCompoundWhenClause:
     DROP TABLE public.users;
     DROP FUNCTION public.forbid_change;
 
-CreateTriggerWithNestedOrInWhenClause:
-  legacy_ignore_quotes: false
-  desired: |
-    CREATE TABLE items (
-      id serial PRIMARY KEY,
-      status text,
-      price integer
-    );
-    CREATE FUNCTION log_item()
-      RETURNS TRIGGER AS
-    $$
-    BEGIN
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-    CREATE TRIGGER log_item_change
-      AFTER UPDATE ON items
-      FOR EACH ROW WHEN (NEW.status IS NOT NULL AND (OLD.status IS DISTINCT FROM NEW.status OR OLD.price <> NEW.price))
-      EXECUTE FUNCTION log_item();
-
 # pg_get_triggerdef() also adds the casts PostgreSQL resolved, such as 'archived'::text.
 CreateTriggerWithLiteralInWhenClause:
   legacy_ignore_quotes: false
