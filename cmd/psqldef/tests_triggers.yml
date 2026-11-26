@@ -725,6 +725,151 @@ CreateTriggerWithWhenClauseProcedure:
     DROP TABLE public.items;
     DROP FUNCTION public.track_status;
 
+# pg_get_triggerdef() parenthesizes each operand of AND/OR, so the exported WHEN condition
+# differs from the desired one only by parentheses and must not recreate the trigger.
+CreateTriggerWithCompoundWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      company_id integer
+    );
+    CREATE FUNCTION forbid_change()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER company_id_immutable
+      BEFORE UPDATE OF company_id ON users
+      FOR EACH ROW WHEN (OLD.company_id IS NOT NULL AND NEW.company_id IS DISTINCT FROM OLD.company_id)
+      EXECUTE FUNCTION forbid_change();
+  up: |
+    CREATE FUNCTION forbid_change()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      company_id integer
+    );
+    CREATE TRIGGER company_id_immutable before update OF company_id ON public.users FOR EACH ROW WHEN (OLD.company_id is not null and NEW.company_id is distinct from OLD.company_id) EXECUTE FUNCTION forbid_change();
+  down: |
+    DROP TRIGGER company_id_immutable ON public.users;
+    DROP TABLE public.users;
+    DROP FUNCTION public.forbid_change;
+
+# pg_get_triggerdef() also adds the casts PostgreSQL resolved, such as 'archived'::text.
+CreateTriggerWithLiteralInWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status text,
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_archive
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status = 'archived' AND OLD.price > 0)
+      EXECUTE FUNCTION log_item();
+
+# String literals in a WHEN condition are case-sensitive.
+ModifyTriggerWhenClauseLiteralCase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status text
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_archive
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status = 'archived')
+      EXECUTE FUNCTION log_item();
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status text
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_archive
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status = 'Archived')
+      EXECUTE FUNCTION log_item();
+  up: |
+    DROP TRIGGER log_archive ON public.items;
+    CREATE TRIGGER log_archive after update ON public.items FOR EACH ROW WHEN (NEW.status = 'Archived') EXECUTE FUNCTION log_item();
+  down: |
+    DROP TRIGGER log_archive ON public.items;
+    CREATE TRIGGER log_archive after update ON public.items FOR EACH ROW WHEN (NEW.status = 'archived') EXECUTE FUNCTION log_item();
+
+# Parentheses that change the grouping are not redundant: moving them must recreate the trigger.
+ModifyTriggerWhenClauseGrouping:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status text,
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status IS NOT NULL AND (OLD.status IS DISTINCT FROM NEW.status OR OLD.price <> NEW.price))
+      EXECUTE FUNCTION log_item();
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status text,
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN ((NEW.status IS NOT NULL AND OLD.status IS DISTINCT FROM NEW.status) OR OLD.price <> NEW.price)
+      EXECUTE FUNCTION log_item();
+  up: |
+    DROP TRIGGER log_item_change ON public.items;
+    CREATE TRIGGER log_item_change after update ON public.items FOR EACH ROW WHEN ((NEW.status is not null and OLD.status is distinct from NEW.status) or OLD.price != NEW.price) EXECUTE FUNCTION log_item();
+  down: |
+    DROP TRIGGER log_item_change ON public.items;
+    CREATE TRIGGER log_item_change after update ON public.items FOR EACH ROW WHEN (NEW.status is not null and (OLD.status is distinct from NEW.status or OLD.price != NEW.price)) EXECUTE FUNCTION log_item();
+
 TriggerRecreateIsHeldBackWithoutEnableDrop:
   legacy_ignore_quotes: false
   enable_drop: false

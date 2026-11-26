@@ -295,8 +295,8 @@ func (s createTriggerStatement) Render() string {
 		return t.statement
 	case GeneratorModePostgres:
 		whenClause := ""
-		if t.whenCondition != "" {
-			whenClause = "WHEN " + t.whenCondition + " "
+		if t.when != nil {
+			whenClause = "WHEN " + parser.String(t.when) + " "
 		}
 		triggerKeyword := "TRIGGER"
 		deferrableClause := ""
