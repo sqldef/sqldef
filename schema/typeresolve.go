@@ -341,6 +341,12 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 			return e, t
 		}
 		return e, exprType{}
+	case *parser.NewQualifierColName:
+		// The parser reads NEW.column, unlike OLD.column, as a node of its own
+		if t, ok := scope(&parser.ColName{Qualifier: parser.TableName{Name: parser.NewIdent("new", false)}, Name: e.Name}); ok {
+			return e, t
+		}
+		return e, exprType{}
 	case *parser.SQLVal:
 		return e, tc.literalType(e)
 	case *parser.NullVal:

@@ -430,7 +430,12 @@ func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, forComparison 
 			//       ARRAY['a'::varchar::text]   -> ARRAY['a'::varchar] (after stripping ::text on element)
 			// Empty arrays (ARRAY[]) need the typecast or PostgreSQL can't determine the type.
 			normalizedExpr := recur(e.Expr, mode)
-			if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
+			arrayExpr := normalizedExpr
+			// PostgreSQL deparses the cast of a constructor as (ARRAY[...])::text[]
+			if paren, ok := arrayExpr.(*parser.ParenExpr); ok {
+				arrayExpr = paren.Expr
+			}
+			if arrayConstructor, isArrayConstructor := arrayExpr.(*parser.ArrayConstructor); isArrayConstructor {
 				// The DDL keeps the cast, which castArrayElements may move onto elements that print without it
 				if _, isArrayType := arrayElementType(e.Type); isArrayType && len(arrayConstructor.Elements) > 0 && forComparison {
 					return recur(castArrayElements(arrayConstructor, e.Type, mode), mode)
