@@ -6968,7 +6968,7 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	}
 	// pg_get_triggerdef() parenthesizes every operand of AND/OR, so compare the ASTs
 	// rather than the text: only parentheses that change the grouping matter.
-	if !g.areSameExprs(triggerA.when, triggerB.when) {
+	if !g.areSameTriggerWhen(triggerA.when, triggerB.when) {
 		return false
 	}
 	if len(triggerA.body) != len(triggerB.body) {
@@ -6986,6 +6986,18 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		}
 	}
 	return true
+}
+
+// areSameTriggerWhen compares the WHEN conditions of triggers. PostgreSQL stores one as it does a
+// CHECK constraint, expanding BETWEEN and adding the implicit casts of its columns' types.
+func (g *Generator) areSameTriggerWhen(whenA, whenB parser.Expr) bool {
+	if g.mode != GeneratorModePostgres {
+		return g.areSameExprs(whenA, whenB)
+	}
+	if whenA == nil || whenB == nil {
+		return whenA == nil && whenB == nil
+	}
+	return g.areSameCheckExprs(g.typed(whenA, whenB))
 }
 
 func (g *Generator) findEventByName(events []*Event, name QualifiedName) *Event {

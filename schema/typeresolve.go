@@ -341,6 +341,12 @@ func (tc *typeContext) resolveNode(expr parser.Expr, scope columnScope) (parser.
 			return e, t
 		}
 		return e, exprType{}
+	case *parser.NewQualifierColName:
+		// The parser reads NEW.column, unlike OLD.column, as a node of its own
+		if t, ok := scope(&parser.ColName{Qualifier: parser.TableName{Name: parser.NewIdent("new", false)}, Name: e.Name}); ok {
+			return e, t
+		}
+		return e, exprType{}
 	case *parser.SQLVal:
 		return e, tc.literalType(e)
 	case *parser.NullVal:
@@ -785,6 +791,13 @@ func (g *Generator) resolveExpressionTypes() {
 		for _, domain := range domains {
 			g.resolveDomainExpressionTypes(tc, domain)
 		}
+		triggers := g.desiredTriggers
+		if tc == current {
+			triggers = g.currentTriggers
+		}
+		for _, trigger := range triggers {
+			g.resolveTriggerExpressionTypes(tc, trigger)
+		}
 		for _, view := range tc.views {
 			tc.viewColumns(view)
 		}
@@ -845,6 +858,32 @@ func (g *Generator) resolveDomainExpressionTypes(tc *typeContext, domain *Domain
 			})
 		}
 	}
+}
+
+// resolveTriggerExpressionTypes resolves the types of the WHEN condition of a trigger, where NEW
+// and OLD are rows of the trigger's table
+func (g *Generator) resolveTriggerExpressionTypes(tc *typeContext, trigger *Trigger) {
+	table := g.findTableByName(tc.tables, trigger.tableName)
+	if trigger.when == nil || table == nil || !hashableExpr(trigger.when) {
+		return
+	}
+	scope := func(col *parser.ColName) (exprType, bool) {
+		qualifier := col.Qualifier
+		if !qualifier.Schema.IsEmpty() || qualifier.Name.Quoted {
+			return exprType{}, false
+		}
+		if name := parser.FoldASCII(qualifier.Name.Name); name != "new" && name != "old" {
+			return exprType{}, false
+		}
+		if column := g.findColumnByName(table.columns, col.Name); column != nil {
+			return tc.columnType(column)
+		}
+		return exprType{}, false
+	}
+	g.typedExprs[trigger.when] = resolveForms(tc, func() parser.Expr {
+		resolved, _ := tc.resolve(trigger.when, scope)
+		return resolved
+	})
 }
 
 // hashableExpr reports whether an expression can be a map key, which takes a pointer

@@ -870,6 +870,216 @@ ModifyTriggerWhenClauseGrouping:
     DROP TRIGGER log_item_change ON public.items;
     CREATE TRIGGER log_item_change after update ON public.items FOR EACH ROW WHEN (NEW.status is not null and (OLD.status is distinct from NEW.status or OLD.price != NEW.price)) EXECUTE FUNCTION log_item();
 
+# pg_get_triggerdef() casts a varchar column to text and types a literal compared to a char
+# column as bpchar.
+CreateTriggerWithVarcharColumnInWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status varchar(20),
+      code char(3),
+      price numeric
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status IS DISTINCT FROM OLD.status AND NEW.status <> 'archived' AND NEW.code = 'abc' AND NEW.price > 1.5)
+      EXECUTE FUNCTION log_item();
+
+CreateTriggerWithVarcharColumnInWhenClauseLegacy:
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status varchar(20)
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status <> 'archived')
+      EXECUTE FUNCTION log_item();
+
+# PostgreSQL stores BETWEEN as >= AND <=, and NOT BETWEEN as < OR >.
+CreateTriggerWithBetweenInWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status varchar(20),
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_in_range
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.price BETWEEN 1 AND 10 AND NEW.status BETWEEN 'a' AND 'm')
+      EXECUTE FUNCTION log_item();
+    CREATE TRIGGER log_out_of_range
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.price NOT BETWEEN 1 AND 10)
+      EXECUTE FUNCTION log_item();
+
+# PostgreSQL casts a smallint or integer column compared to a numeric literal, which only
+# resolving the types of NEW and OLD tells apart from a cast the author wrote.
+CreateTriggerWithNumericComparisonInWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      quantity smallint,
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.quantity > 1.5 AND OLD.price <> 2.5)
+      EXECUTE FUNCTION log_item();
+
+CreateTriggerOnSchemaQualifiedTableWithNumericComparisonInWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE SCHEMA app;
+    CREATE TABLE app.items (
+      id serial PRIMARY KEY,
+      quantity smallint
+    );
+    CREATE FUNCTION app.log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON app.items
+      FOR EACH ROW WHEN (NEW.quantity > 1.5)
+      EXECUTE FUNCTION app.log_item();
+
+# PostgreSQL stores IN on a varchar column as = ANY ((ARRAY[...])::text[]).
+CreateTriggerWithVarcharInListInWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status varchar(20)
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status IN ('archived', 'deleted'))
+      EXECUTE FUNCTION log_item();
+
+ModifyTriggerWhenClauseVarcharLiteral:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status varchar(20)
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status <> 'archived')
+      EXECUTE FUNCTION log_item();
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status varchar(20)
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_item_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.status <> 'deleted')
+      EXECUTE FUNCTION log_item();
+  up: |
+    DROP TRIGGER log_item_change ON public.items;
+    CREATE TRIGGER log_item_change after update ON public.items FOR EACH ROW WHEN (NEW.status != 'deleted') EXECUTE FUNCTION log_item();
+  down: |
+    DROP TRIGGER log_item_change ON public.items;
+    CREATE TRIGGER log_item_change after update ON public.items FOR EACH ROW WHEN (NEW.status != 'archived') EXECUTE FUNCTION log_item();
+
+ModifyTriggerWhenClauseBetweenBound:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_in_range
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.price BETWEEN 1 AND 10)
+      EXECUTE FUNCTION log_item();
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      price integer
+    );
+    CREATE FUNCTION log_item()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_in_range
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (NEW.price BETWEEN 1 AND 20)
+      EXECUTE FUNCTION log_item();
+  up: |
+    DROP TRIGGER log_in_range ON public.items;
+    CREATE TRIGGER log_in_range after update ON public.items FOR EACH ROW WHEN (NEW.price between 1 and 20) EXECUTE FUNCTION log_item();
+  down: |
+    DROP TRIGGER log_in_range ON public.items;
+    CREATE TRIGGER log_in_range after update ON public.items FOR EACH ROW WHEN (NEW.price between 1 and 10) EXECUTE FUNCTION log_item();
+
 TriggerRecreateIsHeldBackWithoutEnableDrop:
   legacy_ignore_quotes: false
   enable_drop: false
