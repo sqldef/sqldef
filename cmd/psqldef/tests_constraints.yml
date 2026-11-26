@@ -108,6 +108,15 @@ AllAnySomeCheckConstraintsModifySome:
   down: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
     ALTER TABLE "public"."test_all_any" ADD CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
+# PostgreSQL deparses an array cast with the constructor in parentheses, (ARRAY[...])::text[].
+CheckConstraintWithParenthesizedArrayCast:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      status varchar(20) CHECK (status = ANY ((ARRAY['a', 'b'])::text[])),
+      code varchar(20) CHECK (code = ANY ((ARRAY['x', 'y'])::varchar(5)[])),
+      quantity integer CHECK (quantity = ANY ((ARRAY[1, 2])::integer[]))
+    );
 AllAnySomeCheckConstraintsRemove:
   current: |
     CREATE TABLE test_all_any (
