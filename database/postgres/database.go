@@ -1722,9 +1722,10 @@ func (d *PostgresDatabase) getIndexDefsForTables(tableNames []string) (map[strin
 	SELECT schemaname || '.' || tablename AS qualified_table_name, indexName, indexdef
 	FROM   pg_indexes
 	WHERE  schemaname || '.' || tablename = ANY($1::text[])
-	AND    indexName NOT IN (
-	    SELECT name FROM exclude_constraints
-	    WHERE  qualified_table_name = schemaname || '.' || tablename
+	AND    NOT EXISTS (
+	    SELECT 1 FROM exclude_constraints
+	    WHERE  name = indexName
+	    AND    qualified_table_name = schemaname || '.' || tablename
 	)
 	ORDER BY schemaname, tablename, indexdef
 	`
