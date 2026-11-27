@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 # Tests for manage.function (see object-management.md): which functions are
-# managed, and whether DROP FUNCTION is allowed per rule.
+# managed, and whether DROP FUNCTION is allowed per rule. Every case here runs
+# without target_schema, which this harness has no option for; the cases that
+# set it live in TestPsqldefManageFunctionWithTargetSchema.
 
 ManageFunctionCreatesMatched:
   manage:
@@ -91,9 +93,9 @@ ManageFunctionRecreateAllowedWithoutEnableDrop:
     CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
 
 ManageFunctionOtherSchemaUntouched:
-  # manage.function is scoped to the default schema: a same-named function in
-  # another schema (s2.app_stale) matches no rule and must not be dropped, even
-  # with drop:true.
+  # Without target_schema, manage.function is scoped to the default schema: a
+  # same-named function in another schema (s2.app_stale) matches no rule and
+  # must not be dropped, even with drop:true.
   manage:
     function:
       - target: app_.*
