@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -37,9 +38,16 @@ const (
 )
 
 // The main parser function for sqldef.
+// yyParserImpl holds the parse stack, and each of its values holds every type of the grammar, so a
+// new parser per statement costs more than the parse itself. A parser is reusable once Parse returns.
+var yyParserPool = sync.Pool{New: func() any { return &yyParserImpl{} }}
+
 func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 	tokenizer := NewTokenizer(sql, mode)
-	if yyParse(tokenizer) != 0 {
+	yyParser := yyParserPool.Get().(*yyParserImpl)
+	result := yyParser.Parse(tokenizer)
+	yyParserPool.Put(yyParser)
+	if result != 0 {
 		return nil, fmt.Errorf(
 			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
 		)
