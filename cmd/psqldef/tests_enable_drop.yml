@@ -320,3 +320,20 @@ AddColumnWithDefaultSpellingDropColumnNotSkipped:
     ALTER TABLE public.users ADD COLUMN note text DEFAULT 'set before DROP COLUMN runs';
   down: |
     -- Skipped: ALTER TABLE public.users DROP COLUMN note;
+
+ResetTableStorageParameterSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (fillfactor = 70, parallel_workers = 0);
+  desired: |
+    CREATE TABLE t (
+      id integer
+    ) WITH (fillfactor = 80);
+  up: |
+    ALTER TABLE public.t SET (fillfactor = 80);
+    -- Skipped: ALTER TABLE public.t RESET (parallel_workers);
+  down: |
+    ALTER TABLE public.t SET (fillfactor = 70);
