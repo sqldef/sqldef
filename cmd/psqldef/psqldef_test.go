@@ -1193,6 +1193,56 @@ func TestPsqldefSkipPartition(t *testing.T) {
 	assert.Equal(t, exportRegularTable, exportOutput)
 }
 
+// A column whose DEFAULT is nextval() of a sequence that no column owns is not a
+// serial column. Folding it to serial/bigserial drops the sequence name from the
+// schema, so applying the export to a fresh database creates a different, per-table
+// sequence instead -- silently, and the export of either database then looks the same.
+func TestPsqldefUnownedSequenceColumnIsNotSerial(t *testing.T) {
+	resetTestDatabase()
+
+	// psqldef cannot parse CREATE SEQUENCE, so set the fixture up with psql.
+	mustPgExec(testDatabaseName, tu.StripHeredoc(`
+		CREATE SEQUENCE shared_seq;
+		CREATE TABLE a (
+		  id bigint NOT NULL DEFAULT nextval('shared_seq'),
+		  PRIMARY KEY (id)
+		);
+		CREATE TABLE b (
+		  id bigint NOT NULL DEFAULT nextval('shared_seq'),
+		  PRIMARY KEY (id)
+		);
+		CREATE TABLE indexed (
+		  id bigint NOT NULL DEFAULT nextval('shared_seq')
+		);
+		CREATE INDEX indexed_id_idx ON indexed (id);
+		CREATE TABLE owned (
+		  id bigserial NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		CREATE TABLE owned_indexed (
+		  id bigserial NOT NULL
+		);
+		CREATE INDEX owned_indexed_id_idx ON owned_indexed (id);
+		`,
+	))
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export")...)
+
+	// Every table keeps the shared sequence by name, the indexed one included: an index
+	// carries an auto dependency on its column as well, and must not pass for a sequence
+	// the column owns.
+	assert.Contains(t, output, `"id" bigint NOT NULL DEFAULT nextval('shared_seq'::regclass)`)
+	assert.Equal(t, 3, strings.Count(output, `nextval('shared_seq'::regclass)`))
+	// A column that does own its sequence is still exported as bigserial, indexed or not.
+	assert.Equal(t, 2, strings.Count(output, `"id" bigserial NOT NULL`))
+	assert.NotContains(t, output, `"a" bigserial`)
+
+	// The export has to converge against the database it was taken from.
+	tu.WriteFile("schema.sql", output)
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql")...)
+	assert.Equal(t, nothingModified, apply)
+}
+
 func TestPsqldefBeforeApply(t *testing.T) {
 	resetTestDatabase()
 

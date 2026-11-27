@@ -1579,7 +1579,21 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 	  CASE WHEN f.attcollation <> t.typcollation THEN
 	    CASE WHEN cn.nspname = 'pg_catalog' THEN quote_ident(co.collname)
 	    ELSE quote_ident(cn.nspname) || '.' || quote_ident(co.collname) END
-	  END
+	  END,
+	  -- sequence_owned_by_column: true only when the sequence behind this column's
+	  -- nextval() default is owned by this very column (serial: 'a', IDENTITY: 'i').
+	  -- A column defaulting to an unowned sequence is NOT a serial column.
+	  -- The pg_class join keeps this to sequences on purpose: an index on the column
+	  -- carries an auto dependency on it as well, and would otherwise pass for one.
+	  EXISTS (
+	    SELECT 1 FROM pg_depend dep
+	     JOIN pg_class seq ON seq.oid = dep.objid AND seq.relkind = 'S'
+	     WHERE dep.classid = 'pg_class'::regclass
+	       AND dep.refclassid = 'pg_class'::regclass
+	       AND dep.refobjid = c.oid
+	       AND dep.refobjsubid = f.attnum
+	       AND dep.deptype IN ('a', 'i')
+	  )
 	FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
@@ -1604,7 +1618,8 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 		col := column{}
 		var tableName, colName, isNullable, dataType, formattedDataType string
 		var colDefault, idGen, collation *string
-		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &collation)
+		var seqOwnedByColumn bool
+		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &collation, &seqOwnedByColumn)
 		if err != nil {
 			return nil, err
 		}
@@ -1612,7 +1627,7 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 		if colDefault != nil {
 			col.Default = *colDefault
 		}
-		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
+		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") && seqOwnedByColumn {
 			col.IsAutoIncrement = true
 		}
 		col.Nullable = isNullable == "YES"
