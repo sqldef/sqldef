@@ -149,6 +149,8 @@ $ psqldef -U postgres test --apply --disable-ddl-transaction < schema.sql
 
 Use `--disable-ddl-transaction` for PostgreSQL-compatible databases that reject multiple DDL statements in one transaction block, such as Aurora DSQL. This flag is equivalent to `--config-inline "disable_ddl_transaction: true"`.
 
+psqldef sends the statements of a transaction to the server in one round trip, so `--apply` prints them once they have run. When one of them fails, it prints the statements up to that one, `ROLLBACK;` and the error, as when they ran one at a time.
+
 ## Offline Mode (File-to-File Comparison)
 
 psqldef can compare two schema files **without connecting to a database**. This is useful for CI/CD pipelines, schema validation, and generating migration scripts.

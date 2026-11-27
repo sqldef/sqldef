@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -277,6 +278,16 @@ type Database interface {
 	SessionSetupQueries() []string
 }
 
+// DDLBatcher is a Database that can run several statements in one round trip.
+type DDLBatcher interface {
+	// ExecDDLs runs ddls in order in transaction until one fails. It returns how many succeeded,
+	// and the error of the one that failed as running it on its own would give it, or
+	// ErrDDLsNotRun when the server ran none of them and they have to run one at a time.
+	ExecDDLs(transaction *sql.Tx, ddls []string) (int, error)
+}
+
+var ErrDDLsNotRun = errors.New("the server ran none of the statements")
+
 func isDryRun(d Database) bool {
 	_, isDryRun := d.(*DryRunDatabase)
 	return isDryRun
@@ -340,7 +351,11 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	// that cannot run inside a transaction, such as CREATE INDEX CONCURRENTLY, therefore end
 	// the transaction that precedes them rather than being deferred to the end.
 	inTransaction := !d.GetConfig().DisableDdlTransaction
-	for _, ddl := range ddls {
+	batcher, _ := d.(DDLBatcher)
+	// The statements before this index run one at a time, as the server ran none of them in a batch
+	sequentialUntil := 0
+	for i := 0; i < len(ddls); i++ {
+		ddl := ddls[i]
 		// A statement the generator commented out is only printed, so it must not decide
 		// whether the transaction around it stays open.
 		if isCommentedOut(ddl) {
@@ -351,6 +366,21 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 		if inTransaction && TransactionSupported(ddl) {
 			if err := runner.begin(); err != nil {
 				return err
+			}
+			if batcher != nil && i >= sequentialUntil {
+				end := i + 1
+				for end < len(ddls) && (isCommentedOut(ddls[end]) || TransactionSupported(ddls[end])) {
+					end++
+				}
+				err := runner.execBatch(batcher, ddls[i:end])
+				if !errors.Is(err, ErrDDLsNotRun) {
+					if err != nil {
+						return err
+					}
+					i = end - 1
+					continue
+				}
+				sequentialUntil = end
 			}
 		} else if err := runner.commit(); err != nil {
 			return err
@@ -406,6 +436,38 @@ func (r *ddlRunner) rollback() {
 	_ = r.transaction.Rollback()
 	r.transaction = nil
 	r.logger.Printf("%s;\n", r.txQueries.Rollback)
+}
+
+// execBatch runs the statements in the open transaction in one round trip. It prints what exec
+// would have printed for them, but only after they have run: up to the one that failed, if any.
+func (r *ddlRunner) execBatch(batcher DDLBatcher, ddls []string) error {
+	var statements []string
+	for _, ddl := range ddls {
+		if !isCommentedOut(ddl) {
+			statements = append(statements, ddl)
+		}
+	}
+	succeeded, err := batcher.ExecDDLs(r.transaction, statements)
+	if errors.Is(err, ErrDDLsNotRun) {
+		return err
+	}
+
+	printed := 0
+	for _, ddl := range ddls {
+		if err != nil && printed > succeeded {
+			break
+		}
+		r.logger.Printf("%s;\n", ddl)
+		if !isCommentedOut(ddl) {
+			r.logger.Print(r.ddlSuffix)
+			printed++
+		}
+	}
+	if err != nil {
+		r.rollback()
+		return err
+	}
+	return nil
 }
 
 func (r *ddlRunner) exec(ddl string) error {
