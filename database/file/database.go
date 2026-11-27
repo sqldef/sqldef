@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/sqldef/sqldef/v3"
@@ -51,7 +52,7 @@ func (d *FileDatabase) GetTransactionQueries() database.TransactionQueries {
 	}
 }
 
-func (d *FileDatabase) SessionSetupQueries() []string {
+func (d *FileDatabase) SetupSession(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 

@@ -271,10 +271,10 @@ type Database interface {
 	GetTransactionQueries() TransactionQueries
 	GetConfig() Config
 
-	// SessionSetupQueries returns the statements to run on the connection that applies the
-	// DDLs, before the first of them. They configure the session, so they must not be run on
-	// a connection the pool may hand to someone else.
-	SessionSetupQueries() []string
+	// SetupSession configures the connection that applies the DDLs, before the first of them.
+	// It changes session state, so it must not be run on a connection the pool may hand to
+	// someone else.
+	SetupSession(ctx context.Context, conn *sql.Conn) error
 }
 
 func isDryRun(d Database) bool {
@@ -307,7 +307,7 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 		logger.Println("-- Apply --")
 	}
 
-	// Every statement runs on one connection: a session setting made by SessionSetupQueries or
+	// Every statement runs on one connection: a session setting made by SetupSession or
 	// by beforeApply has to still be in effect when a later statement runs, and the pool would
 	// otherwise hand out a connection that never saw it.
 	conn, err := d.DB().Conn(context.Background())
@@ -318,10 +318,8 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 
 	runner := ddlRunner{conn: conn, txQueries: d.GetTransactionQueries(), ddlSuffix: ddlSuffix, logger: logger}
 
-	for _, query := range d.SessionSetupQueries() {
-		if _, err := conn.ExecContext(context.Background(), query); err != nil {
-			return err
-		}
+	if err := d.SetupSession(context.Background(), conn); err != nil {
+		return err
 	}
 
 	if len(beforeApply) > 0 {

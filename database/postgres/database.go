@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"cmp"
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
+	"github.com/lib/pq/pqerror"
 	"github.com/sqldef/sqldef/v3/database"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
@@ -142,12 +145,22 @@ func (d *PostgresDatabase) supportsIndexIncluding() bool {
 	return exists
 }
 
-// SessionSetupQueries turns off function body validation while the DDLs are applied. A function
+// SetupSession turns off function body validation while the DDLs are applied. A function
 // body is validated against the objects it references, and functions are created before the
 // tables they read, so a SQL-language function would fail to be created on an empty database.
-// pg_dump turns the check off for the same reason.
-func (d *PostgresDatabase) SessionSetupQueries() []string {
-	return []string{"SET check_function_bodies = off"}
+// pg_dump turns the check off for the same reason. A server that does not support the setting,
+// such as Aurora DSQL, has no check to turn off.
+func (d *PostgresDatabase) SetupSession(ctx context.Context, conn *sql.Conn) error {
+	_, err := conn.ExecContext(ctx, "SET check_function_bodies = off")
+	if isFeatureNotSupported(err) {
+		return nil
+	}
+	return err
+}
+
+func isFeatureNotSupported(err error) bool {
+	pqErr, ok := errors.AsType[*pq.Error](err)
+	return ok && pqErr.Code == pqerror.FeatureNotSupported
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
