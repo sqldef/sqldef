@@ -116,6 +116,124 @@ ALTER TABLE user_accounts RENAME TO users;
 
 Also `@renamed` works for columns, indexes, and ENUM values. See command documentation for more details.
 
+## Supported Mutations
+
+sqldef compares a desired schema to the current one and emits DDL to close the gap. Engines do not all accept the same `ALTER` forms: some mutations are in-place, some replace an object, and some require rebuilding a table or moving dependents out of the way. The tables below record, for each scenario, the mutation strategy that engine requires and whether sqldef implements it.
+
+#### Key: Mutation strategy
+
+These are the names of strategies the **engine** prefers in a given mutation scenario.
+
+| Strategy | Meaning |
+|---|---|
+| `alter` | In-place `ALTER` / `CHANGE` / `sp_rename` (also `GRANT` / `REVOKE`, `ALTER TYPE`, `ENABLE ROW LEVEL SECURITY`) |
+| `replace` | `CREATE OR REPLACE` / `CREATE OR ALTER` |
+| `drop_create` | Drop and create **this** object; that is the engine’s way to change it. The `DROP` half needs [`--enable-drop`](#command-documentation) (default off). |
+| `dependents` | Do the inner `alter`/`replace`/`drop_create`, with blockers dropped and recreated around it. Dropping blockers needs [`--enable-drop`](#command-documentation) (default off). |
+| `column_copy` | Add column, copy data, drop old column |
+| `table_rebuild` | Copy/swap the table |
+| `n/a` | Object or mutation does not exist on this engine (no status) |
+
+#### Key: Status
+
+The icon is the way **sqldef** implements the mutation strategy.
+
+| Icon | Status | Meaning |
+|---|---|---|
+| ✅ | Does it | sqldef implements the engine's preferred strategy |
+| ⚠️ | Partial | Converges, but not via the preferred strategy |
+| ❌ | Missing | Does not converge (skip, illegal SQL, or apply error) |
+
+### Support Matrix
+
+Each cell is `strategy` then icon: strategy = engine requirement; icon = whether sqldef does that.
+
+| Scenario | PostgreSQL | MySQL | SQL Server | SQLite |
+|---|---|---|---|---|
+| Add column | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ✅ |
+| Drop column | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ✅ |
+| Drop column used by a view | `dependents` ❌[^1] | `alter` ✅ | `alter` ✅ | `dependents` ❌[^2] |
+| Drop column used by a schema-bound view | `n/a` | `n/a` | `dependents` ❌[^3] | `n/a` |
+| Rename table | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ✅ |
+| Rename column | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ✅ |
+| Rename column and change type | `alter` ✅ | `alter` ✅ | `alter` ✅ | `column_copy` ✅ |
+| Change column type | `alter` ✅ | `alter` ✅ | `alter` ✅ | `table_rebuild` ❌[^4] |
+| Change column type used by a view | `dependents` ❌[^1] | `alter` ✅ | `alter` ✅ | `table_rebuild` ❌[^4] |
+| Change column type used by a schema-bound view | `n/a` | `n/a` | `dependents` ❌[^3] | `n/a` |
+| Change nullability | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ❌[^5] |
+| Change default | `alter` ✅ | `alter` ✅ | `drop_create` ✅ | `table_rebuild` ❌[^4] |
+| Add generated column (VIRTUAL) | `alter` ✅ | `alter` ✅ | `alter` ❌[^6] | `alter` ✅ |
+| Add generated column (STORED) | `alter` ✅ | `alter` ✅ (TiDB `n/a`[^8]) | `alter` ❌[^6] | `table_rebuild` ❌[^4] |
+| Change generated column storage | `drop_create` ❌[^7] | `drop_create` ✅ (TiDB `n/a`[^19]) | `alter` ❌[^6] | `table_rebuild` ❌[^4] |
+| Add/change identity / AUTO_INCREMENT | `alter` ✅ | `alter` ✅ (TiDB `n/a`[^20]) | `table_rebuild` ❌[^21] | `table_rebuild` ❌[^4] |
+| Add unique constraint | `alter` ✅ | `alter` ✅ | `alter` ✅ | `table_rebuild` ❌[^4] |
+| Change unique constraint | `drop_create` ✅ | `drop_create` ✅ | `drop_create` ✅ | `table_rebuild` ❌[^4] |
+| Add foreign key | `alter` ✅ | `alter` ✅ | `alter` ✅ | `table_rebuild` ❌[^4] |
+| Change foreign key | `drop_create` ✅ | `drop_create` ✅ | `drop_create` ✅ | `table_rebuild` ❌[^4] |
+| Add primary key | `alter` ✅ | `alter` ✅ | `alter` ✅ | `table_rebuild` ❌[^4] |
+| Change primary key | `drop_create` ✅ | `drop_create` ✅ (TiDB `n/a`[^9]) | `drop_create` ✅ | `table_rebuild` ❌[^4] |
+| Change primary key referenced by a foreign key | `dependents` ✅ | `dependents` ✅ (TiDB `n/a`[^9]) | `dependents` ✅ | `table_rebuild` ❌[^4] |
+| Add CHECK | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ✅ |
+| Change CHECK | `drop_create` ✅ | `drop_create` ✅ | `drop_create` ✅ | `drop_create` ❌[^5] |
+| Add index | `alter` ✅ | `alter` ✅ | `alter` ✅ | `alter` ✅ |
+| Change index | `drop_create` ✅ | `drop_create` ✅ | `drop_create` ✅ | `drop_create` ✅ |
+| Rename index | `alter` ✅ | `alter` ✅ | `alter` ✅ | `drop_create` ✅ |
+| Add enum value | `alter` ✅ | `alter` ✅ | `n/a` | `n/a` |
+| Rename enum value | `alter` ✅ | `n/a` | `n/a` | `n/a` |
+| Change view | `replace` ✅ | `replace` ✅ | `replace` ⚠️[^10] | `drop_create` ✅ |
+| Change view used by another view | `dependents` ✅ | `replace` ✅ | `replace` ⚠️[^10] | `dependents` ⚠️[^11] |
+| Change materialized view | `drop_create` ❌[^22] | `n/a` | `n/a` | `n/a` |
+| Change trigger | `replace` ⚠️[^12] | `drop_create` ✅ (TiDB `n/a`[^13]) | `replace` ✅ | `drop_create` ✅ |
+| Change function body | `replace` ✅ | `drop_create` ❌[^14] | `replace` ❌[^15] | `n/a` |
+| Change function signature | `drop_create` ✅ | `drop_create` ❌[^14] | `drop_create` ❌[^15] | `n/a` |
+| Change policy | `drop_create` ✅ | `n/a` | `n/a` | `n/a` |
+| Enable/force row level security | `alter` ✅ | `n/a` | `n/a` | `n/a` |
+| Change privileges | `alter` ✅[^16] | `alter` ❌[^17] | `alter` ❌[^18] | `n/a` |
+
+[^1]: PostgreSQL rejects [`DROP COLUMN`](https://www.postgresql.org/docs/current/sql-altertable.html) and [`ALTER COLUMN … TYPE`](https://www.postgresql.org/docs/current/sql-altertable.html) while a view depends on the column. Drop and recreate those views around the `ALTER`. sqldef emits the inner `ALTER` only, so apply fails. [#1130](https://github.com/sqldef/sqldef/discussions/1130)
+
+[^2]: SQLite [`DROP COLUMN`](https://www.sqlite.org/lang_altertable.html#alter_table_drop_column) fails if the column appears in a view. Drop and recreate those views around the `DROP COLUMN`. sqldef emits `DROP COLUMN` while the view remains.
+
+[^3]: SQL Server [schema-bound views](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-view-transact-sql) (`WITH SCHEMABINDING`) block `DROP COLUMN` / `ALTER COLUMN`. Drop and recreate those views around the `ALTER`. sqldef emits the inner `ALTER` only, so apply fails. Ordinary views do not block these mutations.
+
+[^4]: SQLite [12-step table rebuild](https://www.sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes) for mutations `ALTER TABLE` cannot express (type, default, unique constraint, foreign key, primary key, STORED generated column, identity). sqldef does not rebuild tables: some of these skip, others emit illegal `ALTER TABLE … ADD CONSTRAINT`. [#1218](https://github.com/sqldef/sqldef/discussions/1218)
+
+[^5]: SQLite 3.53+ can [`SET`/`DROP NOT NULL`](https://www.sqlite.org/lang_altertable.html#alter_table_alter_column) and [add or drop CHECK constraints](https://sqlite.org/releaselog/3_53_0.html). sqldef adds new CHECKs but skips CHECK edits and nullability changes.
+
+[^6]: SQL Server computed columns: [`ALTER TABLE … ADD`](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql) for a new computed column; [`ALTER COLUMN … ADD|DROP PERSISTED`](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql) to change storage. sqldef does not parse `PERSISTED`.
+
+[^7]: PostgreSQL 18 can store generated columns as `VIRTUAL` or `STORED`; there is no in-place switch ([generated columns](https://www.postgresql.org/docs/current/ddl-generated-columns.html)). sqldef does not diff generated-column storage on PostgreSQL. Adding a generated column still uses `ADD COLUMN`.
+
+[^8]: TiDB cannot add a [`STORED` generated column](https://docs.pingcap.com/tidb/stable/generated-columns) through `ALTER TABLE`.
+
+[^9]: TiDB cannot [`DROP PRIMARY KEY`](https://docs.pingcap.com/tidb/stable/clustered-indexes) on a clustered index.
+
+[^10]: SQL Server [`CREATE OR ALTER VIEW`](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-view-transact-sql) (2016 SP1+) keeps permissions. sqldef always `DROP VIEW` + `CREATE VIEW`.
+
+[^11]: Nested view changes on SQLite usually apply because [`DROP VIEW`](https://sqlite.org/lang_dropview.html) is not `RESTRICT`, but sqldef does not order dependent views.
+
+[^12]: PostgreSQL 14+ [`CREATE OR REPLACE TRIGGER`](https://www.postgresql.org/docs/current/sql-createtrigger.html). sqldef uses `DROP TRIGGER` + `CREATE TRIGGER`.
+
+[^13]: TiDB has no [triggers](https://docs.pingcap.com/tidb/stable/mysql-compatibility).
+
+[^14]: MySQL [`ALTER FUNCTION`](https://dev.mysql.com/doc/refman/8.4/en/alter-function.html) cannot change the body or signature; the engine requires `DROP FUNCTION` + `CREATE FUNCTION`. mysqldef does not export or manage stored functions.
+
+[^15]: SQL Server [`CREATE OR ALTER FUNCTION`](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-function-transact-sql) for the body; `DROP` + `CREATE` when the function kind or signature cannot be altered. mssqldef does not manage functions.
+
+[^16]: PostgreSQL [`GRANT`](https://www.postgresql.org/docs/current/sql-grant.html) / [`REVOKE`](https://www.postgresql.org/docs/current/sql-revoke.html) for roles listed in `managed_roles` (see [psqldef](./cmd-psqldef.md)).
+
+[^17]: MySQL [`GRANT`](https://dev.mysql.com/doc/refman/8.4/en/grant.html) / [`REVOKE`](https://dev.mysql.com/doc/refman/8.4/en/revoke.html). mysqldef does not emit them.
+
+[^18]: SQL Server [`GRANT`](https://learn.microsoft.com/en-us/sql/t-sql/statements/grant-transact-sql). mssqldef does not emit `GRANT`/`REVOKE`.
+
+[^19]: TiDB cannot convert a generated column between `VIRTUAL` and `STORED` through [`ALTER TABLE`](https://docs.pingcap.com/tidb/stable/generated-columns).
+
+[^20]: TiDB cannot add [`AUTO_INCREMENT`](https://docs.pingcap.com/tidb/stable/auto-increment) to an existing column.
+
+[^21]: SQL Server cannot add [`IDENTITY`](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-column-definition-transact-sql) to an existing column. sqldef emits `DROP COLUMN` + `ADD`.
+
+[^22]: PostgreSQL [`CREATE MATERIALIZED VIEW`](https://www.postgresql.org/docs/current/sql-creatematerializedview.html) has no `OR REPLACE`. sqldef creates and drops materialized views but does not compare an existing definition.
+
 ## Command Documentation
 
 * [mysqldef](./cmd-mysqldef.md)
